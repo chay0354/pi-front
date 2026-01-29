@@ -20,7 +20,7 @@ import { Colors, Spacing, Shadows } from '../constants/styles';
  * HomeScreen Component
  * Main home screen with categories, featured projects, and professionals
  */
-const HomeScreen = () => {
+const HomeScreen = ({ onOpenSettings }) => {
   // Profile pictures data for professionals section
   const [profilePicItems] = useState([
     {
@@ -116,6 +116,12 @@ const HomeScreen = () => {
           <View style={styles.menuContainer}>
             <Menu1 />
           </View>
+          <TouchableOpacity 
+            onPress={onOpenSettings} 
+            style={styles.settingsButton}
+          >
+            <Text style={styles.settingsIcon}>✕</Text>
+          </TouchableOpacity>
           <MenuIcon variant="ללא נוטיפיקציה" />
         </View>
       </View>
@@ -228,6 +234,21 @@ const styles = StyleSheet.create({
     top: 20,
     right: 24,
     zIndex: 2,
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 7,
+    right: 24,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  settingsIcon: {
+    fontSize: 24,
+    color: Colors.white100,
+    fontWeight: '300',
   },
   carouselContainer: {
     width: '100%',

@@ -1,0 +1,249 @@
+/**
+ * API utility functions for communicating with the backend
+ */
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+/**
+ * Submit subscription form
+ * @param {Object} formData - Form data including subscription type, user info, etc.
+ * @param {Object} files - Files to upload (profilePicture, additionalImages, companyLogo, video)
+ * @returns {Promise} API response
+ */
+export const submitSubscription = async (formData, files = {}) => {
+  try {
+    const formDataToSend = new FormData();
+    
+    // Add all form fields
+    Object.keys(formData).forEach((key) => {
+      if (formData[key] !== null && formData[key] !== undefined) {
+        if (Array.isArray(formData[key])) {
+          formDataToSend.append(key, JSON.stringify(formData[key]));
+        } else if (typeof formData[key] === 'object') {
+          formDataToSend.append(key, JSON.stringify(formData[key]));
+        } else {
+          formDataToSend.append(key, String(formData[key]));
+        }
+      }
+    });
+
+    // Add files (React Native FormData format)
+    if (files.profilePicture) {
+      formDataToSend.append('profilePicture', {
+        uri: files.profilePicture.uri,
+        type: files.profilePicture.type || 'image/jpeg',
+        name: files.profilePicture.name || 'profile.jpg',
+      });
+    }
+
+    if (files.additionalImages && files.additionalImages.length > 0) {
+      files.additionalImages.forEach((image, index) => {
+        formDataToSend.append('additionalImages', {
+          uri: image.uri,
+          type: image.type || 'image/jpeg',
+          name: image.name || `image-${index}.jpg`,
+        });
+      });
+    }
+
+    if (files.companyLogo) {
+      formDataToSend.append('companyLogo', {
+        uri: files.companyLogo.uri,
+        type: files.companyLogo.type || 'image/jpeg',
+        name: files.companyLogo.name || 'logo.jpg',
+      });
+    }
+
+    if (files.video) {
+      formDataToSend.append('video', {
+        uri: files.video.uri,
+        type: files.video.type || 'video/mp4',
+        name: files.video.name || 'video.mp4',
+      });
+    }
+
+    const response = await fetch(`${API_URL}/api/subscription/submit`, {
+      method: 'POST',
+      body: formDataToSend,
+      // Don't set Content-Type header - let fetch set it with boundary
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      // Extract more detailed error message
+      const errorMsg = data.error || data.message || 'Failed to submit subscription';
+      throw new Error(errorMsg);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error submitting subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Verify email with verification code
+ * @param {string} email - User email
+ * @param {string} verificationCode - Verification code
+ * @param {string} subscriptionId - Optional subscription ID
+ * @returns {Promise} API response
+ */
+export const verifyEmail = async (email, verificationCode, subscriptionId = null) => {
+  try {
+    console.log('Calling verify API:', { email, verificationCode, subscriptionId, API_URL });
+    const response = await fetch(`${API_URL}/api/subscription/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        verificationCode,
+        subscriptionId,
+      }),
+    });
+
+    console.log('Verify API response status:', response.status);
+    const data = await response.json();
+    console.log('Verify API response data:', data);
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Verification failed');
+    }
+
+    if (!data.success) {
+      throw new Error(data.error || 'Verification failed');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error verifying email:', error);
+    throw error;
+  }
+};
+
+/**
+ * Resend verification code
+ * @param {string} email - User email
+ * @returns {Promise} API response
+ */
+export const resendVerificationCode = async (email, subscriptionId = null) => {
+  try {
+    const response = await fetch(`${API_URL}/api/subscription/resend-code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, subscriptionId }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to resend code');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error resending code:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get subscription by ID
+ * @param {string} subscriptionId - Subscription ID
+ * @returns {Promise} API response
+ */
+export const getSubscription = async (subscriptionId) => {
+  try {
+    const response = await fetch(`${API_URL}/api/subscription/${subscriptionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch subscription');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get current user subscription by email or subscriber number
+ * @param {string} email - User email (optional)
+ * @param {string} subscriberNumber - Subscriber number (optional)
+ * @returns {Promise} API response
+ */
+export const getCurrentUser = async (email = null, subscriberNumber = null) => {
+  try {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (subscriberNumber) params.append('subscriberNumber', subscriberNumber);
+    
+    const response = await fetch(`${API_URL}/api/user/current?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch user');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload a single file
+ * @param {Object} file - File object with uri, type, name
+ * @param {string} folder - Folder name in storage
+ * @returns {Promise} API response with file URL
+ */
+export const uploadFile = async (file, folder = 'general') => {
+  try {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      type: file.type || 'image/jpeg',
+      name: file.name || 'file.jpg',
+    });
+    formData.append('folder', folder);
+
+    const response = await fetch(`${API_URL}/api/upload`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to upload file');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    throw error;
+  }
+};
