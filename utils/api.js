@@ -247,3 +247,38 @@ export const uploadFile = async (file, folder = 'general') => {
     throw error;
   }
 };
+
+/**
+ * Create a new listing
+ * @param {Object} listingData - Listing data including form fields and file URLs
+ * @returns {Promise} API response with listing ID
+ */
+export const createListing = async (listingData) => {
+  try {
+    console.log('Sending listing data to API:', listingData);
+    
+    const response = await fetch(`${API_URL}/api/listings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(listingData),
+    });
+
+    const data = await response.json();
+    
+    console.log('API response status:', response.status);
+    console.log('API response data:', data);
+    
+    if (!response.ok) {
+      const errorMsg = data.error || data.details || 'Failed to create listing';
+      console.error('API error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error creating listing:', error);
+    throw error;
+  }
+};

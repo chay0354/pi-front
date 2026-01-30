@@ -20,7 +20,7 @@ import { Colors, Spacing, Shadows } from '../constants/styles';
  * HomeScreen Component
  * Main home screen with categories, featured projects, and professionals
  */
-const HomeScreen = ({ onOpenSettings }) => {
+const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
   // Profile pictures data for professionals section
   const [profilePicItems] = useState([
     {
@@ -127,9 +127,13 @@ const HomeScreen = ({ onOpenSettings }) => {
       </View>
 
       {/* Category Carousel */}
-      <View style={styles.carouselContainer}>
+      <TouchableOpacity 
+        style={styles.carouselContainer}
+        onPress={onOpenTikTokFeed}
+        activeOpacity={0.8}
+      >
         <Carusel property1="דירות" />
-      </View>
+      </TouchableOpacity>
 
       {/* Content Sections */}
       <View style={styles.contentSections}>

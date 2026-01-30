@@ -8,6 +8,8 @@ import VerificationScreen from './screens/VerificationScreen';
 import VerificationCodeScreen from './screens/VerificationCodeScreen';
 import SuccessScreen from './screens/SuccessScreen';
 import LoginScreen from './screens/LoginScreen';
+import TikTokFeedScreen from './screens/TikTokFeedScreen';
+import OfficeListingScreen from './screens/OfficeListingScreen';
 
 /**
  * Main App Component
@@ -17,6 +19,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUser] = useState(null); // Store current logged-in user data
+  const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed
   
   // Load user data from localStorage on mount
   useEffect(() => {
@@ -73,7 +76,28 @@ export default function App() {
   return (
     <View style={styles.container}>
       {currentScreen === 'home' && (
-        <HomeScreen onOpenSettings={() => setCurrentScreen('settings')} />
+        <HomeScreen 
+          onOpenSettings={() => setCurrentScreen('settings')}
+          onOpenTikTokFeed={() => setCurrentScreen('tikTokFeed')}
+        />
+      )}
+      {currentScreen === 'tikTokFeed' && (
+        <TikTokFeedScreen 
+          onClose={() => setCurrentScreen('home')}
+          onOpenOfficeListing={() => setCurrentScreen('officeListing')}
+          uploadedListings={uploadedListings}
+        />
+      )}
+      {currentScreen === 'officeListing' && (
+        <OfficeListingScreen 
+          onClose={() => setCurrentScreen('tikTokFeed')}
+          onPublish={(listingData) => {
+            // Add the new listing to uploaded listings
+            setUploadedListings(prev => [listingData, ...prev]);
+            // Navigate back to TikTok feed
+            setCurrentScreen('tikTokFeed');
+          }}
+        />
       )}
       {currentScreen === 'settings' && (
         <SettingsScreen
