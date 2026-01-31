@@ -8,8 +8,10 @@ import {
   Dimensions,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors } from '../constants/styles';
+import { getListings } from '../utils/api';
 
 // Image Swiper Component for multiple photos
 const ImageSwiper = ({ images, screenHeight, video }) => {
@@ -86,10 +88,13 @@ const ImageSwiper = ({ images, screenHeight, video }) => {
  * Vertical scrolling feed with TikTok-like behavior
  * Only one video/image visible at a time, snaps to each item
  */
-const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] }) => {
+const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [], selectedCategory = null }) => {
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [dbListings, setDbListings] = useState([]);
+  const [loadingListings, setLoadingListings] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Force refresh when this changes
   const [dimensions, setDimensions] = useState({
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
@@ -120,6 +125,134 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     }
   }, []);
 
+  // Fetch listings from database (all users can see all published listings)
+  // Filter by selectedCategory if provided
+  // Refetch when selectedCategory changes or when refreshKey changes
+  useEffect(() => {
+    const fetchListings = async () => {
+      try {
+        setLoadingListings(true);
+        const categoryToFetch = selectedCategory ? parseInt(selectedCategory) : undefined;
+        console.log('🔍 [TikTokFeedScreen] Fetching listings for category:', categoryToFetch, '(selectedCategory:', selectedCategory, ')');
+        console.log('🔍 [TikTokFeedScreen] useEffect triggered, selectedCategory:', selectedCategory, 'refreshKey:', refreshKey);
+        
+        const result = await getListings({ 
+          status: 'published',
+          category: categoryToFetch
+        });
+        
+        console.log('✅ [TikTokFeedScreen] getListings returned:', result);
+        
+        console.log('✅ Fetched listings result:', result);
+        console.log('📊 Result structure:', {
+          success: result.success,
+          listingsCount: result.listings?.length || 0,
+          hasListings: !!result.listings
+        });
+        
+        if (result.listings && result.listings.length > 0) {
+          console.log('📋 First listing details:', {
+            id: result.listings[0].id,
+            category: result.listings[0].category,
+            images: result.listings[0].listing_images?.length || 0,
+            videos: result.listings[0].listing_videos?.length || 0,
+            imageUrls: result.listings[0].listing_images?.map(img => img.image_url) || []
+          });
+        }
+        
+        if (result.success && result.listings) {
+          console.log(`Received ${result.listings.length} listings from API`);
+          console.log('Sample listing:', result.listings[0]);
+          
+          // Transform database listings to video format
+          const transformedListings = result.listings
+            .filter(listing => {
+              // Only include listings that have at least one image or video
+              const images = listing.listing_images || [];
+              const videos = listing.listing_videos || [];
+              const hasContent = images.length > 0 || videos.length > 0;
+              if (!hasContent) {
+                console.log(`Skipping listing ${listing.id} - no images or videos`);
+              }
+              return hasContent;
+            })
+            .map((listing) => {
+              const images = listing.listing_images || [];
+              const mainImage = images.find(img => img.image_type === 'main');
+              const additionalImages = images.filter(img => img.image_type === 'additional');
+              const video = listing.listing_videos && listing.listing_videos[0];
+              
+              // Build images array - must have at least one image
+              let imagesArray = [];
+              if (mainImage && mainImage.image_url) {
+                imagesArray = [{ uri: mainImage.image_url }];
+                if (additionalImages.length > 0) {
+                  imagesArray = [...imagesArray, ...additionalImages
+                    .filter(img => img.image_url)
+                    .map(img => ({ uri: img.image_url }))];
+                }
+              } else if (additionalImages.length > 0) {
+                imagesArray = additionalImages
+                  .filter(img => img.image_url)
+                  .map(img => ({ uri: img.image_url }));
+              }
+              
+              const listingCategory = parseInt(listing.category) || 1;
+              
+              return {
+                id: listing.id,
+                type: video ? 'video' : 'images',
+                video: video && video.video_url ? { uri: video.video_url } : null,
+                images: imagesArray,
+                location: listing.address || 'תל אביב',
+                price: `₪${parseFloat(listing.price || 0).toLocaleString()}`,
+                purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
+                description: listing.description || '',
+                propertyType: listing.property_type === 'office' ? 'משרד' : 'קומה שלמה',
+                area: listing.area,
+                rooms: listing.rooms,
+                floor: listing.floor,
+                category: listingCategory,
+                isUploaded: true,
+                fromDatabase: true,
+              };
+            });
+          
+          // Backend already filters by category, but double-check client-side
+          const filteredListings = selectedCategory 
+            ? transformedListings.filter(listing => {
+                const matches = listing.category === parseInt(selectedCategory);
+                if (!matches) {
+                  console.log(`Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`);
+                }
+                return matches;
+              })
+            : transformedListings;
+          
+          console.log(`Loaded ${filteredListings.length} listings for category ${selectedCategory || 'all'}`);
+          console.log('Listings details:', filteredListings.map(l => ({ 
+            id: l.id, 
+            category: l.category, 
+            imagesCount: l.images.length,
+            hasVideo: !!l.video
+          })));
+          setDbListings(filteredListings);
+        } else {
+          console.log('No listings found or result was not successful. Result:', result);
+          setDbListings([]);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching listings from database:', error);
+        console.error('Error details:', error.message, error.stack);
+        setDbListings([]);
+      } finally {
+        setLoadingListings(false);
+      }
+    };
+
+    fetchListings();
+  }, [selectedCategory, refreshKey]);
+
   // Map tik image numbers to require statements
   const getTikImage = (num) => {
     const imageMap = {
@@ -138,28 +271,18 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     return imageMap[num] || imageMap[1];
   };
 
-  // Combine uploaded listings with mock data
-  const uploadedVideos = uploadedListings.map((listing, index) => ({
-    id: `uploaded-${index}`,
-    type: listing.video ? 'video' : 'images',
-    video: listing.video,
-    images: listing.mainImage ? [listing.mainImage, ...listing.additionalImages.filter(img => img)] : listing.additionalImages.filter(img => img),
-    location: listing.address || 'תל אביב',
-    price: `₪${listing.price?.toLocaleString() || '0'}`,
-    purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
-    description: listing.description || '',
-    propertyType: listing.propertyType === 'office' ? 'משרד' : 'קומה שלמה',
-    area: listing.area,
-    rooms: listing.rooms,
-    floor: listing.floor,
-    isUploaded: true,
-  }));
+  // Use database listings as primary source (they persist after refresh)
+  // Database listings are already filtered by category from the API
+  const uploadedVideos = [
+    ...dbListings, // Listings from database (all users) - PRIMARY SOURCE
+  ];
 
-  // Mock video data with all tik images
-  const mockVideos = [
+  // Mock video data - each video has a category matching its image number
+  const allMockVideos = [
     {
       id: 1,
       image: 1,
+      category: 1,
       title: 'דירה מרווחת בתל אביב',
       description: 'דירה 4 חדרים עם מרפסת גדולה',
       location: 'תל אביב, רוטשילד 54',
@@ -170,6 +293,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 2,
       image: 2,
+      category: 2,
       title: 'נטהאוז יוקרתי',
       description: 'נוף פנורמי לעיר',
       location: 'תל אביב, דיזנגוף',
@@ -180,6 +304,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 3,
       image: 3,
+      category: 3,
       title: 'דירת סטודיו מודרנית',
       description: 'עיצוב מינימליסטי ונוח',
       location: 'תל אביב, פלורנטין',
@@ -190,6 +315,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 4,
       image: 4,
+      category: 4,
       title: 'בית פרטי עם גינה',
       description: 'בית משפחתי עם חצר גדולה',
       location: 'רמת גן, ז\'בוטינסקי',
@@ -200,6 +326,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 5,
       image: 5,
+      category: 5,
       title: 'דירת גן בקומה ראשונה',
       description: 'גישה ישירה לגינה',
       location: 'תל אביב, נווה צדק',
@@ -210,6 +337,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 6,
       image: 6,
+      category: 6,
       title: 'דופלקס יוקרתי',
       description: '2 קומות עם גג',
       location: 'תל אביב, רמת אביב',
@@ -220,6 +348,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 7,
       image: 7,
+      category: 7,
       title: 'דירה עם מרפסת שמש',
       description: 'נוף לים',
       location: 'תל אביב, חוף הים',
@@ -230,6 +359,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 8,
       image: 8,
+      category: 8,
       title: 'לופט תעשייתי',
       description: 'תקרות גבוהות וחלונות גדולים',
       location: 'תל אביב, נחלת בנימין',
@@ -240,6 +370,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 9,
       image: 9,
+      category: 9,
       title: 'דירה משופצת',
       description: 'שיפוץ מלא וחדש',
       location: 'תל אביב, רחוב אלנבי',
@@ -250,6 +381,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 10,
       image: 10,
+      category: 10,
       title: 'דירת 5 חדרים',
       description: 'מתאימה למשפחה גדולה',
       location: 'רמת גן, ביאליק',
@@ -260,6 +392,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     {
       id: 11,
       image: 11,
+      category: 11,
       title: 'נטהאוז עם גג',
       description: 'נוף 360 מעלות',
       location: 'תל אביב, רחוב בן יהודה',
@@ -269,8 +402,42 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
     },
   ];
 
+  // Filter mock videos by category if selectedCategory is provided
+  const mockVideos = selectedCategory
+    ? allMockVideos.filter(video => video.category === selectedCategory)
+    : allMockVideos;
+
   // Combine uploaded and mock videos
   const videos = [...uploadedVideos, ...mockVideos];
+  
+  console.log(`Total videos to display: ${videos.length} (${uploadedVideos.length} from DB, ${mockVideos.length} mock)`);
+  
+  // Show loading indicator while fetching (only on initial load)
+  if (loadingListings && dbListings.length === 0 && videos.length === mockVideos.length) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.yellowIcons} />
+        <Text style={{ color: '#fff', marginTop: 20 }}>טוען רשימות...</Text>
+      </View>
+    );
+  }
+  
+  // Show empty state if no videos
+  if (videos.length === 0 && !loadingListings) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#fff', fontSize: 18, textAlign: 'center', padding: 20 }}>
+          אין רשימות זמינות בקטגוריה זו
+        </Text>
+        <TouchableOpacity 
+          onPress={onOpenOfficeListing}
+          style={{ marginTop: 20, padding: 15, backgroundColor: Colors.yellowIcons, borderRadius: 8 }}
+        >
+          <Text style={{ color: '#000', fontWeight: 'bold' }}>פרסם רשימה חדשה</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const scrollToIndex = (index) => {
     if (index >= 0 && index < videos.length && scrollViewRef.current) {
@@ -511,7 +678,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [] 
             onPress={() => {
               setShowBottomSheet(false);
               if (onOpenOfficeListing) {
-                onOpenOfficeListing();
+                onOpenOfficeListing(selectedCategory); // Pass the selected category
               }
             }}
           >

@@ -21,6 +21,7 @@ import { Colors, Spacing, Shadows } from '../constants/styles';
  * Main home screen with categories, featured projects, and professionals
  */
 const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
+  const [selectedCategory, setSelectedCategory] = useState(null);
   // Profile pictures data for professionals section
   const [profilePicItems] = useState([
     {
@@ -127,13 +128,17 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
       </View>
 
       {/* Category Carousel */}
-      <TouchableOpacity 
-        style={styles.carouselContainer}
-        onPress={onOpenTikTokFeed}
-        activeOpacity={0.8}
-      >
-        <Carusel property1="דירות" />
-      </TouchableOpacity>
+      <View style={styles.carouselContainer}>
+        <Carusel 
+          property1="דירות" 
+          onCategorySelect={(category) => {
+            setSelectedCategory(category);
+            if (onOpenTikTokFeed) {
+              onOpenTikTokFeed(category);
+            }
+          }}
+        />
+      </View>
 
       {/* Content Sections */}
       <View style={styles.contentSections}>

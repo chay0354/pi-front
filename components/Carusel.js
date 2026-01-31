@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, ScrollView, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, ScrollView, Image, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { BorderRadius, Padding, Gaps, Colors } from '../constants/styles';
 
 /**
@@ -8,8 +8,9 @@ import { BorderRadius, Padding, Gaps, Colors } from '../constants/styles';
  * Center item is determined by visual position in viewport
  * Left and right items are tilted, less lit, and positioned higher
  * @param {string} property1 - Property type (default: "דירות")
+ * @param {function} onCategorySelect - Callback when a category is clicked
  */
-const Carusel = ({ style, property1 = 'דירות' }) => {
+const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
   // Array of tik images from tik1.png to tik11.png
   const tikImages = Array.from({ length: 11 }, (_, i) => i + 1);
   const scrollViewRef = useRef(null);
@@ -125,7 +126,16 @@ const Carusel = ({ style, property1 = 'דירות' }) => {
           const isFaded = !isCenter && !isLeft && !isRight;
 
           return (
-            <View key={num} style={styles.categoryItem}>
+            <TouchableOpacity 
+              key={num} 
+              style={styles.categoryItem}
+              onPress={() => {
+                if (onCategorySelect) {
+                  onCategorySelect(num);
+                }
+              }}
+              activeOpacity={0.7}
+            >
               <Image
                 source={getTikImage(num)}
                 style={[
@@ -137,7 +147,7 @@ const Carusel = ({ style, property1 = 'דירות' }) => {
                 ]}
                 resizeMode="cover"
               />
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>

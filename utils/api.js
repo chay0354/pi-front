@@ -249,6 +249,50 @@ export const uploadFile = async (file, folder = 'general') => {
 };
 
 /**
+ * Get all listings (visible to all users)
+ * @param {Object} options - Query options (status, category)
+ * @returns {Promise} API response with listings
+ */
+export const getListings = async (options = {}) => {
+  try {
+    const { status = 'published', category } = options;
+    const params = new URLSearchParams({ status });
+    if (category) {
+      params.append('category', category);
+    }
+    
+    const url = `${API_URL}/api/listings?${params.toString()}`;
+    console.log('🌐 [api.js] Fetching listings from:', url);
+    console.log('🌐 [api.js] API_URL:', API_URL);
+    console.log('🌐 [api.js] Options:', { status, category });
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('🌐 [api.js] Response status:', response.status, response.statusText);
+    
+    const data = await response.json();
+    
+    console.log('🌐 [api.js] Response data:', data);
+    
+    if (!response.ok) {
+      console.error('❌ [api.js] Response not OK:', data);
+      throw new Error(data.error || 'Failed to fetch listings');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('❌ [api.js] Error fetching listings:', error);
+    console.error('❌ [api.js] Error details:', error.message, error.stack);
+    throw error;
+  }
+};
+
+/**
  * Create a new listing
  * @param {Object} listingData - Listing data including form fields and file URLs
  * @returns {Promise} API response with listing ID

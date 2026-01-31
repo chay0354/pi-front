@@ -18,7 +18,7 @@ import { uploadFile, createListing } from '../utils/api';
  * OfficeListingScreen Component
  * Form for creating an office listing
  */
-const OfficeListingScreen = ({ onClose, onPublish }) => {
+const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => {
   const [propertyType, setPropertyType] = useState(null);
   const [area, setArea] = useState(1);
   const [rooms, setRooms] = useState(1);
@@ -32,6 +32,7 @@ const OfficeListingScreen = ({ onClose, onPublish }) => {
   const [description, setDescription] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
+  const [category, setCategory] = useState(initialCategory || 1); // Category 1-11 (default: 1, or use initialCategory if provided)
   
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
@@ -262,9 +263,16 @@ const OfficeListingScreen = ({ onClose, onPublish }) => {
         additionalImageUrls: uploadedAdditionalImageUrls.filter(url => url !== null && url !== undefined && url !== ''),
         videoUrl: uploadedVideoUrl,
         hasVideo: !!uploadedVideoUrl,
+        category: parseInt(category) || 1, // Category 1-11 - ensure it's an integer
       };
 
-      console.log('Publishing listing with data:', listingData);
+      console.log('📝 Publishing listing with data:', {
+        ...listingData,
+        category: listingData.category,
+        hasMainImage: !!listingData.mainImageUrl,
+        additionalImagesCount: listingData.additionalImageUrls.length,
+        hasVideo: listingData.hasVideo
+      });
 
       // Create listing in database
       const result = await createListing(listingData);
@@ -310,6 +318,38 @@ const OfficeListingScreen = ({ onClose, onPublish }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Container 0: Category Selection */}
+        <View style={styles.formContainer}>
+          <Text style={styles.sectionTitle}>
+            בחר קטגוריה<Text style={styles.required}>*</Text>
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScrollView}>
+            <View style={styles.categoryGrid}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((catNum) => (
+                <TouchableOpacity
+                  key={catNum}
+                  style={[
+                    styles.categoryItem,
+                    category === catNum && styles.categoryItemSelected
+                  ]}
+                  onPress={() => setCategory(catNum)}
+                >
+                  <Image
+                    source={require(`../assets/tik${catNum}.png`)}
+                    style={styles.categoryImage}
+                    resizeMode="cover"
+                  />
+                  {category === catNum && (
+                    <View style={styles.categorySelectedIndicator}>
+                      <Text style={styles.categorySelectedText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+
         {/* Container 1: Images and Video */}
         <View style={styles.formContainer}>
           <Text style={styles.sectionTitle}>
@@ -1464,6 +1504,47 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     objectFit: 'contain',
+  },
+  categoryScrollView: {
+    marginTop: 10,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 5,
+  },
+  categoryItem: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    position: 'relative',
+  },
+  categoryItemSelected: {
+    borderColor: Colors.yellowIcons,
+    borderWidth: 3,
+  },
+  categoryImage: {
+    width: '100%',
+    height: '100%',
+  },
+  categorySelectedIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.yellowIcons,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categorySelectedText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

@@ -19,7 +19,9 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUser] = useState(null); // Store current logged-in user data
-  const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed
+  const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed (temporary, for immediate display)
+  const [selectedCategory, setSelectedCategory] = useState(null); // Store selected category for TikTok feed
+  const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
   
   // Load user data from localStorage on mount
   useEffect(() => {
@@ -78,23 +80,44 @@ export default function App() {
       {currentScreen === 'home' && (
         <HomeScreen 
           onOpenSettings={() => setCurrentScreen('settings')}
-          onOpenTikTokFeed={() => setCurrentScreen('tikTokFeed')}
+          onOpenTikTokFeed={(category) => {
+            setSelectedCategory(category);
+            setCurrentScreen('tikTokFeed');
+          }}
         />
       )}
       {currentScreen === 'tikTokFeed' && (
         <TikTokFeedScreen 
-          onClose={() => setCurrentScreen('home')}
-          onOpenOfficeListing={() => setCurrentScreen('officeListing')}
+          key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
+          onClose={() => {
+            setSelectedCategory(null);
+            setCurrentScreen('home');
+          }}
+          onOpenOfficeListing={(category) => {
+            // Store the category so OfficeListingScreen can use it
+            if (category) {
+              setSelectedCategory(category);
+            }
+            setCurrentScreen('officeListing');
+          }}
           uploadedListings={uploadedListings}
+          selectedCategory={selectedCategory}
         />
       )}
       {currentScreen === 'officeListing' && (
         <OfficeListingScreen 
+          initialCategory={selectedCategory} // Pass the selected category
           onClose={() => setCurrentScreen('tikTokFeed')}
-          onPublish={(listingData) => {
-            // Add the new listing to uploaded listings
-            setUploadedListings(prev => [listingData, ...prev]);
-            // Navigate back to TikTok feed
+          onPublish={async (listingData) => {
+            console.log('✅ Listing published, category:', listingData.category);
+            // Listing is already saved to database via createListing API
+            // Trigger refresh of TikTok feed to show new listing
+            // Small delay to ensure database has updated
+            setTimeout(() => {
+              console.log('🔄 Refreshing TikTok feed...');
+              setTikTokFeedRefreshKey(prev => prev + 1);
+            }, 1500); // Increased delay to ensure DB is updated
+            // Navigate back to TikTok feed with same category
             setCurrentScreen('tikTokFeed');
           }}
         />
