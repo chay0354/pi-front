@@ -110,11 +110,17 @@ export default function App() {
           onClose={() => setCurrentScreen('tikTokFeed')}
           onPublish={async (listingData) => {
             console.log('✅ Listing published, category:', listingData.category);
+            console.log('📂 [App] Listing saved with category:', listingData.category, ', selectedCategory:', selectedCategory);
             // Listing is already saved to database via createListing API
+            // Ensure selectedCategory matches the published listing's category
+            if (listingData.category && listingData.category !== selectedCategory) {
+              console.log('📂 [App] Updating selectedCategory from', selectedCategory, 'to', listingData.category);
+              setSelectedCategory(listingData.category.toString());
+            }
             // Trigger refresh of TikTok feed to show new listing
             // Small delay to ensure database has updated
             setTimeout(() => {
-              console.log('🔄 Refreshing TikTok feed...');
+              console.log('🔄 Refreshing TikTok feed for category:', selectedCategory || listingData.category);
               setTikTokFeedRefreshKey(prev => prev + 1);
             }, 1500); // Increased delay to ensure DB is updated
             // Navigate back to TikTok feed with same category
