@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   ScrollView,
@@ -14,13 +14,13 @@ import Search from '../components/Search';
 import SectionName from '../components/SectionName';
 import Default from '../components/Default';
 import ProfilePic from '../components/ProfilePic';
-import { Colors, Spacing, Shadows } from '../constants/styles';
+import {Colors, Spacing, Shadows} from '../constants/styles';
 
 /**
  * HomeScreen Component
  * Main home screen with categories, featured projects, and professionals
  */
-const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
+const HomeScreen = ({onOpenSettings, onOpenTikTokFeed}) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   // Profile pictures data for professionals section
   const [profilePicItems] = useState([
@@ -63,7 +63,7 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
     {
       badge: false,
       badgeAmount: '-',
-      profilePic: '/profile-pic3@2x.png',
+      profilePic: '/profile-pic3.png',
       prop: 'טקסט של\nשם הפרופיל',
       profilePicFlex: 'unset',
       profilePicMinWidth: 'unset',
@@ -72,7 +72,7 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
     {
       badge: false,
       badgeAmount: '-',
-      profilePic: '/profile-pic3@2x.png',
+      profilePic: '/profile-pic3.png',
       prop: 'אפרים הלוי\nעו״ד לנדל״ן',
       profilePicFlex: 'unset',
       profilePicMinWidth: 'unset',
@@ -81,7 +81,7 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
     {
       badge: false,
       badgeAmount: '-',
-      profilePic: '/profile-pic3@2x.png',
+      profilePic: '/profile-pic3.png',
       prop: 'תמר ברוך\nעיצוב פנים',
       profilePicFlex: 'unset',
       profilePicMinWidth: 'unset',
@@ -90,7 +90,7 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
     {
       badge: false,
       badgeAmount: '-',
-      profilePic: '/profile-pic3@2x.png',
+      profilePic: '/profile-pic3.png',
       prop: 'מור תיווך\nונדל״ן ',
       profilePicFlex: 'unset',
       profilePicMinWidth: 'unset',
@@ -102,14 +102,13 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
     <ScrollView
       style={styles.homeScreen}
       contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
+      showsVerticalScrollIndicator={false}>
       {/* Header Section with Logo */}
       <View style={styles.frame}>
         <View style={styles.frame2}>
           <View style={styles.headerNavigation}>
             <Image
-              source={require('../assets/logo@2x.png')}
+              source={require('../assets/logo.png')}
               style={styles.logoIcon}
               resizeMode="contain"
             />
@@ -117,10 +116,9 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
           <View style={styles.menuContainer}>
             <Menu1 />
           </View>
-          <TouchableOpacity 
-            onPress={onOpenSettings} 
-            style={styles.settingsButton}
-          >
+          <TouchableOpacity
+            onPress={onOpenSettings}
+            style={styles.settingsButton}>
             <Text style={styles.settingsIcon}>✕</Text>
           </TouchableOpacity>
           <MenuIcon variant="ללא נוטיפיקציה" />
@@ -129,9 +127,9 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
 
       {/* Category Carousel */}
       <View style={styles.carouselContainer}>
-        <Carusel 
-          property1="דירות" 
-          onCategorySelect={(category) => {
+        <Carusel
+          property1="דירות"
+          onCategorySelect={category => {
             setSelectedCategory(category);
             if (onOpenTikTokFeed) {
               onOpenTikTokFeed(category);
@@ -163,7 +161,9 @@ const HomeScreen = ({ onOpenSettings, onOpenTikTokFeed }) => {
           {/* Professionals Header */}
           <View style={styles.professionalsHeader}>
             <Text style={styles.searchMoreText2}>חפשו עוד</Text>
-            <Text style={styles.professionalsText}>בעלי מקצוע בתחום הנדל״ן</Text>
+            <Text style={styles.professionalsText}>
+              בעלי מקצוע בתחום הנדל״ן
+            </Text>
           </View>
           <View style={styles.buttons}>
             {profilePicItems.slice(0, 4).map((item, index) => (
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.yellowIcons,
     textShadowColor: 'rgba(255, 196, 10, 0.5)',
-    textShadowOffset: { width: 0, height: 0 },
+    textShadowOffset: {width: 0, height: 0},
     textShadowRadius: 4,
   },
   featuredProjectsText: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 2,
   },
   wrapperProjectImage: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.yellowIcons,
     textShadowColor: 'rgba(255, 196, 10, 0.5)',
-    textShadowOffset: { width: 0, height: 0 },
+    textShadowOffset: {width: 0, height: 0},
     textShadowRadius: 4,
   },
   professionalsText: {
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textSecondary,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 2,
   },
   searchGroup: {

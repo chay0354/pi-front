@@ -1,6 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, ScrollView, Image, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
-import { BorderRadius, Padding, Gaps, Colors } from '../constants/styles';
+import React, {useRef, useState, useEffect} from 'react';
+import {
+  View,
+  ScrollView,
+  Image,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+} from 'react-native';
+import {BorderRadius, Padding, Gaps, Colors} from '../constants/styles';
 
 /**
  * Carusel Component
@@ -10,15 +17,15 @@ import { BorderRadius, Padding, Gaps, Colors } from '../constants/styles';
  * @param {string} property1 - Property type (default: "דירות")
  * @param {function} onCategorySelect - Callback when a category is clicked
  */
-const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
+const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
   // Array of tik images from tik1.png to tik11.png
-  const tikImages = Array.from({ length: 11 }, (_, i) => i + 1);
+  const tikImages = Array.from({length: 11}, (_, i) => i + 1);
   const scrollViewRef = useRef(null);
   // Start with item at index 2 centered (משרדים)
   const [centerIndex, setCenterIndex] = useState(2);
 
   // Map tik image numbers to require statements
-  const getTikImage = (num) => {
+  const getTikImage = num => {
     const imageMap = {
       1: require('../assets/tik1.png'),
       2: require('../assets/tik2.png'),
@@ -35,45 +42,45 @@ const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
     return imageMap[num] || imageMap[1];
   };
 
-  const handleScroll = (event) => {
+  const handleScroll = event => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
     const screenWidth = Dimensions.get('window').width;
     const viewportCenter = scrollPosition + screenWidth / 2;
-    
+
     // Calculate which item is closest to viewport center
     // Each item is 120px wide with 12px gap = 132px total spacing
     const itemWidth = 120;
     const itemGap = 12;
     const itemSpacing = itemWidth + itemGap;
     const paddingLeft = 24;
-    
+
     // Find the index of the item closest to viewport center
     let closestIndex = 0;
     let minDistance = Infinity;
-    
+
     tikImages.forEach((_, index) => {
       const itemLeft = paddingLeft + index * itemSpacing;
       const itemCenter = itemLeft + itemWidth / 2;
       const distance = Math.abs(viewportCenter - itemCenter);
-      
+
       if (distance < minDistance) {
         minDistance = distance;
         closestIndex = index;
       }
     });
-    
+
     setCenterIndex(closestIndex);
   };
 
-  const isCenterItem = (index) => {
+  const isCenterItem = index => {
     return index === centerIndex;
   };
 
-  const isLeftItem = (index) => {
+  const isLeftItem = index => {
     return index === centerIndex - 1;
   };
 
-  const isRightItem = (index) => {
+  const isRightItem = index => {
     return index === centerIndex + 1;
   };
 
@@ -84,14 +91,14 @@ const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
     const itemGap = 12;
     const itemSpacing = itemWidth + itemGap;
     const paddingLeft = 24;
-    
+
     // Calculate position to center item at index 2
     const targetIndex = 2;
     const itemLeft = paddingLeft + targetIndex * itemSpacing;
     const itemCenter = itemLeft + itemWidth / 2;
     const viewportCenter = screenWidth / 2;
     const initialScrollX = itemCenter - viewportCenter;
-    
+
     // Scroll to initial position after a short delay to ensure layout is complete
     setTimeout(() => {
       if (scrollViewRef.current) {
@@ -117,8 +124,7 @@ const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
         bounces={false}
         pagingEnabled={false}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
-      >
+        scrollEventThrottle={16}>
         {tikImages.map((num, index) => {
           const isCenter = isCenterItem(index);
           const isLeft = isLeftItem(index);
@@ -126,16 +132,15 @@ const Carusel = ({ style, property1 = 'דירות', onCategorySelect }) => {
           const isFaded = !isCenter && !isLeft && !isRight;
 
           return (
-            <TouchableOpacity 
-              key={num} 
+            <TouchableOpacity
+              key={num}
               style={styles.categoryItem}
               onPress={() => {
                 if (onCategorySelect) {
                   onCategorySelect(num);
                 }
               }}
-              activeOpacity={0.7}
-            >
+              activeOpacity={0.7}>
               <Image
                 source={getTikImage(num)}
                 style={[
@@ -189,19 +194,19 @@ const styles = StyleSheet.create({
   },
   centerImage: {
     opacity: 1,
-    transform: [{ rotate: '0deg' }],
+    transform: [{rotate: '0deg'}],
   },
   leftImage: {
     opacity: 0.4,
-    transform: [{ rotate: '12deg' }, { translateY: -8 }],
+    transform: [{rotate: '12deg'}, {translateY: -8}],
   },
   rightImage: {
     opacity: 0.4,
-    transform: [{ rotate: '-12deg' }, { translateY: -8 }],
+    transform: [{rotate: '-12deg'}, {translateY: -8}],
   },
   fadedImage: {
     opacity: 0.2,
-    transform: [{ rotate: '0deg' }],
+    transform: [{rotate: '0deg'}],
   },
 });
 

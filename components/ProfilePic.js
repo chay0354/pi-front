@@ -1,6 +1,12 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import { Colors, FontSizes, LineHeights, Gaps, Dimensions } from '../constants/styles';
+import {View, Text, Image, StyleSheet} from 'react-native';
+import {
+  Colors,
+  FontSizes,
+  LineHeights,
+  Gaps,
+  Dimensions,
+} from '../constants/styles';
 
 /**
  * ProfilePic Component
@@ -41,22 +47,22 @@ const ProfilePic = ({
     if (profilePic?.includes('avatar4.png')) {
       return require('../assets/avatar4.png');
     }
-    if (profilePic?.includes('profile-image@2x.png')) {
-      return require('../assets/profile-image@2x.png');
+    if (profilePic?.includes('profile-image.png')) {
+      return require('../assets/profile-image.png');
     }
-    if (profilePic?.includes('profile-pic@2x.png')) {
-      return require('../assets/profile-pic@2x.png');
+    if (profilePic?.includes('profile-pic.png')) {
+      return require('../assets/profile-pic.png');
     }
-    if (profilePic?.includes('profile-pic1@2x.png')) {
-      return require('../assets/profile-pic1@2x.png');
+    if (profilePic?.includes('profile-pic1.png')) {
+      return require('../assets/profile-pic1.png');
     }
-    if (profilePic?.includes('profile-pic2@2x.png')) {
-      return require('../assets/profile-pic2@2x.png');
+    if (profilePic?.includes('profile-pic2.png')) {
+      return require('../assets/profile-pic2.png');
     }
-    if (profilePic?.includes('profile-pic3@2x.png')) {
-      return require('../assets/profile-pic3@2x.png');
+    if (profilePic?.includes('profile-pic3.png')) {
+      return require('../assets/profile-pic3.png');
     }
-    return require('../assets/profile-pic@2x.png'); // default
+    return require('../assets/profile-pic.png'); // default
   };
 
   return (

@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontSizes, LineHeights, Dimensions } from '../constants/styles';
+import {View, Text, StyleSheet} from 'react-native';
+import {Colors, FontSizes, LineHeights, Dimensions} from '../constants/styles';
 
 /**
  * POPULAR Component
  * Popular badge label
  */
-const POPULAR = ({ style }) => {
+const POPULAR = ({style}) => {
   return (
     <View style={[styles.popular, style]}>
       <Text style={styles.popularText}>POPULAR</Text>

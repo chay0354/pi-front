@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import {View, TouchableOpacity, Image, StyleSheet} from 'react-native';
 import POPULAR from './POPULAR';
-import { Dimensions, Padding, BorderRadius } from '../constants/styles';
+import {Dimensions, Padding, BorderRadius} from '../constants/styles';
 
 /**
  * Default Component
  * Popular badge wrapper with decorative icon
  */
-const Default = ({ style }) => {
+const Default = ({style}) => {
   return (
     <View style={[styles.labeldefault, style]}>
       <TouchableOpacity style={styles.popularWrapper} activeOpacity={0.8}>

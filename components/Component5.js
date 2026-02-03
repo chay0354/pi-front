@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
-import { Dimensions } from '../constants/styles';
+import {View, Image, StyleSheet} from 'react-native';
+import {Dimensions} from '../constants/styles';
 
 /**
  * Component5 Component
  * Pi character illustration for category
  * @param {string} category - Category type
  */
-const Component5 = ({ style, category = 'base' }) => {
+const Component5 = ({style, category = 'base'}) => {
   return (
     <View style={[styles.component5, style]}>
       <Image
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -42 }, { translateY: -25.7 }],
+    transform: [{translateX: -42}, {translateY: -25.7}],
     width: Dimensions.width49,
     height: Dimensions.height55_5,
   },

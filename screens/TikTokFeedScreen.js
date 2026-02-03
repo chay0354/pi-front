@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, {useRef, useState, useEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -10,11 +10,16 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Colors } from '../constants/styles';
-import { getListings } from '../utils/api';
+import {Colors} from '../constants/styles';
+import {getListings} from '../utils/api';
 
 // Image Swiper Component for multiple photos - supports slideshow and collage
-const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' }) => {
+const ImageSwiper = ({
+  images,
+  screenHeight,
+  video,
+  displayOption = 'slideshow',
+}) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const scrollViewRef = useRef(null);
 
@@ -27,7 +32,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
     }
   }, [currentImageIndex, displayOption]);
 
-  const handleScroll = (event) => {
+  const handleScroll = event => {
     if (displayOption === 'slideshow') {
       const contentOffsetX = event.nativeEvent.contentOffset.x;
       const viewWidth = Dimensions.get('window').width;
@@ -42,9 +47,9 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
   if (displayOption === 'collage' && images.length > 0) {
     const imageCount = Math.min(images.length, 5); // Support up to 5 images
     const screenWidth = Dimensions.get('window').width;
-    
+
     // Define specific layouts for each image count
-    const getImageLayout = (index) => {
+    const getImageLayout = index => {
       switch (imageCount) {
         case 1:
           // Single image: Full screen - centered with contain mode
@@ -54,7 +59,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
             top: 0,
             left: 0,
           };
-        
+
         case 2:
           // Two images: Side by side
           return {
@@ -63,7 +68,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
             top: 0,
             left: index * (screenWidth / 2),
           };
-        
+
         case 3:
           // Three images: One large on top, two small below
           if (index === 0) {
@@ -81,7 +86,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
               left: (index - 1) * (screenWidth / 2),
             };
           }
-        
+
         case 4:
           // Four images: 2x2 grid
           const isTopRow = index < 2;
@@ -91,7 +96,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
             top: isTopRow ? 0 : screenHeight / 2,
             left: (index % 2) * (screenWidth / 2),
           };
-        
+
         case 5:
           // Five images: One large on left, 4 small on right (2x2 grid)
           if (index === 0) {
@@ -110,15 +115,15 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
             const rightHalfWidth = screenWidth / 2;
             const smallImageWidth = rightHalfWidth / 2; // Each small image is quarter of screen width
             const smallImageHeight = screenHeight / 2;
-            
+
             return {
               width: smallImageWidth,
               height: smallImageHeight,
               top: row * smallImageHeight,
-              left: (screenWidth / 2) + (col * smallImageWidth),
+              left: screenWidth / 2 + col * smallImageWidth,
             };
           }
-        
+
         default:
           // Fallback: Equal grid
           const cols = Math.ceil(Math.sqrt(imageCount));
@@ -131,25 +136,24 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
           };
       }
     };
-    
+
     return (
-      <View 
+      <View
         style={[
-          styles.videoItem, 
-          { 
-            height: screenHeight, 
+          styles.videoItem,
+          {
+            height: screenHeight,
             minHeight: screenHeight,
             maxHeight: screenHeight,
             position: 'relative',
-          }
-        ]}
-      >
+          },
+        ]}>
         <View style={styles.collageContainer}>
           {images.slice(0, 5).map((image, index) => {
             const layout = getImageLayout(index);
             return (
-              <View 
-                key={index} 
+              <View
+                key={index}
                 style={[
                   styles.collageImageContainer,
                   {
@@ -161,19 +165,20 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
                     justifyContent: 'center',
                     alignItems: 'center',
                     backgroundColor: '#000',
-                  }
-                ]}
-              >
+                  },
+                ]}>
                 <Image
-                  source={{ uri: image.uri }}
+                  source={{uri: image.uri}}
                   style={[
-                    imageCount === 1 ? styles.collageImageSingle : styles.collageImage,
+                    imageCount === 1
+                      ? styles.collageImageSingle
+                      : styles.collageImage,
                     imageCount === 1 && {
                       maxWidth: layout.width,
                       maxHeight: layout.height,
-                    }
+                    },
                   ]}
-                  resizeMode={imageCount === 1 ? "contain" : "cover"}
+                  resizeMode={imageCount === 1 ? 'contain' : 'cover'}
                 />
               </View>
             );
@@ -186,20 +191,19 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
   // Slideshow view - swipe horizontally between images
   // For single images, ensure they're centered and fully visible
   const isSingleImage = images.length === 1;
-  
+
   return (
-    <View 
+    <View
       style={[
-        styles.videoItem, 
-        { 
-          height: screenHeight, 
+        styles.videoItem,
+        {
+          height: screenHeight,
           minHeight: screenHeight,
           maxHeight: screenHeight,
           justifyContent: isSingleImage ? 'center' : 'flex-start',
           alignItems: isSingleImage ? 'center' : 'flex-start',
-        }
-      ]}
-    >
+        },
+      ]}>
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -211,18 +215,17 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
         scrollEnabled={!isSingleImage} // Disable scrolling for single image
       >
         {images.map((image, index) => (
-          <View 
-            key={index} 
+          <View
+            key={index}
             style={[
               styles.swiperImageContainer,
-              isSingleImage && styles.swiperImageContainerSingle
-            ]}
-          >
+              isSingleImage && styles.swiperImageContainerSingle,
+            ]}>
             <Image
-              source={{ uri: image.uri }}
+              source={{uri: image.uri}}
               style={[
                 styles.swiperImage,
-                isSingleImage && styles.swiperImageSingle
+                isSingleImage && styles.swiperImageSingle,
               ]}
               resizeMode="contain"
             />
@@ -236,7 +239,7 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
               key={index}
               style={[
                 styles.indicatorDot,
-                index === currentImageIndex && styles.indicatorDotActive
+                index === currentImageIndex && styles.indicatorDotActive,
               ]}
             />
           ))}
@@ -251,7 +254,12 @@ const ImageSwiper = ({ images, screenHeight, video, displayOption = 'slideshow' 
  * Vertical scrolling feed with TikTok-like behavior
  * Only one video/image visible at a time, snaps to each item
  */
-const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [], selectedCategory = null }) => {
+const TikTokFeedScreen = ({
+  onClose,
+  onOpenOfficeListing,
+  uploadedListings = [],
+  selectedCategory = null,
+}) => {
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
@@ -271,7 +279,10 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
       });
     };
 
-    const subscription = Dimensions.addEventListener('change', updateDimensions);
+    const subscription = Dimensions.addEventListener(
+      'change',
+      updateDimensions,
+    );
     return () => subscription?.remove();
   }, []);
 
@@ -295,38 +306,53 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
     const fetchListings = async () => {
       try {
         setLoadingListings(true);
-        const categoryToFetch = selectedCategory ? parseInt(selectedCategory) : undefined;
-        console.log('🔍 [TikTokFeedScreen] Fetching listings for category:', categoryToFetch, '(selectedCategory:', selectedCategory, ')');
-        console.log('🔍 [TikTokFeedScreen] useEffect triggered, selectedCategory:', selectedCategory, 'refreshKey:', refreshKey);
-        
-        const result = await getListings({ 
+        const categoryToFetch = selectedCategory
+          ? parseInt(selectedCategory)
+          : undefined;
+        console.log(
+          '🔍 [TikTokFeedScreen] Fetching listings for category:',
+          categoryToFetch,
+          '(selectedCategory:',
+          selectedCategory,
+          ')',
+        );
+        console.log(
+          '🔍 [TikTokFeedScreen] useEffect triggered, selectedCategory:',
+          selectedCategory,
+          'refreshKey:',
+          refreshKey,
+        );
+
+        const result = await getListings({
           status: 'published',
-          category: categoryToFetch
+          category: categoryToFetch,
         });
-        
+
         console.log('✅ [TikTokFeedScreen] getListings returned:', result);
-        
+
         console.log('✅ Fetched listings result:', result);
         console.log('📊 Result structure:', {
           success: result.success,
           listingsCount: result.listings?.length || 0,
-          hasListings: !!result.listings
+          hasListings: !!result.listings,
         });
-        
+
         if (result.listings && result.listings.length > 0) {
           console.log('📋 First listing details:', {
             id: result.listings[0].id,
             category: result.listings[0].category,
             images: result.listings[0].listing_images?.length || 0,
             videos: result.listings[0].listing_videos?.length || 0,
-            imageUrls: result.listings[0].listing_images?.map(img => img.image_url) || []
+            imageUrls:
+              result.listings[0].listing_images?.map(img => img.image_url) ||
+              [],
           });
         }
-        
+
         if (result.success && result.listings) {
           console.log(`Received ${result.listings.length} listings from API`);
           console.log('Sample listing:', result.listings[0]);
-          
+
           // Transform database listings to video format
           const transformedListings = result.listings
             .filter(listing => {
@@ -335,68 +361,85 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
               const videos = listing.listing_videos || [];
               const hasContent = images.length > 0 || videos.length > 0;
               if (!hasContent) {
-                console.log(`Skipping listing ${listing.id} - no images or videos`);
+                console.log(
+                  `Skipping listing ${listing.id} - no images or videos`,
+                );
               }
               return hasContent;
             })
-            .map((listing) => {
+            .map(listing => {
               const images = listing.listing_images || [];
               const mainImage = images.find(img => img.image_type === 'main');
-              const additionalImages = images.filter(img => img.image_type === 'additional');
+              const additionalImages = images.filter(
+                img => img.image_type === 'additional',
+              );
               const video = listing.listing_videos && listing.listing_videos[0];
-              
+
               // Build images array - must have at least one image
               let imagesArray = [];
               if (mainImage && mainImage.image_url) {
-                imagesArray = [{ uri: mainImage.image_url }];
+                imagesArray = [{uri: mainImage.image_url}];
                 if (additionalImages.length > 0) {
-                  imagesArray = [...imagesArray, ...additionalImages
-                    .filter(img => img.image_url)
-                    .map(img => ({ uri: img.image_url }))];
+                  imagesArray = [
+                    ...imagesArray,
+                    ...additionalImages
+                      .filter(img => img.image_url)
+                      .map(img => ({uri: img.image_url})),
+                  ];
                 }
               } else if (additionalImages.length > 0) {
                 imagesArray = additionalImages
                   .filter(img => img.image_url)
-                  .map(img => ({ uri: img.image_url }));
+                  .map(img => ({uri: img.image_url}));
               }
-              
+
               const listingCategory = parseInt(listing.category) || 1;
-              
+
               // Category 3 specific fields
               const searchPurposeLabels = {
-                'enter': 'מחפש להיכנס',
-                'bring_in': 'מחפש להכניס',
-                'partner': 'מחפש שותף'
+                enter: 'מחפש להיכנס',
+                bring_in: 'מחפש להכניס',
+                partner: 'מחפש שותף',
               };
-              
+
               const apartmentTypeLabels = {
-                'regular': 'דירה רגילה',
-                'studio': 'דירת סטודיו',
-                'garden': 'דירת גן',
-                'duplex': 'דופלקס',
-                'penthouse': 'נטהאוז',
-                'private': 'בית פרטי'
+                regular: 'דירה רגילה',
+                studio: 'דירת סטודיו',
+                garden: 'דירת גן',
+                duplex: 'דופלקס',
+                penthouse: 'נטהאוז',
+                private: 'בית פרטי',
               };
-              
+
               return {
                 id: listing.id,
                 type: video ? 'video' : 'images',
-                video: video && video.video_url ? { uri: video.video_url } : null,
+                video: video && video.video_url ? {uri: video.video_url} : null,
                 images: imagesArray,
                 displayOption: listing.display_option || 'slideshow', // 'collage' or 'slideshow'
                 location: listing.address || 'תל אביב',
                 price: `₪${parseFloat(listing.price || listing.budget || 0).toLocaleString()}`,
                 purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
                 description: listing.description || '',
-                propertyType: listing.property_type === 'office' ? 'משרד' : 'קומה שלמה',
+                propertyType:
+                  listing.property_type === 'office' ? 'משרד' : 'קומה שלמה',
                 area: listing.area,
                 rooms: listing.rooms,
                 floor: listing.floor,
                 category: listingCategory,
                 // Category 3 specific fields
-                searchPurpose: listing.search_purpose ? searchPurposeLabels[listing.search_purpose] : null,
-                preferredApartmentType: listing.preferred_apartment_type ? apartmentTypeLabels[listing.preferred_apartment_type] : null,
-                preferredGender: listing.preferred_gender === 'female' ? 'אישה' : listing.preferred_gender === 'male' ? 'גבר' : null,
+                searchPurpose: listing.search_purpose
+                  ? searchPurposeLabels[listing.search_purpose]
+                  : null,
+                preferredApartmentType: listing.preferred_apartment_type
+                  ? apartmentTypeLabels[listing.preferred_apartment_type]
+                  : null,
+                preferredGender:
+                  listing.preferred_gender === 'female'
+                    ? 'אישה'
+                    : listing.preferred_gender === 'male'
+                      ? 'גבר'
+                      : null,
                 preferredAgeMin: listing.preferred_age_min,
                 preferredAgeMax: listing.preferred_age_max,
                 preferences: listing.preferences || {},
@@ -405,28 +448,38 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
                 fromDatabase: true,
               };
             });
-          
+
           // Backend already filters by category, but double-check client-side
-          const filteredListings = selectedCategory 
+          const filteredListings = selectedCategory
             ? transformedListings.filter(listing => {
                 const matches = listing.category === parseInt(selectedCategory);
                 if (!matches) {
-                  console.log(`Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`);
+                  console.log(
+                    `Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`,
+                  );
                 }
                 return matches;
               })
             : transformedListings;
-          
-          console.log(`Loaded ${filteredListings.length} listings for category ${selectedCategory || 'all'}`);
-          console.log('Listings details:', filteredListings.map(l => ({ 
-            id: l.id, 
-            category: l.category, 
-            imagesCount: l.images.length,
-            hasVideo: !!l.video
-          })));
+
+          console.log(
+            `Loaded ${filteredListings.length} listings for category ${selectedCategory || 'all'}`,
+          );
+          console.log(
+            'Listings details:',
+            filteredListings.map(l => ({
+              id: l.id,
+              category: l.category,
+              imagesCount: l.images.length,
+              hasVideo: !!l.video,
+            })),
+          );
           setDbListings(filteredListings);
         } else {
-          console.log('No listings found or result was not successful. Result:', result);
+          console.log(
+            'No listings found or result was not successful. Result:',
+            result,
+          );
           setDbListings([]);
         }
       } catch (error) {
@@ -442,7 +495,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
   }, [selectedCategory, refreshKey]);
 
   // Map tik image numbers to require statements
-  const getTikImage = (num) => {
+  const getTikImage = num => {
     const imageMap = {
       1: require('../assets/tik1.png'),
       2: require('../assets/tik2.png'),
@@ -508,7 +561,7 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
       category: 4,
       title: 'בית פרטי עם גינה',
       description: 'בית משפחתי עם חצר גדולה',
-      location: 'רמת גן, ז\'בוטינסקי',
+      location: "רמת גן, ז'בוטינסקי",
       price: '₪8,500',
       likes: 3456,
       views: 12345,
@@ -594,43 +647,67 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
 
   // When a category is selected, show ONLY database listings (no mock data)
   // When no category is selected, show database listings + mock videos for general browsing
-  const videos = selectedCategory 
+  const videos = selectedCategory
     ? uploadedVideos // Only DB content when category is selected
     : [...uploadedVideos, ...allMockVideos]; // DB + mock when browsing all
-  
-  console.log(`📊 Total videos to display: ${videos.length} (${uploadedVideos.length} from DB${selectedCategory ? '' : `, ${allMockVideos.length} mock`})`);
+
+  console.log(
+    `📊 Total videos to display: ${videos.length} (${uploadedVideos.length} from DB${selectedCategory ? '' : `, ${allMockVideos.length} mock`})`,
+  );
   if (selectedCategory) {
-    console.log(`📂 Showing ONLY database listings for category: ${selectedCategory}`);
+    console.log(
+      `📂 Showing ONLY database listings for category: ${selectedCategory}`,
+    );
   }
-  
+
   // Show loading indicator while fetching (only on initial load)
   if (loadingListings && dbListings.length === 0 && videos.length === 0) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View
+        style={[
+          styles.container,
+          {justifyContent: 'center', alignItems: 'center'},
+        ]}>
         <ActivityIndicator size="large" color={Colors.yellowIcons} />
-        <Text style={{ color: '#fff', marginTop: 20 }}>טוען רשימות...</Text>
+        <Text style={{color: '#fff', marginTop: 20}}>טוען רשימות...</Text>
       </View>
     );
   }
-  
+
   // Show empty state if no videos
   if (videos.length === 0 && !loadingListings) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#fff', fontSize: 18, textAlign: 'center', padding: 20 }}>
+      <View
+        style={[
+          styles.container,
+          {justifyContent: 'center', alignItems: 'center'},
+        ]}>
+        <Text
+          style={{
+            color: '#fff',
+            fontSize: 18,
+            textAlign: 'center',
+            padding: 20,
+          }}>
           אין רשימות זמינות בקטגוריה זו
         </Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={onOpenOfficeListing}
-          style={{ marginTop: 20, padding: 15, backgroundColor: Colors.yellowIcons, borderRadius: 8 }}
-        >
-          <Text style={{ color: '#000', fontWeight: 'bold' }}>פרסם רשימה חדשה</Text>
+          style={{
+            marginTop: 20,
+            padding: 15,
+            backgroundColor: Colors.yellowIcons,
+            borderRadius: 8,
+          }}>
+          <Text style={{color: '#000', fontWeight: 'bold'}}>
+            פרסם רשימה חדשה
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const scrollToIndex = (index) => {
+  const scrollToIndex = index => {
     if (index >= 0 && index < videos.length && scrollViewRef.current) {
       const targetY = index * screenHeight;
       scrollViewRef.current.scrollTo({
@@ -730,27 +807,25 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
 
       {/* Navigation buttons */}
       <View style={styles.navigationButtons}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.navButton, 
+            styles.navButton,
             styles.navButtonUp,
-            currentIndex === 0 && styles.navButtonDisabled
-          ]} 
+            currentIndex === 0 && styles.navButtonDisabled,
+          ]}
           onPress={handlePrevious}
-          disabled={currentIndex === 0}
-        >
+          disabled={currentIndex === 0}>
           <Text style={styles.navButtonText}>▲</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[
-            styles.navButton, 
+            styles.navButton,
             styles.navButtonDown,
-            currentIndex === videos.length - 1 && styles.navButtonDisabled
-          ]} 
+            currentIndex === videos.length - 1 && styles.navButtonDisabled,
+          ]}
           onPress={handleNext}
-          disabled={currentIndex === videos.length - 1}
-        >
+          disabled={currentIndex === videos.length - 1}>
           <Text style={styles.navButtonText}>▼</Text>
         </TouchableOpacity>
       </View>
@@ -758,11 +833,10 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
       <ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        style={[styles.scrollView, { height: screenHeight }]}
+        style={[styles.scrollView, {height: screenHeight}]}
         contentContainerStyle={styles.scrollContent}
         scrollEnabled={false}
-        bounces={false}
-      >
+        bounces={false}>
         {videos.map((video, index) => {
           // Handle uploaded content
           if (video.isUploaded) {
@@ -770,17 +844,16 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
             if (video.type === 'video' && video.video) {
               // Display video
               return (
-                <View 
-                  key={video.id} 
+                <View
+                  key={video.id}
                   style={[
-                    styles.videoItem, 
-                    { 
-                      height: screenHeight, 
+                    styles.videoItem,
+                    {
+                      height: screenHeight,
                       minHeight: screenHeight,
                       maxHeight: screenHeight,
-                    }
-                  ]}
-                >
+                    },
+                  ]}>
                   {Platform.OS === 'web' ? (
                     <video
                       src={video.video.uri}
@@ -791,18 +864,21 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
                       playsInline
                     />
                   ) : (
-                    <Text style={styles.videoPlaceholder}>Video: {video.video.name}</Text>
+                    <Text style={styles.videoPlaceholder}>
+                      Video: {video.video.name}
+                    </Text>
                   )}
                 </View>
               );
-            } 
+            }
             // Priority 2: If there are images (and no video), show images based on displayOption
             else if (video.images && video.images.length > 0) {
               // Only use displayOption if there's more than 1 image
-              const displayMode = video.images.length > 1 
-                ? (video.displayOption || 'slideshow') 
-                : 'slideshow'; // Single image always uses slideshow (no need for collage)
-              
+              const displayMode =
+                video.images.length > 1
+                  ? video.displayOption || 'slideshow'
+                  : 'slideshow'; // Single image always uses slideshow (no need for collage)
+
               // Display images with swipe or collage functionality
               return (
                 <ImageSwiper
@@ -815,20 +891,19 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
               );
             }
           }
-          
+
           // Handle mock data (existing images)
           return (
-            <View 
-              key={video.id} 
+            <View
+              key={video.id}
               style={[
-                styles.videoItem, 
-                { 
-                  height: screenHeight, 
+                styles.videoItem,
+                {
+                  height: screenHeight,
                   minHeight: screenHeight,
                   maxHeight: screenHeight,
-                }
-              ]}
-            >
+                },
+              ]}>
               <View style={styles.videoImageContainer}>
                 <Image
                   source={getTikImage(video.image)}
@@ -854,27 +929,38 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
             </TouchableOpacity>
             {videos[currentIndex]?.category === 3 ? (
               <View style={styles.forRentButton}>
-                <Text style={styles.forRentText}>{videos[currentIndex]?.searchPurpose || 'מטרת החיפוש'}</Text>
+                <Text style={styles.forRentText}>
+                  {videos[currentIndex]?.searchPurpose || 'מטרת החיפוש'}
+                </Text>
               </View>
             ) : (
               <View style={styles.forRentButton}>
-                <Text style={styles.forRentText}>{videos[currentIndex]?.purpose || 'להשכרה'}</Text>
+                <Text style={styles.forRentText}>
+                  {videos[currentIndex]?.purpose || 'להשכרה'}
+                </Text>
               </View>
             )}
           </View>
           {videos[currentIndex]?.category === 3 ? (
             <View style={styles.locationContainer}>
               <Text style={styles.locationText}>
-                {videos[currentIndex]?.preferredApartmentType ? `${videos[currentIndex].preferredApartmentType}` : ''}
-                {videos[currentIndex]?.preferredGender ? ` • ${videos[currentIndex].preferredGender}` : ''}
-                {videos[currentIndex]?.preferredAgeMin && videos[currentIndex]?.preferredAgeMax 
-                  ? ` • גיל ${videos[currentIndex].preferredAgeMin}-${videos[currentIndex].preferredAgeMax}` 
+                {videos[currentIndex]?.preferredApartmentType
+                  ? `${videos[currentIndex].preferredApartmentType}`
+                  : ''}
+                {videos[currentIndex]?.preferredGender
+                  ? ` • ${videos[currentIndex].preferredGender}`
+                  : ''}
+                {videos[currentIndex]?.preferredAgeMin &&
+                videos[currentIndex]?.preferredAgeMax
+                  ? ` • גיל ${videos[currentIndex].preferredAgeMin}-${videos[currentIndex].preferredAgeMax}`
                   : ''}
               </Text>
             </View>
           ) : (
             <View style={styles.locationContainer}>
-              <Text style={styles.locationText}>{videos[currentIndex]?.location || 'תל אביב, רוטשילד 54'}</Text>
+              <Text style={styles.locationText}>
+                {videos[currentIndex]?.location || 'תל אביב, רוטשילד 54'}
+              </Text>
               <Image
                 source={require('../assets/tiktok-location-icon.svg')}
                 style={styles.locationIcon}
@@ -888,84 +974,92 @@ const TikTokFeedScreen = ({ onClose, onOpenOfficeListing, uploadedListings = [],
       {/* Bottom Bar */}
       {!showBottomSheet && (
         <View style={styles.bottomBar}>
-        <View style={styles.iconsContainer}>
-          <Image
-            source={require('../assets/tiktok-icon1.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-          <Image
-            source={require('../assets/tiktok-icon2.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-          <TouchableOpacity onPress={() => setShowBottomSheet(!showBottomSheet)}>
+          <View style={styles.iconsContainer}>
             <Image
-              source={require('../assets/tiktok-icon3.png')}
+              source={require('../assets/tiktok-icon1.png')}
               style={styles.icon}
               resizeMode="contain"
             />
-          </TouchableOpacity>
-          <Image
-            source={require('../assets/tiktok-icon4.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-          <Image
-            source={require('../assets/tiktok-icon5.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
+            <Image
+              source={require('../assets/tiktok-icon2.png')}
+              style={styles.icon}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              onPress={() => setShowBottomSheet(!showBottomSheet)}>
+              <Image
+                source={require('../assets/tiktok-icon3.png')}
+                style={styles.icon}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            <Image
+              source={require('../assets/tiktok-icon4.png')}
+              style={styles.icon}
+              resizeMode="contain"
+            />
+            <Image
+              source={require('../assets/tiktok-icon5.png')}
+              style={styles.icon}
+              resizeMode="contain"
+            />
+          </View>
         </View>
-      </View>
       )}
 
       {/* Bottom Sheet */}
       {showBottomSheet && (
         <View style={styles.bottomSheet}>
           <View style={styles.bottomSheetHandle} />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.bottomSheetOption}
             onPress={() => {
               setShowBottomSheet(false);
               if (onOpenOfficeListing) {
                 onOpenOfficeListing(selectedCategory); // Pass the selected category
               }
-            }}
-          >
+            }}>
             <Text style={styles.bottomSheetArrow}>‹</Text>
             <View style={styles.bottomSheetOptionContent}>
               <View style={styles.bottomSheetTextContainer}>
                 {selectedCategory === 3 ? (
                   <>
                     <Text style={styles.bottomSheetTitle}>שותפים</Text>
-                    <Text style={styles.bottomSheetSubtitle}>פרסם חיפוש שותף או דירת שותפים</Text>
+                    <Text style={styles.bottomSheetSubtitle}>
+                      פרסם חיפוש שותף או דירת שותפים
+                    </Text>
                   </>
                 ) : (
                   <>
                     <Text style={styles.bottomSheetTitle}>משרד</Text>
-                    <Text style={styles.bottomSheetSubtitle}>פרסם משרד למכירה או השכרה</Text>
+                    <Text style={styles.bottomSheetSubtitle}>
+                      פרסם משרד למכירה או השכרה
+                    </Text>
                   </>
                 )}
               </View>
               <Image
-                source={selectedCategory === 3 
-                  ? require('../assets/image22221.png')
-                  : require('../assets/post-office-icon.png')}
+                source={
+                  selectedCategory === 3
+                    ? require('../assets/image22221.png')
+                    : require('../assets/post-office-icon.png')
+                }
                 style={styles.bottomSheetIcon}
                 resizeMode="contain"
               />
             </View>
           </TouchableOpacity>
-          
+
           <View style={styles.bottomSheetDivider} />
-          
+
           <TouchableOpacity style={styles.bottomSheetOption}>
             <Text style={styles.bottomSheetArrow}>‹</Text>
             <View style={styles.bottomSheetOptionContent}>
               <View style={styles.bottomSheetTextContainer}>
                 <Text style={styles.bottomSheetTitle}>פוסט</Text>
-                <Text style={styles.bottomSheetSubtitle}>שתף מידע או עדכון עם הקהילה</Text>
+                <Text style={styles.bottomSheetSubtitle}>
+                  שתף מידע או עדכון עם הקהילה
+                </Text>
               </View>
               <Image
                 source={require('../assets/post-community-icon.png')}
@@ -1088,7 +1182,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 2,
   },
   bottomInfo: {
@@ -1117,7 +1211,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 2,
   },
   videoTitle: {
@@ -1126,7 +1220,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   videoDescription: {
@@ -1134,7 +1228,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   videoMeta: {
@@ -1146,7 +1240,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   price: {
@@ -1154,21 +1248,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   views: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 12,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   navigationButtons: {
     position: 'absolute',
     right: 20,
     top: '50%',
-    transform: [{ translateY: -60 }],
+    transform: [{translateY: -60}],
     alignItems: 'center',
     zIndex: 100,
   },
@@ -1287,7 +1381,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   locationContainer: {
@@ -1304,7 +1398,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
+    textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },
   bottomSheet: {

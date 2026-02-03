@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import {View, StyleSheet} from 'react-native';
 import CategoryFrame1 from './CategoryFrame1';
 
 /**
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     left: '50%',
-    transform: [{ translateX: -52 }],
+    transform: [{translateX: -52}],
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',

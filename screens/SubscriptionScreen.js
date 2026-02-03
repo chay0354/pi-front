@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   ScrollView,
@@ -8,13 +8,17 @@ import {
   StyleSheet,
   ImageBackground,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 
 /**
  * SubscriptionScreen Component
  * Subscription signup page for brokers/realtors
  */
-const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) => {
+const SubscriptionScreen = ({
+  onClose,
+  onStart,
+  subscriptionType = 'broker',
+}) => {
   const [isAgreed, setIsAgreed] = useState(false);
 
   const getProfileQuestion = () => {
@@ -44,7 +48,7 @@ const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) =
   const features = [
     '10 חזיתות שיווק וניהול למתווכים',
     'פרסום ומיתוג אישי למשרד התיווך שלך',
-    'יצירת קשר וניהול לקוחות צ\'אט פאי',
+    "יצירת קשר וניהול לקוחות צ'אט פאי",
     'גיוס עובדים דרך הפלטפורמה',
     'פרסום מודעות בית פתוח, נכסים ופוסטים',
     'הצעת בלעדיות לנכסים',
@@ -55,14 +59,12 @@ const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) =
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -80,12 +82,12 @@ const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) =
         <View style={styles.profileSection}>
           <View style={styles.profilePictureContainer}>
             <Image
-              source={require('../assets/profile-pic@2x.png')}
+              source={require('../assets/profile-pic.png')}
               style={styles.profilePicture}
               resizeMode="cover"
             />
           </View>
-              <Text style={styles.profileQuestion}>{getProfileQuestion()}</Text>
+          <Text style={styles.profileQuestion}>{getProfileQuestion()}</Text>
           <Text style={styles.profileSubtext}>
             אמת את חשבונך וקבל גישה מלאה לפלטפורמה!
           </Text>
@@ -115,14 +117,13 @@ const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) =
               אני מאשר/ת שלא אפרסם מודעות פיקטיביות
             </Text>
             <Text style={styles.disclaimerText}>
-              במקרה של פרסום כוזב - התראה ראשונה תישלח, ובפעם השנייה תבוצע
-              חסימה אוטומטית של החשבון.
+              במקרה של פרסום כוזב - התראה ראשונה תישלח, ובפעם השנייה תבוצע חסימה
+              אוטומטית של החשבון.
             </Text>
           </View>
           <TouchableOpacity
             onPress={() => setIsAgreed(!isAgreed)}
-            style={styles.checkboxContainer}
-          >
+            style={styles.checkboxContainer}>
             <Image
               source={
                 isAgreed
@@ -144,8 +145,7 @@ const SubscriptionScreen = ({ onClose, onStart, subscriptionType = 'broker' }) =
                 onStart();
               }
             }}
-            style={styles.buttonWrapper}
-          >
+            style={styles.buttonWrapper}>
             <Image
               source={
                 isAgreed

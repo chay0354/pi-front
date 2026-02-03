@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   ScrollView,
@@ -11,14 +11,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
-import { getCurrentUser } from '../utils/api';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {getCurrentUser} from '../utils/api';
 
 /**
  * LoginScreen Component
  * Login page for registered users to sign in
  */
-const LoginScreen = ({ onClose, onLoginSuccess }) => {
+const LoginScreen = ({onClose, onLoginSuccess}) => {
   const [email, setEmail] = useState('');
   const [subscriberNumber, setSubscriberNumber] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -26,17 +26,20 @@ const LoginScreen = ({ onClose, onLoginSuccess }) => {
 
   const handleLogin = async () => {
     setErrorMessage(null);
-    
+
     if (!email.trim() && !subscriberNumber.trim()) {
       setErrorMessage('אנא הזן כתובת מייל או מספר מנוי');
       return;
     }
-    
+
     setIsLoggingIn(true);
     try {
-      const response = await getCurrentUser(email.trim() || null, subscriberNumber.trim() || null);
+      const response = await getCurrentUser(
+        email.trim() || null,
+        subscriberNumber.trim() || null,
+      );
       console.log('Login response:', response);
-      
+
       if (response && response.subscription) {
         // Check if user is verified
         if (response.subscription.status === 'verified') {
@@ -45,7 +48,9 @@ const LoginScreen = ({ onClose, onLoginSuccess }) => {
             onLoginSuccess(response.subscription);
           }
         } else {
-          setErrorMessage('החשבון שלך עדיין לא אומת. אנא השלם את תהליך האימות.');
+          setErrorMessage(
+            'החשבון שלך עדיין לא אומת. אנא השלם את תהליך האימות.',
+          );
         }
       } else {
         setErrorMessage('משתמש לא נמצא. אנא בדוק את הפרטים שהזנת.');
@@ -62,14 +67,12 @@ const LoginScreen = ({ onClose, onLoginSuccess }) => {
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -134,10 +137,11 @@ const LoginScreen = ({ onClose, onLoginSuccess }) => {
           disabled={(!email.trim() && !subscriberNumber.trim()) || isLoggingIn}
           style={[
             styles.loginButton,
-            (!email.trim() && !subscriberNumber.trim()) || isLoggingIn ? styles.loginButtonDisabled : null
+            (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
+              ? styles.loginButtonDisabled
+              : null,
           ]}
-          onPress={handleLogin}
-        >
+          onPress={handleLogin}>
           {isLoggingIn ? (
             <ActivityIndicator color={Colors.white100} />
           ) : (

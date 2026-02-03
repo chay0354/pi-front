@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontSizes } from '../constants/styles';
+import {View, Text, StyleSheet} from 'react-native';
+import {Colors, FontSizes} from '../constants/styles';
 
 /**
  * CategoryTitle Component

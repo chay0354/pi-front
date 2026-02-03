@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   ScrollView,
@@ -13,14 +13,18 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
-import { submitSubscription } from '../utils/api';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {submitSubscription} from '../utils/api';
 
 /**
  * SubscriptionFormScreen Component
  * Subscription form page with image/video upload and activity area selection
  */
-const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }) => {
+const SubscriptionFormScreen = ({
+  onClose,
+  onNext,
+  subscriptionType = 'broker',
+}) => {
   const getHeaderTitle = () => {
     switch (subscriptionType) {
       case 'company':
@@ -36,7 +40,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Form state for company
   const [companyName, setCompanyName] = useState('');
   const [contactPersonName, setContactPersonName] = useState('');
@@ -46,7 +50,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [addDescription, setAddDescription] = useState(false);
-  
+
   // Form state for broker
   const [brokerageLicenseNumber, setBrokerageLicenseNumber] = useState('');
   const [brokerOfficeName, setBrokerOfficeName] = useState('');
@@ -56,12 +60,12 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
   const [selectedRegions, setSelectedRegions] = useState([]);
-  
+
   // Form state for professional (keep existing)
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
   const [phone2, setPhone2] = useState('');
-  
+
   // Image state
   const [profilePicture, setProfilePicture] = useState(null);
   const [additionalImages, setAdditionalImages] = useState([]);
@@ -78,12 +82,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
     'שמאות',
   ];
 
-  const specializations = [
-    'חוזים וקרקעות',
-    'קבוצות רכישה',
-    'נדל"ן',
-    'השקעות',
-  ];
+  const specializations = ['חוזים וקרקעות', 'קבוצות רכישה', 'נדל"ן', 'השקעות'];
 
   // Activity regions for broker subscription
   const activityRegions = [
@@ -100,27 +99,25 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
     'יהודה ושומרון',
   ];
 
-  const toggleType = (type) => {
-    setSelectedTypes((prev) =>
-      prev.includes(type)
-        ? prev.filter((t) => t !== type)
-        : [...prev, type]
+  const toggleType = type => {
+    setSelectedTypes(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type],
     );
   };
 
-  const toggleSpecialization = (specialization) => {
-    setSelectedSpecializations((prev) =>
+  const toggleSpecialization = specialization => {
+    setSelectedSpecializations(prev =>
       prev.includes(specialization)
-        ? prev.filter((s) => s !== specialization)
-        : [...prev, specialization]
+        ? prev.filter(s => s !== specialization)
+        : [...prev, specialization],
     );
   };
 
-  const toggleRegion = (region) => {
-    setSelectedRegions((prev) =>
+  const toggleRegion = region => {
+    setSelectedRegions(prev =>
       prev.includes(region)
-        ? prev.filter((r) => r !== region)
-        : [...prev, region]
+        ? prev.filter(r => r !== region)
+        : [...prev, region],
     );
   };
 
@@ -130,11 +127,14 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
       // On web, we can proceed without explicit permission
       return true;
     }
-    
+
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const {status} = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to upload images!');
+        Alert.alert(
+          'Permission needed',
+          'Sorry, we need camera roll permissions to upload images!',
+        );
         return false;
       }
       return true;
@@ -147,17 +147,17 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   // Pick profile picture
   const pickProfilePicture = async () => {
     console.log('pickProfilePicture called');
-    
+
     // Web fallback using file input
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.onchange = (e) => {
+      input.onchange = e => {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (event) => {
+          reader.onload = event => {
             setProfilePicture({
               uri: event.target.result,
               type: file.type,
@@ -180,7 +180,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
     try {
       console.log('Launching image picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -197,19 +197,19 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   };
 
   // Pick additional image
-  const pickAdditionalImage = async (index) => {
+  const pickAdditionalImage = async index => {
     console.log('pickAdditionalImage called for index:', index);
-    
+
     // Web fallback using file input
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.onchange = (e) => {
+      input.onchange = e => {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (event) => {
+          reader.onload = event => {
             const newImages = [...additionalImages];
             newImages[index] = {
               uri: event.target.result,
@@ -230,7 +230,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -250,17 +250,17 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   // Pick company logo
   const pickCompanyLogo = async () => {
     console.log('pickCompanyLogo called');
-    
+
     // Web fallback using file input
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.onchange = (e) => {
+      input.onchange = e => {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = (event) => {
+          reader.onload = event => {
             setCompanyLogo({
               uri: event.target.result,
               type: file.type,
@@ -279,7 +279,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -302,7 +302,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Videos,
+        mediaTypes: 'videos',
         allowsEditing: Platform.OS !== 'web',
         quality: 0.8,
       });
@@ -319,11 +319,11 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
   // Handle form submission
   const handleSubmit = async () => {
     setErrorMessage(null); // Clear previous errors
-    
+
     try {
       // Validate required fields
       const missingFields = [];
-      
+
       if (subscriptionType === 'company') {
         if (!companyName) missingFields.push('שם החברה');
         if (!contactPersonName) missingFields.push('שם איש קשר');
@@ -358,62 +358,67 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
       // Prepare form data
       const formData = {
         subscriptionType,
-        ...(subscriptionType === 'company' ? {
-          businessName: companyName,
-          contactPersonName,
-          companyId,
-          officePhone,
-          mobilePhone,
-          email: companyEmail,
-          companyWebsite,
-          description: addDescription ? description : null,
-        } : subscriptionType === 'broker' ? {
-          // Broker subscription
-          name: agentName, // Backend expects 'name' for broker/professional
-          brokerageLicenseNumber,
-          brokerOfficeName,
-          agentName,
-          dealerNumber,
-          phone: phone1,
-          email,
-          description,
-          activityRegions: selectedRegions,
-        } : {
-          // Professional subscription (keep existing)
-          name: businessName,
-          businessName,
-          businessAddress,
-          dealerNumber,
-          phone: phone1,
-          phone2,
-          email,
-          description,
-          types: selectedTypes,
-          specializations: selectedSpecializations,
-        }),
+        ...(subscriptionType === 'company'
+          ? {
+              businessName: companyName,
+              contactPersonName,
+              companyId,
+              officePhone,
+              mobilePhone,
+              email: companyEmail,
+              companyWebsite,
+              description: addDescription ? description : null,
+            }
+          : subscriptionType === 'broker'
+            ? {
+                // Broker subscription
+                name: agentName, // Backend expects 'name' for broker/professional
+                brokerageLicenseNumber,
+                brokerOfficeName,
+                agentName,
+                dealerNumber,
+                phone: phone1,
+                email,
+                description,
+                activityRegions: selectedRegions,
+              }
+            : {
+                // Professional subscription (keep existing)
+                name: businessName,
+                businessName,
+                businessAddress,
+                dealerNumber,
+                phone: phone1,
+                phone2,
+                email,
+                description,
+                types: selectedTypes,
+                specializations: selectedSpecializations,
+              }),
         agreedToTerms: true,
       };
 
       // Prepare files
       const files = {};
       if (profilePicture) files.profilePicture = profilePicture;
-      if (additionalImages.length > 0) files.additionalImages = additionalImages.filter(img => img !== null);
+      if (additionalImages.length > 0)
+        files.additionalImages = additionalImages.filter(img => img !== null);
       if (companyLogo) files.companyLogo = companyLogo;
       if (video && activeTab === 'video') files.video = video;
 
       // Submit to backend
       const response = await submitSubscription(formData, files);
-      
+
       console.log('Form submission response:', response);
-      
+
       if (response && response.success) {
         const userEmail = subscriptionType === 'company' ? companyEmail : email;
         console.log('Navigating to verification screen with:', {
           subscriptionId: response.subscriptionId,
           email: userEmail,
-          verificationCode: response.verificationCode
+          verificationCode: response.verificationCode,
         });
-        
+
         // Store email and subscription ID for verification
         if (onNext) {
           onNext(response.subscriptionId, userEmail, response.verificationCode);
@@ -440,14 +445,12 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -467,8 +470,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
             <Text style={styles.errorNoticeText}>{errorMessage}</Text>
             <TouchableOpacity
               onPress={() => setErrorMessage(null)}
-              style={styles.errorCloseButton}
-            >
+              style={styles.errorCloseButton}>
               <Text style={styles.errorCloseText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -496,8 +498,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                 if (newTab === 'video' && !video) {
                   pickVideo();
                 }
-              }}
-            >
+              }}>
               {activeTab === 'images' ? (
                 <Image
                   source={require('../assets/tab-images-selected.png')}
@@ -522,10 +523,12 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
               {activeTab === 'images' ? (
                 <>
                   <Text style={styles.sectionTitle}>תמונת פרופיל (חובה)</Text>
-                  <TouchableOpacity onPress={pickProfilePicture} style={styles.imageUploadContainer}>
+                  <TouchableOpacity
+                    onPress={pickProfilePicture}
+                    style={styles.imageUploadContainer}>
                     {profilePicture ? (
                       <Image
-                        source={{ uri: profilePicture.uri }}
+                        source={{uri: profilePicture.uri}}
                         style={styles.imageInsert}
                         resizeMode="cover"
                       />
@@ -539,15 +542,14 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                   </TouchableOpacity>
                   <Text style={styles.sectionTitle}>תמונות נוספות</Text>
                   <View style={styles.imageGrid}>
-                    {[0, 1, 2, 3].map((index) => (
+                    {[0, 1, 2, 3].map(index => (
                       <TouchableOpacity
                         key={index}
                         style={styles.imagePlaceholder}
-                        onPress={() => pickAdditionalImage(index)}
-                      >
+                        onPress={() => pickAdditionalImage(index)}>
                         {additionalImages[index] ? (
                           <Image
-                            source={{ uri: additionalImages[index].uri }}
+                            source={{uri: additionalImages[index].uri}}
                             style={styles.uploadedImage}
                             resizeMode="cover"
                           />
@@ -561,16 +563,20 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
               ) : (
                 <>
                   <Text style={styles.sectionTitle}>סרטון</Text>
-                  <TouchableOpacity onPress={pickVideo} style={styles.imageUploadContainer}>
+                  <TouchableOpacity
+                    onPress={pickVideo}
+                    style={styles.imageUploadContainer}>
                     {video ? (
                       <Image
-                        source={{ uri: video.uri }}
+                        source={{uri: video.uri}}
                         style={styles.imageInsert}
                         resizeMode="cover"
                       />
                     ) : (
                       <View style={styles.videoPlaceholder}>
-                        <Text style={styles.videoPlaceholderText}>לחץ להעלאת סרטון</Text>
+                        <Text style={styles.videoPlaceholderText}>
+                          לחץ להעלאת סרטון
+                        </Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -583,7 +589,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
               <TouchableOpacity onPress={pickCompanyLogo}>
                 {companyLogo ? (
                   <Image
-                    source={{ uri: companyLogo.uri }}
+                    source={{uri: companyLogo.uri}}
                     style={styles.logoImage}
                     resizeMode="cover"
                   />
@@ -607,16 +613,16 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                       key={index}
                       style={[
                         styles.optionButton,
-                        selectedTypes.includes(type) && styles.optionButtonSelected,
+                        selectedTypes.includes(type) &&
+                          styles.optionButtonSelected,
                       ]}
-                      onPress={() => toggleType(type)}
-                    >
+                      onPress={() => toggleType(type)}>
                       <Text
                         style={[
                           styles.optionText,
-                          selectedTypes.includes(type) && styles.optionTextSelected,
-                        ]}
-                      >
+                          selectedTypes.includes(type) &&
+                            styles.optionTextSelected,
+                        ]}>
                         {type}
                       </Text>
                     </TouchableOpacity>
@@ -635,16 +641,16 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                       key={index}
                       style={[
                         styles.optionButton,
-                        selectedSpecializations.includes(specialization) && styles.optionButtonSelected,
+                        selectedSpecializations.includes(specialization) &&
+                          styles.optionButtonSelected,
                       ]}
-                      onPress={() => toggleSpecialization(specialization)}
-                    >
+                      onPress={() => toggleSpecialization(specialization)}>
                       <Text
                         style={[
                           styles.optionText,
-                          selectedSpecializations.includes(specialization) && styles.optionTextSelected,
-                        ]}
-                      >
+                          selectedSpecializations.includes(specialization) &&
+                            styles.optionTextSelected,
+                        ]}>
                         {specialization}
                       </Text>
                     </TouchableOpacity>
@@ -671,7 +677,7 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
           {subscriptionType === 'company' && (
             <Text style={styles.sectionTitle}>פרטים כלליים</Text>
           )}
-          
+
           {subscriptionType === 'company' ? (
             <>
               <View style={styles.inputGroup}>
@@ -768,12 +774,11 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                 <Text style={styles.descriptionLabel}>הוסף תיאור</Text>
                 <TouchableOpacity
                   onPress={() => setAddDescription(!addDescription)}
-                  style={styles.checkboxCircle}
-                >
+                  style={styles.checkboxCircle}>
                   {addDescription && <View style={styles.checkboxFilled} />}
                 </TouchableOpacity>
               </View>
-              
+
               {addDescription && (
                 <View style={styles.inputGroup}>
                   <TextInput
@@ -800,16 +805,16 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
                       key={index}
                       style={[
                         styles.optionButton,
-                        selectedRegions.includes(region) && styles.optionButtonSelected,
+                        selectedRegions.includes(region) &&
+                          styles.optionButtonSelected,
                       ]}
-                      onPress={() => toggleRegion(region)}
-                    >
+                      onPress={() => toggleRegion(region)}>
                       <Text
                         style={[
                           styles.optionText,
-                          selectedRegions.includes(region) && styles.optionTextSelected,
-                        ]}
-                      >
+                          selectedRegions.includes(region) &&
+                            styles.optionTextSelected,
+                        ]}>
                         {region}
                       </Text>
                     </TouchableOpacity>
@@ -1006,10 +1011,12 @@ const SubscriptionFormScreen = ({ onClose, onNext, subscriptionType = 'broker' }
           )}
 
           <TouchableOpacity
-            style={[styles.nextButton, isSubmitting && styles.nextButtonDisabled]}
+            style={[
+              styles.nextButton,
+              isSubmitting && styles.nextButtonDisabled,
+            ]}
             onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
+            disabled={isSubmitting}>
             {isSubmitting ? (
               <ActivityIndicator color={Colors.white100} />
             ) : (

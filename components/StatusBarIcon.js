@@ -1,11 +1,11 @@
 import React from 'react';
-import { Image, StyleSheet } from 'react-native';
+import {Image, StyleSheet} from 'react-native';
 
 /**
  * StatusBarIcon Component
  * Displays the status bar image at the top of the screen
  */
-const StatusBarIcon = ({ style }) => {
+const StatusBarIcon = ({style}) => {
   return (
     <Image
       source={require('../assets/Status-bar@2x.png')}

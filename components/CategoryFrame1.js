@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import {View, Image, StyleSheet} from 'react-native';
 import CategoryFrame from './CategoryFrame';
 import Frame1171276078 from './Frame1171276078';
-import { Spacing, Dimensions, BorderRadius } from '../constants/styles';
+import {Spacing, Dimensions, BorderRadius} from '../constants/styles';
 
 /**
  * CategoryFrame1 Component

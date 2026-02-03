@@ -1,12 +1,12 @@
 import React from 'react';
-import { Image, StyleSheet } from 'react-native';
+import {Image, StyleSheet} from 'react-native';
 
 /**
  * MenuIcon Component
  * Floating menu icon button
  * @param {string} variant - Variant type (default: "ללא נוטיפיקציה")
  */
-const MenuIcon = ({ style, variant = 'ללא נוטיפיקציה' }) => {
+const MenuIcon = ({style, variant = 'ללא נוטיפיקציה'}) => {
   return (
     <Image
       source={require('../assets/menu.svg')}

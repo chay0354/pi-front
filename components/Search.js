@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import { Colors, FontSizes, Gaps } from '../constants/styles';
+import {View, Text, Image, StyleSheet} from 'react-native';
+import {Colors, FontSizes, Gaps} from '../constants/styles';
 
 /**
  * Search Component
  * Search button with navigation icon
  * @param {string} vector190 - Path to vector icon (not used in RN, kept for compatibility)
  */
-const Search = ({ style, vector190 }) => {
+const Search = ({style, vector190}) => {
   return (
     <View style={[styles.search, style]}>
       <View style={styles.navigationalIcon}>

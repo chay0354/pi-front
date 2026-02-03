@@ -13,9 +13,9 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 export const submitSubscription = async (formData, files = {}) => {
   try {
     const formDataToSend = new FormData();
-    
+
     // Add all form fields
-    Object.keys(formData).forEach((key) => {
+    Object.keys(formData).forEach(key => {
       if (formData[key] !== null && formData[key] !== undefined) {
         if (Array.isArray(formData[key])) {
           formDataToSend.append(key, JSON.stringify(formData[key]));
@@ -69,10 +69,11 @@ export const submitSubscription = async (formData, files = {}) => {
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       // Extract more detailed error message
-      const errorMsg = data.error || data.message || 'Failed to submit subscription';
+      const errorMsg =
+        data.error || data.message || 'Failed to submit subscription';
       throw new Error(errorMsg);
     }
 
@@ -90,9 +91,18 @@ export const submitSubscription = async (formData, files = {}) => {
  * @param {string} subscriptionId - Optional subscription ID
  * @returns {Promise} API response
  */
-export const verifyEmail = async (email, verificationCode, subscriptionId = null) => {
+export const verifyEmail = async (
+  email,
+  verificationCode,
+  subscriptionId = null,
+) => {
   try {
-    console.log('Calling verify API:', { email, verificationCode, subscriptionId, API_URL });
+    console.log('Calling verify API:', {
+      email,
+      verificationCode,
+      subscriptionId,
+      API_URL,
+    });
     const response = await fetch(`${API_URL}/api/subscription/verify`, {
       method: 'POST',
       headers: {
@@ -108,7 +118,7 @@ export const verifyEmail = async (email, verificationCode, subscriptionId = null
     console.log('Verify API response status:', response.status);
     const data = await response.json();
     console.log('Verify API response data:', data);
-    
+
     if (!response.ok) {
       throw new Error(data.error || 'Verification failed');
     }
@@ -136,11 +146,11 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, subscriptionId }),
+      body: JSON.stringify({email, subscriptionId}),
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.error || 'Failed to resend code');
     }
@@ -157,17 +167,20 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
  * @param {string} subscriptionId - Subscription ID
  * @returns {Promise} API response
  */
-export const getSubscription = async (subscriptionId) => {
+export const getSubscription = async subscriptionId => {
   try {
-    const response = await fetch(`${API_URL}/api/subscription/${subscriptionId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `${API_URL}/api/subscription/${subscriptionId}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
-    });
+    );
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.error || 'Failed to fetch subscription');
     }
@@ -190,16 +203,19 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
     const params = new URLSearchParams();
     if (email) params.append('email', email);
     if (subscriberNumber) params.append('subscriberNumber', subscriberNumber);
-    
-    const response = await fetch(`${API_URL}/api/user/current?${params.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+
+    const response = await fetch(
+      `${API_URL}/api/user/current?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
-    });
+    );
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.error || 'Failed to fetch user');
     }
@@ -236,7 +252,7 @@ export const uploadFile = async (file, folder = 'general') => {
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(data.error || 'Failed to upload file');
     }
@@ -255,17 +271,17 @@ export const uploadFile = async (file, folder = 'general') => {
  */
 export const getListings = async (options = {}) => {
   try {
-    const { status = 'published', category } = options;
-    const params = new URLSearchParams({ status });
+    const {status = 'published', category} = options;
+    const params = new URLSearchParams({status});
     if (category) {
       params.append('category', category);
     }
-    
+
     const url = `${API_URL}/api/listings?${params.toString()}`;
     console.log('🌐 [api.js] Fetching listings from:', url);
     console.log('🌐 [api.js] API_URL:', API_URL);
-    console.log('🌐 [api.js] Options:', { status, category });
-    
+    console.log('🌐 [api.js] Options:', {status, category});
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -273,12 +289,16 @@ export const getListings = async (options = {}) => {
       },
     });
 
-    console.log('🌐 [api.js] Response status:', response.status, response.statusText);
-    
+    console.log(
+      '🌐 [api.js] Response status:',
+      response.status,
+      response.statusText,
+    );
+
     const data = await response.json();
-    
+
     console.log('🌐 [api.js] Response data:', data);
-    
+
     if (!response.ok) {
       console.error('❌ [api.js] Response not OK:', data);
       throw new Error(data.error || 'Failed to fetch listings');
@@ -297,10 +317,10 @@ export const getListings = async (options = {}) => {
  * @param {Object} listingData - Listing data including form fields and file URLs
  * @returns {Promise} API response with listing ID
  */
-export const createListing = async (listingData) => {
+export const createListing = async listingData => {
   try {
     console.log('Sending listing data to API:', listingData);
-    
+
     const response = await fetch(`${API_URL}/api/listings`, {
       method: 'POST',
       headers: {
@@ -310,10 +330,10 @@ export const createListing = async (listingData) => {
     });
 
     const data = await response.json();
-    
+
     console.log('API response status:', response.status);
     console.log('API response data:', data);
-    
+
     if (!response.ok) {
       const errorMsg = data.error || data.details || 'Failed to create listing';
       console.error('API error:', errorMsg);

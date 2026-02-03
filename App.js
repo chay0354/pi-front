@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, {useState, useEffect} from 'react';
+import {StyleSheet, View} from 'react-native';
 import HomeScreen from './screens/HomeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SubscriptionScreen from './screens/SubscriptionScreen';
@@ -16,13 +16,13 @@ import OfficeListingScreen from './screens/OfficeListingScreen';
  * Entry point for the PI Real Estate application
  */
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('home');
+  const [currentScreen, setCurrentScreen] = useState('login');
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUser] = useState(null); // Store current logged-in user data
   const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed (temporary, for immediate display)
   const [selectedCategory, setSelectedCategory] = useState(null); // Store selected category for TikTok feed
   const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
-  
+
   // Load user data from localStorage on mount
   useEffect(() => {
     try {
@@ -38,7 +38,7 @@ export default function App() {
       console.error('Error loading user from localStorage:', error);
     }
   }, []);
-  
+
   // Save user data to localStorage whenever it changes
   useEffect(() => {
     if (currentUser) {
@@ -62,15 +62,23 @@ export default function App() {
       }
     }
   }, [currentUser]);
-  
+
   // Debug logging
   useEffect(() => {
     console.log('Current screen:', currentScreen);
     console.log('Subscription data:', subscriptionData);
     console.log('Current user:', currentUser);
     if (currentUser) {
-      console.log('Current user subscriber number:', currentUser.subscriber_number);
-      console.log('Current user name:', currentUser.name || currentUser.agent_name || currentUser.contact_person_name);
+      console.log(
+        'Current user subscriber number:',
+        currentUser.subscriber_number,
+      );
+      console.log(
+        'Current user name:',
+        currentUser.name ||
+          currentUser.agent_name ||
+          currentUser.contact_person_name,
+      );
       console.log('Current user email:', currentUser.email);
     }
   }, [currentScreen, subscriptionData, currentUser]);
@@ -78,22 +86,22 @@ export default function App() {
   return (
     <View style={styles.container}>
       {currentScreen === 'home' && (
-        <HomeScreen 
+        <HomeScreen
           onOpenSettings={() => setCurrentScreen('settings')}
-          onOpenTikTokFeed={(category) => {
+          onOpenTikTokFeed={category => {
             setSelectedCategory(category);
             setCurrentScreen('tikTokFeed');
           }}
         />
       )}
       {currentScreen === 'tikTokFeed' && (
-        <TikTokFeedScreen 
+        <TikTokFeedScreen
           key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
           onClose={() => {
             setSelectedCategory(null);
             setCurrentScreen('home');
           }}
-          onOpenOfficeListing={(category) => {
+          onOpenOfficeListing={category => {
             // Store the category so OfficeListingScreen can use it
             if (category) {
               setSelectedCategory(category);
@@ -105,22 +113,41 @@ export default function App() {
         />
       )}
       {currentScreen === 'officeListing' && (
-        <OfficeListingScreen 
+        <OfficeListingScreen
           initialCategory={selectedCategory} // Pass the selected category
           onClose={() => setCurrentScreen('tikTokFeed')}
-          onPublish={async (listingData) => {
-            console.log('✅ Listing published, category:', listingData.category);
-            console.log('📂 [App] Listing saved with category:', listingData.category, ', selectedCategory:', selectedCategory);
+          onPublish={async listingData => {
+            console.log(
+              '✅ Listing published, category:',
+              listingData.category,
+            );
+            console.log(
+              '📂 [App] Listing saved with category:',
+              listingData.category,
+              ', selectedCategory:',
+              selectedCategory,
+            );
             // Listing is already saved to database via createListing API
             // Ensure selectedCategory matches the published listing's category
-            if (listingData.category && listingData.category !== selectedCategory) {
-              console.log('📂 [App] Updating selectedCategory from', selectedCategory, 'to', listingData.category);
+            if (
+              listingData.category &&
+              listingData.category !== selectedCategory
+            ) {
+              console.log(
+                '📂 [App] Updating selectedCategory from',
+                selectedCategory,
+                'to',
+                listingData.category,
+              );
               setSelectedCategory(listingData.category.toString());
             }
             // Trigger refresh of TikTok feed to show new listing
             // Small delay to ensure database has updated
             setTimeout(() => {
-              console.log('🔄 Refreshing TikTok feed for category:', selectedCategory || listingData.category);
+              console.log(
+                '🔄 Refreshing TikTok feed for category:',
+                selectedCategory || listingData.category,
+              );
               setTikTokFeedRefreshKey(prev => prev + 1);
             }, 1500); // Increased delay to ensure DB is updated
             // Navigate back to TikTok feed with same category
@@ -131,7 +158,7 @@ export default function App() {
       {currentScreen === 'settings' && (
         <SettingsScreen
           onClose={() => setCurrentScreen('home')}
-          onOpenSubscription={(type) => {
+          onOpenSubscription={type => {
             if (type === 'company') {
               setCurrentScreen('subscriptionCompany');
             } else if (type === 'professional') {
@@ -151,8 +178,11 @@ export default function App() {
       {currentScreen === 'login' && (
         <LoginScreen
           onClose={() => setCurrentScreen('settings')}
-          onLoginSuccess={(subscription) => {
-            console.log('Login successful, setting current user:', subscription);
+          onLoginSuccess={subscription => {
+            console.log(
+              'Login successful, setting current user:',
+              subscription,
+            );
             setCurrentUser(subscription);
             setCurrentScreen('settings');
           }}
@@ -183,7 +213,7 @@ export default function App() {
         <SubscriptionFormScreen
           onClose={() => setCurrentScreen('subscription')}
           onNext={(subscriptionId, email, verificationCode) => {
-            setSubscriptionData({ subscriptionId, email, verificationCode });
+            setSubscriptionData({subscriptionId, email, verificationCode});
             setCurrentScreen('verification');
           }}
           subscriptionType="broker"
@@ -193,7 +223,7 @@ export default function App() {
         <SubscriptionFormScreen
           onClose={() => setCurrentScreen('subscriptionCompany')}
           onNext={(subscriptionId, email, verificationCode) => {
-            setSubscriptionData({ subscriptionId, email, verificationCode });
+            setSubscriptionData({subscriptionId, email, verificationCode});
             setCurrentScreen('verificationCompany');
           }}
           subscriptionType="company"
@@ -203,7 +233,7 @@ export default function App() {
         <SubscriptionFormScreen
           onClose={() => setCurrentScreen('subscriptionProfessional')}
           onNext={(subscriptionId, email, verificationCode) => {
-            setSubscriptionData({ subscriptionId, email, verificationCode });
+            setSubscriptionData({subscriptionId, email, verificationCode});
             setCurrentScreen('verificationProfessional');
           }}
           subscriptionType="professional"
@@ -239,8 +269,8 @@ export default function App() {
       {currentScreen === 'verificationCode' && (
         <VerificationCodeScreen
           onClose={() => setCurrentScreen('verification')}
-          onNext={(subscription) => {
-            setSubscriptionData({ ...subscriptionData, subscription });
+          onNext={subscription => {
+            setSubscriptionData({...subscriptionData, subscription});
             setCurrentScreen('success');
           }}
           subscriptionType="broker"
@@ -251,8 +281,8 @@ export default function App() {
       {currentScreen === 'verificationCodeCompany' && (
         <VerificationCodeScreen
           onClose={() => setCurrentScreen('verificationCompany')}
-          onNext={(subscription) => {
-            setSubscriptionData({ ...subscriptionData, subscription });
+          onNext={subscription => {
+            setSubscriptionData({...subscriptionData, subscription});
             setCurrentScreen('successCompany');
           }}
           subscriptionType="company"
@@ -263,8 +293,8 @@ export default function App() {
       {currentScreen === 'verificationCodeProfessional' && (
         <VerificationCodeScreen
           onClose={() => setCurrentScreen('verificationProfessional')}
-          onNext={(subscription) => {
-            setSubscriptionData({ ...subscriptionData, subscription });
+          onNext={subscription => {
+            setSubscriptionData({...subscriptionData, subscription});
             setCurrentScreen('successProfessional');
           }}
           subscriptionType="professional"
@@ -301,7 +331,10 @@ export default function App() {
           onGoHome={() => {
             // Store user data after successful verification
             if (subscriptionData?.subscription) {
-              console.log('Storing user data (company):', subscriptionData.subscription);
+              console.log(
+                'Storing user data (company):',
+                subscriptionData.subscription,
+              );
               setCurrentUser(subscriptionData.subscription);
             }
             setSubscriptionData(null);
@@ -310,7 +343,10 @@ export default function App() {
           onStartPublishing={() => {
             // Store user data after successful verification
             if (subscriptionData?.subscription) {
-              console.log('Storing user data (company):', subscriptionData.subscription);
+              console.log(
+                'Storing user data (company):',
+                subscriptionData.subscription,
+              );
               setCurrentUser(subscriptionData.subscription);
             }
             setSubscriptionData(null);
@@ -326,7 +362,10 @@ export default function App() {
           onGoHome={() => {
             // Store user data after successful verification
             if (subscriptionData?.subscription) {
-              console.log('Storing user data (professional):', subscriptionData.subscription);
+              console.log(
+                'Storing user data (professional):',
+                subscriptionData.subscription,
+              );
               setCurrentUser(subscriptionData.subscription);
             }
             setSubscriptionData(null);
@@ -335,7 +374,10 @@ export default function App() {
           onStartPublishing={() => {
             // Store user data after successful verification
             if (subscriptionData?.subscription) {
-              console.log('Storing user data (professional):', subscriptionData.subscription);
+              console.log(
+                'Storing user data (professional):',
+                subscriptionData.subscription,
+              );
               setCurrentUser(subscriptionData.subscription);
             }
             setSubscriptionData(null);

@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontSizes, Dimensions } from '../constants/styles';
+import {View, Text, StyleSheet} from 'react-native';
+import {Colors, FontSizes, Dimensions} from '../constants/styles';
 
 /**
  * StringValue Component
@@ -8,7 +8,7 @@ import { Colors, FontSizes, Dimensions } from '../constants/styles';
  * @param {string} text - Category name (default: "Apartments")
  * @param {string} type - Type variant (not used, kept for compatibility)
  */
-const StringValue = ({ style, type = 'defult', text = 'Apartments' }) => {
+const StringValue = ({style, type = 'defult', text = 'Apartments'}) => {
   return (
     <View style={[styles.stringValue, style]}>
       <Text style={styles.name}>{text}</Text>

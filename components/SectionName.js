@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import { Colors, FontSizes, Gaps, Dimensions } from '../constants/styles';
+import {View, Text, Image, StyleSheet} from 'react-native';
+import {Colors, FontSizes, Gaps, Dimensions} from '../constants/styles';
 
 /**
  * SectionName Component
  * Section title with optional icon
  * @param {string} text - Section title text (default: "פרוייקטים נבחרים")
  */
-const SectionName = ({ style, text = 'פרוייקטים נבחרים' }) => {
+const SectionName = ({style, text = 'פרוייקטים נבחרים'}) => {
   return (
     <View style={[styles.sectionName, style]}>
       <View style={styles.parent}>

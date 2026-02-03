@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   ScrollView,
@@ -7,17 +7,23 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
-import { getCurrentUser } from '../utils/api';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {getCurrentUser} from '../utils/api';
 
 /**
  * SettingsScreen Component
  * Settings/Options page with messages, subscriptions, and general settings
  */
-const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentUser, onLogout, onOpenLogin }) => {
+const SettingsScreen = ({
+  onClose,
+  onOpenSubscription,
+  currentUser: propCurrentUser,
+  onLogout,
+  onOpenLogin,
+}) => {
   const [currentUser, setCurrentUser] = useState(propCurrentUser);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
-  
+
   useEffect(() => {
     // Use prop if provided, otherwise try to load from localStorage
     if (propCurrentUser) {
@@ -29,7 +35,10 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
           const savedUser = localStorage.getItem('pi_current_user');
           if (savedUser) {
             const user = JSON.parse(savedUser);
-            console.log('SettingsScreen - Loaded user from localStorage:', user);
+            console.log(
+              'SettingsScreen - Loaded user from localStorage:',
+              user,
+            );
             setCurrentUser(user);
           }
         }
@@ -38,7 +47,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
       }
     }
   }, [propCurrentUser]);
-  
+
   const handleLogout = () => {
     // Clear localStorage
     try {
@@ -49,25 +58,33 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
     } catch (error) {
       console.error('Error clearing localStorage:', error);
     }
-    
+
     // Clear current user state
     setCurrentUser(null);
-    
+
     // Notify parent component
     if (onLogout) {
       onLogout();
     }
   };
-  
+
   useEffect(() => {
     console.log('SettingsScreen - currentUser:', currentUser);
     if (currentUser) {
-      console.log('SettingsScreen - subscriber_number:', currentUser.subscriber_number);
-      console.log('SettingsScreen - name:', currentUser.name || currentUser.agent_name || currentUser.contact_person_name);
+      console.log(
+        'SettingsScreen - subscriber_number:',
+        currentUser.subscriber_number,
+      );
+      console.log(
+        'SettingsScreen - name:',
+        currentUser.name ||
+          currentUser.agent_name ||
+          currentUser.contact_person_name,
+      );
       console.log('SettingsScreen - email:', currentUser.email);
     }
   }, [currentUser]);
-  const handleSubscriptionPress = (type) => {
+  const handleSubscriptionPress = type => {
     if (onOpenSubscription) {
       onOpenSubscription(type);
     }
@@ -76,8 +93,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
     <ScrollView
       style={styles.settingsScreen}
       contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
+      showsVerticalScrollIndicator={false}>
       {/* Header with X button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -85,7 +101,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
         </TouchableOpacity>
         <View style={styles.logoSection}>
           <Image
-            source={require('../assets/logo@2x.png')}
+            source={require('../assets/logo.png')}
             style={styles.logoIcon}
             resizeMode="contain"
           />
@@ -107,35 +123,43 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
               resizeMode="contain"
             />
           </TouchableOpacity>
-          
+
           {/* Profile content row: info on left, picture on right */}
           <View style={styles.profileContentRow}>
             {/* Name and Email on the left */}
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>
-                {currentUser.name || currentUser.agent_name || currentUser.contact_person_name || 'משתמש'}
+                {currentUser.name ||
+                  currentUser.agent_name ||
+                  currentUser.contact_person_name ||
+                  'משתמש'}
               </Text>
               <Text style={styles.profileEmail}>{currentUser.email || ''}</Text>
             </View>
-            
+
             {/* Profile Picture on the right */}
             <View style={styles.profilePictureContainer}>
               {currentUser.profile_picture_url ? (
                 <Image
-                  source={{ uri: currentUser.profile_picture_url }}
+                  source={{uri: currentUser.profile_picture_url}}
                   style={styles.profilePicture}
                   resizeMode="cover"
                 />
               ) : (
                 <View style={styles.profilePicturePlaceholder}>
                   <Text style={styles.profilePicturePlaceholderText}>
-                    {((currentUser.name || currentUser.agent_name || currentUser.contact_person_name || 'U')[0] || 'U').toUpperCase()}
+                    {(
+                      (currentUser.name ||
+                        currentUser.agent_name ||
+                        currentUser.contact_person_name ||
+                        'U')[0] || 'U'
+                    ).toUpperCase()}
                   </Text>
                 </View>
               )}
             </View>
           </View>
-          
+
           {/* Subscriber Number at bottom */}
           <View style={styles.profileBottom}>
             <Text style={styles.subscriberNumber}>
@@ -173,8 +197,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
           <Text style={styles.cardTitle}>מנויים</Text>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('company')}
-          >
+            onPress={() => handleSubscriptionPress('company')}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי לחברות</Text>
             <Image
@@ -185,8 +208,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('broker')}
-          >
+            onPress={() => handleSubscriptionPress('broker')}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי למתווכים</Text>
             <Image
@@ -197,8 +219,7 @@ const SettingsScreen = ({ onClose, onOpenSubscription, currentUser: propCurrentU
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('professional')}
-          >
+            onPress={() => handleSubscriptionPress('professional')}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
             <Image

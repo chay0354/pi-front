@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -11,14 +11,20 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
-import { resendVerificationCode } from '../utils/api';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {resendVerificationCode} from '../utils/api';
 
 /**
  * VerificationScreen Component
  * Email verification page for subscription
  */
-const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', email: propEmail, subscriptionId }) => {
+const VerificationScreen = ({
+  onClose,
+  onNext,
+  subscriptionType = 'broker',
+  email: propEmail,
+  subscriptionId,
+}) => {
   const getHeaderTitle = () => {
     switch (subscriptionType) {
       case 'company':
@@ -33,20 +39,20 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
   const [email, setEmail] = useState(propEmail || '');
   const [isSending, setIsSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  
+
   // Update email when prop changes
   useEffect(() => {
     if (propEmail) {
       setEmail(propEmail);
     }
   }, [propEmail]);
-  
+
   const handleSendCode = async () => {
     if (!email.trim()) {
       Alert.alert('שגיאה', 'אנא הזן כתובת מייל');
       return;
     }
-    
+
     setIsSending(true);
     try {
       await resendVerificationCode(email.trim(), subscriptionId);
@@ -59,7 +65,10 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
       }, 1000);
     } catch (error) {
       console.error('Error sending verification code:', error);
-      Alert.alert('שגיאה', error.message || 'נכשל בשליחת קוד האימות. אנא נסה שוב.');
+      Alert.alert(
+        'שגיאה',
+        error.message || 'נכשל בשליחת קוד האימות. אנא נסה שוב.',
+      );
       setIsSending(false);
     }
   };
@@ -68,14 +77,12 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -128,8 +135,7 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
         <TouchableOpacity
           disabled={!email.trim() || isSending}
           style={styles.submitButtonWrapper}
-          onPress={handleSendCode}
-        >
+          onPress={handleSendCode}>
           {isSending ? (
             <View style={styles.submitButtonImage}>
               <ActivityIndicator color={Colors.white100} />
@@ -146,7 +152,7 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
             />
           )}
         </TouchableOpacity>
-        
+
         {/* Success Message */}
         {emailSent && (
           <View style={styles.successMessage}>
@@ -159,8 +165,7 @@ const VerificationScreen = ({ onClose, onNext, subscriptionType = 'broker', emai
                   onNext();
                 }
               }}
-              style={styles.continueButton}
-            >
+              style={styles.continueButton}>
               <Text style={styles.continueButtonText}>המשך לקוד האימות</Text>
             </TouchableOpacity>
           </View>

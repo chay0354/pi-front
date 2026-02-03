@@ -107,14 +107,14 @@ export const Dimensions = {
 export const Shadows = {
   shadowDrop: {
     shadowColor: 'rgba(96, 231, 255, 0.5)',
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 1,
     shadowRadius: 25,
     elevation: 5,
   },
   shadowDrop1: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.9 },
+    shadowOffset: {width: 0, height: 1.9},
     shadowOpacity: 0.35,
     shadowRadius: 33.55,
     elevation: 5,

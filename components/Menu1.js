@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import {View, Image, StyleSheet} from 'react-native';
 
 /**
  * Menu1 Component
  * Hamburger menu icon component
  */
-const Menu1 = ({ style }) => {
+const Menu1 = ({style}) => {
   return (
     <View style={[styles.menu, style]}>
       <Image
@@ -14,7 +14,7 @@ const Menu1 = ({ style }) => {
         resizeMode="contain"
       />
       <Image
-        source={require('../assets/image-7@2x.png')}
+        source={require('../assets/image-7.png')}
         style={styles.image7Icon}
         resizeMode="cover"
       />

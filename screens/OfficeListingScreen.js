@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -12,32 +12,33 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '../constants/styles';
-import { uploadFile, createListing } from '../utils/api';
+import {LinearGradient} from 'expo-linear-gradient';
+import {Colors} from '../constants/styles';
+import {uploadFile, createListing} from '../utils/api';
+import {categoryImages} from '../utils/constant';
 
 /**
  * Age Range Slider Component
  * Custom dual-handle range slider for age selection matching Figma design
  */
-const AgeRangeSlider = ({ minValue, maxValue, onMinChange, onMaxChange }) => {
+const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
   const [sliderWidth, setSliderWidth] = useState(300);
   const [activeThumb, setActiveThumb] = useState(null); // 'min' or 'max'
   const sliderContainerRef = useRef(null);
-  
+
   const minPosition = (minValue / 100) * 100;
   const maxPosition = (maxValue / 100) * 100;
-  
-  const handleSliderPress = (evt) => {
+
+  const handleSliderPress = evt => {
     if (!sliderContainerRef.current) return;
-    
-    const { locationX } = evt.nativeEvent;
+
+    const {locationX} = evt.nativeEvent;
     const percent = Math.max(0, Math.min(100, (locationX / sliderWidth) * 100));
-    
+
     // Determine which thumb is closer
     const minDist = Math.abs(percent - minPosition);
     const maxDist = Math.abs(percent - maxPosition);
-    
+
     if (minDist < maxDist) {
       setActiveThumb('min');
       const newMin = Math.max(18, Math.min(maxValue - 1, Math.round(percent)));
@@ -48,59 +49,70 @@ const AgeRangeSlider = ({ minValue, maxValue, onMinChange, onMaxChange }) => {
       onMaxChange(newMax);
     }
   };
-  
-  const handleThumbPress = (thumb) => {
+
+  const handleThumbPress = thumb => {
     setActiveThumb(thumb);
   };
-  
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const { locationX } = evt.nativeEvent;
+      onPanResponderGrant: evt => {
+        const {locationX} = evt.nativeEvent;
         const percent = (locationX / sliderWidth) * 100;
-        
+
         // Determine which thumb is closer
         const minDist = Math.abs(percent - minPosition);
         const maxDist = Math.abs(percent - maxPosition);
-        
+
         if (minDist < maxDist) {
           setActiveThumb('min');
         } else {
           setActiveThumb('max');
         }
       },
-      onPanResponderMove: (evt) => {
+      onPanResponderMove: evt => {
         if (activeThumb === null) return;
-        
-        const { locationX } = evt.nativeEvent;
-        const percent = Math.max(0, Math.min(100, (locationX / sliderWidth) * 100));
-        
+
+        const {locationX} = evt.nativeEvent;
+        const percent = Math.max(
+          0,
+          Math.min(100, (locationX / sliderWidth) * 100),
+        );
+
         if (activeThumb === 'min') {
-          const newMin = Math.max(18, Math.min(maxValue - 1, Math.round(percent)));
+          const newMin = Math.max(
+            18,
+            Math.min(maxValue - 1, Math.round(percent)),
+          );
           onMinChange(newMin);
         } else {
-          const newMax = Math.max(minValue + 1, Math.min(100, Math.round(percent)));
+          const newMax = Math.max(
+            minValue + 1,
+            Math.min(100, Math.round(percent)),
+          );
           onMaxChange(newMax);
         }
       },
       onPanResponderRelease: () => {
         setActiveThumb(null);
       },
-    })
+    }),
   ).current;
-  
+
   return (
     <View style={styles.preferenceSection}>
       <Text style={styles.preferenceLabel}>גיל מועדף</Text>
       <View style={styles.ageRangeContainer}>
-        <Text style={styles.ageRangeText}>{minValue} - {maxValue}</Text>
-        <View 
+        <Text style={styles.ageRangeText}>
+          {minValue} - {maxValue}
+        </Text>
+        <View
           ref={sliderContainerRef}
           style={styles.ageRangeSliderContainer}
-          onLayout={(event) => {
-            const { width } = event.nativeEvent.layout;
+          onLayout={event => {
+            const {width} = event.nativeEvent.layout;
             if (width > 0) {
               setSliderWidth(width);
             }
@@ -108,40 +120,38 @@ const AgeRangeSlider = ({ minValue, maxValue, onMinChange, onMaxChange }) => {
           {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
           onStartShouldSetResponder={() => true}
           onResponderGrant={handleSliderPress}
-          onTouchStart={Platform.OS === 'web' ? (e) => {
-            const touch = e.touches?.[0] || e.nativeEvent?.touches?.[0];
-            if (touch && sliderContainerRef.current) {
-              const rect = sliderContainerRef.current.getBoundingClientRect?.();
-              if (rect) {
-                const locationX = touch.clientX - rect.left;
-                handleSliderPress({ nativeEvent: { locationX } });
-              }
-            }
-          } : undefined}
-        >
+          onTouchStart={
+            Platform.OS === 'web'
+              ? e => {
+                  const touch = e.touches?.[0] || e.nativeEvent?.touches?.[0];
+                  if (touch && sliderContainerRef.current) {
+                    const rect =
+                      sliderContainerRef.current.getBoundingClientRect?.();
+                    if (rect) {
+                      const locationX = touch.clientX - rect.left;
+                      handleSliderPress({nativeEvent: {locationX}});
+                    }
+                  }
+                }
+              : undefined
+          }>
           <View style={styles.ageRangeSliderTrack}>
-            <View 
+            <View
               style={[
                 styles.ageRangeSliderFill,
                 {
                   left: `${minPosition}%`,
                   width: `${maxPosition - minPosition}%`,
-                }
+                },
               ]}
             />
             <TouchableOpacity
-              style={[
-                styles.ageRangeSliderThumb,
-                { left: `${minPosition}%` }
-              ]}
+              style={[styles.ageRangeSliderThumb, {left: `${minPosition}%`}]}
               onPressIn={() => handleThumbPress('min')}
               activeOpacity={1}
             />
             <TouchableOpacity
-              style={[
-                styles.ageRangeSliderThumb,
-                { left: `${maxPosition}%` }
-              ]}
+              style={[styles.ageRangeSliderThumb, {left: `${maxPosition}%`}]}
               onPressIn={() => handleThumbPress('max')}
               activeOpacity={1}
             />
@@ -156,7 +166,7 @@ const AgeRangeSlider = ({ minValue, maxValue, onMinChange, onMaxChange }) => {
  * OfficeListingScreen Component
  * Form for creating an office listing
  */
-const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => {
+const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const [propertyType, setPropertyType] = useState(null);
   const [area, setArea] = useState(1);
   const [rooms, setRooms] = useState(1);
@@ -170,8 +180,10 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
   const [description, setDescription] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
-  const [category, setCategory] = useState(initialCategory ? parseInt(initialCategory) : 1); // Category 1-11 (default: 1, or use initialCategory if provided)
-  
+  const [category, setCategory] = useState(
+    initialCategory ? parseInt(initialCategory) : 1,
+  ); // Category 1-11 (default: 1, or use initialCategory if provided)
+
   // New fields for category 3 (חדש מקבלן)
   const [searchPurpose, setSearchPurpose] = useState(null); // 'enter', 'bring_in', 'partner'
   const [preferredApartmentType, setPreferredApartmentType] = useState(null); // 'regular', 'studio', 'garden', 'duplex', 'penthouse', 'private'
@@ -180,18 +192,21 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
   const [preferredAgeMax, setPreferredAgeMax] = useState(100);
   const [preferences, setPreferences] = useState({}); // { nonSmokers: false, students: false, etc. }
   const [budget, setBudget] = useState(1000);
-  
+
   // Update category when initialCategory prop changes
   useEffect(() => {
     if (initialCategory) {
       const categoryNum = parseInt(initialCategory);
       if (categoryNum >= 1 && categoryNum <= 11) {
         setCategory(categoryNum);
-        console.log('📂 [OfficeListingScreen] Category updated from initialCategory:', categoryNum);
+        console.log(
+          '📂 [OfficeListingScreen] Category updated from initialCategory:',
+          categoryNum,
+        );
       }
     }
   }, [initialCategory]);
-  
+
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
   const [mainImageUrl, setMainImageUrl] = useState(null);
@@ -199,27 +214,27 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
   const [additionalImageUrls, setAdditionalImageUrls] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
-  
+
   // Loading states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
-  
+
   // File input refs for web
   const mainImageInputRef = useRef(null);
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
-  
-  const toggleAmenity = (amenity) => {
+
+  const toggleAmenity = amenity => {
     if (amenities[amenity]) {
-      const newAmenities = { ...amenities };
+      const newAmenities = {...amenities};
       delete newAmenities[amenity];
       setAmenities(newAmenities);
     } else {
       setAmenities({
         ...amenities,
-        [amenity]: amenitiesWithQuantity.includes(amenity) ? 1 : true
+        [amenity]: amenitiesWithQuantity.includes(amenity) ? 1 : true,
       });
     }
   };
@@ -227,7 +242,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
   const setAmenityQuantity = (amenity, quantity) => {
     setAmenities({
       ...amenities,
-      [amenity]: quantity
+      [amenity]: quantity,
     });
   };
 
@@ -238,7 +253,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
     }
   };
 
-  const handleMainImageChange = (event) => {
+  const handleMainImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       const fileObj = {
@@ -252,7 +267,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
     }
   };
 
-  const handleAdditionalImageUpload = (index) => {
+  const handleAdditionalImageUpload = index => {
     if (Platform.OS === 'web' && additionalImageInputRefs.current[index]) {
       additionalImageInputRefs.current[index].click();
     }
@@ -280,7 +295,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
     }
   };
 
-  const handleVideoChange = (event) => {
+  const handleVideoChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       const fileObj = {
@@ -297,7 +312,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
   const handlePublish = async () => {
     try {
       setUploading(true);
-      
+
       // Validate required fields based on category
       if (category === 3) {
         // Validation for category 3 (חדש מקבלן)
@@ -339,31 +354,37 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
           return;
         }
       }
-      
+
       // Upload files to Supabase storage
       let uploadedMainImageUrl = null;
       const uploadedAdditionalImageUrls = [];
       let uploadedVideoUrl = null;
-      
+
       // For category 3, upload user's image if provided, otherwise use fixed image
       if (category === 3) {
         if (mainImage && mainImage.file) {
           // User uploaded their own image - upload it
           try {
-            setUploadProgress(prev => ({ ...prev, mainImage: true }));
+            setUploadProgress(prev => ({...prev, mainImage: true}));
             const formData = new FormData();
             formData.append('file', mainImage.file);
             formData.append('folder', 'listings/images');
-            
-            const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-            
+
+            const response = await fetch(
+              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              {
+                method: 'POST',
+                body: formData,
+              },
+            );
+
             const data = await response.json();
             if (data.success && data.url) {
               uploadedMainImageUrl = data.url;
-              console.log('📸 User image uploaded for category 3:', uploadedMainImageUrl);
+              console.log(
+                '📸 User image uploaded for category 3:',
+                uploadedMainImageUrl,
+              );
             } else {
               throw new Error(data.error || 'Failed to upload image');
             }
@@ -373,41 +394,56 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             setUploading(false);
             return;
           } finally {
-            setUploadProgress(prev => ({ ...prev, mainImage: false }));
+            setUploadProgress(prev => ({...prev, mainImage: false}));
           }
         } else {
           // No user image - upload the fixed image from assets
           try {
             if (Platform.OS === 'web') {
-              setUploadProgress(prev => ({ ...prev, mainImage: true }));
+              setUploadProgress(prev => ({...prev, mainImage: true}));
               // Fetch the image from the asset
               const imageModule = require('../assets/image-insert-2.png');
-              const imageUrl = typeof imageModule === 'string' ? imageModule : imageModule.default || imageModule;
-              
+              const imageUrl =
+                typeof imageModule === 'string'
+                  ? imageModule
+                  : imageModule.default || imageModule;
+
               // Fetch the image and convert to blob
               const response = await fetch(imageUrl);
               const blob = await response.blob();
-              const file = new File([blob], 'image-insert-2.png', { type: 'image/png' });
-              
+              const file = new File([blob], 'image-insert-2.png', {
+                type: 'image/png',
+              });
+
               const formData = new FormData();
               formData.append('file', file);
               formData.append('folder', 'listings/images');
-              
-              const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`, {
-                method: 'POST',
-                body: formData,
-              });
-              
+
+              const uploadResponse = await fetch(
+                `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+                {
+                  method: 'POST',
+                  body: formData,
+                },
+              );
+
               const uploadData = await uploadResponse.json();
               if (uploadData.success && uploadData.url) {
                 uploadedMainImageUrl = uploadData.url;
-                console.log('📸 Fixed image uploaded for category 3:', uploadedMainImageUrl);
+                console.log(
+                  '📸 Fixed image uploaded for category 3:',
+                  uploadedMainImageUrl,
+                );
               } else {
-                throw new Error(uploadData.error || 'Failed to upload fixed image');
+                throw new Error(
+                  uploadData.error || 'Failed to upload fixed image',
+                );
               }
             } else {
               // For native, you might need a different approach
-              console.log('📸 Category 3 fixed image - native platform handling needed');
+              console.log(
+                '📸 Category 3 fixed image - native platform handling needed',
+              );
             }
           } catch (error) {
             console.error('Error uploading fixed image for category 3:', error);
@@ -415,24 +451,27 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             setUploading(false);
             return;
           } finally {
-            setUploadProgress(prev => ({ ...prev, mainImage: false }));
+            setUploadProgress(prev => ({...prev, mainImage: false}));
           }
         }
       }
-      
+
       // Upload main image (skip for category 3)
       if (category !== 3 && mainImage && mainImage.file) {
         try {
-          setUploadProgress(prev => ({ ...prev, mainImage: true }));
+          setUploadProgress(prev => ({...prev, mainImage: true}));
           const formData = new FormData();
           formData.append('file', mainImage.file);
           formData.append('folder', 'listings/images');
-          
-          const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-          
+
+          const response = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            {
+              method: 'POST',
+              body: formData,
+            },
+          );
+
           const data = await response.json();
           if (data.success && data.url) {
             uploadedMainImageUrl = data.url;
@@ -445,51 +484,66 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
           setUploading(false);
           return;
         } finally {
-          setUploadProgress(prev => ({ ...prev, mainImage: false }));
+          setUploadProgress(prev => ({...prev, mainImage: false}));
         }
       }
-      
+
       // Upload additional images
       for (let i = 0; i < additionalImages.length; i++) {
         if (additionalImages[i] && additionalImages[i].file) {
           try {
-            setUploadProgress(prev => ({ ...prev, [`additional-${i}`]: true }));
+            setUploadProgress(prev => ({
+              ...prev,
+              [`additional-${i}`]: true,
+            }));
             const formData = new FormData();
             formData.append('file', additionalImages[i].file);
             formData.append('folder', 'listings/images');
-            
-            const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-            
+
+            const response = await fetch(
+              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              {
+                method: 'POST',
+                body: formData,
+              },
+            );
+
             const data = await response.json();
             if (data.success && data.url) {
               uploadedAdditionalImageUrls[i] = data.url;
             } else {
-              console.error(`Failed to upload additional image ${i}:`, data.error);
+              console.error(
+                `Failed to upload additional image ${i}:`,
+                data.error,
+              );
             }
           } catch (error) {
             console.error(`Error uploading additional image ${i}:`, error);
           } finally {
-            setUploadProgress(prev => ({ ...prev, [`additional-${i}`]: false }));
+            setUploadProgress(prev => ({
+              ...prev,
+              [`additional-${i}`]: false,
+            }));
           }
         }
       }
-      
+
       // Upload video if exists
       if (videoFile && videoFile.file) {
         try {
-          setUploadProgress(prev => ({ ...prev, video: true }));
+          setUploadProgress(prev => ({...prev, video: true}));
           const formData = new FormData();
           formData.append('file', videoFile.file);
           formData.append('folder', 'listings/videos');
-          
-          const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-          
+
+          const response = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            {
+              method: 'POST',
+              body: formData,
+            },
+          );
+
           const data = await response.json();
           if (data.success && data.url) {
             uploadedVideoUrl = data.url;
@@ -499,83 +553,99 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
         } catch (error) {
           console.error('Error uploading video:', error);
         } finally {
-          setUploadProgress(prev => ({ ...prev, video: false }));
+          setUploadProgress(prev => ({...prev, video: false}));
         }
       }
-      
+
       // Prepare listing data with uploaded Supabase URLs
-      const listingCategory = parseInt(category) || (initialCategory ? parseInt(initialCategory) : 1);
-      
+      const listingCategory =
+        parseInt(category) || (initialCategory ? parseInt(initialCategory) : 1);
+
       // For category 3, use different data structure
-      const listingData = category === 3 ? {
-        // Category 3 specific fields
-        searchPurpose,
-        preferredApartmentType,
-        preferredGender,
-        preferredAgeMin,
-        preferredAgeMax,
-        preferences,
-        budget: parseFloat(budget) || 0,
-        description: description.trim(),
-        mainImageUrl: uploadedMainImageUrl,
-        category: listingCategory,
-        // Set defaults for required fields that don't apply to category 3
-        propertyType: 'office', // Default
-        area: 1,
-        rooms: 1,
-        floor: 1,
-        purpose: 'rent', // Default for shared apartments
-        price: parseFloat(budget) || 0,
-        address: '', // Not required for category 3
-        phone: '', // Not required for category 3
-        additionalImageUrls: [], // Empty array for category 3
-      } : {
-        // Standard listing fields for other categories
-        propertyType,
-        area: parseInt(area) || 1,
-        rooms: parseInt(rooms) || 1,
-        floor: parseInt(floor) || 1,
-        amenities: amenities || {},
-        condition: condition || null,
-        purpose: purpose || 'sale',
-        price: parseFloat(price) || 0,
-        address: address.trim(),
-        phone: phone.trim(),
-        description: description.trim(),
-        displayOption: displayOption || null,
-        mainImageUrl: uploadedMainImageUrl,
-        additionalImageUrls: uploadedAdditionalImageUrls.filter(url => url !== null && url !== undefined && url !== ''),
-        videoUrl: uploadedVideoUrl,
-        hasVideo: !!uploadedVideoUrl,
-        category: listingCategory,
-      };
-      
-      console.log('📂 [OfficeListingScreen] Publishing listing with category:', listingCategory, '(category state:', category, ', initialCategory:', initialCategory, ')');
+      const listingData =
+        category === 3
+          ? {
+              // Category 3 specific fields
+              searchPurpose,
+              preferredApartmentType,
+              preferredGender,
+              preferredAgeMin,
+              preferredAgeMax,
+              preferences,
+              budget: parseFloat(budget) || 0,
+              description: description.trim(),
+              mainImageUrl: uploadedMainImageUrl,
+              category: listingCategory,
+              // Set defaults for required fields that don't apply to category 3
+              propertyType: 'office', // Default
+              area: 1,
+              rooms: 1,
+              floor: 1,
+              purpose: 'rent', // Default for shared apartments
+              price: parseFloat(budget) || 0,
+              address: '', // Not required for category 3
+              phone: '', // Not required for category 3
+              additionalImageUrls: [], // Empty array for category 3
+            }
+          : {
+              // Standard listing fields for other categories
+              propertyType,
+              area: parseInt(area) || 1,
+              rooms: parseInt(rooms) || 1,
+              floor: parseInt(floor) || 1,
+              amenities: amenities || {},
+              condition: condition || null,
+              purpose: purpose || 'sale',
+              price: parseFloat(price) || 0,
+              address: address.trim(),
+              phone: phone.trim(),
+              description: description.trim(),
+              displayOption: displayOption || null,
+              mainImageUrl: uploadedMainImageUrl,
+              additionalImageUrls: uploadedAdditionalImageUrls.filter(
+                url => url !== null && url !== undefined && url !== '',
+              ),
+              videoUrl: uploadedVideoUrl,
+              hasVideo: !!uploadedVideoUrl,
+              category: listingCategory,
+            };
+
+      console.log(
+        '📂 [OfficeListingScreen] Publishing listing with category:',
+        listingCategory,
+        '(category state:',
+        category,
+        ', initialCategory:',
+        initialCategory,
+        ')',
+      );
 
       console.log('📝 Publishing listing with data:', {
         ...listingData,
         category: listingData.category,
         hasMainImage: !!listingData.mainImageUrl,
         additionalImagesCount: listingData.additionalImageUrls?.length || 0,
-        hasVideo: listingData.hasVideo
+        hasVideo: listingData.hasVideo,
       });
 
       // Create listing in database
       const result = await createListing(listingData);
-      
+
       console.log('Listing created successfully:', result);
-      
+
       // Pass to parent with Supabase URLs
       if (onPublish) {
         onPublish({
           ...listingData,
           id: result.id || result.listing?.id,
-          mainImage: uploadedMainImageUrl ? { uri: uploadedMainImageUrl } : null,
-          additionalImages: uploadedAdditionalImageUrls.filter(url => url).map(url => ({ uri: url })),
-          video: uploadedVideoUrl ? { uri: uploadedVideoUrl } : null,
+          mainImage: uploadedMainImageUrl ? {uri: uploadedMainImageUrl} : null,
+          additionalImages: uploadedAdditionalImageUrls
+            .filter(url => url)
+            .map(url => ({uri: url})),
+          video: uploadedVideoUrl ? {uri: uploadedVideoUrl} : null,
         });
       }
-      
+
       // Close the screen
       if (onClose) {
         onClose();
@@ -602,26 +672,27 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Container 0: Category Selection */}
         <View style={styles.formContainer}>
           <Text style={styles.sectionTitle}>
             בחר קטגוריה<Text style={styles.required}>*</Text>
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScrollView}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryScrollView}>
             <View style={styles.categoryGrid}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((catNum) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(catNum => (
                 <TouchableOpacity
                   key={catNum}
                   style={[
                     styles.categoryItem,
-                    category === catNum && styles.categoryItemSelected
+                    category === catNum && styles.categoryItemSelected,
                   ]}
-                  onPress={() => setCategory(catNum)}
-                >
+                  onPress={() => setCategory(catNum)}>
                   <Image
-                    source={require(`../assets/tik${catNum}.png`)}
+                    source={categoryImages[catNum]}
                     style={styles.categoryImage}
                     resizeMode="cover"
                   />
@@ -645,14 +716,14 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             </Text>
             <View style={styles.fixedImageContainer}>
               {mainImage ? (
-                <Image 
-                  source={{ uri: mainImage.uri }} 
+                <Image
+                  source={{uri: mainImage.uri}}
                   style={styles.fixedImage}
                   resizeMode="contain"
                 />
               ) : (
-                <Image 
-                  source={require('../assets/image-insert-2.png')} 
+                <Image
+                  source={require('../assets/image-insert-2.png')}
                   style={styles.fixedImage}
                   resizeMode="contain"
                 />
@@ -660,8 +731,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
               <TouchableOpacity
                 style={styles.uploadButtonOverlay}
                 onPress={handleMainImageUpload}
-                disabled={uploadProgress.mainImage}
-              >
+                disabled={uploadProgress.mainImage}>
                 {uploadProgress.mainImage && (
                   <ActivityIndicator size="small" color="#fff" />
                 )}
@@ -671,27 +741,25 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                   ref={mainImageInputRef}
                   type="file"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  style={{display: 'none'}}
                   onChange={handleMainImageChange}
                 />
               )}
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.videoOption}
-              onPress={() => setHasVideo(!hasVideo)}
-            >
+              onPress={() => setHasVideo(!hasVideo)}>
               <View style={styles.radioButton}>
                 {hasVideo && (
                   <LinearGradient
                     colors={['#FEE787', '#BD9947', '#9C6522']}
                     locations={[0.0456, 0.5076, 0.8831]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.radioButtonGradient}
-                  >
-                    <Image 
-                      source={require('../assets/checkbox-selected.png')} 
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={styles.radioButtonGradient}>
+                    <Image
+                      source={require('../assets/checkbox-selected.png')}
                       style={styles.radioButtonSelected}
                       resizeMode="contain"
                     />
@@ -705,11 +773,10 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             {/* Video Upload Section - shown when checkbox is selected */}
             {hasVideo && (
               <View style={styles.videoUploadSection}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.videoUploadArea}
                   onPress={handleVideoUpload}
-                  disabled={uploadProgress.video}
-                >
+                  disabled={uploadProgress.video}>
                   {uploadProgress.video ? (
                     <View style={styles.videoPreview}>
                       <ActivityIndicator size="large" color="#fff" />
@@ -724,13 +791,15 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                           controls={false}
                         />
                       ) : (
-                        <Text style={styles.videoPreviewText}>Video Selected</Text>
+                        <Text style={styles.videoPreviewText}>
+                          Video Selected
+                        </Text>
                       )}
                     </View>
                   ) : (
                     <View style={styles.videoUploadContent}>
-                      <Image 
-                        source={require('../assets/image-insert.png')} 
+                      <Image
+                        source={require('../assets/image-insert.png')}
                         style={styles.videoUploadImage}
                         resizeMode="contain"
                       />
@@ -741,7 +810,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                       ref={videoInputRef}
                       type="file"
                       accept="video/*"
-                      style={{ display: 'none' }}
+                      style={{display: 'none'}}
                       onChange={handleVideoChange}
                     />
                   )}
@@ -754,18 +823,17 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             <Text style={styles.sectionTitle}>
               תמונת נושא או הדמייה<Text style={styles.required}>*</Text>
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.imageUploadArea}
-              onPress={handleMainImageUpload}
-            >
+              onPress={handleMainImageUpload}>
               {uploadProgress.mainImage ? (
                 <View style={styles.uploadingContainer}>
                   <ActivityIndicator size="small" color="#fff" />
                   <Text style={styles.uploadButtonText}>מעלה תמונה...</Text>
                 </View>
               ) : mainImage ? (
-                <Image 
-                  source={{ uri: mainImage.uri }} 
+                <Image
+                  source={{uri: mainImage.uri}}
                   style={styles.uploadedImage}
                   resizeMode="contain"
                 />
@@ -779,28 +847,29 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                   ref={mainImageInputRef}
                   type="file"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  style={{display: 'none'}}
                   onChange={handleMainImageChange}
                 />
               )}
             </TouchableOpacity>
 
-            <Text style={[styles.sectionTitle, styles.sectionTitleMargin]}>תמונות נוספות</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleMargin]}>
+              תמונות נוספות
+            </Text>
             <View style={styles.additionalImagesGrid}>
-              {[0, 1, 2, 3].map((index) => (
-                <TouchableOpacity 
-                  key={index} 
+              {[0, 1, 2, 3].map(index => (
+                <TouchableOpacity
+                  key={index}
                   style={styles.imagePlaceholder}
                   onPress={() => handleAdditionalImageUpload(index)}
-                  disabled={uploadProgress[`additional-${index}`]}
-                >
+                  disabled={uploadProgress[`additional-${index}`]}>
                   {uploadProgress[`additional-${index}`] ? (
                     <View style={styles.uploadingContainer}>
                       <ActivityIndicator size="small" color="#fff" />
                     </View>
                   ) : additionalImages[index] ? (
-                    <Image 
-                      source={{ uri: additionalImages[index].uri }} 
+                    <Image
+                      source={{uri: additionalImages[index].uri}}
                       style={styles.uploadedImage}
                       resizeMode="contain"
                     />
@@ -809,86 +878,85 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                   )}
                   {Platform.OS === 'web' && (
                     <input
-                      ref={el => additionalImageInputRefs.current[index] = el}
+                      ref={el => (additionalImageInputRefs.current[index] = el)}
                       type="file"
                       accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleAdditionalImageChange(index, e)}
+                      style={{display: 'none'}}
+                      onChange={e => handleAdditionalImageChange(index, e)}
                     />
                   )}
                 </TouchableOpacity>
               ))}
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.videoOption}
-              onPress={() => setHasVideo(!hasVideo)}
-            >
+              onPress={() => setHasVideo(!hasVideo)}>
               <View style={styles.radioButton}>
-              {hasVideo && (
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.radioButtonGradient}
-                >
-                  <Image 
-                    source={require('../assets/checkbox-selected.png')} 
-                    style={styles.radioButtonSelected}
-                    resizeMode="contain"
-                  />
-                </LinearGradient>
-              )}
-            </View>
-            <View style={styles.radioSpacer} />
-            <Text style={styles.videoOptionText}>הוסף סרטון</Text>
-          </TouchableOpacity>
+                {hasVideo && (
+                  <LinearGradient
+                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    locations={[0.0456, 0.5076, 0.8831]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={styles.radioButtonGradient}>
+                    <Image
+                      source={require('../assets/checkbox-selected.png')}
+                      style={styles.radioButtonSelected}
+                      resizeMode="contain"
+                    />
+                  </LinearGradient>
+                )}
+              </View>
+              <View style={styles.radioSpacer} />
+              <Text style={styles.videoOptionText}>הוסף סרטון</Text>
+            </TouchableOpacity>
 
-          {/* Video Upload Section - shown when checkbox is selected */}
-          {hasVideo && (
-            <View style={styles.videoUploadSection}>
-              <TouchableOpacity 
-                style={styles.videoUploadArea}
-                onPress={handleVideoUpload}
-                disabled={uploadProgress.video}
-              >
-                {uploadProgress.video ? (
-                  <View style={styles.videoPreview}>
-                    <ActivityIndicator size="large" color="#fff" />
-                    <Text style={styles.videoPreviewText}>מעלה סרטון...</Text>
-                  </View>
-                ) : videoFile ? (
-                  <View style={styles.videoPreview}>
-                    {Platform.OS === 'web' ? (
-                      <video
-                        src={videoFile.uri}
-                        style={styles.videoPreviewElement}
-                        controls={false}
-                      />
-                    ) : (
-                      <Text style={styles.videoPreviewText}>Video Selected</Text>
-                    )}
-                  </View>
-                ) : (
-                  <Image 
-                    source={require('../assets/image-insert.png')} 
-                    style={styles.videoUploadImage}
-                    resizeMode="contain"
-                  />
-                )}
-                {Platform.OS === 'web' && (
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/*"
-                    style={{ display: 'none' }}
-                    onChange={handleVideoChange}
-                  />
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
+            {/* Video Upload Section - shown when checkbox is selected */}
+            {hasVideo && (
+              <View style={styles.videoUploadSection}>
+                <TouchableOpacity
+                  style={styles.videoUploadArea}
+                  onPress={handleVideoUpload}
+                  disabled={uploadProgress.video}>
+                  {uploadProgress.video ? (
+                    <View style={styles.videoPreview}>
+                      <ActivityIndicator size="large" color="#fff" />
+                      <Text style={styles.videoPreviewText}>מעלה סרטון...</Text>
+                    </View>
+                  ) : videoFile ? (
+                    <View style={styles.videoPreview}>
+                      {Platform.OS === 'web' ? (
+                        <video
+                          src={videoFile.uri}
+                          style={styles.videoPreviewElement}
+                          controls={false}
+                        />
+                      ) : (
+                        <Text style={styles.videoPreviewText}>
+                          Video Selected
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <Image
+                      source={require('../assets/image-insert.png')}
+                      style={styles.videoUploadImage}
+                      resizeMode="contain"
+                    />
+                  )}
+                  {Platform.OS === 'web' && (
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      style={{display: 'none'}}
+                      onChange={handleVideoChange}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -903,23 +971,23 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
               <View style={styles.radioGroup}>
                 <TouchableOpacity
                   style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('enter')}
-                >
+                  onPress={() => setSearchPurpose('enter')}>
                   <View style={styles.radioOptionContent}>
                     <Text style={styles.radioOptionTitle}>מחפש להיכנס</Text>
-                    <Text style={styles.radioOptionDescription}>אני מחפש להיכנס לדירת שותפים קיימת.</Text>
+                    <Text style={styles.radioOptionDescription}>
+                      אני מחפש להיכנס לדירת שותפים קיימת.
+                    </Text>
                   </View>
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'enter' ? (
                     <LinearGradient
                       colors={['#FEE787', '#BD9947', '#9C6522']}
                       locations={[0.0456, 0.5076, 0.8831]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.radioButtonGradient}
-                    >
-                      <Image 
-                        source={require('../assets/checkbox-selected.png')} 
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.radioButtonGradient}>
+                      <Image
+                        source={require('../assets/checkbox-selected.png')}
                         style={styles.radioButtonSelected}
                         resizeMode="contain"
                       />
@@ -931,23 +999,24 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                 <View style={styles.divider} />
                 <TouchableOpacity
                   style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('bring_in')}
-                >
+                  onPress={() => setSearchPurpose('bring_in')}>
                   <View style={styles.radioOptionContent}>
                     <Text style={styles.radioOptionTitle}>מחפש להכניס</Text>
-                    <Text style={styles.radioOptionDescription}>מחפש לי חדר בדירה השותפים שבה אני גר. אני מעוניין למצוא שותף חדש לגור איתי.</Text>
+                    <Text style={styles.radioOptionDescription}>
+                      מחפש לי חדר בדירה השותפים שבה אני גר. אני מעוניין למצוא
+                      שותף חדש לגור איתי.
+                    </Text>
                   </View>
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'bring_in' ? (
                     <LinearGradient
                       colors={['#FEE787', '#BD9947', '#9C6522']}
                       locations={[0.0456, 0.5076, 0.8831]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.radioButtonGradient}
-                    >
-                      <Image 
-                        source={require('../assets/checkbox-selected.png')} 
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.radioButtonGradient}>
+                      <Image
+                        source={require('../assets/checkbox-selected.png')}
                         style={styles.radioButtonSelected}
                         resizeMode="contain"
                       />
@@ -959,23 +1028,24 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                 <View style={styles.divider} />
                 <TouchableOpacity
                   style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('partner')}
-                >
+                  onPress={() => setSearchPurpose('partner')}>
                   <View style={styles.radioOptionContent}>
                     <Text style={styles.radioOptionTitle}>מחפש שותף</Text>
-                    <Text style={styles.radioOptionDescription}>אני מחפש ליצור חיבורים חדשים עם אנשים ולחפש ביחד דירת שותפים.</Text>
+                    <Text style={styles.radioOptionDescription}>
+                      אני מחפש ליצור חיבורים חדשים עם אנשים ולחפש ביחד דירת
+                      שותפים.
+                    </Text>
                   </View>
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'partner' ? (
                     <LinearGradient
                       colors={['#FEE787', '#BD9947', '#9C6522']}
                       locations={[0.0456, 0.5076, 0.8831]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.radioButtonGradient}
-                    >
-                      <Image 
-                        source={require('../assets/checkbox-selected.png')} 
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.radioButtonGradient}>
+                      <Image
+                        source={require('../assets/checkbox-selected.png')}
                         style={styles.radioButtonSelected}
                         resizeMode="contain"
                       />
@@ -994,31 +1064,29 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
               </Text>
               <View style={styles.radioGroup}>
                 {[
-                  { value: 'regular', label: 'דירה רגילה' },
-                  { value: 'studio', label: 'דירת סטודיו' },
-                  { value: 'garden', label: 'דירת גן' },
-                  { value: 'duplex', label: 'דופלקס' },
-                  { value: 'penthouse', label: 'נטהאוז' },
-                  { value: 'private', label: 'בית פרטי' },
+                  {value: 'regular', label: 'דירה רגילה'},
+                  {value: 'studio', label: 'דירת סטודיו'},
+                  {value: 'garden', label: 'דירת גן'},
+                  {value: 'duplex', label: 'דופלקס'},
+                  {value: 'penthouse', label: 'נטהאוז'},
+                  {value: 'private', label: 'בית פרטי'},
                 ].map((option, index) => (
                   <React.Fragment key={option.value}>
                     {index > 0 && <View style={styles.divider} />}
                     <TouchableOpacity
                       style={styles.radioOption}
-                      onPress={() => setPreferredApartmentType(option.value)}
-                    >
+                      onPress={() => setPreferredApartmentType(option.value)}>
                       <Text style={styles.radioOptionText}>{option.label}</Text>
                       <View style={styles.radioSpacer} />
                       {preferredApartmentType === option.value ? (
                         <LinearGradient
                           colors={['#FEE787', '#BD9947', '#9C6522']}
                           locations={[0.0456, 0.5076, 0.8831]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.radioButtonGradient}
-                        >
-                          <Image 
-                            source={require('../assets/checkbox-selected.png')} 
+                          start={{x: 0, y: 0}}
+                          end={{x: 1, y: 1}}
+                          style={styles.radioButtonGradient}>
+                          <Image
+                            source={require('../assets/checkbox-selected.png')}
                             style={styles.radioButtonSelected}
                             resizeMode="contain"
                           />
@@ -1035,7 +1103,7 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
             {/* Container 4: Preferences */}
             <View style={styles.formContainer}>
               <Text style={styles.sectionTitle}>העדפות</Text>
-              
+
               {/* Gender */}
               <View style={styles.preferenceSection}>
                 <Text style={styles.preferenceLabel}>מין</Text>
@@ -1043,14 +1111,18 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                   <TouchableOpacity
                     style={[
                       styles.genderButton,
-                      preferredGender === 'female' && styles.genderButtonSelected
+                      preferredGender === 'female' &&
+                        styles.genderButtonSelected,
                     ]}
-                    onPress={() => setPreferredGender('female')}
-                  >
-                    <Text style={[
-                      styles.genderButtonText,
-                      preferredGender === 'female' && styles.genderButtonTextSelected
-                    ]}>אישה</Text>
+                    onPress={() => setPreferredGender('female')}>
+                    <Text
+                      style={[
+                        styles.genderButtonText,
+                        preferredGender === 'female' &&
+                          styles.genderButtonTextSelected,
+                      ]}>
+                      אישה
+                    </Text>
                     <View style={styles.radioSpacer} />
                     {preferredGender === 'female' ? (
                       <View style={styles.genderRadioSelected} />
@@ -1061,14 +1133,17 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                   <TouchableOpacity
                     style={[
                       styles.genderButton,
-                      preferredGender === 'male' && styles.genderButtonSelected
+                      preferredGender === 'male' && styles.genderButtonSelected,
                     ]}
-                    onPress={() => setPreferredGender('male')}
-                  >
-                    <Text style={[
-                      styles.genderButtonText,
-                      preferredGender === 'male' && styles.genderButtonTextSelected
-                    ]}>גבר</Text>
+                    onPress={() => setPreferredGender('male')}>
+                    <Text
+                      style={[
+                        styles.genderButtonText,
+                        preferredGender === 'male' &&
+                          styles.genderButtonTextSelected,
+                      ]}>
+                      גבר
+                    </Text>
                     <View style={styles.radioSpacer} />
                     {preferredGender === 'male' ? (
                       <View style={styles.genderRadioSelected} />
@@ -1090,32 +1165,34 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
               {/* Checkboxes */}
               <View style={styles.preferenceSection}>
                 {[
-                  { key: 'nonSmokers', label: 'ללא מעשנים' },
-                  { key: 'students', label: 'סטודנטים' },
-                  { key: 'stableJob', label: 'בעלי עבודה מסודרת' },
-                  { key: 'occasionalJob', label: 'בעלי עבודה מזדמנת' },
-                  { key: 'immediateEntry', label: 'כניסה מיידית' },
-                ].map((option) => (
+                  {key: 'nonSmokers', label: 'ללא מעשנים'},
+                  {key: 'students', label: 'סטודנטים'},
+                  {key: 'stableJob', label: 'בעלי עבודה מסודרת'},
+                  {key: 'occasionalJob', label: 'בעלי עבודה מזדמנת'},
+                  {key: 'immediateEntry', label: 'כניסה מיידית'},
+                ].map(option => (
                   <TouchableOpacity
                     key={option.key}
                     style={styles.preferenceCheckbox}
-                    onPress={() => setPreferences({
-                      ...preferences,
-                      [option.key]: !preferences[option.key]
-                    })}
-                  >
-                    <Text style={styles.preferenceCheckboxText}>{option.label}</Text>
+                    onPress={() =>
+                      setPreferences({
+                        ...preferences,
+                        [option.key]: !preferences[option.key],
+                      })
+                    }>
+                    <Text style={styles.preferenceCheckboxText}>
+                      {option.label}
+                    </Text>
                     <View style={styles.radioSpacer} />
                     {preferences[option.key] ? (
                       <LinearGradient
                         colors={['#FEE787', '#BD9947', '#9C6522']}
                         locations={[0.0456, 0.5076, 0.8831]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.radioButtonGradient}
-                      >
-                        <Image 
-                          source={require('../assets/checkbox-selected.png')} 
+                        start={{x: 0, y: 0}}
+                        end={{x: 1, y: 1}}
+                        style={styles.radioButtonGradient}>
+                        <Image
+                          source={require('../assets/checkbox-selected.png')}
                           style={styles.radioButtonSelected}
                           resizeMode="contain"
                         />
@@ -1134,21 +1211,21 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                 התקציב שלי<Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.priceInput}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.counterButtonLeft}
-                  onPress={() => setBudget(Math.max(0, budget - 100))}
-                >
+                  onPress={() => setBudget(Math.max(0, budget - 100))}>
                   <Text style={styles.counterButton}>+</Text>
                 </TouchableOpacity>
                 <View style={styles.counterDivider} />
                 <View style={styles.counterValueContainer}>
-                  <Text style={styles.priceValue}>₪ {budget.toLocaleString()}</Text>
+                  <Text style={styles.priceValue}>
+                    ₪ {budget.toLocaleString()}
+                  </Text>
                 </View>
                 <View style={styles.counterDivider} />
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.counterButtonRight}
-                  onPress={() => setBudget(budget + 100)}
-                >
+                  onPress={() => setBudget(budget + 100)}>
                   <Text style={styles.counterButton}>-</Text>
                 </TouchableOpacity>
               </View>
@@ -1175,12 +1252,17 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
           <>
             {/* Container 2: Display Options */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>בחרו אפשרויות תצוגה נוספות</Text>
+              <Text style={styles.sectionTitle}>
+                בחרו אפשרויות תצוגה נוספות
+              </Text>
               <View style={styles.displayOptions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.displayOption}
-                  onPress={() => setDisplayOption(displayOption === 'collage' ? null : 'collage')}
-                >
+                  onPress={() =>
+                    setDisplayOption(
+                      displayOption === 'collage' ? null : 'collage',
+                    )
+                  }>
                   <View style={styles.displayOptionContent}>
                     <Text style={styles.displayOptionTitle}>קולאז'</Text>
                     <View style={styles.radioSpacer} />
@@ -1189,12 +1271,11 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                         <LinearGradient
                           colors={['#FEE787', '#BD9947', '#9C6522']}
                           locations={[0.0456, 0.5076, 0.8831]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.radioButtonGradient}
-                        >
-                          <Image 
-                            source={require('../assets/checkbox-selected.png')} 
+                          start={{x: 0, y: 0}}
+                          end={{x: 1, y: 1}}
+                          style={styles.radioButtonGradient}>
+                          <Image
+                            source={require('../assets/checkbox-selected.png')}
                             style={styles.radioButtonSelected}
                             resizeMode="contain"
                           />
@@ -1202,17 +1283,20 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                       )}
                     </View>
                   </View>
-                  <Image 
-                    source={require('../assets/Frame1261158884.png')} 
+                  <Image
+                    source={require('../assets/Frame1261158884.png')}
                     style={styles.displayOptionImage}
                     resizeMode="cover"
                   />
                   <Text style={styles.displayOptionSubtitle}>תצוגה משולבת</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.displayOption}
-                  onPress={() => setDisplayOption(displayOption === 'slideshow' ? null : 'slideshow')}
-                >
+                  onPress={() =>
+                    setDisplayOption(
+                      displayOption === 'slideshow' ? null : 'slideshow',
+                    )
+                  }>
                   <View style={styles.displayOptionContent}>
                     <Text style={styles.displayOptionTitle}>מצגת</Text>
                     <View style={styles.radioSpacer} />
@@ -1221,12 +1305,11 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                         <LinearGradient
                           colors={['#FEE787', '#BD9947', '#9C6522']}
                           locations={[0.0456, 0.5076, 0.8831]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.radioButtonGradient}
-                        >
-                          <Image 
-                            source={require('../assets/checkbox-selected.png')} 
+                          start={{x: 0, y: 0}}
+                          end={{x: 1, y: 1}}
+                          style={styles.radioButtonGradient}>
+                          <Image
+                            source={require('../assets/checkbox-selected.png')}
                             style={styles.radioButtonSelected}
                             resizeMode="contain"
                           />
@@ -1234,184 +1317,38 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                       )}
                     </View>
                   </View>
-                  <Image 
-                    source={require('../assets/Frame1261158883.png')} 
+                  <Image
+                    source={require('../assets/Frame1261158883.png')}
                     style={styles.displayOptionImage}
                     resizeMode="cover"
                   />
-                  <Text style={styles.displayOptionSubtitle}>תמונות מתחלפות</Text>
+                  <Text style={styles.displayOptionSubtitle}>
+                    תמונות מתחלפות
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Container 3: Property Type */}
-        <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>
-            סוג הנכס<Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.radioGroup}>
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => setPropertyType('office')}
-            >
-              <Text style={styles.radioOptionText}>משרד</Text>
-              <View style={styles.radioSpacer} />
-              {propertyType === 'office' ? (
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.radioButtonGradient}
-                >
-                  <Image 
-                    source={require('../assets/checkbox-selected.png')} 
-                    style={styles.radioButtonSelected}
-                    resizeMode="contain"
-                  />
-                </LinearGradient>
-              ) : (
-                <View style={styles.radioButton}>
-                  {false && <View style={styles.radioButtonSelected} />}
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => setPropertyType('floor')}
-            >
-              <Text style={styles.radioOptionText}>קומה שלמה</Text>
-              <View style={styles.radioSpacer} />
-              {propertyType === 'floor' ? (
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.radioButtonGradient}
-                >
-                  <Image 
-                    source={require('../assets/checkbox-selected.png')} 
-                    style={styles.radioButtonSelected}
-                    resizeMode="contain"
-                  />
-                </LinearGradient>
-              ) : (
-                <View style={styles.radioButton}>
-                  {false && <View style={styles.radioButtonSelected} />}
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Container 4: General Details */}
-        <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>פרטים כלליים</Text>
-          
-          {/* Area */}
-          <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>
-              שטח הנכס<Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.counterInput}>
-              <TouchableOpacity 
-                style={styles.counterButtonLeft}
-                onPress={() => setArea(Math.max(1, area - 1))}
-              >
-                <Text style={styles.counterButton}>+</Text>
-              </TouchableOpacity>
-              <View style={styles.counterDivider} />
-              <View style={styles.counterValueContainer}>
-                <Text style={styles.counterValue}>{area} מ"ר</Text>
-              </View>
-              <View style={styles.counterDivider} />
-              <TouchableOpacity 
-                style={styles.counterButtonRight}
-                onPress={() => setArea(area + 1)}
-              >
-                <Text style={styles.counterButton}>-</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Rooms */}
-          <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>
-              מספר חדרים<Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.counterInput}>
-              <TouchableOpacity 
-                style={styles.counterButtonLeft}
-                onPress={() => setRooms(Math.max(1, rooms - 1))}
-              >
-                <Text style={styles.counterButton}>+</Text>
-              </TouchableOpacity>
-              <View style={styles.counterDivider} />
-              <View style={styles.counterValueContainer}>
-                <Text style={styles.counterValue}>{rooms}</Text>
-              </View>
-              <View style={styles.counterDivider} />
-              <TouchableOpacity 
-                style={styles.counterButtonRight}
-                onPress={() => setRooms(rooms + 1)}
-              >
-                <Text style={styles.counterButton}>-</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Floor */}
-          <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>
-              קומה<Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.counterInput}>
-              <TouchableOpacity 
-                style={styles.counterButtonLeft}
-                onPress={() => setFloor(Math.max(1, floor - 1))}
-              >
-                <Text style={styles.counterButton}>+</Text>
-              </TouchableOpacity>
-              <View style={styles.counterDivider} />
-              <View style={styles.counterValueContainer}>
-                <Text style={styles.counterValue}>{floor}</Text>
-              </View>
-              <View style={styles.counterDivider} />
-              <TouchableOpacity 
-                style={styles.counterButtonRight}
-                onPress={() => setFloor(floor + 1)}
-              >
-                <Text style={styles.counterButton}>-</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Amenities */}
-          {['חנייה', 'מרפסת', 'מעלית', 'ממ"ד', 'כניסה מיידית'].map((amenity) => {
-            const isSelected = !!amenities[amenity];
-            const hasQuantity = amenitiesWithQuantity.includes(amenity);
-            const quantity = hasQuantity ? (amenities[amenity] || 0) : null;
-            
-            return (
-              <View key={amenity} style={styles.amenityRow}>
-                {/* Amenity label and checkbox */}
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionTitle}>
+                סוג הנכס<Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.radioGroup}>
                 <TouchableOpacity
-                  style={styles.amenityOption}
-                  onPress={() => toggleAmenity(amenity)}
-                >
-                  <Text style={styles.amenityText}>{amenity}</Text>
+                  style={styles.radioOption}
+                  onPress={() => setPropertyType('office')}>
+                  <Text style={styles.radioOptionText}>משרד</Text>
                   <View style={styles.radioSpacer} />
-                  {isSelected ? (
+                  {propertyType === 'office' ? (
                     <LinearGradient
                       colors={['#FEE787', '#BD9947', '#9C6522']}
                       locations={[0.0456, 0.5076, 0.8831]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.radioButtonGradient}
-                    >
-                      <Image 
-                        source={require('../assets/checkbox-selected.png')} 
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.radioButtonGradient}>
+                      <Image
+                        source={require('../assets/checkbox-selected.png')}
                         style={styles.radioButtonSelected}
                         resizeMode="contain"
                       />
@@ -1422,200 +1359,341 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
                     </View>
                   )}
                 </TouchableOpacity>
-                
-                {/* Quantity selector for amenities that need it - below the amenity row */}
-                {hasQuantity && isSelected && (
-                  <View style={styles.amenityQuantitySelector}>
-                    {[4, 3, 2, 1].map((qty) => (
+                <TouchableOpacity
+                  style={styles.radioOption}
+                  onPress={() => setPropertyType('floor')}>
+                  <Text style={styles.radioOptionText}>קומה שלמה</Text>
+                  <View style={styles.radioSpacer} />
+                  {propertyType === 'floor' ? (
+                    <LinearGradient
+                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      locations={[0.0456, 0.5076, 0.8831]}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={styles.radioButtonGradient}>
+                      <Image
+                        source={require('../assets/checkbox-selected.png')}
+                        style={styles.radioButtonSelected}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.radioButton}>
+                      {false && <View style={styles.radioButtonSelected} />}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Container 4: General Details */}
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionTitle}>פרטים כלליים</Text>
+
+              {/* Area */}
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>
+                  שטח הנכס<Text style={styles.required}>*</Text>
+                </Text>
+                <View style={styles.counterInput}>
+                  <TouchableOpacity
+                    style={styles.counterButtonLeft}
+                    onPress={() => setArea(Math.max(1, area - 1))}>
+                    <Text style={styles.counterButton}>+</Text>
+                  </TouchableOpacity>
+                  <View style={styles.counterDivider} />
+                  <View style={styles.counterValueContainer}>
+                    <Text style={styles.counterValue}>{area} מ"ר</Text>
+                  </View>
+                  <View style={styles.counterDivider} />
+                  <TouchableOpacity
+                    style={styles.counterButtonRight}
+                    onPress={() => setArea(area + 1)}>
+                    <Text style={styles.counterButton}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Rooms */}
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>
+                  מספר חדרים<Text style={styles.required}>*</Text>
+                </Text>
+                <View style={styles.counterInput}>
+                  <TouchableOpacity
+                    style={styles.counterButtonLeft}
+                    onPress={() => setRooms(Math.max(1, rooms - 1))}>
+                    <Text style={styles.counterButton}>+</Text>
+                  </TouchableOpacity>
+                  <View style={styles.counterDivider} />
+                  <View style={styles.counterValueContainer}>
+                    <Text style={styles.counterValue}>{rooms}</Text>
+                  </View>
+                  <View style={styles.counterDivider} />
+                  <TouchableOpacity
+                    style={styles.counterButtonRight}
+                    onPress={() => setRooms(rooms + 1)}>
+                    <Text style={styles.counterButton}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Floor */}
+              <View style={styles.inputRow}>
+                <Text style={styles.inputLabel}>
+                  קומה<Text style={styles.required}>*</Text>
+                </Text>
+                <View style={styles.counterInput}>
+                  <TouchableOpacity
+                    style={styles.counterButtonLeft}
+                    onPress={() => setFloor(Math.max(1, floor - 1))}>
+                    <Text style={styles.counterButton}>+</Text>
+                  </TouchableOpacity>
+                  <View style={styles.counterDivider} />
+                  <View style={styles.counterValueContainer}>
+                    <Text style={styles.counterValue}>{floor}</Text>
+                  </View>
+                  <View style={styles.counterDivider} />
+                  <TouchableOpacity
+                    style={styles.counterButtonRight}
+                    onPress={() => setFloor(floor + 1)}>
+                    <Text style={styles.counterButton}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Amenities */}
+              {['חנייה', 'מרפסת', 'מעלית', 'ממ"ד', 'כניסה מיידית'].map(
+                amenity => {
+                  const isSelected = !!amenities[amenity];
+                  const hasQuantity = amenitiesWithQuantity.includes(amenity);
+                  const quantity = hasQuantity ? amenities[amenity] || 0 : null;
+
+                  return (
+                    <View key={amenity} style={styles.amenityRow}>
+                      {/* Amenity label and checkbox */}
                       <TouchableOpacity
-                        key={qty}
-                        onPress={() => setAmenityQuantity(amenity, qty)}
-                        style={styles.amenityQuantityButtonContainer}
-                      >
-                        {quantity === qty ? (
+                        style={styles.amenityOption}
+                        onPress={() => toggleAmenity(amenity)}>
+                        <Text style={styles.amenityText}>{amenity}</Text>
+                        <View style={styles.radioSpacer} />
+                        {isSelected ? (
                           <LinearGradient
                             colors={['#FEE787', '#BD9947', '#9C6522']}
                             locations={[0.0456, 0.5076, 0.8831]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.amenityQuantityButtonSelected}
-                          >
-                            <Text style={styles.amenityQuantityTextSelected}>{qty}</Text>
-                            <View style={styles.amenityQuantityDotSelected}>
-                              <LinearGradient
-                                colors={['#FEE787', '#BD9947', '#9C6522']}
-                                locations={[0.0456, 0.5076, 0.8831]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.amenityQuantityDotInner}
-                              />
-                            </View>
+                            start={{x: 0, y: 0}}
+                            end={{x: 1, y: 1}}
+                            style={styles.radioButtonGradient}>
+                            <Image
+                              source={require('../assets/checkbox-selected.png')}
+                              style={styles.radioButtonSelected}
+                              resizeMode="contain"
+                            />
                           </LinearGradient>
                         ) : (
-                          <View style={styles.amenityQuantityButton}>
-                            <Text style={styles.amenityQuantityText}>{qty}</Text>
-                            <View style={styles.amenityQuantityDot} />
+                          <View style={styles.radioButton}>
+                            {false && (
+                              <View style={styles.radioButtonSelected} />
+                            )}
                           </View>
                         )}
                       </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
 
-        {/* Container 5: Property Condition */}
-        <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>
-            מצב הנכס<Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.segmentedButtons}>
-            {['ישן', 'משופץ', 'חדש'].map((cond) => (
-              <TouchableOpacity
-                key={cond}
-                onPress={() => setCondition(cond)}
-                style={styles.segmentedButtonContainer}
-              >
-                {condition === cond ? (
-                  <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
-                    locations={[0.0456, 0.5076, 0.8831]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[styles.segmentedButton, styles.segmentedButtonSelected]}
-                  >
-                    <Text style={styles.segmentedButtonTextSelected}>
-                      {cond}
-                    </Text>
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.segmentedButton}>
-                    <Text style={styles.segmentedButtonText}>
-                      {cond}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Container 6: Purpose */}
-        <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>
-            מטרת הפרסום<Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.purposeButtons}>
-            <TouchableOpacity
-              onPress={() => setPurpose('sale')}
-              style={styles.purposeButtonContainer}
-            >
-              {purpose === 'sale' ? (
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.purposeButton, styles.purposeButtonSelected, styles.purposeButtonGradient]}
-                >
-                  <Text style={styles.purposeButtonTextSelected}>
-                    למכירה
-                  </Text>
-                  <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
-                    locations={[0.0456, 0.5076, 0.8831]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.radioButtonGradient}
-                  >
-                    <Image 
-                      source={require('../assets/checkbox-selected.png')} 
-                      style={styles.radioButtonSelected}
-                      resizeMode="contain"
-                    />
-                  </LinearGradient>
-                </LinearGradient>
-              ) : (
-                <View style={styles.purposeButton}>
-                  <Text style={styles.purposeButtonText}>
-                    למכירה
-                  </Text>
-                  <View style={styles.radioButton}>
-                    {false && <View style={styles.radioButtonSelected} />}
-                  </View>
-                </View>
+                      {/* Quantity selector for amenities that need it - below the amenity row */}
+                      {hasQuantity && isSelected && (
+                        <View style={styles.amenityQuantitySelector}>
+                          {[4, 3, 2, 1].map(qty => (
+                            <TouchableOpacity
+                              key={qty}
+                              onPress={() => setAmenityQuantity(amenity, qty)}
+                              style={styles.amenityQuantityButtonContainer}>
+                              {quantity === qty ? (
+                                <LinearGradient
+                                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                                  locations={[0.0456, 0.5076, 0.8831]}
+                                  start={{x: 0, y: 0}}
+                                  end={{x: 1, y: 1}}
+                                  style={styles.amenityQuantityButtonSelected}>
+                                  <Text
+                                    style={styles.amenityQuantityTextSelected}>
+                                    {qty}
+                                  </Text>
+                                  <View
+                                    style={styles.amenityQuantityDotSelected}>
+                                    <LinearGradient
+                                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                                      locations={[0.0456, 0.5076, 0.8831]}
+                                      start={{x: 0, y: 0}}
+                                      end={{x: 1, y: 1}}
+                                      style={styles.amenityQuantityDotInner}
+                                    />
+                                  </View>
+                                </LinearGradient>
+                              ) : (
+                                <View style={styles.amenityQuantityButton}>
+                                  <Text style={styles.amenityQuantityText}>
+                                    {qty}
+                                  </Text>
+                                  <View style={styles.amenityQuantityDot} />
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                },
               )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setPurpose('rent')}
-              style={styles.purposeButtonContainer}
-            >
-              {purpose === 'rent' ? (
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.purposeButton, styles.purposeButtonSelected, styles.purposeButtonGradient]}
-                >
-                  <Text style={styles.purposeButtonTextSelected}>
-                    להשכרה
-                  </Text>
-                  <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
-                    locations={[0.0456, 0.5076, 0.8831]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.radioButtonGradient}
-                  >
-                    <Image 
-                      source={require('../assets/checkbox-selected.png')} 
-                      style={styles.radioButtonSelected}
-                      resizeMode="contain"
-                    />
-                  </LinearGradient>
-                </LinearGradient>
-              ) : (
-                <View style={styles.purposeButton}>
-                  <Text style={styles.purposeButtonText}>
-                    להשכרה
-                  </Text>
-                  <View style={styles.radioButton}>
-                    {false && <View style={styles.radioButtonSelected} />}
-                  </View>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Container 7: Price */}
-        <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>
-            מחיר<Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.priceInput}>
-            <TouchableOpacity 
-              style={styles.counterButtonLeft}
-              onPress={() => setPrice(Math.max(0, price - 10000))}
-            >
-              <Text style={styles.counterButton}>+</Text>
-            </TouchableOpacity>
-            <View style={styles.counterDivider} />
-            <View style={styles.counterValueContainer}>
-              <Text style={styles.priceValue}>₪ {price.toLocaleString()}</Text>
             </View>
-            <View style={styles.counterDivider} />
-            <TouchableOpacity 
-              style={styles.counterButtonRight}
-              onPress={() => setPrice(price + 10000)}
-            >
-              <Text style={styles.counterButton}>-</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+
+            {/* Container 5: Property Condition */}
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionTitle}>
+                מצב הנכס<Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.segmentedButtons}>
+                {['ישן', 'משופץ', 'חדש'].map(cond => (
+                  <TouchableOpacity
+                    key={cond}
+                    onPress={() => setCondition(cond)}
+                    style={styles.segmentedButtonContainer}>
+                    {condition === cond ? (
+                      <LinearGradient
+                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        locations={[0.0456, 0.5076, 0.8831]}
+                        start={{x: 0, y: 0}}
+                        end={{x: 1, y: 1}}
+                        style={[
+                          styles.segmentedButton,
+                          styles.segmentedButtonSelected,
+                        ]}>
+                        <Text style={styles.segmentedButtonTextSelected}>
+                          {cond}
+                        </Text>
+                      </LinearGradient>
+                    ) : (
+                      <View style={styles.segmentedButton}>
+                        <Text style={styles.segmentedButtonText}>{cond}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Container 6: Purpose */}
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionTitle}>
+                מטרת הפרסום<Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.purposeButtons}>
+                <TouchableOpacity
+                  onPress={() => setPurpose('sale')}
+                  style={styles.purposeButtonContainer}>
+                  {purpose === 'sale' ? (
+                    <LinearGradient
+                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      locations={[0.0456, 0.5076, 0.8831]}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={[
+                        styles.purposeButton,
+                        styles.purposeButtonSelected,
+                        styles.purposeButtonGradient,
+                      ]}>
+                      <Text style={styles.purposeButtonTextSelected}>
+                        למכירה
+                      </Text>
+                      <LinearGradient
+                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        locations={[0.0456, 0.5076, 0.8831]}
+                        start={{x: 0, y: 0}}
+                        end={{x: 1, y: 1}}
+                        style={styles.radioButtonGradient}>
+                        <Image
+                          source={require('../assets/checkbox-selected.png')}
+                          style={styles.radioButtonSelected}
+                          resizeMode="contain"
+                        />
+                      </LinearGradient>
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.purposeButton}>
+                      <Text style={styles.purposeButtonText}>למכירה</Text>
+                      <View style={styles.radioButton}>
+                        {false && <View style={styles.radioButtonSelected} />}
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setPurpose('rent')}
+                  style={styles.purposeButtonContainer}>
+                  {purpose === 'rent' ? (
+                    <LinearGradient
+                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      locations={[0.0456, 0.5076, 0.8831]}
+                      start={{x: 0, y: 0}}
+                      end={{x: 1, y: 1}}
+                      style={[
+                        styles.purposeButton,
+                        styles.purposeButtonSelected,
+                        styles.purposeButtonGradient,
+                      ]}>
+                      <Text style={styles.purposeButtonTextSelected}>
+                        להשכרה
+                      </Text>
+                      <LinearGradient
+                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        locations={[0.0456, 0.5076, 0.8831]}
+                        start={{x: 0, y: 0}}
+                        end={{x: 1, y: 1}}
+                        style={styles.radioButtonGradient}>
+                        <Image
+                          source={require('../assets/checkbox-selected.png')}
+                          style={styles.radioButtonSelected}
+                          resizeMode="contain"
+                        />
+                      </LinearGradient>
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.purposeButton}>
+                      <Text style={styles.purposeButtonText}>להשכרה</Text>
+                      <View style={styles.radioButton}>
+                        {false && <View style={styles.radioButtonSelected} />}
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Container 7: Price */}
+            <View style={styles.formContainer}>
+              <Text style={styles.sectionTitle}>
+                מחיר<Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.priceInput}>
+                <TouchableOpacity
+                  style={styles.counterButtonLeft}
+                  onPress={() => setPrice(Math.max(0, price - 10000))}>
+                  <Text style={styles.counterButton}>+</Text>
+                </TouchableOpacity>
+                <View style={styles.counterDivider} />
+                <View style={styles.counterValueContainer}>
+                  <Text style={styles.priceValue}>
+                    ₪ {price.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.counterDivider} />
+                <TouchableOpacity
+                  style={styles.counterButtonRight}
+                  onPress={() => setPrice(price + 10000)}>
+                  <Text style={styles.counterButton}>-</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Address Section */}
             <View style={styles.section}>
@@ -1671,17 +1749,13 @@ const OfficeListingScreen = ({ onClose, onPublish, initialCategory = null }) => 
         )}
 
         {/* Publish Button */}
-        <TouchableOpacity
-          onPress={handlePublish}
-          disabled={uploading}
-        >
+        <TouchableOpacity onPress={handlePublish} disabled={uploading}>
           <LinearGradient
             colors={['#FEE787', '#BD9947', '#9C6522']}
             locations={[0.0456, 0.5076, 0.8831]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.publishButton}
-          >
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.publishButton}>
             {uploading ? (
               <ActivityIndicator size="small" color="#000" />
             ) : (
@@ -2402,7 +2476,7 @@ const styles = StyleSheet.create({
     marginLeft: -10,
     marginTop: -8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,

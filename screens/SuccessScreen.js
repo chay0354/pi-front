@@ -8,13 +8,19 @@ import {
   StyleSheet,
   ImageBackground,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 
 /**
  * SuccessScreen Component
  * Registration success/completion screen
  */
-const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType = 'broker', subscription }) => {
+const SuccessScreen = ({
+  onClose,
+  onGoHome,
+  onStartPublishing,
+  subscriptionType = 'broker',
+  subscription,
+}) => {
   const getHeaderTitle = () => {
     switch (subscriptionType) {
       case 'company':
@@ -30,14 +36,12 @@ const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType 
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -65,7 +69,7 @@ const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType 
           <View style={styles.profilePictureContainer}>
             {subscription?.profile_picture_url ? (
               <Image
-                source={{ uri: subscription.profile_picture_url }}
+                source={{uri: subscription.profile_picture_url}}
                 style={styles.profilePicture}
                 resizeMode="cover"
               />
@@ -85,7 +89,10 @@ const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType 
             </View>
           </View>
           <Text style={styles.userName}>
-            {subscription?.name || subscription?.agent_name || subscription?.contact_person_name || 'משתמש'}
+            {subscription?.name ||
+              subscription?.agent_name ||
+              subscription?.contact_person_name ||
+              'משתמש'}
           </Text>
           <Text style={styles.userEmail}>{subscription?.email || ''}</Text>
         </View>
@@ -114,8 +121,7 @@ const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType 
               if (onStartPublishing) {
                 onStartPublishing();
               }
-            }}
-          >
+            }}>
             <Image
               source={require('../assets/start-publishing-button.png')}
               style={styles.publishButtonImage}
@@ -128,8 +134,7 @@ const SuccessScreen = ({ onClose, onGoHome, onStartPublishing, subscriptionType 
               if (onGoHome) {
                 onGoHome();
               }
-            }}
-          >
+            }}>
             <Text style={styles.homeLinkText}>קח אותי לעמוד הבית</Text>
           </TouchableOpacity>
         </View>

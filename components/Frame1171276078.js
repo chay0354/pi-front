@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import {View, Image, StyleSheet} from 'react-native';
 import CategoryTitle1 from './CategoryTitle1';
-import { Gaps, Dimensions } from '../constants/styles';
+import {Gaps, Dimensions} from '../constants/styles';
 
 /**
  * Frame1171276078 Component

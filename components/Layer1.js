@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import {View, Image, StyleSheet} from 'react-native';
 import StringValue from './StringValue';
-import { Colors, FontSizes, Gaps, Dimensions } from '../constants/styles';
+import {Colors, FontSizes, Gaps, Dimensions} from '../constants/styles';
 
 /**
  * Layer1 Component
@@ -9,7 +9,7 @@ import { Colors, FontSizes, Gaps, Dimensions } from '../constants/styles';
  * @param {string} text - Category text
  * @param {string} type - Type variant
  */
-const Layer1 = ({ style, type = 'defult', text }) => {
+const Layer1 = ({style, type = 'defult', text}) => {
   return (
     <View style={[styles.piCategory, style]}>
       <Image

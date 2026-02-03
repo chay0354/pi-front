@@ -1,8 +1,15 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import {View, Image, StyleSheet} from 'react-native';
 import Layer1 from './Layer1';
 import Component5 from './Component5';
-import { Colors, BorderRadius, Padding, Gaps, Dimensions, Shadows } from '../constants/styles';
+import {
+  Colors,
+  BorderRadius,
+  Padding,
+  Gaps,
+  Dimensions,
+  Shadows,
+} from '../constants/styles';
 
 /**
  * CategoryFrame Component

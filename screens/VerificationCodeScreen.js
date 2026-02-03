@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   ScrollView,
@@ -11,14 +11,20 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/styles';
-import { verifyEmail, resendVerificationCode } from '../utils/api';
+import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {verifyEmail, resendVerificationCode} from '../utils/api';
 
 /**
  * VerificationCodeScreen Component
  * Screen for entering verification code after email is sent
  */
-const VerificationCodeScreen = ({ onClose, onNext, subscriptionType = 'broker', email, subscriptionId }) => {
+const VerificationCodeScreen = ({
+  onClose,
+  onNext,
+  subscriptionType = 'broker',
+  email,
+  subscriptionId,
+}) => {
   const getHeaderTitle = () => {
     switch (subscriptionType) {
       case 'company':
@@ -38,14 +44,12 @@ const VerificationCodeScreen = ({ onClose, onNext, subscriptionType = 'broker', 
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
-      resizeMode="cover"
-    >
+      resizeMode="cover">
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -101,44 +105,78 @@ const VerificationCodeScreen = ({ onClose, onNext, subscriptionType = 'broker', 
 
           {/* Submit Button */}
           <TouchableOpacity
-            disabled={!verificationCode.trim() || isVerifying || (!email && !subscriptionId)}
+            disabled={
+              !verificationCode.trim() ||
+              isVerifying ||
+              (!email && !subscriptionId)
+            }
             style={styles.submitButtonWrapper}
             onPress={async () => {
-              if (verificationCode.trim() && (email || subscriptionId) && onNext) {
+              if (
+                verificationCode.trim() &&
+                (email || subscriptionId) &&
+                onNext
+              ) {
                 setIsVerifying(true);
                 try {
-                  console.log('Verifying code:', { email, subscriptionId, code: verificationCode.trim() });
-                  const response = await verifyEmail(email, verificationCode.trim(), subscriptionId);
+                  console.log('Verifying code:', {
+                    email,
+                    subscriptionId,
+                    code: verificationCode.trim(),
+                  });
+                  const response = await verifyEmail(
+                    email,
+                    verificationCode.trim(),
+                    subscriptionId,
+                  );
                   console.log('Verification response:', response);
                   if (response && response.success) {
-                    console.log('Verification successful, navigating to next screen');
+                    console.log(
+                      'Verification successful, navigating to next screen',
+                    );
                     console.log('Subscription object:', response.subscription);
-                    console.log('Subscriber number in response:', response.subscription?.subscriber_number);
-                    console.log('Subscriber number field:', response.subscriberNumber);
+                    console.log(
+                      'Subscriber number in response:',
+                      response.subscription?.subscriber_number,
+                    );
+                    console.log(
+                      'Subscriber number field:',
+                      response.subscriberNumber,
+                    );
                     // Make sure subscriber_number is set
-                    if (response.subscription && !response.subscription.subscriber_number && response.subscriberNumber) {
-                      response.subscription.subscriber_number = response.subscriberNumber;
+                    if (
+                      response.subscription &&
+                      !response.subscription.subscriber_number &&
+                      response.subscriberNumber
+                    ) {
+                      response.subscription.subscriber_number =
+                        response.subscriberNumber;
                     }
                     onNext(response.subscription);
                   } else {
-                    Alert.alert('שגיאה', response?.error || 'קוד האימות שגוי. אנא נסה שוב.');
+                    Alert.alert(
+                      'שגיאה',
+                      response?.error || 'קוד האימות שגוי. אנא נסה שוב.',
+                    );
                   }
                 } catch (error) {
                   console.error('Verification error:', error);
-                  Alert.alert('שגיאה', error.message || 'קוד האימות שגוי. אנא נסה שוב.');
+                  Alert.alert(
+                    'שגיאה',
+                    error.message || 'קוד האימות שגוי. אנא נסה שוב.',
+                  );
                 } finally {
                   setIsVerifying(false);
                 }
               } else {
-                console.log('Cannot verify:', { 
-                  hasCode: !!verificationCode.trim(), 
-                  hasEmail: !!email, 
-                  hasSubscriptionId: !!subscriptionId, 
-                  hasOnNext: !!onNext 
+                console.log('Cannot verify:', {
+                  hasCode: !!verificationCode.trim(),
+                  hasEmail: !!email,
+                  hasSubscriptionId: !!subscriptionId,
+                  hasOnNext: !!onNext,
                 });
               }
-            }}
-          >
+            }}>
             {isVerifying ? (
               <View style={styles.submitButtonImage}>
                 <ActivityIndicator color={Colors.white100} />
@@ -174,8 +212,7 @@ const VerificationCodeScreen = ({ onClose, onNext, subscriptionType = 'broker', 
                 setIsResending(false);
               }
             }}
-            disabled={isResending || !email}
-          >
+            disabled={isResending || !email}>
             <Text style={styles.resendLinkText}>
               {isResending ? 'שולח...' : 'לא קיבלתי את הקוד'}
             </Text>
