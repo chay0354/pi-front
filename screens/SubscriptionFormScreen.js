@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {submitSubscription} from '../utils/api';
+import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
 /**
  * SubscriptionFormScreen Component
@@ -23,19 +24,8 @@ import {submitSubscription} from '../utils/api';
 const SubscriptionFormScreen = ({
   onClose,
   onNext,
-  subscriptionType = 'broker',
+  subscriptionType = subscriptionTypes.broker,
 }) => {
-  const getHeaderTitle = () => {
-    switch (subscriptionType) {
-      case 'company':
-        return 'מנוי לחברות';
-      case 'professional':
-        return 'מנוי לבעלי מקצוע';
-      case 'broker':
-      default:
-        return 'מנוי למתווכים';
-    }
-  };
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState([]);
@@ -324,14 +314,14 @@ const SubscriptionFormScreen = ({
       // Validate required fields
       const missingFields = [];
 
-      if (subscriptionType === 'company') {
+      if (subscriptionType === subscriptionTypes.company) {
         if (!companyName) missingFields.push('שם החברה');
         if (!contactPersonName) missingFields.push('שם איש קשר');
         if (!companyEmail) missingFields.push('כתובת מייל');
         if (!officePhone) missingFields.push('מספר טלפון משרד');
       } else {
         // Broker/professional validation
-        if (subscriptionType === 'broker') {
+        if (subscriptionType === subscriptionTypes.broker) {
           if (!brokerageLicenseNumber) missingFields.push('מספר רשיון תיווך');
           if (!brokerOfficeName) missingFields.push('שם משרד המתווך');
           if (!agentName) missingFields.push('שם הסוכן');
@@ -358,7 +348,7 @@ const SubscriptionFormScreen = ({
       // Prepare form data
       const formData = {
         subscriptionType,
-        ...(subscriptionType === 'company'
+        ...(subscriptionType === subscriptionTypes.company
           ? {
               businessName: companyName,
               contactPersonName,
@@ -369,7 +359,7 @@ const SubscriptionFormScreen = ({
               companyWebsite,
               description: addDescription ? description : null,
             }
-          : subscriptionType === 'broker'
+          : subscriptionType === subscriptionTypes.broker
             ? {
                 // Broker subscription
                 name: agentName, // Backend expects 'name' for broker/professional
@@ -412,7 +402,8 @@ const SubscriptionFormScreen = ({
       console.log('Form submission response:', response);
 
       if (response && response.success) {
-        const userEmail = subscriptionType === 'company' ? companyEmail : email;
+        const userEmail =
+          subscriptionType === subscriptionTypes.company ? companyEmail : email;
         console.log('Navigating to verification screen with:', {
           subscriptionId: response.subscriptionId,
           email: userEmail,
@@ -460,7 +451,9 @@ const SubscriptionFormScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+          <Text style={styles.headerTitle}>
+            {getHeaderTitle(subscriptionType)}
+          </Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -477,7 +470,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Progress Indicator - Only for non-company at top */}
-        {subscriptionType !== 'company' && (
+        {subscriptionType !== subscriptionTypes.company && (
           <View style={styles.progressContainer}>
             <Image
               source={require('../assets/wizard-progress.png')}
@@ -488,7 +481,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Tab Selector - Only for non-company */}
-        {subscriptionType !== 'company' && (
+        {subscriptionType !== subscriptionTypes.company && (
           <View style={styles.tabContainer}>
             <TouchableOpacity
               style={styles.tabFullWidth}
@@ -517,7 +510,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Profile Picture and Additional Images Section - Only for non-company */}
-        {subscriptionType !== 'company' && (
+        {subscriptionType !== subscriptionTypes.company && (
           <>
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
@@ -604,7 +597,7 @@ const SubscriptionFormScreen = ({
             </View>
 
             {/* Type Section - Only for professional */}
-            {subscriptionType === 'professional' && (
+            {subscriptionType === subscriptionTypes.professional && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>סוג</Text>
                 <View style={styles.optionsContainer}>
@@ -632,7 +625,7 @@ const SubscriptionFormScreen = ({
             )}
 
             {/* Specialization Section - Only for professional */}
-            {subscriptionType === 'professional' && (
+            {subscriptionType === subscriptionTypes.professional && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>התמחות</Text>
                 <View style={styles.optionsContainer}>
@@ -662,7 +655,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Progress Indicator - For company flow, above form */}
-        {subscriptionType === 'company' && (
+        {subscriptionType === subscriptionTypes.company && (
           <View style={styles.progressContainer}>
             <Image
               source={require('../assets/wizard-progress.png')}
@@ -674,11 +667,11 @@ const SubscriptionFormScreen = ({
 
         {/* General Details Form Section */}
         <View style={styles.formSection}>
-          {subscriptionType === 'company' && (
+          {subscriptionType === subscriptionTypes.company && (
             <Text style={styles.sectionTitle}>פרטים כלליים</Text>
           )}
 
-          {subscriptionType === 'company' ? (
+          {subscriptionType === subscriptionTypes.company ? (
             <>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>שם החברה*</Text>
@@ -794,7 +787,7 @@ const SubscriptionFormScreen = ({
                 </View>
               )}
             </>
-          ) : subscriptionType === 'broker' ? (
+          ) : subscriptionType === subscriptionTypes.broker ? (
             <>
               {/* Activity Area Section - Only for broker */}
               <View style={styles.section}>

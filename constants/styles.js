@@ -15,6 +15,7 @@ export const Colors = {
   whiteGeneral: '#fff',
   yellowIcons: '#ffc40a',
   yellowTextCTA: '#ffc40a',
+  black: '#000000',
 };
 
 // Spacing

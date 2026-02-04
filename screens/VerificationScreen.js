@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {resendVerificationCode} from '../utils/api';
+import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
 /**
  * VerificationScreen Component
@@ -21,21 +22,10 @@ import {resendVerificationCode} from '../utils/api';
 const VerificationScreen = ({
   onClose,
   onNext,
-  subscriptionType = 'broker',
+  subscriptionType = subscriptionTypes.broker,
   email: propEmail,
   subscriptionId,
 }) => {
-  const getHeaderTitle = () => {
-    switch (subscriptionType) {
-      case 'company':
-        return 'מנוי לחברות';
-      case 'professional':
-        return 'מנוי לבעלי מקצוע';
-      case 'broker':
-      default:
-        return 'מנוי למתווכים';
-    }
-  };
   const [email, setEmail] = useState(propEmail || '');
   const [isSending, setIsSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -92,7 +82,9 @@ const VerificationScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+          <Text style={styles.headerTitle}>
+            {getHeaderTitle(subscriptionType)}
+          </Text>
           <View style={styles.headerSpacer} />
         </View>
 

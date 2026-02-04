@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {
   View,
   ScrollView,
@@ -8,7 +8,9 @@ import {
   StyleSheet,
 } from 'react-native';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {ContextHook} from '../hooks/ContextHook';
 import {getCurrentUser} from '../utils/api';
+import {subscriptionTypes} from '../utils/constant';
 
 /**
  * SettingsScreen Component
@@ -17,36 +19,11 @@ import {getCurrentUser} from '../utils/api';
 const SettingsScreen = ({
   onClose,
   onOpenSubscription,
-  currentUser: propCurrentUser,
   onLogout,
   onOpenLogin,
 }) => {
-  const [currentUser, setCurrentUser] = useState(propCurrentUser);
+  const {currentUser, setCurrentUser} = useContext(ContextHook);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
-
-  useEffect(() => {
-    // Use prop if provided, otherwise try to load from localStorage
-    if (propCurrentUser) {
-      setCurrentUser(propCurrentUser);
-    } else {
-      // Try to load from localStorage
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          const savedUser = localStorage.getItem('pi_current_user');
-          if (savedUser) {
-            const user = JSON.parse(savedUser);
-            console.log(
-              'SettingsScreen - Loaded user from localStorage:',
-              user,
-            );
-            setCurrentUser(user);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading user from localStorage:', error);
-      }
-    }
-  }, [propCurrentUser]);
 
   const handleLogout = () => {
     // Clear localStorage
@@ -197,7 +174,7 @@ const SettingsScreen = ({
           <Text style={styles.cardTitle}>מנויים</Text>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('company')}>
+            onPress={() => handleSubscriptionPress(subscriptionTypes.company)}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי לחברות</Text>
             <Image
@@ -208,7 +185,7 @@ const SettingsScreen = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('broker')}>
+            onPress={() => handleSubscriptionPress(subscriptionTypes.broker)}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי למתווכים</Text>
             <Image
@@ -219,7 +196,7 @@ const SettingsScreen = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cardItem}
-            onPress={() => handleSubscriptionPress('professional')}>
+            onPress={() => handleSubscriptionPress(subscriptionTypes.professional)}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
             <Image

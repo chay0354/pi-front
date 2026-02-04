@@ -9,6 +9,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
 /**
  * SuccessScreen Component
@@ -18,20 +19,9 @@ const SuccessScreen = ({
   onClose,
   onGoHome,
   onStartPublishing,
-  subscriptionType = 'broker',
+  subscriptionType = subscriptionTypes.broker,
   subscription,
 }) => {
-  const getHeaderTitle = () => {
-    switch (subscriptionType) {
-      case 'company':
-        return 'מנוי לחברות';
-      case 'professional':
-        return 'מנוי לבעלי מקצוע';
-      case 'broker':
-      default:
-        return 'מנוי למתווכים';
-    }
-  };
   return (
     <ImageBackground
       source={require('../assets/subscription-background.png')}
@@ -51,7 +41,7 @@ const SuccessScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+          <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
           <View style={styles.headerSpacer} />
         </View>
 

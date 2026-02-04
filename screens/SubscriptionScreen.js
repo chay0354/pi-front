@@ -9,6 +9,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
 /**
  * SubscriptionScreen Component
@@ -17,31 +18,19 @@ import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 const SubscriptionScreen = ({
   onClose,
   onStart,
-  subscriptionType = 'broker',
+  subscriptionType = subscriptionTypes.broker,
 }) => {
   const [isAgreed, setIsAgreed] = useState(false);
 
   const getProfileQuestion = () => {
     switch (subscriptionType) {
-      case 'company':
+      case subscriptionTypes.company:
         return 'אמיר, אתה חברה?';
-      case 'professional':
+      case subscriptionTypes.professional:
         return 'אבישג, אתה בעל מקצוע?';
-      case 'broker':
+      case subscriptionTypes.broker:
       default:
         return 'אמיר, אתה מתווך?';
-    }
-  };
-
-  const getHeaderTitle = () => {
-    switch (subscriptionType) {
-      case 'company':
-        return 'מנוי לחברות';
-      case 'professional':
-        return 'מנוי לבעלי מקצוע';
-      case 'broker':
-      default:
-        return 'מנוי למתווכים';
     }
   };
 
@@ -74,7 +63,7 @@ const SubscriptionScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+          <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
           <View style={styles.headerSpacer} />
         </View>
 

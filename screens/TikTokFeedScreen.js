@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {Colors} from '../constants/styles';
 import {getListings} from '../utils/api';
+import {categoryImages} from '../utils/constant';
 
 // Image Swiper Component for multiple photos - supports slideshow and collage
 const ImageSwiper = ({
@@ -496,20 +497,7 @@ const TikTokFeedScreen = ({
 
   // Map tik image numbers to require statements
   const getTikImage = num => {
-    const imageMap = {
-      1: require('../assets/tik1.png'),
-      2: require('../assets/tik2.png'),
-      3: require('../assets/tik3.png'),
-      4: require('../assets/tik4.png'),
-      5: require('../assets/tik5.png'),
-      6: require('../assets/tik6.png'),
-      7: require('../assets/tik7.png'),
-      8: require('../assets/tik8.png'),
-      9: require('../assets/tik9.png'),
-      10: require('../assets/tik10.png'),
-      11: require('../assets/tik11.png'),
-    };
-    return imageMap[num] || imageMap[1];
+    return categoryImages[num] || categoryImages[1];
   };
 
   // Use database listings as primary source (they persist after refresh)
@@ -674,39 +662,6 @@ const TikTokFeedScreen = ({
     );
   }
 
-  // Show empty state if no videos
-  if (videos.length === 0 && !loadingListings) {
-    return (
-      <View
-        style={[
-          styles.container,
-          {justifyContent: 'center', alignItems: 'center'},
-        ]}>
-        <Text
-          style={{
-            color: '#fff',
-            fontSize: 18,
-            textAlign: 'center',
-            padding: 20,
-          }}>
-          אין רשימות זמינות בקטגוריה זו
-        </Text>
-        <TouchableOpacity
-          onPress={onOpenOfficeListing}
-          style={{
-            marginTop: 20,
-            padding: 15,
-            backgroundColor: Colors.yellowIcons,
-            borderRadius: 8,
-          }}>
-          <Text style={{color: '#000', fontWeight: 'bold'}}>
-            פרסם רשימה חדשה
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   const scrollToIndex = index => {
     if (index >= 0 && index < videos.length && scrollViewRef.current) {
       const targetY = index * screenHeight;
@@ -730,6 +685,46 @@ const TikTokFeedScreen = ({
     }
   };
 
+  // Show empty state if no videos
+  if (videos.length === 0 && !loadingListings) {
+    return (
+      <>
+        {/* Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.backButton}>
+            <Text style={styles.backArrow}>‹</Text>
+          </TouchableOpacity>
+        </View>
+        <View
+          style={[
+            styles.container,
+            {justifyContent: 'center', alignItems: 'center'},
+          ]}>
+          <Text
+            style={{
+              color: '#fff',
+              fontSize: 18,
+              textAlign: 'center',
+              padding: 20,
+            }}>
+            אין רשימות זמינות בקטגוריה זו
+          </Text>
+          <TouchableOpacity
+            onPress={onOpenOfficeListing}
+            style={{
+              marginTop: 20,
+              padding: 15,
+              backgroundColor: Colors.yellowIcons,
+              borderRadius: 8,
+            }}>
+            <Text style={{color: '#000', fontWeight: 'bold'}}>
+              פרסם רשימה חדשה
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
   return (
     <View style={styles.container}>
       {/* Sidebar icons */}
@@ -1084,6 +1079,21 @@ const styles = StyleSheet.create({
     maxWidth: 414,
     alignSelf: 'center',
     overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    backgroundColor: '#000',
+  },
+  backButton: {
+    marginRight: 15,
+  },
+  backArrow: {
+    color: '#fff',
+    fontSize: 32,
   },
   closeButton: {
     position: 'absolute',

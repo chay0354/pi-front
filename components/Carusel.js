@@ -1,4 +1,4 @@
-import React, {useRef, useState, useEffect} from 'react';
+import React, {useRef, useState, useEffect, useContext} from 'react';
 import {
   View,
   ScrollView,
@@ -8,6 +8,14 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import {BorderRadius, Padding, Gaps, Colors} from '../constants/styles';
+import {
+  brokerCategories,
+  categoryImages,
+  companyCategories,
+  subscriptionTypes,
+  userCategories,
+} from '../utils/constant';
+import {ContextHook} from '../hooks/ContextHook';
 
 /**
  * Carusel Component
@@ -18,28 +26,20 @@ import {BorderRadius, Padding, Gaps, Colors} from '../constants/styles';
  * @param {function} onCategorySelect - Callback when a category is clicked
  */
 const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
-  // Array of tik images from tik1.png to tik11.png
-  const tikImages = Array.from({length: 11}, (_, i) => i + 1);
+  const {currentUser} = useContext(ContextHook);
+  const categoriesList =
+    currentUser?.subscription_type === subscriptionTypes.user
+      ? userCategories
+      : currentUser?.subscription_type === subscriptionTypes.broker
+        ? brokerCategories
+        : companyCategories;
   const scrollViewRef = useRef(null);
   // Start with item at index 2 centered (משרדים)
   const [centerIndex, setCenterIndex] = useState(2);
 
   // Map tik image numbers to require statements
-  const getTikImage = num => {
-    const imageMap = {
-      1: require('../assets/tik1.png'),
-      2: require('../assets/tik2.png'),
-      3: require('../assets/tik3.png'),
-      4: require('../assets/tik4.png'),
-      5: require('../assets/tik5.png'),
-      6: require('../assets/tik6.png'),
-      7: require('../assets/tik7.png'),
-      8: require('../assets/tik8.png'),
-      9: require('../assets/tik9.png'),
-      10: require('../assets/tik10.png'),
-      11: require('../assets/tik11.png'),
-    };
-    return imageMap[num] || imageMap[1];
+  const getTikImage = id => {
+    return categoryImages[id] || categoryImages[1];
   };
 
   const handleScroll = event => {
@@ -58,7 +58,7 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
     let closestIndex = 0;
     let minDistance = Infinity;
 
-    tikImages.forEach((_, index) => {
+    categoriesList.forEach((_, index) => {
       const itemLeft = paddingLeft + index * itemSpacing;
       const itemCenter = itemLeft + itemWidth / 2;
       const distance = Math.abs(viewportCenter - itemCenter);
@@ -125,7 +125,7 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
         pagingEnabled={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}>
-        {tikImages.map((num, index) => {
+        {categoriesList.map((item, index) => {
           const isCenter = isCenterItem(index);
           const isLeft = isLeftItem(index);
           const isRight = isRightItem(index);
@@ -133,16 +133,16 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
 
           return (
             <TouchableOpacity
-              key={num}
+              key={item.id}
               style={styles.categoryItem}
               onPress={() => {
                 if (onCategorySelect) {
-                  onCategorySelect(num);
+                  onCategorySelect(item.id);
                 }
               }}
               activeOpacity={0.7}>
               <Image
-                source={getTikImage(num)}
+                source={getTikImage(item.id)}
                 style={[
                   styles.tikImage,
                   isCenter && styles.centerImage,
