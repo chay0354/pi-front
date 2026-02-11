@@ -2,11 +2,16 @@ import React from 'react';
 import {StyleSheet, Text} from 'react-native';
 import {Colors} from '../../constants/styles';
 
-export const Title = ({text = '', required = false, textStyle = {}}) => {
+export const Title = ({
+  text = '',
+  required = false,
+  textStyle = {},
+  starStyle,
+}) => {
   return (
     <Text style={[styles.title, textStyle]}>
       {text}
-      {required && <Text style={styles.star}>*</Text>}
+      {required && <Text style={[styles.star, starStyle]}>*</Text>}
     </Text>
   );
 };

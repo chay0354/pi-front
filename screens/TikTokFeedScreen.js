@@ -310,19 +310,6 @@ const TikTokFeedScreen = ({
         const categoryToFetch = selectedCategory
           ? parseInt(selectedCategory)
           : undefined;
-        console.log(
-          '🔍 [TikTokFeedScreen] Fetching listings for category:',
-          categoryToFetch,
-          '(selectedCategory:',
-          selectedCategory,
-          ')',
-        );
-        console.log(
-          '🔍 [TikTokFeedScreen] useEffect triggered, selectedCategory:',
-          selectedCategory,
-          'refreshKey:',
-          refreshKey,
-        );
 
         const result = await getListings({
           status: 'published',
@@ -710,7 +697,7 @@ const TikTokFeedScreen = ({
             אין רשימות זמינות בקטגוריה זו
           </Text>
           <TouchableOpacity
-            onPress={onOpenOfficeListing}
+            onPress={() => onOpenOfficeListing(selectedCategory)}
             style={{
               marginTop: 20,
               padding: 15,

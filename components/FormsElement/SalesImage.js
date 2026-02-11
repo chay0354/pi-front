@@ -1,27 +1,30 @@
-import React from 'react';
 import {
   StyleSheet,
+  Text,
   View,
-  TouchableOpacity,
   Image,
+  TouchableOpacity,
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import React from 'react';
+import {FormContainer} from './FormContainer';
 import {Title} from './Title';
-import {Text} from 'react-native';
 import {Colors} from '../../constants/styles';
 
-export const ProfilePictureUpload = ({
+export const SalesImage = ({
   mainImage,
-  uploadProgress,
   handleMainImageUpload,
   handleMainImageChange,
   mainImageInputRef,
-  title = 'תמונת נושא או הדמייה',
+  uploadProgress,
 }) => {
   return (
-    <>
-      <Title text={title} required />
+    <FormContainer>
+      <Title text={'תמונה מכירתית'} />
+      <Text style={styles.subTitle}>
+        מומלץ להוסיף תמונה מכירתית על מנת להגביר את החשיפה של הפרוייקט שלכם.
+      </Text>
       <TouchableOpacity
         style={styles.fixedImageContainer}
         onPress={handleMainImageUpload}>
@@ -34,11 +37,11 @@ export const ProfilePictureUpload = ({
         ) : (
           <>
             <Image
-              source={require('../../assets/user-icon.png')}
-              style={styles.useImage}
+              source={require('../../assets/cameraIcon.png')}
+              style={styles.cameraIcon}
               resizeMode="contain"
             />
-            <Text style={styles.userImageText}>תמונת פרופיל</Text>
+            <Text style={styles.cameraImageText}>תמונת פרופיל</Text>
             <View style={styles.uploadButtonContainer}>
               <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
             </View>
@@ -62,14 +65,25 @@ export const ProfilePictureUpload = ({
           />
         )}
       </TouchableOpacity>
-    </>
+      <Text style={[styles.subTitle, {textAlign: 'center'}]}>או</Text>
+      <TouchableOpacity style={styles.createImageContainer} onPress={() => {}}>
+        <Text style={styles.createImageText}>צור תמונה מכירתית</Text>
+      </TouchableOpacity>
+    </FormContainer>
   );
 };
 
 const styles = StyleSheet.create({
+  subTitle: {
+    textAlign: 'right',
+    color: '#9E9DA4',
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+  },
   fixedImageContainer: {
     width: '100%',
-    height: 230,
+    height: 500,
+    marginVertical: 20,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
@@ -78,11 +92,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#2B2A39',
   },
-  useImage: {
-    width: 55,
-    height: 55,
+  fixedImage: {
+    width: '100%',
+    height: '100%',
   },
-  userImageText: {
+  cameraIcon: {
+    width: 60,
+    height: 60,
+  },
+  cameraImageText: {
     color: '#858585',
     fontSize: 16,
     marginVertical: 10,
@@ -101,19 +119,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
-  fixedImage: {
-    width: '100%',
-    height: '100%',
+  or: {
+    textAlign: 'center',
   },
-  uploadButtonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
+  createImageContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+    marginTop: 15,
+  },
+  createImageText: {
+    color: Colors.whiteGeneral,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textDecorationLine: 'underline',
   },
 });

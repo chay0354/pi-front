@@ -8,9 +8,10 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import {RadioButton} from './RadioButton';
+import {RadioIcon} from './RadioIcon';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
+import {RadioButton} from './RadioButton';
 
 export const VideoUpload = ({
   hasVideo,
@@ -20,20 +21,23 @@ export const VideoUpload = ({
   handleVideoUpload,
   handleVideoChange,
   videoInputRef,
+  videoOptionStyle,
+  children,
+  wayToDisplayAd,
 }) => {
   return (
     <>
       <TouchableOpacity
-        style={styles.videoOption}
+        style={[styles.videoOption, videoOptionStyle]}
         onPress={() => setHasVideo(!hasVideo)}>
-        <RadioButton isSelected={hasVideo} />
+        <RadioIcon isSelected={hasVideo} />
         <View style={styles.radioSpacer} />
         <Title
           text={'הוסף סרטון'}
           textStyle={{marginBottom: 0, alignSelf: 'center'}}
         />
       </TouchableOpacity>
-
+      {children}
       {/* Video Upload Section - shown when checkbox is selected */}
       {hasVideo && (
         <View style={styles.videoUploadSection}>
@@ -82,6 +86,19 @@ export const VideoUpload = ({
               />
             )}
           </TouchableOpacity>
+          {wayToDisplayAd && (
+            <View style={{marginTop: 20}}>
+              <Title text="אופן תצוגת המודעה" />
+              <RadioButton
+                data={[
+                  {name: 'video', title: 'וידיאו'},
+                  {name: 'mainImage', title: 'תמונה ראשית'},
+                ]}
+                // condition={preferredGender}
+                // setCondition={setPreferredGender}
+              />
+            </View>
+          )}
         </View>
       )}
     </>

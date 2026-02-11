@@ -21,7 +21,10 @@ export const MultiPicturesUpload = ({
   handleAdditionalImageChange,
   mainImageInputRef,
   additionalImageInputRefs,
+  addMorePhotos,
 }) => {
+  const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
+
   const MoreImagesRender = array => {
     return (
       <View style={styles.additionalImagesGrid}>
@@ -94,6 +97,27 @@ export const MultiPicturesUpload = ({
       <Title text={'תמונות נוספות'} textStyle={styles.sectionTitle} />
       {MoreImagesRender([0, 1])}
       {MoreImagesRender([2, 3])}
+      {!showAdditionalImages && (
+        <TouchableOpacity
+          style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 10,
+          }}
+          onPress={() => setShowAdditionalImages(true)}>
+          <Text
+            style={{
+              color: Colors.whiteGeneral,
+              fontSize: 18,
+              fontFamily: 'Rubik-Regular',
+              textDecorationLine: 'underline',
+            }}>
+            הוסף עוד תמונות
+          </Text>
+        </TouchableOpacity>
+      )}
+      {addMorePhotos && showAdditionalImages && MoreImagesRender([4, 5])}
+      {addMorePhotos && showAdditionalImages && MoreImagesRender([6, 7])}
     </>
   );
 };
@@ -101,11 +125,11 @@ export const MultiPicturesUpload = ({
 const styles = StyleSheet.create({
   imageUploadArea: {
     width: '100%',
-    height: 200,
+    height: 230,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
-    borderRadius: 20,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#2B2A39',
@@ -144,7 +168,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
-    borderRadius: 20,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#2B2A39',

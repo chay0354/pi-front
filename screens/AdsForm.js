@@ -1,9 +1,8 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useContext} from 'react';
 import {
   View,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Image,
@@ -15,16 +14,50 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing} from '../utils/api';
-import {categoryImages} from '../utils/constant';
+import {
+  brokerCategoryForm,
+  categoryImages,
+  companyCategoryForm,
+  subscriptionTypes,
+  userCategoryForm,
+} from '../utils/constant';
 import {fonts} from '../utils/fonts';
 import {
-  Divider,
+  AccommodationOffers,
+  AdditionalDetails,
+  AddressDetails,
+  ApartmentType,
+  DisplayOptions,
+  FormContainer,
+  GeneralDetails,
+  HospitalityNature,
+  MultiImageWithVideo,
   MultiPicturesUpload,
+  Preferences,
+  PriceCount,
   ProfilePictureUpload,
-  RadioButton,
+  ProfileVerification,
+  PropertyCondition,
+  PropertyType,
+  Purpose,
+  RadioIcon,
+  SearchPurpose,
+  ServiceAndFacility,
   Title,
   VideoUpload,
+  CancellationPolicy,
+  ContactDetails,
+  ProposedLand,
+  RadioOptions,
+  LandAddress,
+  SalesImage,
+  SaleAtPreSale,
+  GeneralDetailsWithRadio,
+  ConsructionStatus,
+  PropertyAddress,
 } from '../components';
+import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
+import {ContextHook} from '../hooks/ContextHook';
 
 /**
  * Age Range Slider Component
@@ -112,7 +145,7 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
 
   return (
     <View style={styles.preferenceSection}>
-      <Text style={styles.preferenceLabel}>גיל מועדף</Text>
+      <Title text="גיל מועדף" />
       <View style={styles.ageRangeContainer}>
         <Text style={styles.ageRangeText}>
           {minValue} - {maxValue}
@@ -177,6 +210,7 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
  */
 const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [propertyType, setPropertyType] = useState(null);
+  const [cancellationPolicy, setCancellationPolicy] = useState(null);
   const [area, setArea] = useState(1);
   const [rooms, setRooms] = useState(1);
   const [floor, setFloor] = useState(1);
@@ -189,6 +223,14 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [description, setDescription] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
+  const {currentUser} = useContext(ContextHook);
+  const formList =
+    currentUser?.subscription_type === subscriptionTypes?.user
+      ? userCategoryForm
+      : currentUser?.subscription_type === subscriptionTypes?.broker
+        ? brokerCategoryForm
+        : companyCategoryForm;
+
   const [category, setCategory] = useState(
     initialCategory ? parseInt(initialCategory) : 1,
   ); // Category 1-11 (default: 1, or use initialCategory if provided)
@@ -226,6 +268,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
 
   // File input refs for web
   const mainImageInputRef = useRef(null);
+  const [consructionStatus, setConsructionStatus] = useState(null);
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
 
@@ -622,6 +665,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
+  console.log('dsdjshdjsh');
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -629,837 +674,273 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         <TouchableOpacity onPress={onClose} style={styles.backButton}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>יצירת מודעה</Text>
+        <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* Container 0: Category Selection */}
-        {/* <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>
-            בחר קטגוריה<Text style={styles.required}>*</Text>
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryScrollView}>
-            <View style={styles.categoryGrid}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(catNum => (
-                <TouchableOpacity
-                  key={catNum}
-                  style={[
-                    styles.categoryItem,
-                    category === catNum && styles.categoryItemSelected,
-                  ]}
-                  onPress={() => setCategory(catNum)}>
-                  <Image
-                    source={categoryImages[catNum]}
-                    style={styles.categoryImage}
-                    resizeMode="cover"
-                  />
-                  {category === catNum && (
-                    <View style={styles.categorySelectedIndicator}>
-                      <Text style={styles.categorySelectedText}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View> */}
-
-        {/* Container 1: Images and Video */}
-        {/* For category 3 (חדש מקבלן), show fixed image instead of upload fields */}
-        <View style={styles.formContainer}>
-          {category === 3 ? (
-            <ProfilePictureUpload
-              mainImage={mainImage}
-              setMainImage={setMainImage}
-              uploadProgress={uploadProgress}
-              handleMainImageUpload={handleMainImageUpload}
-              handleMainImageChange={handleMainImageChange}
-              mainImageInputRef={mainImageInputRef}
-            />
-          ) : (
-            <MultiPicturesUpload
-              uploadProgress={uploadProgress}
-              mainImage={mainImage}
-              additionalImages={additionalImages}
-              handleMainImageUpload={handleMainImageUpload}
-              handleMainImageChange={handleMainImageChange}
-              handleAdditionalImageUpload={handleAdditionalImageUpload}
-              handleAdditionalImageChange={handleAdditionalImageChange}
-              mainImageInputRef={mainImageInputRef}
-              additionalImageInputRefs={additionalImageInputRefs}
-            />
-          )}
-          <Divider style={styles.divider} />
-          <VideoUpload
-            hasVideo={hasVideo}
-            setHasVideo={setHasVideo}
-            uploadProgress={uploadProgress}
-            videoFile={videoFile}
-            handleVideoUpload={handleVideoUpload}
-            handleVideoChange={handleVideoChange}
-            videoInputRef={videoInputRef}
-          />
-        </View>
-
         {/* For category 3, show new form fields. For other categories, show existing form */}
-        {category === 3 ? (
-          <>
-            {/* Container 2: Search Purpose */}
-            <View style={styles.formContainer}>
-              <Title text="מטרת החיפוש" />
-              <View style={styles.radioGroup}>
-                <TouchableOpacity
-                  style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('enter')}>
-                  <View style={styles.radioOptionContent}>
-                    <Text style={styles.radioOptionTitle}>מחפש להיכנס</Text>
-                    <Text style={styles.radioOptionDescription}>
-                      אני מחפש להיכנס לדירת שותפים קיימת.
-                    </Text>
-                  </View>
-                  <View style={styles.radioSpacer} />
-                  {searchPurpose === 'enter' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.radioButtonGradient}>
-                      <Image
-                        source={require('../assets/checkbox-selected.png')}
-                        style={styles.radioButtonSelected}
-                        resizeMode="contain"
-                      />
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.radioButton} />
-                  )}
-                </TouchableOpacity>
-                <Divider style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('bring_in')}>
-                  <View style={styles.radioOptionContent}>
-                    <Text style={styles.radioOptionTitle}>מחפש להכניס</Text>
-                    <Text style={styles.radioOptionDescription}>
-                      מחפש לי חדר בדירה השותפים שבה אני גר. אני מעוניין למצוא
-                      שותף חדש לגור איתי.
-                    </Text>
-                  </View>
-                  <View style={styles.radioSpacer} />
-                  {searchPurpose === 'bring_in' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.radioButtonGradient}>
-                      <Image
-                        source={require('../assets/checkbox-selected.png')}
-                        style={styles.radioButtonSelected}
-                        resizeMode="contain"
-                      />
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.radioButton} />
-                  )}
-                </TouchableOpacity>
-                <View style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.radioOptionWithDescription}
-                  onPress={() => setSearchPurpose('partner')}>
-                  <View style={styles.radioOptionContent}>
-                    <Text style={styles.radioOptionTitle}>מחפש שותף</Text>
-                    <Text style={styles.radioOptionDescription}>
-                      אני מחפש ליצור חיבורים חדשים עם אנשים ולחפש ביחד דירת
-                      שותפים.
-                    </Text>
-                  </View>
-                  <View style={styles.radioSpacer} />
-                  {searchPurpose === 'partner' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.radioButtonGradient}>
-                      <Image
-                        source={require('../assets/checkbox-selected.png')}
-                        style={styles.radioButtonSelected}
-                        resizeMode="contain"
-                      />
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.radioButton} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
 
-            {/* Container 3: Preferred Apartment Type */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                סוג דירת השותפים המועדף<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.radioGroup}>
-                {[
-                  {value: 'regular', label: 'דירה רגילה'},
-                  {value: 'studio', label: 'דירת סטודיו'},
-                  {value: 'garden', label: 'דירת גן'},
-                  {value: 'duplex', label: 'דופלקס'},
-                  {value: 'penthouse', label: 'נטהאוז'},
-                  {value: 'private', label: 'בית פרטי'},
-                ].map((option, index) => (
-                  <React.Fragment key={option.value}>
-                    {index > 0 && <View style={styles.divider} />}
-                    <TouchableOpacity
-                      style={styles.radioOption}
-                      onPress={() => setPreferredApartmentType(option.value)}>
-                      <Text style={styles.radioOptionText}>{option.label}</Text>
-                      <View style={styles.radioSpacer} />
-                      {preferredApartmentType === option.value ? (
-                        <LinearGradient
-                          colors={['#FEE787', '#BD9947', '#9C6522']}
-                          locations={[0.0456, 0.5076, 0.8831]}
-                          start={{x: 0, y: 0}}
-                          end={{x: 1, y: 1}}
-                          style={styles.radioButtonGradient}>
-                          <Image
-                            source={require('../assets/checkbox-selected.png')}
-                            style={styles.radioButtonSelected}
-                            resizeMode="contain"
-                          />
-                        </LinearGradient>
-                      ) : (
-                        <View style={styles.radioButton} />
-                      )}
-                    </TouchableOpacity>
-                  </React.Fragment>
-                ))}
-              </View>
-            </View>
-
-            {/* Container 4: Preferences */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>העדפות</Text>
-
-              {/* Gender */}
-              <View style={styles.preferenceSection}>
-                <Text style={styles.preferenceLabel}>מין</Text>
-                <View style={styles.genderButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.genderButton,
-                      preferredGender === 'female' &&
-                        styles.genderButtonSelected,
-                    ]}
-                    onPress={() => setPreferredGender('female')}>
-                    <Text
-                      style={[
-                        styles.genderButtonText,
-                        preferredGender === 'female' &&
-                          styles.genderButtonTextSelected,
-                      ]}>
-                      אישה
-                    </Text>
-                    <View style={styles.radioSpacer} />
-                    {preferredGender === 'female' ? (
-                      <View style={styles.genderRadioSelected} />
-                    ) : (
-                      <View style={styles.genderRadioUnselected} />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.genderButton,
-                      preferredGender === 'male' && styles.genderButtonSelected,
-                    ]}
-                    onPress={() => setPreferredGender('male')}>
-                    <Text
-                      style={[
-                        styles.genderButtonText,
-                        preferredGender === 'male' &&
-                          styles.genderButtonTextSelected,
-                      ]}>
-                      גבר
-                    </Text>
-                    <View style={styles.radioSpacer} />
-                    {preferredGender === 'male' ? (
-                      <View style={styles.genderRadioSelected} />
-                    ) : (
-                      <View style={styles.genderRadioUnselected} />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Age Range */}
-              <AgeRangeSlider
-                minValue={preferredAgeMin}
-                maxValue={preferredAgeMax}
-                onMinChange={setPreferredAgeMin}
-                onMaxChange={setPreferredAgeMax}
-              />
-
-              {/* Checkboxes */}
-              <View style={styles.preferenceSection}>
-                {[
-                  {key: 'nonSmokers', label: 'ללא מעשנים'},
-                  {key: 'students', label: 'סטודנטים'},
-                  {key: 'stableJob', label: 'בעלי עבודה מסודרת'},
-                  {key: 'occasionalJob', label: 'בעלי עבודה מזדמנת'},
-                  {key: 'immediateEntry', label: 'כניסה מיידית'},
-                ].map(option => (
-                  <TouchableOpacity
-                    key={option.key}
-                    style={styles.preferenceCheckbox}
-                    onPress={() =>
-                      setPreferences({
-                        ...preferences,
-                        [option.key]: !preferences[option.key],
-                      })
-                    }>
-                    <Text style={styles.preferenceCheckboxText}>
-                      {option.label}
-                    </Text>
-                    <View style={styles.radioSpacer} />
-                    {preferences[option.key] ? (
-                      <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
-                        locations={[0.0456, 0.5076, 0.8831]}
-                        start={{x: 0, y: 0}}
-                        end={{x: 1, y: 1}}
-                        style={styles.radioButtonGradient}>
-                        <Image
-                          source={require('../assets/checkbox-selected.png')}
-                          style={styles.radioButtonSelected}
-                          resizeMode="contain"
-                        />
-                      </LinearGradient>
-                    ) : (
-                      <View style={styles.radioButton} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Container 5: Budget */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                התקציב שלי<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.priceInput}>
-                <TouchableOpacity
-                  style={styles.counterButtonLeft}
-                  onPress={() => setBudget(Math.max(0, budget - 100))}>
-                  <Text style={styles.counterButton}>+</Text>
-                </TouchableOpacity>
-                <View style={styles.counterDivider} />
-                <View style={styles.counterValueContainer}>
-                  <Text style={styles.priceValue}>
-                    ₪ {budget.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.counterDivider} />
-                <TouchableOpacity
-                  style={styles.counterButtonRight}
-                  onPress={() => setBudget(budget + 100)}>
-                  <Text style={styles.counterButton}>-</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Container 6: Additional Details */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>פרטים נוספים</Text>
-              <Text style={styles.inputLabel}>
-                פרטים נוספים<Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.textArea}
-                placeholder="כתוב תיאור"
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-          </>
-        ) : (
-          <>
-            {/* Container 2: Display Options */}
-            <View style={styles.formContainer}>
-              <Title text={'בחרו אפשרויות תצוגה נוספות'} />
-              <View style={styles.displayOptions}>
-                <TouchableOpacity
-                  style={styles.displayOption}
-                  onPress={() =>
-                    setDisplayOption(
-                      displayOption === 'collage' ? null : 'collage',
-                    )
-                  }>
-                  <View style={styles.displayOptionContent}>
-                    <Text style={styles.displayOptionTitle}>קולאז'</Text>
-                    <View style={styles.radioSpacer} />
-                    <RadioButton isSelected={displayOption === 'collage'} />
-                  </View>
-                  <Image
-                    source={require('../assets/Frame1261158884.png')}
-                    style={styles.displayOptionImage}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.displayOptionSubtitle}>תצוגה משולבת</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.displayOption}
-                  onPress={() =>
-                    setDisplayOption(
-                      displayOption === 'slideshow' ? null : 'slideshow',
-                    )
-                  }>
-                  <View style={styles.displayOptionContent}>
-                    <Text style={styles.displayOptionTitle}>מצגת</Text>
-                    <View style={styles.radioSpacer} />
-                    <RadioButton isSelected={displayOption === 'slideshow'} />
-                  </View>
-                  <Image
-                    source={require('../assets/Frame1261158883.png')}
-                    style={styles.displayOptionImage}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.displayOptionSubtitle}>
-                    תמונות מתחלפות
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Container 3: Property Type */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                סוג הנכס<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.radioGroup}>
-                <TouchableOpacity
-                  style={styles.radioOption}
-                  onPress={() => setPropertyType('office')}>
-                  <Text style={styles.radioOptionText}>משרד</Text>
-                  <View style={styles.radioSpacer} />
-                  {propertyType === 'office' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.radioButtonGradient}>
-                      <Image
-                        source={require('../assets/checkbox-selected.png')}
-                        style={styles.radioButtonSelected}
-                        resizeMode="contain"
-                      />
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.radioButton}>
-                      {false && <View style={styles.radioButtonSelected} />}
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.radioOption}
-                  onPress={() => setPropertyType('floor')}>
-                  <Text style={styles.radioOptionText}>קומה שלמה</Text>
-                  <View style={styles.radioSpacer} />
-                  {propertyType === 'floor' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={styles.radioButtonGradient}>
-                      <Image
-                        source={require('../assets/checkbox-selected.png')}
-                        style={styles.radioButtonSelected}
-                        resizeMode="contain"
-                      />
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.radioButton}>
-                      {false && <View style={styles.radioButtonSelected} />}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Container 4: General Details */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>פרטים כלליים</Text>
-
-              {/* Area */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  שטח הנכס<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setArea(Math.max(1, area - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{area} מ"ר</Text>
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setArea(area + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Rooms */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  מספר חדרים<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setRooms(Math.max(1, rooms - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{rooms}</Text>
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setRooms(rooms + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Floor */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  קומה<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setFloor(Math.max(1, floor - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{floor}</Text>
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setFloor(floor + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Amenities */}
-              {['חנייה', 'מרפסת', 'מעלית', 'ממ"ד', 'כניסה מיידית'].map(
-                amenity => {
-                  const isSelected = !!amenities[amenity];
-                  const hasQuantity = amenitiesWithQuantity.includes(amenity);
-                  const quantity = hasQuantity ? amenities[amenity] || 0 : null;
-
+        <>
+          {formList[category] &&
+            formList[category].fields.map((field, index) => {
+              switch (field.key) {
+                case 'profileverification':
                   return (
-                    <View key={amenity} style={styles.amenityRow}>
-                      {/* Amenity label and checkbox */}
-                      <TouchableOpacity
-                        style={styles.amenityOption}
-                        onPress={() => toggleAmenity(amenity)}>
-                        <Text style={styles.amenityText}>{amenity}</Text>
-                        <View style={styles.radioSpacer} />
-                        {isSelected ? (
-                          <LinearGradient
-                            colors={['#FEE787', '#BD9947', '#9C6522']}
-                            locations={[0.0456, 0.5076, 0.8831]}
-                            start={{x: 0, y: 0}}
-                            end={{x: 1, y: 1}}
-                            style={styles.radioButtonGradient}>
-                            <Image
-                              source={require('../assets/checkbox-selected.png')}
-                              style={styles.radioButtonSelected}
-                              resizeMode="contain"
-                            />
-                          </LinearGradient>
-                        ) : (
-                          <View style={styles.radioButton}>
-                            {false && (
-                              <View style={styles.radioButtonSelected} />
-                            )}
-                          </View>
-                        )}
-                      </TouchableOpacity>
-
-                      {/* Quantity selector for amenities that need it - below the amenity row */}
-                      {hasQuantity && isSelected && (
-                        <View style={styles.amenityQuantitySelector}>
-                          {[4, 3, 2, 1].map(qty => (
-                            <TouchableOpacity
-                              key={qty}
-                              onPress={() => setAmenityQuantity(amenity, qty)}
-                              style={styles.amenityQuantityButtonContainer}>
-                              {quantity === qty ? (
-                                <LinearGradient
-                                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                                  locations={[0.0456, 0.5076, 0.8831]}
-                                  start={{x: 0, y: 0}}
-                                  end={{x: 1, y: 1}}
-                                  style={styles.amenityQuantityButtonSelected}>
-                                  <Text
-                                    style={styles.amenityQuantityTextSelected}>
-                                    {qty}
-                                  </Text>
-                                  <View
-                                    style={styles.amenityQuantityDotSelected}>
-                                    <LinearGradient
-                                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                                      locations={[0.0456, 0.5076, 0.8831]}
-                                      start={{x: 0, y: 0}}
-                                      end={{x: 1, y: 1}}
-                                      style={styles.amenityQuantityDotInner}
-                                    />
-                                  </View>
-                                </LinearGradient>
-                              ) : (
-                                <View style={styles.amenityQuantityButton}>
-                                  <Text style={styles.amenityQuantityText}>
-                                    {qty}
-                                  </Text>
-                                  <View style={styles.amenityQuantityDot} />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
-                    </View>
+                    <ProfileVerification
+                      key="profileverification"
+                      mainImage={mainImage}
+                      setMainImage={setMainImage}
+                      uploadProgress={uploadProgress}
+                      handleMainImageUpload={handleMainImageUpload}
+                      handleMainImageChange={handleMainImageChange}
+                      mainImageInputRef={mainImageInputRef}
+                      hasVideo={hasVideo}
+                      setHasVideo={setHasVideo}
+                      videoFile={videoFile}
+                      handleVideoUpload={handleVideoUpload}
+                      handleVideoChange={handleVideoChange}
+                      videoInputRef={videoInputRef}
+                    />
                   );
-                },
-              )}
-            </View>
-
-            {/* Container 5: Property Condition */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                מצב הנכס<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.segmentedButtons}>
-                {['ישן', 'משופץ', 'חדש'].map(cond => (
-                  <TouchableOpacity
-                    key={cond}
-                    onPress={() => setCondition(cond)}
-                    style={styles.segmentedButtonContainer}>
-                    {condition === cond ? (
-                      <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
-                        locations={[0.0456, 0.5076, 0.8831]}
-                        start={{x: 0, y: 0}}
-                        end={{x: 1, y: 1}}
-                        style={[
-                          styles.segmentedButton,
-                          styles.segmentedButtonSelected,
-                        ]}>
-                        <Text style={styles.segmentedButtonTextSelected}>
-                          {cond}
-                        </Text>
-                      </LinearGradient>
-                    ) : (
-                      <View style={styles.segmentedButton}>
-                        <Text style={styles.segmentedButtonText}>{cond}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Container 6: Purpose */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                מטרת הפרסום<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.purposeButtons}>
-                <TouchableOpacity
-                  onPress={() => setPurpose('sale')}
-                  style={styles.purposeButtonContainer}>
-                  {purpose === 'sale' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={[
-                        styles.purposeButton,
-                        styles.purposeButtonSelected,
-                        styles.purposeButtonGradient,
-                      ]}>
-                      <Text style={styles.purposeButtonTextSelected}>
-                        למכירה
-                      </Text>
-                      <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
-                        locations={[0.0456, 0.5076, 0.8831]}
-                        start={{x: 0, y: 0}}
-                        end={{x: 1, y: 1}}
-                        style={styles.radioButtonGradient}>
-                        <Image
-                          source={require('../assets/checkbox-selected.png')}
-                          style={styles.radioButtonSelected}
-                          resizeMode="contain"
-                        />
-                      </LinearGradient>
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.purposeButton}>
-                      <Text style={styles.purposeButtonText}>למכירה</Text>
-                      <View style={styles.radioButton}>
-                        {false && <View style={styles.radioButtonSelected} />}
-                      </View>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setPurpose('rent')}
-                  style={styles.purposeButtonContainer}>
-                  {purpose === 'rent' ? (
-                    <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                      locations={[0.0456, 0.5076, 0.8831]}
-                      start={{x: 0, y: 0}}
-                      end={{x: 1, y: 1}}
-                      style={[
-                        styles.purposeButton,
-                        styles.purposeButtonSelected,
-                        styles.purposeButtonGradient,
-                      ]}>
-                      <Text style={styles.purposeButtonTextSelected}>
-                        להשכרה
-                      </Text>
-                      <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
-                        locations={[0.0456, 0.5076, 0.8831]}
-                        start={{x: 0, y: 0}}
-                        end={{x: 1, y: 1}}
-                        style={styles.radioButtonGradient}>
-                        <Image
-                          source={require('../assets/checkbox-selected.png')}
-                          style={styles.radioButtonSelected}
-                          resizeMode="contain"
-                        />
-                      </LinearGradient>
-                    </LinearGradient>
-                  ) : (
-                    <View style={styles.purposeButton}>
-                      <Text style={styles.purposeButtonText}>להשכרה</Text>
-                      <View style={styles.radioButton}>
-                        {false && <View style={styles.radioButtonSelected} />}
-                      </View>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Container 7: Price */}
-            <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                מחיר<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.priceInput}>
-                <TouchableOpacity
-                  style={styles.counterButtonLeft}
-                  onPress={() => setPrice(Math.max(0, price - 10000))}>
-                  <Text style={styles.counterButton}>+</Text>
-                </TouchableOpacity>
-                <View style={styles.counterDivider} />
-                <View style={styles.counterValueContainer}>
-                  <Text style={styles.priceValue}>
-                    ₪ {price.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.counterDivider} />
-                <TouchableOpacity
-                  style={styles.counterButtonRight}
-                  onPress={() => setPrice(price + 10000)}>
-                  <Text style={styles.counterButton}>-</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Address Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>פרטי כתובת הנכס</Text>
-              <Text style={styles.inputLabel}>
-                כתובת הנכס<Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="הזן עיר, רחוב ומספר"
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                value={address}
-                onChangeText={setAddress}
-              />
-            </View>
-
-            {/* Phone Section */}
-            <View style={styles.section}>
-              <Text style={styles.inputLabel}>
-                טלפון<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.phoneInput}>
-                <TouchableOpacity>
-                  <Text style={styles.phoneDropdown}>▼</Text>
-                </TouchableOpacity>
-                <TextInput
-                  style={styles.phoneTextInput}
-                  placeholder="00 000 0000"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-
-            {/* Description Section */}
-            <View style={styles.section}>
-              <Text style={styles.inputLabel}>
-                תיאור<Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.textArea}
-                placeholder="כתוב תיאור"
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-          </>
-        )}
+                case 'searchpurpose':
+                  return (
+                    <SearchPurpose
+                      key="searchpurpose"
+                      searchPurpose={searchPurpose}
+                      setSearchPurpose={setSearchPurpose}
+                    />
+                  );
+                case 'apartmenttype':
+                  return (
+                    <ApartmentType
+                      key="apartmenttype"
+                      preferredApartmentType={preferredApartmentType}
+                      setPreferredApartmentType={setPreferredApartmentType}
+                    />
+                  );
+                case 'preferences':
+                  return (
+                    <Preferences
+                      key="preferences"
+                      preferences={preferences}
+                      setPreferences={setPreferences}
+                      preferredGender={preferredGender}
+                      setPreferredGender={setPreferredGender}
+                      preferredAgeMin={preferredAgeMin}
+                      setPreferredAgeMin={setPreferredAgeMin}
+                      preferredAgeMax={preferredAgeMax}
+                      setPreferredAgeMax={setPreferredAgeMax}
+                    />
+                  );
+                case 'price':
+                  return (
+                    <PriceCount
+                      key="price"
+                      price={price}
+                      setPrice={setPrice}
+                      title={category === 3 ? 'התקציב שלי' : 'מחיר'}
+                    />
+                  );
+                case 'pricepernight':
+                  return (
+                    <PriceCount
+                      key="pricepernight"
+                      price={price}
+                      setPrice={setPrice}
+                      title={field.title}
+                      isPricePerNight={true}
+                    />
+                  );
+                case 'contactdetails':
+                  return <ContactDetails key="contactdetails" />;
+                case 'additionaldetails':
+                  return (
+                    <AdditionalDetails
+                      key="additionaldetails"
+                      description={description}
+                      setDescription={setDescription}
+                    />
+                  );
+                case 'multiimagewithvideo':
+                  return (
+                    <MultiImageWithVideo
+                      key="multiimagewithvideo"
+                      category={category}
+                      mainImage={mainImage}
+                      setMainImage={setMainImage}
+                      uploadProgress={uploadProgress}
+                      handleMainImageUpload={handleMainImageUpload}
+                      handleMainImageChange={handleMainImageChange}
+                      mainImageInputRef={mainImageInputRef}
+                      additionalImages={additionalImages}
+                      handleAdditionalImageUpload={handleAdditionalImageUpload}
+                      handleAdditionalImageChange={handleAdditionalImageChange}
+                      additionalImageInputRefs={additionalImageInputRefs}
+                      hasVideo={hasVideo}
+                      setHasVideo={setHasVideo}
+                      videoFile={videoFile}
+                      handleVideoUpload={handleVideoUpload}
+                      handleVideoChange={handleVideoChange}
+                      videoInputRef={videoInputRef}
+                      wayToDisplayAd={field.wayToDisplayAd}
+                      addMorePhotos={field.addMorePhotos}
+                    />
+                  );
+                case 'hospitalitynature':
+                  // TODO
+                  return (
+                    <HospitalityNature
+                      key="hospitalitynature"
+                      preferredApartmentType={preferredApartmentType}
+                      setPreferredApartmentType={setPreferredApartmentType}
+                    />
+                  );
+                case 'displayoptions':
+                  return (
+                    <DisplayOptions
+                      key="displayoptions"
+                      displayOption={displayOption}
+                      setDisplayOption={setDisplayOption}
+                    />
+                  );
+                case 'propertytype':
+                  return (
+                    <PropertyType
+                      key="propertytype"
+                      propertyType={propertyType}
+                      setPropertyType={setPropertyType}
+                      propertyTypes={field.data || []}
+                      title={field.title}
+                    />
+                  );
+                case 'proposedland':
+                  return <ProposedLand key="proposedland" />;
+                case 'radiooptions':
+                  return (
+                    <RadioOptions
+                      key={`radiooptions-${index}`}
+                      data={field.data}
+                      title={field.title}
+                    />
+                  );
+                case 'landaddress':
+                  return <LandAddress key="landaddress" />;
+                case 'propertyaddress':
+                  return <PropertyAddress key="propertyaddress" />;
+                case 'generaldetails':
+                  return (
+                    <GeneralDetails
+                      key="generaldetails"
+                      area={area}
+                      setArea={setArea}
+                      rooms={rooms}
+                      setRooms={setRooms}
+                      floor={floor}
+                      setFloor={setFloor}
+                      amenities={amenities}
+                      setAmenities={setAmenities}
+                      toggleAmenity={toggleAmenity}
+                      setAmenityQuantity={setAmenityQuantity}
+                      amenitiesWithQuantity={amenitiesWithQuantity}
+                      isArea={field.isArea}
+                      isRooms={field.isRooms}
+                      isFloor={field.isFloor}
+                      amenitiesData={field.data}
+                      counterData={field.counterData}
+                    />
+                  );
+                case 'serviceandfacility':
+                  return (
+                    <ServiceAndFacility
+                      key="serviceandfacility"
+                      propertyType={propertyType}
+                      setPropertyType={setPropertyType}
+                      data={field.data || []}
+                      title={field.title}
+                    />
+                  );
+                case 'accommodationoffers':
+                  return <AccommodationOffers key="accommodationoffers" />;
+                case 'cancellationpolicy':
+                  return (
+                    <CancellationPolicy
+                      key="cancellationpolicy"
+                      cancellationPolicy={cancellationPolicy}
+                      setCancellationPolicy={setCancellationPolicy}
+                      data={field.data || []}
+                      title={field.title}
+                    />
+                  );
+                case 'propertycondition':
+                  return (
+                    <PropertyCondition
+                      key="propertycondition"
+                      condition={condition}
+                      setCondition={setCondition}
+                    />
+                  );
+                case 'purpose':
+                  return (
+                    <Purpose
+                      key="purpose"
+                      purpose={purpose}
+                      setPurpose={setPurpose}
+                    />
+                  );
+                case 'address-phone-description':
+                  return (
+                    <AddressDetails
+                      key="address-phone-description"
+                      address={address}
+                      setAddress={setAddress}
+                      phone={phone}
+                      setPhone={setPhone}
+                      description={description}
+                      setDescription={setDescription}
+                    />
+                  );
+                case 'salesimage':
+                  return (
+                    <SalesImage
+                      key="salesimage"
+                      mainImage={mainImage}
+                      handleMainImageUpload={handleMainImageUpload}
+                      handleMainImageChange={handleMainImageChange}
+                      mainImageInputRef={mainImageInputRef}
+                      uploadProgress={uploadProgress}
+                    />
+                  );
+                case 'saleatpresale':
+                  return <SaleAtPreSale key="saleatpresale" />;
+                case 'generaldetailswithradio':
+                  return (
+                    <GeneralDetailsWithRadio
+                      key={`generaldetailswithradio-${index}`}
+                      groups={field.groups}
+                    />
+                  );
+                case 'consructionstatus':
+                  return (
+                    <ConsructionStatus
+                      key="consructionstatus"
+                      data={field.data || []}
+                      title={field.title}
+                      consructionStatus={consructionStatus}
+                      setConsructionStatus={setConsructionStatus}
+                    />
+                  );
+                case 'companyofferslandsizes':
+                  return (
+                    <CompanyOffersLandSizes key="companyofferslandsizes" />
+                  );
+                default:
+                  return null;
+              }
+            })}
+        </>
 
         {/* Publish Button */}
         <TouchableOpacity onPress={handlePublish} disabled={uploading}>
@@ -1504,9 +985,12 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   headerTitle: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '700',
+    textAlign: 'center',
+    flex: 1,
+    marginBottom: 0,
+    alignSelf: 'center',
+    paddingRight: 22,
+    // textAlignVertical: 'center',
   },
   scrollView: {
     flex: 1,
@@ -1516,429 +1000,24 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     backgroundColor: '#1E1D27',
   },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 30,
-  },
-  formContainer: {
-    backgroundColor: '#2B2A39',
-    borderRadius: 20,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 18,
-    marginBottom: 15,
-    fontFamily: 'Rubik-Regular',
-  },
-  sectionTitleMargin: {
-    marginTop: 20,
-  },
   required: {
     color: Colors.yellowIcons,
-  },
-  imageUploadArea: {
-    width: '100%',
-    height: 200,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderStyle: 'dashed',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#2B2A39',
-  },
-  additionalImagesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  imagePlaceholder: {
-    width: '48%',
-    aspectRatio: 1,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderStyle: 'dashed',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#2B2A39',
-    marginBottom: 10,
-  },
-  plusIcon: {
-    color: '#fff',
-    fontSize: 32,
-  },
-  videoOption: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  videoOptionText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  videoUploadSection: {
-    marginTop: 20,
-  },
-  videoUploadArea: {
-    width: '100%',
-    minHeight: 200,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    backgroundColor: '#2B2A39',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  videoUploadContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
-  },
-  videoUploadImage: {
-    width: '100%',
-    height: '100%',
-    minHeight: 200,
-  },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  radioButtonGradient: {
-    width: 23,
-    height: 23,
-    borderRadius: 11.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CCA447',
-    backgroundColor: '#27262F',
-  },
-  radioButtonSelected: {
-    width: 17,
-    height: 17,
   },
   displayOptions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 10,
   },
   displayOption: {
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 25,
   },
-  displayOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    width: '100%',
-    justifyContent: 'center',
-  },
-  displayOptionTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Regular',
-  },
-  displayOptionImage: {
-    height: 100,
-    marginBottom: 15,
-  },
-  displayOptionSubtitle: {
-    color: '#D2D0DC',
-    fontSize: 14,
-    fontFamily: 'Rubik-Regular',
-  },
-  radioGroup: {
-    // Removed gap, using marginBottom on radioOption instead
-  },
-  radioOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingVertical: 12,
-    marginBottom: 15,
-  },
-  radioOptionSelected: {
-    // Add selected styling if needed
-  },
-  radioOptionText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  radioSpacer: {
-    width: 15,
-  },
-  inputRow: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    color: '#fff',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  counterInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 64,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    overflow: 'hidden',
-  },
-  counterButtonLeft: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopLeftRadius: 32,
-    borderBottomLeftRadius: 32,
-  },
-  counterButtonRight: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopRightRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  counterButton: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  counterDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#8C85B3',
-  },
-  counterValueContainer: {
-    flex: 2,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  counterValue: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  amenityRow: {
-    marginBottom: 15,
-  },
-  amenityOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingVertical: 12,
-  },
-  amenityText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  amenityQuantitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    justifyContent: 'flex-end',
-  },
-  amenityQuantityButtonContainer: {
-    marginLeft: 8,
-  },
-  amenityQuantityButton: {
-    backgroundColor: '#2B2A39',
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    borderRadius: 846.154,
-    width: 56,
-    height: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  amenityQuantityButtonSelected: {
-    borderRadius: 846.154,
-    width: 56,
-    height: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  amenityQuantityText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  amenityQuantityTextSelected: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  amenityQuantityDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#8C85B3',
-    marginLeft: 6,
-  },
-  amenityQuantityDotSelected: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#1A1B3A',
-    marginLeft: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  amenityQuantityDotInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  segmentedButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  segmentedButtonContainer: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  segmentedButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentedButtonSelected: {
-    borderColor: 'transparent',
-  },
-  segmentedButtonText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  segmentedButtonTextSelected: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  purposeButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  purposeButtonContainer: {
-    flex: 1,
-    marginHorizontal: 7.5,
-  },
-  purposeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  purposeButtonSelected: {
-    borderColor: 'transparent',
-  },
-  purposeButtonGradient: {
-    overflow: 'hidden',
-  },
-  purposeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  purposeButtonTextSelected: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  priceInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 64,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    overflow: 'hidden',
-  },
-  priceValue: {
-    color: Colors.yellowIcons,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  textInput: {
-    backgroundColor: '#1E1D27',
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 10,
-  },
-  phoneInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E1D27',
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginTop: 10,
-  },
-  phoneDropdown: {
-    color: '#fff',
-    fontSize: 16,
-    marginRight: 10,
-  },
-  phoneTextInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-  },
-  textArea: {
-    backgroundColor: '#1E1D27',
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 10,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
   publishButton: {
     borderRadius: 25,
     paddingVertical: 16,
     marginHorizontal: 20,
-    marginTop: 20,
+    marginTop: 10,
     marginBottom: 40,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1948,186 +1027,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  uploadingContainer: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadedImage: {
-    width: '100%',
-    height: '100%',
-  },
-  fixedImageContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: '#2B2A39',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  fixedImage: {
-    width: '100%',
-    height: '100%',
-  },
-  uploadButtonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 20,
-  },
-  videoPreview: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-  },
-  videoPreviewText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 10,
-  },
-  videoPreviewElement: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-  },
-  categoryScrollView: {
-    marginTop: 10,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 5,
-  },
-  categoryItem: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    position: 'relative',
-  },
-  categoryItemSelected: {
-    borderColor: Colors.yellowIcons,
-    borderWidth: 3,
-  },
-  categoryImage: {
-    width: '100%',
-    height: '100%',
-  },
-  categorySelectedIndicator: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.yellowIcons,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categorySelectedText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  radioOptionWithDescription: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-  },
-  radioOptionContent: {
-    flex: 1,
-    marginRight: 15,
-  },
-  radioOptionTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  radioOptionDescription: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-  },
-  divider: {
-    marginVertical: 10,
-  },
   preferenceSection: {
     marginBottom: 20,
-  },
-  preferenceLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  genderButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  genderButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    backgroundColor: '#2B2A39',
-  },
-  genderButtonSelected: {
-    borderColor: Colors.yellowIcons,
-    backgroundColor: '#4A4538', // Dark olive-brown background like in Figma
-  },
-  genderButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-    flex: 1,
-    textAlign: 'right',
-  },
-  genderButtonTextSelected: {
-    color: Colors.yellowIcons,
-    fontWeight: '600',
-  },
-  genderRadioSelected: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.yellowIcons,
-    borderWidth: 2,
-    borderColor: Colors.yellowIcons,
-  },
-  genderRadioUnselected: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    backgroundColor: 'transparent',
   },
   ageRangeContainer: {
     paddingVertical: 10,
   },
   ageRangeText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 15,
-    textAlign: 'right',
+    fontSize: 18,
+    marginBottom: 5,
+    textAlign: 'left',
+    fontFamily: 'Rubik-Medium',
   },
   ageRangeSliderContainer: {
     width: '100%',
@@ -2165,16 +1076,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,
-  },
-  preferenceCheckbox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  preferenceCheckboxText: {
-    color: '#fff',
-    fontSize: 16,
-    flex: 1,
   },
 });
 
