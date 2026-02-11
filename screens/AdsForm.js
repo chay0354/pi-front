@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing} from '../utils/api';
 import {
@@ -254,6 +255,31 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     }
   }, [initialCategory]);
 
+  // Request camera and media library permissions on mount
+  useEffect(() => {
+    const requestPermissions = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          const cameraStatus =
+            await ImagePicker.requestCameraPermissionsAsync();
+          const mediaLibraryStatus =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+          if (
+            cameraStatus.status !== 'granted' ||
+            mediaLibraryStatus.status !== 'granted'
+          ) {
+            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים');
+          }
+        } catch (error) {
+          console.error('Permission request error:', error);
+        }
+      }
+    };
+
+    requestPermissions();
+  }, []);
+
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
   const [mainImageUrl, setMainImageUrl] = useState(null);
@@ -295,9 +321,32 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   };
 
   // File upload handlers
-  const handleMainImageUpload = () => {
+  const handleMainImageUpload = async () => {
     if (Platform.OS === 'web' && mainImageInputRef.current) {
       mainImageInputRef.current.click();
+    } else {
+      // Native mobile - use expo-image-picker
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 1,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          const asset = result.assets[0];
+          const fileObj = {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.filename || `photo-${Date.now()}.jpg`,
+            file: asset, // Store for upload
+          };
+          setMainImage(fileObj);
+        }
+      } catch (error) {
+        console.log('errrorr', error);
+        alert('שגיאה בבחירת תמונה: ' + error.message);
+      }
     }
   };
 
@@ -315,9 +364,33 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  const handleAdditionalImageUpload = index => {
+  const handleAdditionalImageUpload = async index => {
     if (Platform.OS === 'web' && additionalImageInputRefs.current[index]) {
       additionalImageInputRefs.current[index].click();
+    } else {
+      // Native mobile - use expo-image-picker
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 1,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          const asset = result.assets[0];
+          const fileObj = {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.filename || `photo-${Date.now()}.jpg`,
+            file: asset,
+          };
+          const newImages = [...additionalImages];
+          newImages[index] = fileObj;
+          setAdditionalImages(newImages);
+        }
+      } catch (error) {
+        alert('שגיאה בבחירת תמונה: ' + error.message);
+      }
     }
   };
 
@@ -337,9 +410,34 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  const handleVideoUpload = () => {
+  const handleVideoUpload = async () => {
     if (Platform.OS === 'web' && videoInputRef.current) {
       videoInputRef.current.click();
+    } else {
+      // Native mobile - use expo-image-picker for video
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          allowsEditing: true,
+          quality: 1,
+          // videoMaxDuration: 300, // 5 minutes max
+        });
+
+        if (!result.canceled && result.assets[0]) {
+          const asset = result.assets[0];
+          const fileObj = {
+            uri: asset.uri,
+            type: asset.type || 'video/mp4',
+            name: asset.filename || `video-${Date.now()}.mp4`,
+            file: asset,
+          };
+          setVideoFile(fileObj);
+          setHasVideo(true);
+        }
+      } catch (error) {
+        console.log('errrorr', error);
+        alert('שגיאה בבחירת סרטון: ' + error.message);
+      }
     }
   };
 

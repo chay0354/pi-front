@@ -15,13 +15,23 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "אנחנו צריכים גישה למצלמה כדי להעלות תמונות",
+        "NSPhotoLibraryUsageDescription": "אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים",
+        "NSPhotoLibraryAddOnlyUsageDescription": "אנחנו צריכים גישה לספריית התמונות כדי להוסיף תמונות"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
