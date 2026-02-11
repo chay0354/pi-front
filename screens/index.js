@@ -7,5 +7,6 @@ export {default as SubscriptionFormScreen} from './SubscriptionFormScreen';
 export {default as SubscriptionScreen} from './SubscriptionScreen';
 export {default as SuccessScreen} from './SuccessScreen';
 export {default as TikTokFeedScreen} from './TikTokFeedScreen';
+export {default as UserRegistrationScreen} from './UserRegistrationScreen';
 export {default as VerificationCodeScreen} from './VerificationCodeScreen';
 export {default as VerificationScreen} from './VerificationScreen';

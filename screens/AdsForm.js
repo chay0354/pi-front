@@ -297,6 +297,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [consructionStatus, setConsructionStatus] = useState(null);
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
+  // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
+  const [landRadioValues, setLandRadioValues] = useState({});
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
@@ -459,9 +461,11 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     try {
       setUploading(true);
 
-      // Validate required fields based on category
+      const fields = formList[category]?.fields || [];
+      const fieldKeys = fields.map(f => f.key);
+
+      // Validate only fields that exist in this form
       if (category === 3) {
-        // Validation for category 3 (חדש מקבלן)
         if (!searchPurpose) {
           alert('אנא בחר מטרת חיפוש');
           setUploading(false);
@@ -483,18 +487,28 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           return;
         }
       } else {
-        // Validation for other categories
-        if (!propertyType) {
+        if (fieldKeys.includes('propertytype') && !propertyType) {
           alert('אנא בחר סוג נכס');
           setUploading(false);
           return;
         }
-        if (!address || !phone || !description) {
-          alert('אנא מלא את כל השדות הנדרשים');
+        const needsAddressPhoneDescription =
+          fieldKeys.includes('address-phone-description') ||
+          fieldKeys.includes('propertyaddress') ||
+          fieldKeys.includes('landaddress');
+        if (needsAddressPhoneDescription && (!address || !phone || !description)) {
+          alert('אנא מלא את כל השדות הנדרשים (כתובת, טלפון, תיאור)');
           setUploading(false);
           return;
         }
-        if (!mainImage && additionalImages.filter(img => img).length === 0) {
+        const needsMainImage =
+          fieldKeys.includes('multiimagewithvideo') &&
+          !fieldKeys.includes('profileverification');
+        if (
+          needsMainImage &&
+          !mainImage &&
+          additionalImages.filter(img => img).length === 0
+        ) {
           alert('אנא העלה לפחות תמונה אחת');
           setUploading(false);
           return;
@@ -690,6 +704,9 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
       const listingData =
         category === 3
           ? {
+              status: 'published',
+              subscriptionType: currentUser?.subscription_type || null,
+              subscriptionId: currentUser?.id || null,
               // Category 3 specific fields
               searchPurpose,
               preferredApartmentType,
@@ -713,6 +730,9 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               additionalImageUrls: [], // Empty array for category 3
             }
           : {
+              status: 'published',
+              subscriptionType: currentUser?.subscription_type || null,
+              subscriptionId: currentUser?.id || null,
               // Standard listing fields for other categories
               propertyType,
               area: parseInt(area) || 1,
@@ -733,6 +753,12 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               videoUrl: uploadedVideoUrl,
               hasVideo: !!uploadedVideoUrl,
               category: listingCategory,
+              // Land form radio values (when present)
+              planApproval: landRadioValues['תב״ע'] || null,
+              landInMortgage: landRadioValues['קרקע במושע'] || null,
+              permit: landRadioValues['היתר'] || null,
+              agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
+              landOwnership: landRadioValues['בעלות קרקע'] || null,
             };
 
       // Create listing in database
@@ -763,13 +789,14 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  console.log('dsdjshdjsh');
-
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={[styles.backButton, Platform.OS === 'web' && {cursor: 'pointer'}]}
+          activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
         <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
@@ -922,12 +949,39 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
                       key={`radiooptions-${index}`}
                       data={field.data}
                       title={field.title}
+                      selectedValue={landRadioValues[field.title]}
+                      onChange={value =>
+                        setLandRadioValues(prev => ({
+                          ...prev,
+                          [field.title]: value,
+                        }))
+                      }
                     />
                   );
                 case 'landaddress':
-                  return <LandAddress key="landaddress" />;
+                  return (
+                    <LandAddress
+                      key="landaddress"
+                      address={address}
+                      setAddress={setAddress}
+                      phone={phone}
+                      setPhone={setPhone}
+                      description={description}
+                      setDescription={setDescription}
+                    />
+                  );
                 case 'propertyaddress':
-                  return <PropertyAddress key="propertyaddress" />;
+                  return (
+                    <PropertyAddress
+                      key="propertyaddress"
+                      address={address}
+                      setAddress={setAddress}
+                      phone={phone}
+                      setPhone={setPhone}
+                      description={description}
+                      setDescription={setDescription}
+                    />
+                  );
                 case 'generaldetails':
                   return (
                     <GeneralDetails
@@ -1041,7 +1095,11 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         </>
 
         {/* Publish Button */}
-        <TouchableOpacity onPress={handlePublish} disabled={uploading}>
+        <TouchableOpacity
+          onPress={handlePublish}
+          disabled={uploading}
+          style={Platform.OS === 'web' && !uploading ? {cursor: 'pointer'} : undefined}
+          activeOpacity={0.7}>
           <LinearGradient
             colors={['#FEE787', '#BD9947', '#9C6522']}
             locations={[0.0456, 0.5076, 0.8831]}

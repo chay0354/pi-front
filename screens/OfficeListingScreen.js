@@ -565,6 +565,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       const listingData =
         category === 3
           ? {
+              status: 'published',
               // Category 3 specific fields
               searchPurpose,
               preferredApartmentType,
@@ -588,6 +589,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               additionalImageUrls: [], // Empty array for category 3
             }
           : {
+              status: 'published',
               // Standard listing fields for other categories
               propertyType,
               area: parseInt(area) || 1,

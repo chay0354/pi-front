@@ -712,79 +712,32 @@ const TikTokFeedScreen = ({
       </>
     );
   }
+  const categoryId = Number(selectedCategory);
+  const isLandCategory = categoryId === 7; // קרקעות
+  const isBnbCategory = categoryId === 5; // BnB
+  const isPartnersCategory = categoryId === 3; // שותפים
+  const sidebarSource = isLandCategory
+    ? require('../assets/lands/Frame 1261158717 (2).png')
+    : isBnbCategory
+      ? require('../assets/Frame 1261158717 (3).png')
+      : isPartnersCategory
+        ? require('../assets/par/Frame 1261158717 (4).png')
+        : require('../assets/sidebar-new.png');
+  const bottomBarSource = isLandCategory
+    ? require('../assets/lands/Frame 2 (2).png')
+    : isPartnersCategory
+      ? require('../assets/par/Frame 2 (3).png')
+      : require('../assets/bottom-bar-new.png');
+
   return (
     <View style={styles.container}>
-      {/* Sidebar icons */}
+      {/* Sidebar - lands: assets/lands; BnB: Frame (3); partners: assets/par; rest: sidebar-new */}
       <View style={styles.sidebar}>
-        {/* Profile icon - same for all categories */}
         <Image
-          source={require('../assets/tiktok-sidebar-profile.png')}
-          style={styles.sidebarProfile}
+          source={sidebarSource}
+          style={styles.sidebarImage}
           resizeMode="contain"
         />
-        {/* Bottom 5 icons - use partner logos for category 3 */}
-        {videos[currentIndex]?.category === 3 ? (
-          <>
-            <Image
-              source={require('../assets/image.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/image copy.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/image copy 2.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/image copy 3.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/Frame 1261158851 (1).png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-          </>
-        ) : (
-          <>
-            <Image
-              source={require('../assets/tiktok-sidebar1.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-sidebar2.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-sidebar3.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-sidebar4.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-sidebar5.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-sidebar6.png')}
-              style={styles.sidebarIcon}
-              resizeMode="contain"
-            />
-          </>
-        )}
       </View>
 
       {/* Navigation buttons */}
@@ -953,39 +906,19 @@ const TikTokFeedScreen = ({
         </View>
       </View>
 
-      {/* Bottom Bar */}
+      {/* Bottom Bar - lands (קרקעות) uses assets/lands, rest use bottom-bar-new */}
       {!showBottomSheet && (
         <View style={styles.bottomBar}>
-          <View style={styles.iconsContainer}>
+          <TouchableOpacity
+            style={styles.bottomBarImageTouchable}
+            onPress={() => setShowBottomSheet(true)}
+            activeOpacity={1}>
             <Image
-              source={require('../assets/tiktok-icon1.png')}
-              style={styles.icon}
-              resizeMode="contain"
+              source={bottomBarSource}
+              style={styles.bottomBarImage}
+              resizeMode="cover"
             />
-            <Image
-              source={require('../assets/tiktok-icon2.png')}
-              style={styles.icon}
-              resizeMode="contain"
-            />
-            <TouchableOpacity
-              onPress={() => setShowBottomSheet(!showBottomSheet)}>
-              <Image
-                source={require('../assets/tiktok-icon3.png')}
-                style={styles.icon}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-            <Image
-              source={require('../assets/tiktok-icon4.png')}
-              style={styles.icon}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../assets/tiktok-icon5.png')}
-              style={styles.icon}
-              resizeMode="contain"
-            />
-          </View>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -1112,6 +1045,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     margin: 0,
     padding: 0,
+    paddingBottom: 80,
   },
   videoItem: {
     position: 'relative',
@@ -1303,7 +1237,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     position: 'absolute',
-    bottom: 0,
+    bottom: -8,
     left: 0,
     right: 0,
     width: '100%',
@@ -1313,6 +1247,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  bottomBarImageTouchable: {
+    width: '88%',
+    height: 68,
+    alignSelf: 'center',
+  },
   bottomBarImage: {
     width: '100%',
     height: '100%',
@@ -1320,10 +1259,16 @@ const styles = StyleSheet.create({
   sidebar: {
     position: 'absolute',
     left: 10,
-    top: 220,
+    top: 200,
+    bottom: 80,
     flexDirection: 'column',
     alignItems: 'center',
     zIndex: 100,
+  },
+  sidebarImage: {
+    width: 58,
+    flex: 1,
+    minHeight: 200,
   },
   sidebarProfile: {
     width: 60,
@@ -1331,9 +1276,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sidebarIcon: {
-    width: 48,
-    height: 48,
-    marginBottom: 20,
+    width: 38,
+    height: 38,
+    marginBottom: 16,
   },
   actionIconsContainer: {
     position: 'absolute',

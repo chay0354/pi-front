@@ -13,6 +13,7 @@ import {
   VerificationScreen,
   VerificationCodeScreen,
   LoginScreen,
+  UserRegistrationScreen,
 } from './screens';
 import {ContextHook} from './hooks/ContextHook';
 import {subscriptionTypes} from './utils/constant';
@@ -41,6 +42,7 @@ const screenName = {
   success: 'success',
   successCompany: 'successCompany',
   successProfessional: 'successProfessional',
+  userRegistration: 'userRegistration',
 };
 
 /**
@@ -132,12 +134,12 @@ export default function App() {
               setCurrentScreen(screenName.home);
             }}
             onOpenOfficeListing={category => {
-              // Store the category so OfficeListingScreen can use it
-              if (category) {
-                setSelectedCategory(category);
+              if (category) setSelectedCategory(category);
+              if (!currentUser) {
+                setCurrentScreen(screenName.userRegistration);
+              } else {
+                setCurrentScreen(screenName.adsForm);
               }
-              // setCurrentScreen(screenName.officeListing);
-              setCurrentScreen(screenName.adsForm);
             }}
             uploadedListings={uploadedListings}
             selectedCategory={selectedCategory}
@@ -214,6 +216,17 @@ export default function App() {
               setCurrentUser(subscription);
               setCurrentScreen(screenName.home);
             }}
+          />
+        )}
+        {currentScreen === screenName.userRegistration && (
+          <UserRegistrationScreen
+            selectedCategory={selectedCategory}
+            onSuccess={user => {
+              setCurrentUser(user);
+              setCurrentScreen(screenName.adsForm);
+            }}
+            onCancel={() => setCurrentScreen(screenName.tikTokFeed)}
+            onOpenLogin={() => setCurrentScreen(screenName.login)}
           />
         )}
         {currentScreen === screenName.subscription && (

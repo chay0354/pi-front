@@ -40,7 +40,7 @@ export const brokerCategories = [
   {id: 2, name: 'משרדים', image: require('../assets/tik2.png')},
   // {id: 3, name: 'שותפים', image: require('../assets/tik3.png')},
   {id: 4, name: 'גלובל', image: require('../assets/tik4.png')},
-  // {id: 5, categoryName: 'BNB', image: require('../assets/tik5.png')},
+  {id: 5, name: 'BNB', image: require('../assets/tik5.png')},
   {id: 6, name: 'מגזר דתי', image: require('../assets/tik6.png')},
   {id: 7, name: 'קרקעות', image: require('../assets/tik7.png')},
   {id: 8, name: 'מסחר', image: require('../assets/tik8.png')},
@@ -55,7 +55,7 @@ export const companyCategories = [
   {id: 2, name: 'משרדים', image: require('../assets/tik2.png')},
   // {id: 3, name: 'שותפים', image: require('../assets/tik3.png')},
   {id: 4, name: 'גלובל', image: require('../assets/tik4.png')},
-  // {id: 5, categoryName: 'BNB', image: require('../assets/tik5.png')},
+  {id: 5, name: 'BNB', image: require('../assets/tik5.png')},
   {id: 6, name: 'מגזר דתי', image: require('../assets/tik6.png')},
   {id: 7, name: 'קרקעות', image: require('../assets/tik7.png')},
   {id: 8, name: 'מסחר', image: require('../assets/tik8.png')},
@@ -76,6 +76,64 @@ export const getHeaderTitle = subscriptionType => {
       return 'מנוי למתווכים';
   }
 };
+
+// Shared BnB (category 5) ad form fields – used by user, broker, and company
+const bnbFormFields = [
+  {key: 'multiimagewithvideo', wayToDisplayAd: true},
+  {key: 'hospitalitynature'},
+  {
+    key: 'propertytype',
+    data: [
+      {name: 'room', title: 'חדר'},
+      {name: 'housing_unit', title: 'יחידת דיור'},
+      {name: 'house', title: 'בית'},
+      {name: 'B&B', title: 'צימר'},
+      {name: 'holiday_apartment', title: 'דירת נופש'},
+      {name: 'villa', title: 'וילה'},
+      {name: 'special', title: 'מיוחדים'},
+    ],
+    title: 'סוג',
+  },
+  {
+    key: 'generaldetails',
+    counterData: [
+      {title: 'מספר חדרים', isArea: false, value: 0, required: true},
+      {title: 'קומה', isArea: false, value: 0, isLast: true, required: true},
+    ],
+    data: [
+      {title: 'כמות חניות', option: [1, 2, 3, 4], optionSecond: {title: 'חנייה בתשלום', option: ['כן', 'ללא']}},
+      {title: 'חנייה בתשלום'},
+    ],
+  },
+  {
+    key: 'serviceandfacility',
+    data: [
+      {name: 'pool', title: 'בריכה'},
+      {name: 'merger', title: 'מיזוג'},
+      {name: 'fridge', title: 'מקרר'},
+      {name: 'laundry', title: 'כביסה'},
+      {name: 'eater', title: 'אוכל'},
+      {name: 'kitchen', title: 'מטבח'},
+      {name: 'locker', title: 'ארון'},
+      {name: 'tv', title: 'טלויזיה'},
+      {name: 'safe', title: 'כספת'},
+      {name: 'smoke_detector', title: 'גלאי עשן'},
+      {name: 'wifi_internet', title: 'אינטרנט wifi'},
+      {name: 'private_services', title: 'שירותים פרטיים'},
+      {name: 'shared_services', title: 'שירותים משותפים'},
+      {name: 'private_shower', title: 'מקלחת פרטית'},
+      {name: 'shared_shower', title: 'מקלחת משותפת'},
+      {name: 'accessible_place', title: 'מקום נגיש'},
+      {name: 'suitable_for_animals', title: 'מתאים לבעלי חיים'},
+      {name: 'suitable_for_smokers', title: 'מתאים למעשנים'},
+    ],
+    title: 'שירותים ומתקנים במקום',
+  },
+  {key: 'accommodationoffers'},
+  {key: 'cancellationpolicy', data: [{name: 'without_penalty', title: 'ללא קנס'}], title: 'מדיניות ביטולים'},
+  {key: 'pricepernight', title: 'מחיר ללילה'},
+  {key: 'contactdetails'},
+];
 
 export const userCategoryForm = {
   2: {
@@ -226,89 +284,7 @@ export const userCategoryForm = {
       },
     ],
   },
-  5: {
-    role: 'user',
-    fields: [
-      {key: 'multiimagewithvideo', wayToDisplayAd: true},
-      {key: 'hospitalitynature'},
-      {
-        key: 'propertytype',
-        data: [
-          {name: 'room', title: 'חדר'},
-          {name: 'housing_unit', title: 'יחידת דיור'},
-          {name: 'house', title: 'בית'},
-          {name: 'B&B', title: 'צימר'},
-          {name: 'holiday_apartment', title: 'דירת נופש'},
-          {name: 'villa', title: 'וילה'},
-          {name: 'special', title: 'מיוחדים'},
-        ],
-        title: 'סוג',
-      },
-      {
-        key: 'generaldetails',
-        counterData: [
-          {
-            title: 'מספר חדרים',
-            isArea: false,
-            value: 0,
-            required: true,
-          },
-          {
-            title: 'קומה',
-            isArea: false,
-            value: 0,
-            isLast: true,
-            required: true,
-          },
-        ],
-        data: [
-          {
-            title: 'כמות חניות',
-            option: [1, 2, 3, 4],
-            optionSecond: {title: 'חנייה בתשלום', option: ['כן', 'ללא']},
-          },
-          {title: 'חנייה בתשלום'},
-        ],
-      },
-      {
-        key: 'serviceandfacility',
-        data: [
-          {name: 'pool', title: 'בריכה'},
-          {name: 'merger', title: 'מיזוג'},
-          {name: 'fridge', title: 'מקרר'},
-          {name: 'laundry', title: 'כביסה'},
-          {name: 'eater', title: 'אוכל'},
-          {name: 'kitchen', title: 'מטבח'},
-          {name: 'locker', title: 'ארון'},
-          {name: 'tv', title: 'טלויזיה'},
-          {name: 'safe', title: 'כספת'},
-          {name: 'smoke_detector', title: 'גלאי עשן'},
-          {name: 'wifi_internet', title: 'אינטרנט wifi'},
-          {name: 'private_services', title: 'שירותים פרטיים'},
-          {name: 'shared_services', title: 'שירותים משותפים'},
-          {name: 'private_shower', title: 'מקלחת פרטית'},
-          {name: 'shared_shower', title: 'מקלחת משותפת'},
-          {name: 'accessible_place', title: 'מקום נגיש'},
-          {name: 'suitable_for_animals', title: 'מתאים לבעלי חיים'},
-          {name: 'suitable_for_smokers', title: 'מתאים למעשנים'},
-        ],
-        title: 'שירותים ומתקנים במקום',
-      },
-      {key: 'accommodationoffers'},
-      {
-        key: 'cancellationpolicy',
-        data: [{name: 'without_penalty', title: 'ללא קנס'}],
-        title: 'מדיניות ביטולים',
-      },
-      {
-        key: 'pricepernight',
-        title: 'מחיר ללילה',
-      },
-      {
-        key: 'contactdetails',
-      },
-    ],
-  },
+  5: {role: 'user', fields: bnbFormFields},
   6: {
     role: 'user',
     fields: [
@@ -999,6 +975,7 @@ export const brokerCategoryForm = {
       },
     ],
   },
+  5: {role: 'broker', fields: bnbFormFields},
   6: {
     role: 'broker',
     fields: [
@@ -1738,6 +1715,7 @@ export const companyCategoryForm = {
       },
     ],
   },
+  5: {role: 'company', fields: bnbFormFields},
   6: {
     role: 'company',
     fields: [
