@@ -312,6 +312,20 @@ export const getListings = async (options = {}) => {
   }
 };
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Return subscriptionId only if it's a valid UUID (DB expects UUID). Client ids like "user-123" become null.
+ * @param {*} id - currentUser.id or similar
+ * @returns {string|null}
+ */
+export const toSubscriptionId = id => {
+  if (id == null || typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  return UUID_REGEX.test(trimmed) ? trimmed : null;
+};
+
 /**
  * Create a new listing
  * @param {Object} listingData - Listing data including form fields and file URLs

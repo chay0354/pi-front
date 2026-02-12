@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {getListings} from '../utils/api';
 import {categoryImages} from '../utils/constant';
@@ -258,6 +259,7 @@ const ImageSwiper = ({
 const TikTokFeedScreen = ({
   onClose,
   onOpenOfficeListing,
+  onOpenPostEditor,
   uploadedListings = [],
   selectedCategory = null,
 }) => {
@@ -341,19 +343,22 @@ const TikTokFeedScreen = ({
           console.log(`Received ${result.listings.length} listings from API`);
           console.log('Sample listing:', result.listings[0]);
 
-          // Transform database listings to video format
+          // Transform database listings to video format (include posts with image, video, or text only)
           const transformedListings = result.listings
             .filter(listing => {
-              // Only include listings that have at least one image or video
               const images = listing.listing_images || [];
               const videos = listing.listing_videos || [];
-              const hasContent = images.length > 0 || videos.length > 0;
-              if (!hasContent) {
+              const hasMedia = images.length > 0 || videos.length > 0;
+              const hasDescription =
+                listing.description && String(listing.description).trim().length > 0;
+              const include =
+                hasMedia || hasDescription;
+              if (!include) {
                 console.log(
-                  `Skipping listing ${listing.id} - no images or videos`,
+                  `Skipping listing ${listing.id} - no images, videos, or description`,
                 );
               }
-              return hasContent;
+              return include;
             })
             .map(listing => {
               const images = listing.listing_images || [];
@@ -399,11 +404,23 @@ const TikTokFeedScreen = ({
                 private: 'בית פרטי',
               };
 
+              const isTextOnly =
+                imagesArray.length === 0 &&
+                !(listing.listing_videos && listing.listing_videos.length > 0) &&
+                listing.description &&
+                String(listing.description).trim().length > 0;
+
               return {
                 id: listing.id,
                 type: video ? 'video' : 'images',
                 video: video && video.video_url ? {uri: video.video_url} : null,
-                images: imagesArray,
+                images:
+                  imagesArray.length > 0
+                    ? imagesArray
+                    : isTextOnly
+                      ? [{uri: 'text-post-placeholder'}]
+                      : imagesArray,
+                isTextOnlyPost: !!isTextOnly,
                 displayOption: listing.display_option || 'slideshow', // 'collage' or 'slideshow'
                 location: listing.address || 'תל אביב',
                 price: `₪${parseFloat(listing.price || listing.budget || 0).toLocaleString()}`,
@@ -775,6 +792,29 @@ const TikTokFeedScreen = ({
         {videos.map((video, index) => {
           // Handle uploaded content
           if (video.isUploaded) {
+            // Text-only post (from post editor with no image/video)
+            if (video.isTextOnlyPost && video.description) {
+              return (
+                <View
+                  key={video.id}
+                  style={[
+                    styles.videoItem,
+                    {
+                      height: screenHeight,
+                      minHeight: screenHeight,
+                      maxHeight: screenHeight,
+                    },
+                  ]}>
+                  <LinearGradient
+                    colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
+                    style={styles.textPostCardGradient}>
+                    <Text style={styles.textPostCardDescription} numberOfLines={10}>
+                      {video.description}
+                    </Text>
+                  </LinearGradient>
+                </View>
+              );
+            }
             // Priority 1: If there's a video, show only the video
             if (video.type === 'video' && video.video) {
               // Display video
@@ -967,7 +1007,14 @@ const TikTokFeedScreen = ({
 
           <View style={styles.bottomSheetDivider} />
 
-          <TouchableOpacity style={styles.bottomSheetOption}>
+          <TouchableOpacity
+            style={styles.bottomSheetOption}
+            onPress={() => {
+              setShowBottomSheet(false);
+              if (onOpenPostEditor) {
+                onOpenPostEditor(selectedCategory);
+              }
+            }}>
             <Text style={styles.bottomSheetArrow}>‹</Text>
             <View style={styles.bottomSheetOptionContent}>
               <View style={styles.bottomSheetTextContainer}>
@@ -1057,6 +1104,18 @@ const styles = StyleSheet.create({
     margin: 0,
     padding: 0,
     borderWidth: 0,
+  },
+  textPostCardGradient: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  textPostCardDescription: {
+    color: '#fff',
+    fontSize: 22,
+    textAlign: 'center',
   },
   videoImageContainer: {
     width: '100%',

@@ -8,6 +8,7 @@ import {
   SuccessScreen,
   TikTokFeedScreen,
   OfficeListingScreen,
+  PostEditorScreen,
   SubscriptionScreen,
   SubscriptionFormScreen,
   VerificationScreen,
@@ -43,6 +44,7 @@ const screenName = {
   successCompany: 'successCompany',
   successProfessional: 'successProfessional',
   userRegistration: 'userRegistration',
+  postEditor: 'postEditor',
 };
 
 /**
@@ -141,8 +143,25 @@ export default function App() {
                 setCurrentScreen(screenName.adsForm);
               }
             }}
+            onOpenPostEditor={category => {
+              if (category) setSelectedCategory(category);
+              setCurrentScreen(screenName.postEditor);
+            }}
             uploadedListings={uploadedListings}
             selectedCategory={selectedCategory}
+          />
+        )}
+        {currentScreen === screenName.postEditor && (
+          <PostEditorScreen
+            selectedCategory={selectedCategory}
+            currentUser={currentUser}
+            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
+            onPublish={async () => {
+              setCurrentScreen(screenName.tikTokFeed);
+              setTimeout(() => {
+                setTikTokFeedRefreshKey(prev => prev + 1);
+              }, 800);
+            }}
           />
         )}
         {currentScreen === screenName.adsForm && (

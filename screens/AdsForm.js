@@ -14,7 +14,7 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing} from '../utils/api';
+import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
 import {
   brokerCategoryForm,
   categoryImages,
@@ -706,7 +706,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           ? {
               status: 'published',
               subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: currentUser?.id || null,
+              subscriptionId: toSubscriptionId(currentUser?.id) || null,
               // Category 3 specific fields
               searchPurpose,
               preferredApartmentType,
@@ -732,7 +732,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           : {
               status: 'published',
               subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: currentUser?.id || null,
+              subscriptionId: toSubscriptionId(currentUser?.id) || null,
               // Standard listing fields for other categories
               propertyType,
               area: parseInt(area) || 1,
