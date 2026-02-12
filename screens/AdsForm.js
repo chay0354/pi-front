@@ -260,19 +260,31 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     const requestPermissions = async () => {
       if (Platform.OS !== 'web') {
         try {
-          const cameraStatus =
-            await ImagePicker.requestCameraPermissionsAsync();
+          // Check existing permissions first
           const mediaLibraryStatus =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
+            await ImagePicker.getMediaLibraryPermissionsAsync();
 
-          if (
-            cameraStatus.status !== 'granted' ||
-            mediaLibraryStatus.status !== 'granted'
-          ) {
-            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים');
+          // Only request if not already granted
+          if (mediaLibraryStatus.status !== 'granted') {
+            const newMediaLibraryStatus =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+            if (newMediaLibraryStatus.status !== 'granted') {
+              alert(
+                'נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים',
+              );
+              return;
+            }
+          }
+
+          // Request camera permission (optional, only needed if using camera)
+          const cameraStatus = await ImagePicker.getCameraPermissionsAsync();
+          if (cameraStatus.status !== 'granted') {
+            await ImagePicker.requestCameraPermissionsAsync();
           }
         } catch (error) {
           console.error('Permission request error:', error);
+          alert('שגיאה בבקשת הרשאות: ' + error.message);
         }
       }
     };
@@ -329,25 +341,36 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     } else {
       // Native mobile - use expo-image-picker
       try {
+        // Check permissions before launching picker
+        const {status} = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          const {status: newStatus} =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (newStatus !== 'granted') {
+            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות');
+            return;
+          }
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: 'Images',
           allowsEditing: true,
           quality: 1,
         });
 
-        if (!result.canceled && result.assets[0]) {
+        if (!result.canceled && result.assets && result.assets[0]) {
           const asset = result.assets[0];
           const fileObj = {
             uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.filename || `photo-${Date.now()}.jpg`,
+            type: asset.mimeType || asset.type || 'image/jpeg',
+            name: asset.fileName || asset.filename || `photo-${Date.now()}.jpg`,
             file: asset, // Store for upload
           };
           setMainImage(fileObj);
         }
       } catch (error) {
-        console.log('errrorr', error);
-        alert('שגיאה בבחירת תמונה: ' + error.message);
+        console.error('Error picking image:', error);
+        alert('שגיאה בבחירת תמונה: ' + (error.message || 'נסה שוב'));
       }
     }
   };
@@ -372,18 +395,29 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     } else {
       // Native mobile - use expo-image-picker
       try {
+        // Check permissions before launching picker
+        const {status} = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          const {status: newStatus} =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (newStatus !== 'granted') {
+            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות');
+            return;
+          }
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: 'Images',
           allowsEditing: true,
           quality: 1,
         });
 
-        if (!result.canceled && result.assets[0]) {
+        if (!result.canceled && result.assets && result.assets[0]) {
           const asset = result.assets[0];
           const fileObj = {
             uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.filename || `photo-${Date.now()}.jpg`,
+            type: asset.mimeType || asset.type || 'image/jpeg',
+            name: asset.fileName || asset.filename || `photo-${Date.now()}.jpg`,
             file: asset,
           };
           const newImages = [...additionalImages];
@@ -391,7 +425,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           setAdditionalImages(newImages);
         }
       } catch (error) {
-        alert('שגיאה בבחירת תמונה: ' + error.message);
+        console.error('Error picking image:', error);
+        alert('שגיאה בבחירת תמונה: ' + (error.message || 'נסה שוב'));
       }
     }
   };
@@ -418,27 +453,38 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
     } else {
       // Native mobile - use expo-image-picker for video
       try {
+        // Check permissions before launching picker
+        const {status} = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          const {status: newStatus} =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (newStatus !== 'granted') {
+            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות סרטונים');
+            return;
+          }
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          mediaTypes: 'Videos',
           allowsEditing: true,
           quality: 1,
           // videoMaxDuration: 300, // 5 minutes max
         });
 
-        if (!result.canceled && result.assets[0]) {
+        if (!result.canceled && result.assets && result.assets[0]) {
           const asset = result.assets[0];
           const fileObj = {
             uri: asset.uri,
-            type: asset.type || 'video/mp4',
-            name: asset.filename || `video-${Date.now()}.mp4`,
+            type: asset.mimeType || asset.type || 'video/mp4',
+            name: asset.fileName || asset.filename || `video-${Date.now()}.mp4`,
             file: asset,
           };
           setVideoFile(fileObj);
           setHasVideo(true);
         }
       } catch (error) {
-        console.log('errrorr', error);
-        alert('שגיאה בבחירת סרטון: ' + error.message);
+        console.error('Error picking video:', error);
+        alert('שגיאה בבחירת סרטון: ' + (error.message || 'נסה שוב'));
       }
     }
   };
@@ -527,7 +573,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           try {
             setUploadProgress(prev => ({...prev, mainImage: true}));
             const formData = new FormData();
-            formData.append('file', mainImage.file);
+            // For React Native, use {uri, type, name} format; for web, use File object
+            if (Platform.OS === 'web') {
+              formData.append('file', mainImage.file);
+            } else {
+              formData.append('file', {
+                uri: mainImage.uri,
+                type: mainImage.type || 'image/jpeg',
+                name: mainImage.name || `photo-${Date.now()}.jpg`,
+              });
+            }
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
@@ -608,7 +663,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         try {
           setUploadProgress(prev => ({...prev, mainImage: true}));
           const formData = new FormData();
-          formData.append('file', mainImage.file);
+          // For React Native, use {uri, type, name} format; for web, use File object
+          if (Platform.OS === 'web') {
+            formData.append('file', mainImage.file);
+          } else {
+            formData.append('file', {
+              uri: mainImage.uri,
+              type: mainImage.type || 'image/jpeg',
+              name: mainImage.name || `photo-${Date.now()}.jpg`,
+            });
+          }
           formData.append('folder', 'listings/images');
 
           const response = await fetch(
@@ -643,7 +707,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               [`additional-${i}`]: true,
             }));
             const formData = new FormData();
-            formData.append('file', additionalImages[i].file);
+            // For React Native, use {uri, type, name} format; for web, use File object
+            if (Platform.OS === 'web') {
+              formData.append('file', additionalImages[i].file);
+            } else {
+              formData.append('file', {
+                uri: additionalImages[i].uri,
+                type: additionalImages[i].type || 'image/jpeg',
+                name: additionalImages[i].name || `photo-${Date.now()}.jpg`,
+              });
+            }
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
@@ -674,7 +747,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         try {
           setUploadProgress(prev => ({...prev, video: true}));
           const formData = new FormData();
-          formData.append('file', videoFile.file);
+          // For React Native, use {uri, type, name} format; for web, use File object
+          if (Platform.OS === 'web') {
+            formData.append('file', videoFile.file);
+          } else {
+            formData.append('file', {
+              uri: videoFile.uri,
+              type: videoFile.type || 'video/mp4',
+              name: videoFile.name || `video-${Date.now()}.mp4`,
+            });
+          }
           formData.append('folder', 'listings/videos');
 
           const response = await fetch(

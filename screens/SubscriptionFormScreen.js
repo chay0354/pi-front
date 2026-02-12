@@ -170,7 +170,7 @@ const SubscriptionFormScreen = ({
     try {
       console.log('Launching image picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: 'Images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -220,7 +220,7 @@ const SubscriptionFormScreen = ({
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: 'Images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -269,7 +269,7 @@ const SubscriptionFormScreen = ({
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: 'Images',
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -292,7 +292,7 @@ const SubscriptionFormScreen = ({
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'videos',
+        mediaTypes: 'Videos',
         allowsEditing: Platform.OS !== 'web',
         quality: 0.8,
       });
