@@ -20,7 +20,7 @@ import {Colors} from '../constants/styles';
 import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
-const TEXT_CANVAS_HEIGHT = SCREEN_HEIGHT * 0.9;
+const TEXT_CANVAS_HEIGHT = SCREEN_HEIGHT * 0.72;
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -73,6 +73,7 @@ const PostEditorScreen = ({
   const [publishing, setPublishing] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [overlayText, setOverlayText] = useState('');
@@ -329,7 +330,11 @@ const PostEditorScreen = ({
           onPress={handlePublish}
           disabled={publishing || !canPublish}
           style={[styles.publishBtn, !canPublish && styles.publishBtnDisabled]}>
-          <Text style={styles.publishBtnText}>פרסם</Text>
+          <Image
+            source={require('../assets/camera/postbutton.png')}
+            style={styles.publishBtnImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
 
@@ -510,25 +515,36 @@ const PostEditorScreen = ({
               </View>
               <View style={styles.captureRow}>
                 <TouchableOpacity style={styles.captureLabel}>
-                  <Text style={styles.captureLabelText}>
-                    {isVideoMode ? 'וידאו' : 'תמונה'}
-                  </Text>
+                  <Image
+                    source={require('../assets/camera/changephoto.png')}
+                    style={styles.captureLabelImage}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => pickImageOrVideo(true)}
                   style={styles.shutterBtn}>
-                  <View
-                    style={[
-                      styles.shutterInner,
-                      isVideoMode && styles.shutterInnerVideoMode,
-                    ]}
+                  <Image
+                    source={
+                      isRecording
+                        ? require('../assets/camera/videoruning.png')
+                        : isVideoMode
+                          ? require('../assets/camera/camera.png')
+                          : require('../assets/camera/cameraphoto.png')
+                    }
+                    style={styles.shutterBtnImage}
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.flipBtn}
                   onPress={() => setIsVideoMode(prev => !prev)}
                   activeOpacity={0.6}>
-                  <Text style={styles.flipBtnText}>↻</Text>
+                  <Image
+                    source={require('../assets/camera/switchpic.png')}
+                    style={styles.flipBtnImage}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -539,7 +555,11 @@ const PostEditorScreen = ({
                 style={[styles.sideIcon, flashOn && styles.sideIconActive]}
                 onPress={() => setFlashOn(prev => !prev)}
                 activeOpacity={0.7}>
-                <Text style={styles.sideIconText}>⚡</Text>
+                <Image
+                  source={require('../assets/camera/flash.png')}
+                  style={styles.sideIconImage}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -549,7 +569,11 @@ const PostEditorScreen = ({
               ]}
               onPress={() => setShowFilterModal(true)}
               activeOpacity={0.7}>
-              <Text style={styles.sideIconText}>☰</Text>
+              <Image
+                source={require('../assets/camera/lines.png')}
+                style={styles.sideIconImage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
             {mediaUri && (
               <TouchableOpacity
@@ -565,7 +589,11 @@ const PostEditorScreen = ({
                   }
                 }}
                 activeOpacity={0.7}>
-                <Text style={styles.sideIconText}>Aa</Text>
+                <Image
+                  source={require('../assets/camera/text.png')}
+                  style={styles.sideIconImage}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
             )}
           </View>
@@ -641,16 +669,17 @@ const styles = StyleSheet.create({
   backArrow: {color: '#fff', fontSize: 28, fontWeight: '300'},
   tabs: {flexDirection: 'row', alignItems: 'center', gap: 8},
   tab: {paddingVertical: 6, paddingHorizontal: 12},
-  tabActive: {borderBottomWidth: 2, borderBottomColor: Colors.yellowIcons},
+  tabActive: {},
   tabText: {color: 'rgba(255,255,255,0.6)', fontSize: 16},
   tabTextActive: {color: '#fff', fontWeight: '600'},
   publishBtn: {
-    backgroundColor: Colors.yellowIcons,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    backgroundColor: 'transparent',
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   publishBtnDisabled: {opacity: 0.5},
+  publishBtnImage: {width: 64, height: 42},
   publishBtnText: {color: '#1e1d27', fontWeight: '700', fontSize: 16},
   scroll: {flex: 1},
   scrollContent: {padding: 16, paddingBottom: 40},
@@ -886,10 +915,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   durationBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 48,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF33',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -904,16 +933,14 @@ const styles = StyleSheet.create({
   },
   captureLabel: {padding: 8},
   captureLabelText: {color: 'rgba(255,255,255,0.8)', fontSize: 14},
+  captureLabelImage: {width: 36, height: 36},
   shutterBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'transparent',
   },
+  shutterBtnImage: {width: 80, height: 80},
   shutterInner: {
     width: 56,
     height: 56,
@@ -924,18 +951,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(229,57,53,0.95)',
   },
   flipBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
+  flipBtnImage: {width: 36, height: 36},
   flipBtnText: {color: '#fff', fontSize: 24},
   cameraSideIcons: {
     position: 'absolute',
     right: 12,
-    top: '30%',
+    top: 16,
     flexDirection: 'column',
     gap: 20,
   },
@@ -948,6 +974,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sideIconText: {color: '#fff', fontSize: 18},
+  sideIconImage: {width: 30, height: 30},
   sideIconActive: {
     backgroundColor: Colors.yellowIcons,
   },
