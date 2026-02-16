@@ -20,7 +20,7 @@ import {Colors} from '../constants/styles';
 import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
-const TEXT_CANVAS_HEIGHT = SCREEN_HEIGHT * 0.72;
+const TEXT_CANVAS_HEIGHT = SCREEN_HEIGHT * 0.82;
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -379,8 +379,8 @@ const PostEditorScreen = ({
                 ) : null}
               </LinearGradient>
             </View>
-            <View style={styles.textModeOverlayRows}>
-              <View style={styles.styleRow}>
+            <View style={styles.textModeOverlayRows} pointerEvents="box-none">
+              <View style={styles.styleRow} pointerEvents="box-none">
                 {STYLES.map((label, i) => (
                   <TouchableOpacity
                     key={label}
@@ -412,23 +412,41 @@ const PostEditorScreen = ({
                       textModePosRef.current = {x: 80, y: 80};
                     }
                   }}>
-                  <Text style={styles.formatBtnTextAa}>Aa</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.formatBtnCircle}>
-                  <LinearGradient
-                    colors={['#e65100', '#00bcd4']}
-                    start={{x: 0, y: 0.5}}
-                    end={{x: 1, y: 0.5}}
-                    style={styles.formatBtnGradientInner}
+                  <Image
+                    source={require('../assets/editors/textAa.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.formatBtnLines}>
-                  <View style={styles.formatBtnLine} />
-                  <View style={[styles.formatBtnLine, styles.formatBtnLineShort]} />
-                  <View style={[styles.formatBtnLine, styles.formatBtnLineShortest]} />
+                <TouchableOpacity
+                  style={styles.formatBtnCircle}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/Action icons.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.formatBtnA}>
-                  <Text style={styles.formatBtnTextA}>A</Text>
+                <TouchableOpacity
+                  style={styles.formatBtnLines}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/align.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.formatBtnA}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/text.png')}
+                    style={styles.formatBtnIconSmall}
+                    resizeMode="contain"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
@@ -756,10 +774,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    gap: 14,
-    backgroundColor: '#1a0d2e',
+    gap: 48,
+    backgroundColor: '#2B2A39',
     paddingVertical: 10,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     borderRadius: 24,
   },
   formatBtn: {
@@ -770,8 +788,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   formatBtnAa: {
-    backgroundColor: Colors.yellowIcons,
+    backgroundColor: 'transparent',
   },
+  formatBtnIcon: {width: 50, height: 50},
+  formatBtnIconSmall: {width: 38, height: 38},
   formatBtnTextAa: {
     color: '#1e1d27',
     fontSize: 18,
@@ -780,12 +800,10 @@ const styles = StyleSheet.create({
   formatBtnCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    overflow: 'hidden',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    ...(Platform.OS === 'web' && {outlineStyle: 'none'}),
   },
   formatBtnGradientInner: {
     width: 36,
@@ -798,6 +816,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
+    ...(Platform.OS === 'web' && {outlineStyle: 'none'}),
   },
   formatBtnLine: {
     width: 20,
@@ -811,11 +830,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    ...(Platform.OS === 'web' && {outlineStyle: 'none'}),
   },
   formatBtnTextA: {color: '#fff', fontSize: 18, fontWeight: '700'},
   formatBtnText: {color: Colors.yellowIcons, fontSize: 18},
