@@ -98,6 +98,7 @@ export const Dimensions = {
   height40: 40,
   height48: 48,
   height64: 64,
+  height66: 66,
   height78: 78,
   height104: 104,
   height55_5: 55.5,

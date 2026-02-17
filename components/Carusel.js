@@ -7,25 +7,16 @@ import {
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import {BorderRadius, Padding, Gaps, Colors} from '../constants/styles';
 import {
   brokerCategories,
-  categoryImages,
   companyCategories,
   subscriptionTypes,
   userCategories,
 } from '../utils/constant';
 import {ContextHook} from '../hooks/ContextHook';
 
-/**
- * Carusel Component
- * Horizontal scrollable category carousel with tik images
- * Center item is determined by visual position in viewport
- * Left and right items are tilted, less lit, and positioned higher
- * @param {string} property1 - Property type (default: "דירות")
- * @param {function} onCategorySelect - Callback when a category is clicked
- */
-const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
+const {width: screenWidth} = Dimensions.get('window');
+const Carusel = ({style, onCategorySelect}) => {
   const {currentUser} = useContext(ContextHook);
   const categoriesList =
     currentUser?.subscription_type === subscriptionTypes.user
@@ -35,16 +26,10 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
         : companyCategories;
   const scrollViewRef = useRef(null);
   // Start with item at index 2 centered (משרדים)
-  const [centerIndex, setCenterIndex] = useState(2);
-
-  // Map tik image numbers to require statements
-  const getTikImage = id => {
-    return categoryImages[id] || categoryImages[1];
-  };
+  const [centerIndex, setCenterIndex] = useState(0);
 
   const handleScroll = event => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const screenWidth = Dimensions.get('window').width;
     const viewportCenter = scrollPosition + screenWidth / 2;
 
     // Calculate which item is closest to viewport center
@@ -86,16 +71,7 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
 
   // Calculate initial scroll position to center item at index 2
   useEffect(() => {
-    const screenWidth = Dimensions.get('window').width;
-    const itemWidth = 120;
-    const itemGap = 12;
-    const itemSpacing = itemWidth + itemGap;
-    const paddingLeft = 24;
-
-    // Calculate position to center item at index 2
-    const targetIndex = 2;
-    const itemLeft = paddingLeft + targetIndex * itemSpacing;
-    const itemCenter = itemLeft + itemWidth / 2;
+    const itemCenter = (screenWidth / 0.33) * 2;
     const viewportCenter = screenWidth / 2;
     const initialScrollX = itemCenter - viewportCenter;
 
@@ -111,13 +87,11 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
   }, []);
 
   return (
-    <View style={[styles.carusel, style]}>
+    <View style={[style]}>
       <ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        style={styles.scrollView}
         decelerationRate="fast"
         snapToInterval={132}
         snapToAlignment="start"
@@ -142,7 +116,14 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
               }}
               activeOpacity={0.7}>
               <Image
-                source={getTikImage(item.id)}
+                source={
+                  isCenter
+                    ? item.image
+                    : isLeft
+                      ? item.imageLeft
+                      : item.imageRight
+                }
+                resizeMode="contain"
                 style={[
                   styles.tikImage,
                   isCenter && styles.centerImage,
@@ -150,7 +131,6 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
                   isRight && styles.rightImage,
                   isFaded && styles.fadedImage,
                 ]}
-                resizeMode="cover"
               />
             </TouchableOpacity>
           );
@@ -161,48 +141,29 @@ const Carusel = ({style, property1 = 'דירות', onCategorySelect}) => {
 };
 
 const styles = StyleSheet.create({
-  carusel: {
-    width: '100%',
-    height: 150,
-    maxWidth: 366,
-    alignSelf: 'center',
-    position: 'relative',
-  },
-  scrollView: {
-    width: '100%',
-    height: '100%',
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingRight: 24,
-    gap: 12,
-    alignItems: 'center',
-    paddingVertical: 0,
-  },
   categoryItem: {
-    width: 120,
-    height: 120,
+    width: screenWidth / 3,
+    height: 142,
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
   },
   tikImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
+    width: 104,
+    height: 142,
   },
   centerImage: {
-    opacity: 1,
-    transform: [{rotate: '0deg'}],
+    width: 174,
+    height: 212,
+    marginTop: -15,
   },
   leftImage: {
-    opacity: 0.4,
-    transform: [{rotate: '12deg'}, {translateY: -8}],
+    width: 104,
+    height: 142,
   },
   rightImage: {
-    opacity: 0.4,
-    transform: [{rotate: '-12deg'}, {translateY: -8}],
+    width: 104,
+    height: 142,
   },
   fadedImage: {
     opacity: 0.2,

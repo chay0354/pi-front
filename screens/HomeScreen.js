@@ -10,11 +10,8 @@ import {
 import Menu1 from '../components/Menu1';
 import MenuIcon from '../components/MenuIcon';
 import Carusel from '../components/Carusel';
-import Search from '../components/Search';
-import SectionName from '../components/SectionName';
-import Default from '../components/Default';
 import ProfilePic from '../components/ProfilePic';
-import {Colors, Spacing, Shadows} from '../constants/styles';
+import {Colors, Spacing} from '../constants/styles';
 
 /**
  * HomeScreen Component

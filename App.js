@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AdsForm,
   HomeScreen,
+  Home,
   SettingsScreen,
   SuccessScreen,
   TikTokFeedScreen,
@@ -120,7 +121,7 @@ export default function App() {
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <View style={styles.container}>
         {currentScreen === screenName.home && (
-          <HomeScreen
+          <Home
             onOpenSettings={() => setCurrentScreen(screenName.settings)}
             onOpenTikTokFeed={category => {
               setSelectedCategory(category);

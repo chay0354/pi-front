@@ -17,7 +17,6 @@ import {Colors} from '../constants/styles';
 import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
 import {
   brokerCategoryForm,
-  categoryImages,
   companyCategoryForm,
   subscriptionTypes,
   userCategoryForm,
@@ -496,7 +495,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
           fieldKeys.includes('address-phone-description') ||
           fieldKeys.includes('propertyaddress') ||
           fieldKeys.includes('landaddress');
-        if (needsAddressPhoneDescription && (!address || !phone || !description)) {
+        if (
+          needsAddressPhoneDescription &&
+          (!address || !phone || !description)
+        ) {
           alert('אנא מלא את כל השדות הנדרשים (כתובת, טלפון, תיאור)');
           setUploading(false);
           return;
@@ -795,7 +797,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
       <View style={styles.header}>
         <TouchableOpacity
           onPress={onClose}
-          style={[styles.backButton, Platform.OS === 'web' && {cursor: 'pointer'}]}
+          style={[
+            styles.backButton,
+            Platform.OS === 'web' && {cursor: 'pointer'},
+          ]}
           activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
@@ -1098,7 +1103,11 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         <TouchableOpacity
           onPress={handlePublish}
           disabled={uploading}
-          style={Platform.OS === 'web' && !uploading ? {cursor: 'pointer'} : undefined}
+          style={
+            Platform.OS === 'web' && !uploading
+              ? {cursor: 'pointer'}
+              : undefined
+          }
           activeOpacity={0.7}>
           <LinearGradient
             colors={['#FEE787', '#BD9947', '#9C6522']}
