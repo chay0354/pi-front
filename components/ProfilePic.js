@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, Image, StyleSheet} from 'react-native';
+import {View, Text, Image, StyleSheet, TouchableOpacity} from 'react-native';
 import {
   Colors,
   FontSizes,
@@ -10,7 +10,11 @@ import {
 
 const ProfilePic = ({style, prop, item}) => {
   return (
-    <View style={[styles.profilePicParent, style]}>
+    <TouchableOpacity
+      style={[styles.profilePicParent, style]}
+      onPress={() => {
+        console.log('profile pic pressed');
+      }}>
       <View style={styles.profilePicIconContainer}>
         <Image
           source={item.profilePic}
@@ -19,7 +23,7 @@ const ProfilePic = ({style, prop, item}) => {
         />
       </View>
       {item.name ? <Text style={styles.profileName}>{item.name}</Text> : null}
-    </View>
+    </TouchableOpacity>
   );
 };
 
