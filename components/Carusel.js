@@ -69,6 +69,22 @@ const Carusel = ({style, onCategorySelect}) => {
     return index === centerIndex + 1;
   };
 
+  const scrollToIndex = (index, animated = true) => {
+    if (!scrollViewRef.current) {
+      return;
+    }
+
+    const itemWidth = screenWidth / 3;
+    const itemCenter = index * itemWidth + itemWidth / 2;
+    const viewportCenter = screenWidth / 2;
+    const scrollX = Math.max(0, itemCenter - viewportCenter);
+
+    scrollViewRef.current.scrollTo({
+      x: scrollX,
+      animated,
+    });
+  };
+
   // Calculate initial scroll position to center item at index 2
   useEffect(() => {
     const itemCenter = (screenWidth / 0.33) * 2;
@@ -110,8 +126,15 @@ const Carusel = ({style, onCategorySelect}) => {
               key={item.id}
               style={styles.categoryItem}
               onPress={() => {
-                if (onCategorySelect) {
+                if (
+                  (isCenter ||
+                    index === 0 ||
+                    index === categoriesList.length - 1) &&
+                  onCategorySelect
+                ) {
                   onCategorySelect(item.id);
+                } else {
+                  scrollToIndex(index);
                 }
               }}
               activeOpacity={0.7}>
