@@ -35,7 +35,6 @@ import {
   MultiPicturesUpload,
   Preferences,
   PriceCount,
-  ProfilePictureUpload,
   ProfileVerification,
   PropertyCondition,
   PropertyType,
@@ -222,6 +221,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
+  const [feedDisplayPriority, setFeedDisplayPriority] = useState('video'); // 'video' | 'mainImage' – what to show first on TikTok feed
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
   const {currentUser} = useContext(ContextHook);
   const formList =
@@ -286,7 +286,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [additionalImageUrls, setAdditionalImageUrls] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
-
   // Loading states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
@@ -719,6 +718,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               budget: parseFloat(budget) || 0,
               description: description.trim(),
               mainImageUrl: uploadedMainImageUrl,
+              profileImageUrl: currentUser?.profile_picture_url || null,
               category: listingCategory,
               // Set defaults for required fields that don't apply to category 3
               propertyType: 'office', // Default
@@ -754,6 +754,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               ),
               videoUrl: uploadedVideoUrl,
               hasVideo: !!uploadedVideoUrl,
+              profileImageUrl: currentUser?.profile_picture_url || null,
+              feed_display_priority: feedDisplayPriority,
               category: listingCategory,
               // Land form radio values (when present)
               planApproval: landRadioValues['תב״ע'] || null,
@@ -916,6 +918,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
                       handleVideoChange={handleVideoChange}
                       videoInputRef={videoInputRef}
                       wayToDisplayAd={field.wayToDisplayAd}
+                      feedDisplayPriority={feedDisplayPriority}
+                      setFeedDisplayPriority={setFeedDisplayPriority}
                       addMorePhotos={field.addMorePhotos}
                     />
                   );
@@ -987,7 +991,32 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
                       setDescription={setDescription}
                     />
                   );
-                case 'generaldetails':
+                case 'generaldetails': {
+                  const counterDataWithSetters = (field.counterData || []).map(
+                    (c) => {
+                      const isAreaField = c.title && c.title.includes('שטח');
+                      const isRoomsField =
+                        c.title && c.title.includes('חדרים');
+                      const isFloorField = c.title && c.title.includes('קומה');
+                      return {
+                        ...c,
+                        value: isAreaField
+                          ? area
+                          : isRoomsField
+                            ? rooms
+                            : isFloorField
+                              ? floor
+                              : c.value,
+                        setCount: isAreaField
+                          ? setArea
+                          : isRoomsField
+                            ? setRooms
+                            : isFloorField
+                              ? setFloor
+                              : () => {},
+                      };
+                    },
+                  );
                   return (
                     <GeneralDetails
                       key="generaldetails"
@@ -1006,9 +1035,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
                       isRooms={field.isRooms}
                       isFloor={field.isFloor}
                       amenitiesData={field.data}
-                      counterData={field.counterData}
+                      counterData={counterDataWithSetters}
                     />
                   );
+                }
                 case 'serviceandfacility':
                   return (
                     <ServiceAndFacility

@@ -24,6 +24,8 @@ export const VideoUpload = ({
   videoOptionStyle,
   children,
   wayToDisplayAd,
+  feedDisplayPriority = 'video',
+  setFeedDisplayPriority,
 }) => {
   return (
     <>
@@ -94,8 +96,8 @@ export const VideoUpload = ({
                   {name: 'video', title: 'וידיאו'},
                   {name: 'mainImage', title: 'תמונה ראשית'},
                 ]}
-                // condition={preferredGender}
-                // setCondition={setPreferredGender}
+                condition={feedDisplayPriority}
+                setCondition={setFeedDisplayPriority}
               />
             </View>
           )}

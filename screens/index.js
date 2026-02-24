@@ -11,4 +11,6 @@ export {default as UserRegistrationScreen} from './UserRegistrationScreen';
 export {default as VerificationCodeScreen} from './VerificationCodeScreen';
 export {default as VerificationScreen} from './VerificationScreen';
 export {default as PostEditorScreen} from './PostEditorScreen';
+export {default as CityFilterScreen} from './CityFilterScreen';
+export {default as ApartmentTypeFilterScreen} from './ApartmentTypeFilterScreen';
 export {default as Home} from './Home';

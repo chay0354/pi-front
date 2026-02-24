@@ -14,26 +14,27 @@ export const CountUpdate = ({
   containerStyle,
   deviderStyle,
 }) => {
+  const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
   return (
     <View style={[{marginBottom: isLast ? 0 : 20}, containerStyle]}>
       {title && <Title text={title} required textStyle={{marginBottom: 15}} />}
       <View style={[styles.counterInput, counterInputStyle]}>
         <TouchableOpacity
           style={styles.counterButtonLeft}
-          onPress={() => setCount(Math.max(1, count - 1))}>
-          <Text style={styles.counterButton}>+</Text>
+          onPress={() => safeSetCount(Math.max(1, (count ?? 0) - 1))}>
+          <Text style={styles.counterButtonMinus}>−</Text>
         </TouchableOpacity>
         <View style={styles.counterDivider} />
         <View style={styles.counterValueContainer}>
           <Text style={styles.counterValue}>
-            {count} {isArea ? 'מ"ר' : ''}
+            {count ?? 0} {isArea ? 'מ"ר' : ''}
           </Text>
         </View>
         <View style={styles.counterDivider} />
         <TouchableOpacity
           style={styles.counterButtonRight}
-          onPress={() => setCount(count + 1)}>
-          <Text style={styles.counterButton}>-</Text>
+          onPress={() => safeSetCount((count ?? 0) + 1)}>
+          <Text style={styles.counterButtonPlus}>+</Text>
         </TouchableOpacity>
       </View>
       {isDivider && <Divider style={deviderStyle} />}
@@ -72,6 +73,16 @@ const styles = StyleSheet.create({
   counterButton: {
     color: '#fff',
     fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+  },
+  counterButtonMinus: {
+    color: '#fff',
+    fontSize: 22,
+    fontFamily: 'Rubik-Medium',
+  },
+  counterButtonPlus: {
+    color: '#fff',
+    fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
   counterDivider: {

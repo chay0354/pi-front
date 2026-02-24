@@ -23,10 +23,36 @@ export const MultiImageWithVideo = ({
   handleVideoChange,
   videoInputRef,
   wayToDisplayAd,
+  feedDisplayPriority = 'video',
+  setFeedDisplayPriority,
   addMorePhotos,
+  profilePicture,
+  setProfilePicture,
+  handleProfilePictureUpload,
+  handleProfilePictureChange,
+  profilePictureInputRef,
 }) => {
+  const showProfilePic =
+    setProfilePicture &&
+    handleProfilePictureUpload &&
+    (handleProfilePictureChange || profilePictureInputRef);
+
   return (
     <FormContainer>
+      {showProfilePic && (
+        <>
+          <ProfilePictureUpload
+            mainImage={profilePicture}
+            setMainImage={setProfilePicture}
+            uploadProgress={{mainImage: uploadProgress?.profilePicture}}
+            handleMainImageUpload={handleProfilePictureUpload}
+            handleMainImageChange={handleProfilePictureChange}
+            mainImageInputRef={profilePictureInputRef}
+            title="תמונת פרופיל (יוצג במודעה)"
+          />
+          <Divider style={styles.divider} />
+        </>
+      )}
       <MultiPicturesUpload
         uploadProgress={uploadProgress}
         mainImage={mainImage}
@@ -49,6 +75,8 @@ export const MultiImageWithVideo = ({
         handleVideoChange={handleVideoChange}
         videoInputRef={videoInputRef}
         wayToDisplayAd={wayToDisplayAd}
+        feedDisplayPriority={feedDisplayPriority}
+        setFeedDisplayPriority={setFeedDisplayPriority}
       />
     </FormContainer>
   );

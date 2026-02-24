@@ -10,6 +10,8 @@ import {
   TikTokFeedScreen,
   OfficeListingScreen,
   PostEditorScreen,
+  CityFilterScreen,
+  ApartmentTypeFilterScreen,
   SubscriptionScreen,
   SubscriptionFormScreen,
   VerificationScreen,
@@ -46,6 +48,8 @@ const screenName = {
   successProfessional: 'successProfessional',
   userRegistration: 'userRegistration',
   postEditor: 'postEditor',
+  cityFilter: 'cityFilter',
+  apartmentTypeFilter: 'apartmentTypeFilter',
 };
 
 /**
@@ -148,8 +152,26 @@ export default function App() {
               if (category) setSelectedCategory(category);
               setCurrentScreen(screenName.postEditor);
             }}
+            onOpenCityFilter={() => setCurrentScreen(screenName.cityFilter)}
+            onOpenApartmentTypeFilter={() => setCurrentScreen(screenName.apartmentTypeFilter)}
             uploadedListings={uploadedListings}
             selectedCategory={selectedCategory}
+          />
+        )}
+        {currentScreen === screenName.cityFilter && (
+          <CityFilterScreen
+            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
+            onSave={filter => {
+              setCurrentScreen(screenName.tikTokFeed);
+            }}
+          />
+        )}
+        {currentScreen === screenName.apartmentTypeFilter && (
+          <ApartmentTypeFilterScreen
+            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
+            onSave={filter => {
+              setCurrentScreen(screenName.tikTokFeed);
+            }}
           />
         )}
         {currentScreen === screenName.postEditor && (

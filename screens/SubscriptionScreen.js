@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ImageBackground,
 } from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
@@ -25,12 +26,12 @@ const SubscriptionScreen = ({
   const getProfileQuestion = () => {
     switch (subscriptionType) {
       case subscriptionTypes.company:
-        return 'אמיר, אתה חברה?';
+        return 'אתה חברה?';
       case subscriptionTypes.professional:
         return 'אבישג, אתה בעל מקצוע?';
       case subscriptionTypes.broker:
       default:
-        return 'אמיר, אתה מתווך?';
+        return 'אתה מתווך?';
     }
   };
 
@@ -57,11 +58,7 @@ const SubscriptionScreen = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Image
-              source={require('../assets/back-arrow-icon.png')}
-              style={styles.backArrow}
-              resizeMode="contain"
-            />
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
           <View style={styles.headerSpacer} />

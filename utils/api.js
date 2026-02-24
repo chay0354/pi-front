@@ -271,16 +271,23 @@ export const uploadFile = async (file, folder = 'general') => {
  */
 export const getListings = async (options = {}) => {
   try {
-    const {status = 'published', category} = options;
+    const {status = 'published', category, subscription_type: subscriptionType, has_video: hasVideo} = options;
     const params = new URLSearchParams({status});
     if (category) {
       params.append('category', category);
+    }
+    if (subscriptionType != null && subscriptionType !== '') {
+      const value = Array.isArray(subscriptionType) ? subscriptionType.join(',') : String(subscriptionType);
+      if (value) params.append('subscription_type', value);
+    }
+    if (hasVideo === true) {
+      params.append('has_video', 'true');
     }
 
     const url = `${API_URL}/api/listings?${params.toString()}`;
     console.log('🌐 [api.js] Fetching listings from:', url);
     console.log('🌐 [api.js] API_URL:', API_URL);
-    console.log('🌐 [api.js] Options:', {status, category});
+    console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo});
 
     const response = await fetch(url, {
       method: 'GET',

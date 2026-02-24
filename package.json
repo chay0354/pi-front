@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web --port 8084",
+    "open-web": "start http://localhost:8084"
   },
   "dependencies": {
     "@expo/webpack-config": "^19.0.1",

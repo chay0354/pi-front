@@ -19,7 +19,7 @@ export const PriceCount = ({
         <TouchableOpacity
           style={styles.counterButtonLeft}
           onPress={() => setPrice(Math.max(0, price - 10000))}>
-          <Text style={styles.counterButton}>+</Text>
+          <Text style={styles.counterButtonMinus}>−</Text>
         </TouchableOpacity>
         <View style={styles.counterDivider} />
         <View style={styles.counterValueContainer}>
@@ -31,7 +31,7 @@ export const PriceCount = ({
         <TouchableOpacity
           style={styles.counterButtonRight}
           onPress={() => setPrice(price + 10000)}>
-          <Text style={styles.counterButton}>-</Text>
+          <Text style={styles.counterButtonPlus}>+</Text>
         </TouchableOpacity>
       </View>
       {isPricePerNight && (
@@ -108,6 +108,16 @@ const styles = StyleSheet.create({
   counterButton: {
     color: '#fff',
     fontSize: 24,
+    fontWeight: '600',
+  },
+  counterButtonMinus: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: '600',
+  },
+  counterButtonPlus: {
+    color: '#fff',
+    fontSize: 20,
     fontWeight: '600',
   },
   counterDivider: {

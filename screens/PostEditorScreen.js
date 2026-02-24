@@ -83,6 +83,7 @@ const PostEditorScreen = ({
   const dragStartRef = useRef({x: 80, y: 80});
   const lastTapTimeRef = useRef(0);
   const overlayMovedRef = useRef(false);
+  const editPositionRef = useRef({x: 80, y: 80});
   const [isEditingOverlay, setIsEditingOverlay] = useState(false);
   const [textModeOverlayText, setTextModeOverlayText] = useState('');
   const [textModeOverlayX, setTextModeOverlayX] = useState(80);
@@ -92,6 +93,7 @@ const PostEditorScreen = ({
   const textModeDragStartRef = useRef({x: 80, y: 80});
   const textModeLastTapRef = useRef(0);
   const textModeMovedRef = useRef(false);
+  const textModeEditPositionRef = useRef({x: 80, y: 80});
 
   useEffect(() => {
     overlayPosRef.current = {x: overlayX, y: overlayY};
@@ -109,19 +111,27 @@ const PostEditorScreen = ({
         overlayMovedRef.current = false;
       },
       onPanResponderMove: (_, gestureState) => {
-        if (Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5) {
+        const dx = gestureState.dx;
+        const dy = gestureState.dy;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
           overlayMovedRef.current = true;
         }
-        const x = dragStartRef.current.x + gestureState.dx;
-        const y = dragStartRef.current.y + gestureState.dy;
-        overlayPosRef.current = {x, y};
-        setOverlayX(x);
-        setOverlayY(y);
+        if (overlayMovedRef.current) {
+          const x = dragStartRef.current.x + dx;
+          const y = dragStartRef.current.y + dy;
+          overlayPosRef.current = {x, y};
+          setOverlayX(x);
+          setOverlayY(y);
+        }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (!overlayMovedRef.current && Math.abs(gestureState.dx) < 10 && Math.abs(gestureState.dy) < 10) {
+        if (!overlayMovedRef.current && Math.abs(gestureState.dx) < 12 && Math.abs(gestureState.dy) < 12) {
           const now = Date.now();
           if (now - lastTapTimeRef.current < 450) {
+            editPositionRef.current = {
+              x: overlayPosRef.current.x,
+              y: overlayPosRef.current.y,
+            };
             setIsEditingOverlay(true);
             lastTapTimeRef.current = 0;
             return;
@@ -148,19 +158,27 @@ const PostEditorScreen = ({
         textModeMovedRef.current = false;
       },
       onPanResponderMove: (_, gestureState) => {
-        if (Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5) {
+        const dx = gestureState.dx;
+        const dy = gestureState.dy;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
           textModeMovedRef.current = true;
         }
-        const x = textModeDragStartRef.current.x + gestureState.dx;
-        const y = textModeDragStartRef.current.y + gestureState.dy;
-        textModePosRef.current = {x, y};
-        setTextModeOverlayX(x);
-        setTextModeOverlayY(y);
+        if (textModeMovedRef.current) {
+          const x = textModeDragStartRef.current.x + dx;
+          const y = textModeDragStartRef.current.y + dy;
+          textModePosRef.current = {x, y};
+          setTextModeOverlayX(x);
+          setTextModeOverlayY(y);
+        }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (!textModeMovedRef.current && Math.abs(gestureState.dx) < 10 && Math.abs(gestureState.dy) < 10) {
+        if (!textModeMovedRef.current && Math.abs(gestureState.dx) < 12 && Math.abs(gestureState.dy) < 12) {
           const now = Date.now();
           if (now - textModeLastTapRef.current < 450) {
+            textModeEditPositionRef.current = {
+              x: textModePosRef.current.x,
+              y: textModePosRef.current.y,
+            };
             setIsEditingTextModeOverlay(true);
             textModeLastTapRef.current = 0;
             return;
@@ -260,8 +278,11 @@ const PostEditorScreen = ({
       }
 
       const description =
-        (activeTab === TAB_TEXT ? textModeOverlayText : textContent.trim()) ||
-        (mediaUri ? 'פוסט עם מדיה' : '');
+        activeTab === TAB_TEXT
+          ? (textModeOverlayText || '').trim()
+          : (overlayText || textContent?.trim?.() || '').trim();
+      const overlayXPos = activeTab === TAB_TEXT ? textModeOverlayX : overlayX;
+      const overlayYPos = activeTab === TAB_TEXT ? textModeOverlayY : overlayY;
       const listingData = {
         status: 'published',
         subscriptionType: currentUser?.subscription_type || null,
@@ -280,6 +301,10 @@ const PostEditorScreen = ({
         price: null,
         address: null,
         phone: null,
+        ...((description && (overlayText || textModeOverlayText)) && {
+          overlay_x: overlayXPos,
+          overlay_y: overlayYPos,
+        }),
       };
 
       await createListing(listingData);
@@ -292,8 +317,20 @@ const PostEditorScreen = ({
     }
   };
 
+  const isEditingOverlayAny =
+    activeTab === TAB_TEXT ? isEditingTextModeOverlay : isEditingOverlay;
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        isEditingOverlayAny && {
+          width: SCREEN_WIDTH,
+          minWidth: SCREEN_WIDTH,
+          maxWidth: SCREEN_WIDTH,
+          overflow: 'hidden',
+        },
+      ]}>
       {/* Top bar */}
       <View style={styles.topBar}>
         <TouchableOpacity
@@ -339,6 +376,122 @@ const PostEditorScreen = ({
       </View>
 
       {activeTab === TAB_TEXT ? (
+        isEditingTextModeOverlay ? (
+          <View style={styles.flex1}>
+            <View style={styles.textModeContainer}>
+            <View style={[styles.textModeCanvasWrap, {height: TEXT_CANVAS_HEIGHT}]}>
+              <LinearGradient
+                colors={TEXT_MODE_BACKGROUNDS[selectedStyleIndex] || TEXT_MODE_BACKGROUNDS[0]}
+                style={styles.textModeCanvas}>
+                {textModeOverlayText ? (
+                  <View
+                    style={[
+                      styles.overlayTextDraggable,
+                      {
+                        left: isEditingTextModeOverlay
+                          ? textModeEditPositionRef.current.x
+                          : textModeOverlayX,
+                        top: isEditingTextModeOverlay
+                          ? textModeEditPositionRef.current.y
+                          : textModeOverlayY,
+                      },
+                    ]}
+                    {...(!isEditingTextModeOverlay
+                      ? textModePanResponder.panHandlers
+                      : {})}>
+                    {isEditingTextModeOverlay ? (
+                      <TextInput
+                        style={styles.overlayTextInputInline}
+                        value={textModeOverlayText}
+                        onChangeText={setTextModeOverlayText}
+                        onBlur={() => setIsEditingTextModeOverlay(false)}
+                        placeholder="טקסט"
+                        placeholderTextColor="rgba(255,255,255,0.6)"
+                        autoFocus
+                        selectTextOnFocus
+                        maxLength={100}
+                      />
+                    ) : (
+                      <Text style={styles.overlayText}>{textModeOverlayText}</Text>
+                    )}
+                  </View>
+                ) : null}
+              </LinearGradient>
+            </View>
+            <View style={styles.textModeOverlayRows} pointerEvents="box-none">
+              <View style={styles.styleRow} pointerEvents="box-none">
+                {STYLES.map((label, i) => (
+                  <TouchableOpacity
+                    key={label}
+                    onPress={() => setSelectedStyleIndex(i)}
+                    style={[
+                      styles.styleBtn,
+                      selectedStyleIndex === i && styles.styleBtnActive,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.styleBtnText,
+                        selectedStyleIndex === i && styles.styleBtnTextActive,
+                      ]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.formatRow}>
+                <TouchableOpacity
+                  style={[styles.formatBtn, styles.formatBtnAa]}
+                  onPress={() => {
+                    if (textModeOverlayText) {
+                      setTextModeOverlayText('');
+                    } else {
+                      setTextModeOverlayText('text');
+                      setTextModeOverlayX(80);
+                      setTextModeOverlayY(80);
+                      textModePosRef.current = {x: 80, y: 80};
+                    }
+                  }}>
+                  <Image
+                    source={require('../assets/editors/textAa.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.formatBtnCircle}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/Action icons.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.formatBtnLines}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/align.png')}
+                    style={styles.formatBtnIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.formatBtnA}
+                  onPress={() => {}}
+                  activeOpacity={0.7}>
+                  <Image
+                    source={require('../assets/editors/text.png')}
+                    style={styles.formatBtnIconSmall}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+        ) : (
         <KeyboardAvoidingView
           style={styles.flex1}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -353,8 +506,12 @@ const PostEditorScreen = ({
                     style={[
                       styles.overlayTextDraggable,
                       {
-                        left: textModeOverlayX,
-                        top: textModeOverlayY,
+                        left: isEditingTextModeOverlay
+                          ? textModeEditPositionRef.current.x
+                          : textModeOverlayX,
+                        top: isEditingTextModeOverlay
+                          ? textModeEditPositionRef.current.y
+                          : textModeOverlayY,
                       },
                     ]}
                     {...(!isEditingTextModeOverlay
@@ -452,22 +609,29 @@ const PostEditorScreen = ({
             </View>
           </View>
         </KeyboardAvoidingView>
+        )
       ) : (
-        <View style={styles.cameraContainer}>
+        <View
+          style={[
+            styles.cameraContainer,
+            isEditingOverlay && {width: '100%', minWidth: SCREEN_WIDTH},
+          ]}>
           {mediaUri ? (
             <View style={styles.mediaPreview}>
               {mediaType === 'image' ? (
-                <Image
-                  source={{uri: mediaUri}}
-                  style={[
-                    styles.mediaImage,
-                    Platform.OS === 'web' &&
-                      FILTER_STYLES_WEB[selectedFilter] && {
-                        filter: FILTER_STYLES_WEB[selectedFilter],
-                      },
-                  ]}
-                  resizeMode="cover"
-                />
+                <View style={styles.mediaImageWrap}>
+                  <Image
+                    source={{uri: mediaUri}}
+                    style={[
+                      styles.mediaImage,
+                      Platform.OS === 'web' &&
+                        FILTER_STYLES_WEB[selectedFilter] && {
+                          filter: FILTER_STYLES_WEB[selectedFilter],
+                        },
+                    ]}
+                    resizeMode="cover"
+                  />
+                </View>
               ) : (
                 <View style={styles.videoPlaceholder}>
                   <Text style={styles.videoPlaceholderText}>וידאו נבחר</Text>
@@ -477,9 +641,13 @@ const PostEditorScreen = ({
                 <View
                   style={[
                     styles.overlayTextDraggable,
-                    {left: overlayX, top: overlayY},
+                    {
+                      left: isEditingOverlay ? editPositionRef.current.x : overlayX,
+                      top: isEditingOverlay ? editPositionRef.current.y : overlayY,
+                    },
                   ]}
-                  {...(!isEditingOverlay ? overlayPanResponder.panHandlers : {})}>
+                  {...(!isEditingOverlay ? overlayPanResponder.panHandlers : {})}
+                  pointerEvents="box-none">
                   {isEditingOverlay ? (
                     <TextInput
                       style={styles.overlayTextInputInline}
@@ -862,6 +1030,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  mediaImageWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+    elevation: 0,
+  },
   mediaImage: {width: '100%', height: '100%', borderRadius: 16},
   videoPlaceholder: {
     flex: 1,
@@ -887,8 +1064,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     padding: 12,
     minWidth: 48,
-    zIndex: 20,
-    elevation: 20,
+    alignSelf: 'flex-start',
+    zIndex: 50,
+    elevation: 50,
     ...(Platform.OS === 'web' && {cursor: 'grab'}),
   },
   overlayText: {
@@ -905,6 +1083,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     padding: 0,
+    margin: 0,
     minWidth: 60,
     backgroundColor: 'transparent',
     textShadowColor: 'rgba(0,0,0,0.9)',

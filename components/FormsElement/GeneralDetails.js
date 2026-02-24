@@ -35,7 +35,7 @@ export const GeneralDetails = ({
         return (
           <CountUpdate
             title={counter.title}
-            count={counter.value}
+            count={counter.value ?? counter.count ?? 0}
             setCount={counter.setCount}
             isLast={counter.isLast}
             isArea={counter.isArea}
