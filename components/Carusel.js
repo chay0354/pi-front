@@ -4,8 +4,8 @@ import {
   ScrollView,
   Image,
   StyleSheet,
-  Dimensions,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import {
   brokerCategories,
@@ -15,8 +15,8 @@ import {
 } from '../utils/constant';
 import {ContextHook} from '../hooks/ContextHook';
 
-const {width: screenWidth} = Dimensions.get('window');
 const Carusel = ({style, onCategorySelect}) => {
+  const {width: screenWidth} = useWindowDimensions();
   const {currentUser} = useContext(ContextHook);
   const categoriesList =
     currentUser?.subscription_type === subscriptionTypes.user
@@ -25,27 +25,56 @@ const Carusel = ({style, onCategorySelect}) => {
         ? brokerCategories
         : companyCategories;
   const scrollViewRef = useRef(null);
-  // Start with item at index 2 centered (משרדים)
-  const [centerIndex, setCenterIndex] = useState(0);
+  const hasInitialScrollDone = useRef(false);
+  const scrollEndTimeoutRef = useRef(null);
+  const lastScrollPositionRef = useRef(0);
+  const initialCenterIndex = Math.min(2, Math.max(0, categoriesList.length - 1));
+  const [centerIndex, setCenterIndex] = useState(initialCenterIndex);
+
+  // Single source of truth: item width matches categoryItem style (screenWidth / 3)
+  const itemWidth = screenWidth > 0 ? screenWidth / 3 : 120;
+
+  const runSnapToCenter = scrollPosition => {
+    if (screenWidth <= 0) return;
+    const viewportCenter = scrollPosition + screenWidth / 2;
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    categoriesList.forEach((_, index) => {
+      const itemCenter = (index + 0.5) * itemWidth;
+      const distance = Math.abs(viewportCenter - itemCenter);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setCenterIndex(closestIndex);
+    const snapScrollX = Math.max(0, (closestIndex - 1) * itemWidth);
+    if (scrollViewRef.current && Math.abs(scrollPosition - snapScrollX) > 1) {
+      scrollViewRef.current.scrollTo({
+        x: snapScrollX,
+        animated: true,
+      });
+    }
+  };
 
   const handleScroll = event => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
+    lastScrollPositionRef.current = scrollPosition;
     const viewportCenter = scrollPosition + screenWidth / 2;
 
-    // Calculate which item is closest to viewport center
-    // Each item is 120px wide with 12px gap = 132px total spacing
-    const itemWidth = 120;
-    const itemGap = 12;
-    const itemSpacing = itemWidth + itemGap;
-    const paddingLeft = 24;
+    // Detect scroll end by timeout after last scroll (works on web, Android, iOS)
+    if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current);
+    scrollEndTimeoutRef.current = setTimeout(() => {
+      scrollEndTimeoutRef.current = null;
+      runSnapToCenter(lastScrollPositionRef.current);
+    }, 120);
 
-    // Find the index of the item closest to viewport center
+    // Use same itemWidth as layout so center detection matches visible items
     let closestIndex = 0;
     let minDistance = Infinity;
 
     categoriesList.forEach((_, index) => {
-      const itemLeft = paddingLeft + index * itemSpacing;
-      const itemCenter = itemLeft + itemWidth / 2;
+      const itemCenter = (index + 0.5) * itemWidth;
       const distance = Math.abs(viewportCenter - itemCenter);
 
       if (distance < minDistance) {
@@ -54,7 +83,28 @@ const Carusel = ({style, onCategorySelect}) => {
       }
     });
 
-    setCenterIndex(closestIndex);
+    setCenterIndex(prev => {
+      if (closestIndex === prev) return prev;
+      // Hysteresis: only switch when viewport has clearly crossed the boundary
+      const boundaryRight = (prev + 1) * itemWidth;
+      const boundaryLeft = prev * itemWidth;
+      if (closestIndex > prev && viewportCenter >= boundaryRight) return closestIndex;
+      if (closestIndex < prev && viewportCenter <= boundaryLeft) return closestIndex;
+      return prev;
+    });
+  };
+
+  const handleScrollEndDrag = () => {
+    // Don't snap here on iOS/Android — momentum may still be running. Snap in onMomentumScrollEnd or timeout.
+  };
+
+  const handleMomentumScrollEnd = event => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    if (scrollEndTimeoutRef.current) {
+      clearTimeout(scrollEndTimeoutRef.current);
+      scrollEndTimeoutRef.current = null;
+    }
+    runSnapToCenter(scrollPosition);
   };
 
   const isCenterItem = index => {
@@ -70,14 +120,11 @@ const Carusel = ({style, onCategorySelect}) => {
   };
 
   const scrollToIndex = (index, animated = true) => {
-    if (!scrollViewRef.current) {
+    if (!scrollViewRef.current || screenWidth <= 0) {
       return;
     }
 
-    const itemWidth = screenWidth / 3;
-    const itemCenter = index * itemWidth + itemWidth / 2;
-    const viewportCenter = screenWidth / 2;
-    const scrollX = Math.max(0, itemCenter - viewportCenter);
+    const scrollX = Math.max(0, (index - 1) * itemWidth);
 
     scrollViewRef.current.scrollTo({
       x: scrollX,
@@ -85,22 +132,36 @@ const Carusel = ({style, onCategorySelect}) => {
     });
   };
 
-  // Calculate initial scroll position to center item at index 2
+  // Initial scroll once per mount: center the intended item when we have valid dimensions.
   useEffect(() => {
-    const itemCenter = (screenWidth / 0.33) * 2;
-    const viewportCenter = screenWidth / 2;
-    const initialScrollX = itemCenter - viewportCenter;
+    if (screenWidth <= 0 || hasInitialScrollDone.current) {
+      return;
+    }
 
-    // Scroll to initial position after a short delay to ensure layout is complete
-    setTimeout(() => {
-      if (scrollViewRef.current) {
+    const initialScrollX = Math.max(0, (initialCenterIndex - 1) * itemWidth);
+
+    const runAfterLayout = () => {
+      if (scrollViewRef.current && !hasInitialScrollDone.current) {
         scrollViewRef.current.scrollTo({
           x: initialScrollX,
           animated: false,
         });
+        hasInitialScrollDone.current = true;
       }
-    }, 100);
+    };
+
+    // Delay so ScrollView has been laid out (web, Android, iOS)
+    const t = setTimeout(runAfterLayout, 150);
+    return () => clearTimeout(t);
+  }, [screenWidth, itemWidth, initialCenterIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current);
+    };
   }, []);
+
+  const snapInterval = Math.round(itemWidth);
 
   return (
     <View style={[style]}>
@@ -109,11 +170,13 @@ const Carusel = ({style, onCategorySelect}) => {
         horizontal
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
-        snapToInterval={132}
+        snapToInterval={snapInterval}
         snapToAlignment="start"
         bounces={false}
         pagingEnabled={false}
         onScroll={handleScroll}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        onScrollEndDrag={handleScrollEndDrag}
         scrollEventThrottle={16}>
         {categoriesList.map((item, index) => {
           const isCenter = isCenterItem(index);
@@ -124,7 +187,7 @@ const Carusel = ({style, onCategorySelect}) => {
           return (
             <TouchableOpacity
               key={item.id}
-              style={styles.categoryItem}
+              style={[styles.categoryItem, {width: itemWidth}]}
               onPress={() => {
                 if (
                   (isCenter ||
@@ -165,7 +228,6 @@ const Carusel = ({style, onCategorySelect}) => {
 
 const styles = StyleSheet.create({
   categoryItem: {
-    width: screenWidth / 3,
     height: 142,
     display: 'flex',
     alignItems: 'center',
