@@ -12,21 +12,25 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 const BG = '#1a1926';
 const BORDER = 'rgba(255,255,255,0.2)';
 
-const APARTMENT_TYPES = [
-  {id: 'apartment', label: 'דירה'},
-  {id: 'studio', label: 'דירת סטודיו'},
-  {id: 'garden', label: 'דירת גן'},
-  {id: 'private_house', label: 'בית פרטי'},
-  {id: 'duplex', label: 'דופלקס'},
-  {id: 'penthouse', label: 'נטהאוז'},
+// סוג (Type) options for global category – matches design: דירות, פנטהאוזים, etc.
+const TYPE_OPTIONS = [
+  {id: 'apartments', label: 'דירות'},
+  {id: 'penthouses', label: 'נטהאוזים'},
+  {id: 'private_houses', label: 'בתים פרטיים'},
+  {id: 'villas', label: 'וילות'},
+  {id: 'estates', label: 'אחוזות'},
+  {id: 'multi_family', label: 'Multi-family'},
+  {id: 'offices', label: 'משרדים'},
+  {id: 'commercial', label: 'מסחר'},
+  {id: 'land', label: 'קרקעות'},
 ];
 
-const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
+const TypeFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [selectedId, setSelectedId] = useState(initialFilter ?? null);
 
   const handleSave = () => {
     if (onSave && selectedId) {
-      onSave({apartmentType: selectedId});
+      onSave({type: selectedId});
     }
     if (onClose) onClose();
   };
@@ -37,22 +41,21 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-        <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={12}>
+        <MaterialCommunityIcons name="chevron-right" size={28} color="#fff" />
       </TouchableOpacity>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* Header: title only (no icon) */}
+        <View style={styles.handleBar} />
         <View style={styles.header}>
-          <Text style={styles.title}>סוג דירה</Text>
+          <Text style={styles.title}>סוג</Text>
         </View>
 
-        {/* Radio list */}
         <View style={styles.radioList}>
-          {APARTMENT_TYPES.map((option) => (
+          {TYPE_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option.id}
               style={styles.radioRow}
@@ -67,7 +70,6 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
             </TouchableOpacity>
           ))}
         </View>
-
       </ScrollView>
 
       <View style={styles.footer}>
@@ -87,42 +89,27 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  backBtn: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 80,
-    paddingBottom: 24,
-  },
+  container: { flex: 1, backgroundColor: BG },
+  backBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 40,
     backgroundColor: BG,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 24,
+  handleBar: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 2,
+    marginBottom: 16,
   },
-  title: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Medium',
-  },
-  radioList: {
-    marginBottom: 32,
-  },
+  header: { alignItems: 'center', marginBottom: 24 },
+  title: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium' },
+  radioList: { marginBottom: 32 },
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -148,32 +135,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioOuterSelected: {
-    borderColor: '#fff',
-  },
+  radioOuterSelected: { borderColor: '#fff' },
   radioInner: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#fff',
   },
-  saveBtnWrap: {
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnImage: {
-    width: '100%',
-    height: 54,
-  },
-  clearWrap: {
-    alignItems: 'center',
-  },
-  clearText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 16,
-    textDecorationLine: 'underline',
-  },
+  saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
+  saveBtnImage: { width: '100%', height: 54 },
+  clearWrap: { alignItems: 'center' },
+  clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
 });
 
-export default ApartmentTypeFilterScreen;
+export default TypeFilterScreen;

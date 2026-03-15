@@ -19,12 +19,12 @@ const GOLD_END = '#B8960C';
 
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 
-const CityFilterScreen = ({onClose, onSave}) => {
-  const [purpose, setPurpose] = useState('rent'); // 'rent' | 'sale'
-  const [city, setCity] = useState('');
-  const [street, setStreet] = useState('');
-  const [distanceKm, setDistanceKm] = useState(20);
-  const [immediateEntry, setImmediateEntry] = useState(false);
+const CityFilterScreen = ({initialFilter, onClose, onSave}) => {
+  const [purpose, setPurpose] = useState(initialFilter?.purpose ?? 'rent'); // 'rent' | 'sale'
+  const [city, setCity] = useState(initialFilter?.city ?? '');
+  const [street, setStreet] = useState(initialFilter?.street ?? '');
+  const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
+  const [immediateEntry, setImmediateEntry] = useState(initialFilter?.immediateEntry ?? false);
 
   const handleSave = () => {
     if (onSave) {
@@ -43,8 +43,8 @@ const CityFilterScreen = ({onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={12}>
-        <MaterialCommunityIcons name="chevron-right" size={28} color="#fff" />
+      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+        <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
       </TouchableOpacity>
 
       <ScrollView
@@ -139,8 +139,9 @@ const CityFilterScreen = ({onClose, onSave}) => {
             ) : null}
           </View>
         </TouchableOpacity>
+      </ScrollView>
 
-        {/* Save button */}
+      <View style={styles.footer}>
         <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
           <Image
             source={require('../assets/buy-rent/save.png')}
@@ -148,12 +149,10 @@ const CityFilterScreen = ({onClose, onSave}) => {
             resizeMode="contain"
           />
         </TouchableOpacity>
-
-        {/* Clear */}
         <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
           <Text style={styles.clearText}>נקה</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </View>
   );
 };
@@ -175,7 +174,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 80,
+    paddingBottom: 24,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
     paddingBottom: 40,
+    backgroundColor: BG,
   },
   header: {
     alignItems: 'center',
@@ -279,7 +284,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   saveBtnWrap: {
-    marginBottom: 16,
+    marginBottom: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

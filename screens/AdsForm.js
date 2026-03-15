@@ -207,7 +207,7 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
  * AdsForm Component
  * Form for creating an office listing
  */
-const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
+const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = null}) => {
   const [propertyType, setPropertyType] = useState(null);
   const [cancellationPolicy, setCancellationPolicy] = useState(null);
   const [area, setArea] = useState(1);
@@ -223,6 +223,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const [hasVideo, setHasVideo] = useState(false);
   const [feedDisplayPriority, setFeedDisplayPriority] = useState('video'); // 'video' | 'mainImage' – what to show first on TikTok feed
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
+  const [exposureLevel, setExposureLevel] = useState('medium'); // 'low' | 'medium' | 'high' – how often ad is shown to others
   const {currentUser} = useContext(ContextHook);
   const formList =
     currentUser?.subscription_type === subscriptionTypes?.user
@@ -253,6 +254,48 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
       }
     }
   }, [initialCategory]);
+
+  // Pre-fill form when editing an existing listing
+  useEffect(() => {
+    if (!initialListing) return;
+    const cat = initialListing.category != null ? parseInt(initialListing.category) : null;
+    if (cat >= 1 && cat <= 11) setCategory(cat);
+    setDescription(initialListing.description ?? '');
+    setPrice(initialListing.price ?? 1000000);
+    setBudget(initialListing.budget ?? 1000);
+    const imgs = initialListing.images ?? (initialListing.image ? [{uri: initialListing.image}] : []);
+    if (imgs.length > 0) {
+      const first = imgs[0];
+      const uri = typeof first === 'string' ? first : first?.uri;
+      if (uri) {
+        setMainImage({uri});
+        setMainImageUrl(uri);
+      }
+      if (imgs.length > 1) {
+        const rest = imgs.slice(1).map(i => (typeof i === 'string' ? {uri: i} : {uri: i?.uri}));
+        setAdditionalImages(rest.filter(i => i?.uri));
+        setAdditionalImageUrls(rest.map(i => i?.uri).filter(Boolean));
+      }
+    }
+    if (initialListing.general_details && typeof initialListing.general_details === 'object') {
+      const gd = initialListing.general_details;
+      setGeneralDetailsCounts(prev => ({
+        ...prev,
+        building_count: gd.building_count != null ? Number(gd.building_count) : prev.building_count,
+        floor_count: gd.floor_count != null ? Number(gd.floor_count) : prev.floor_count,
+        apartment_count: gd.apartment_count != null ? Number(gd.apartment_count) : prev.apartment_count,
+      }));
+    }
+    if (initialListing.project_offers && typeof initialListing.project_offers === 'object') {
+      setProjectOffers(prev => ({ ...prev, ...initialListing.project_offers }));
+    }
+    if (initialListing.construction_status != null) {
+      setConsructionStatus(initialListing.construction_status);
+    }
+    if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
+      setExposureLevel(String(initialListing.exposure_level).toLowerCase());
+    }
+  }, [initialListing?.id]);
 
   // Request camera and media library permissions on mount
   useEffect(() => {
@@ -297,8 +340,71 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
   const videoInputRef = useRef(null);
   // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
+  // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
+  const [generalDetailsCounts, setGeneralDetailsCounts] = useState({
+    building_count: 0,
+    floor_count: 0,
+    apartment_count: 0,
+  });
+  // הפרויקט מציע: דירות 3/4/5 חדרים, דירות גן, פנטהאוזים, בתים פרטיים (area, rooms, price per type)
+  const [projectOffers, setProjectOffers] = useState({
+    rooms_3_area: 0,
+    rooms_3_price: 0,
+    rooms_4_area: 0,
+    rooms_4_price: 0,
+    rooms_5_area: 0,
+    rooms_5_price: 0,
+    garden_area: 0,
+    garden_rooms: 0,
+    garden_price: 0,
+    penthouse_area: 0,
+    penthouse_rooms: 0,
+    penthouse_price: 0,
+    private_area: 0,
+    private_rooms: 0,
+    private_price: 0,
+  });
+  // Catch-all for company (and any) form keys not in generalDetailsCounts/projectOffers (e.g. office_1_area, whole_floor_1_price)
+  const [otherFormValues, setOtherFormValues] = useState({});
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
+
+  // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
+  const hydrateGeneralDetailsWithRadio = (groups) => {
+    if (!groups || !groups.groups) return groups;
+    const getValue = (key) => {
+      if (key in generalDetailsCounts) return Number(generalDetailsCounts[key]) || 0;
+      if (key in projectOffers) return Number(projectOffers[key]) || 0;
+      if (key in otherFormValues) return Number(otherFormValues[key]) || 0;
+      return 0;
+    };
+    const setValue = (key, val) => {
+      const numVal = key.endsWith('_price') ? Number(val) || 0 : Math.max(0, Number(val) || 0);
+      if (key in generalDetailsCounts) {
+        setGeneralDetailsCounts(prev => ({ ...prev, [key]: numVal }));
+      } else if (key in projectOffers) {
+        setProjectOffers(prev => ({ ...prev, [key]: numVal }));
+      } else {
+        setOtherFormValues(prev => ({ ...prev, [key]: numVal }));
+      }
+    };
+    return {
+      ...groups,
+      groups: groups.groups.map(grp => ({
+        ...grp,
+        fields: (grp.fields || []).map(f => {
+          if ((f.type === 'count' || f.type === 'price') && f.key) {
+            return {
+              ...f,
+              value: getValue(f.key),
+              onChange: (val) => setValue(f.key, val),
+            };
+          }
+          return f;
+        }),
+      })),
+    };
+  };
 
   const toggleAmenity = amenity => {
     if (amenities[amenity]) {
@@ -516,14 +622,24 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         }
       }
 
-      // Upload files to Supabase storage
+      // Upload files to Supabase storage (or reuse existing URLs when editing)
       let uploadedMainImageUrl = null;
       const uploadedAdditionalImageUrls = [];
       let uploadedVideoUrl = null;
+      if (initialListing && mainImage?.uri && !mainImage?.file) {
+        uploadedMainImageUrl = mainImage.uri || mainImageUrl;
+      }
+      for (let i = 0; i < (additionalImages?.length || 0); i++) {
+        if (additionalImages[i]?.uri && !additionalImages[i]?.file) {
+          uploadedAdditionalImageUrls[i] = additionalImages[i].uri;
+        }
+      }
 
-      // For category 3, upload user's image if provided, otherwise use fixed image
+      // For category 3, upload user's image if provided, otherwise use fixed image (or keep existing when editing)
       if (category === 3) {
-        if (mainImage && mainImage.file) {
+        if (uploadedMainImageUrl) {
+          // Already have URL from initialListing (edit mode)
+        } else if (mainImage && mainImage.file) {
           // User uploaded their own image - upload it
           try {
             setUploadProgress(prev => ({...prev, mainImage: true}));
@@ -604,8 +720,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
         }
       }
 
-      // Upload main image (skip for category 3)
-      if (category !== 3 && mainImage && mainImage.file) {
+      // Upload main image (skip for category 3; skip if already have URL from edit)
+      if (category !== 3 && !uploadedMainImageUrl && mainImage && mainImage.file) {
         try {
           setUploadProgress(prev => ({...prev, mainImage: true}));
           const formData = new FormData();
@@ -756,6 +872,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               hasVideo: !!uploadedVideoUrl,
               profileImageUrl: currentUser?.profile_picture_url || null,
               feed_display_priority: feedDisplayPriority,
+              exposure_level: exposureLevel,
               category: listingCategory,
               // Land form radio values (when present)
               planApproval: landRadioValues['תב״ע'] || null,
@@ -763,6 +880,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               permit: landRadioValues['היתר'] || null,
               agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
               landOwnership: landRadioValues['בעלות קרקע'] || null,
+              generalDetails:
+                Object.keys(generalDetailsCounts).length > 0
+                  ? { ...generalDetailsCounts }
+                  : undefined,
+              projectOffers: (() => {
+                const merged = { ...projectOffers, ...otherFormValues };
+                const hasAny = Object.values(merged).some(v => v !== 0 && v !== undefined && v !== '');
+                return hasAny ? merged : undefined;
+              })(),
+              constructionStatus: consructionStatus || undefined,
             };
 
       // Create listing in database
@@ -1106,7 +1233,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
-                      groups={field.groups}
+                      groups={hydrateGeneralDetailsWithRadio(field.groups)}
                     />
                   );
                 case 'consructionstatus':
@@ -1128,6 +1255,32 @@ const AdsForm = ({onClose, onPublish, initialCategory = null}) => {
               }
             })}
         </>
+
+        {/* Exposure level: how often this ad is shown to other users */}
+        <FormContainer title="חשיפה בפייד">
+          <View style={styles.exposureRow}>
+            {[
+              { value: 'low', label: 'נמוכה' },
+              { value: 'medium', label: 'בינונית' },
+              { value: 'high', label: 'גבוהה' },
+            ].map(({ value, label }) => (
+              <TouchableOpacity
+                key={value}
+                onPress={() => setExposureLevel(value)}
+                style={[styles.exposureOption, exposureLevel === value && styles.exposureOptionActive]}
+                activeOpacity={0.7}>
+                <Text style={[styles.exposureOptionText, exposureLevel === value && styles.exposureOptionTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.exposureHint}>
+            {exposureLevel === 'low' && 'המודעה תופיע פחות למשתמשים אחרים'}
+            {exposureLevel === 'medium' && 'חשיפה רגילה'}
+            {exposureLevel === 'high' && 'המודעה תופיע יותר למשתמשים אחרים'}
+          </Text>
+        </FormContainer>
 
         {/* Publish Button */}
         <TouchableOpacity
@@ -1207,6 +1360,37 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 25,
+  },
+  exposureRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  exposureOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  exposureOptionActive: {
+    backgroundColor: Colors.yellowIcons || '#D4AF37',
+  },
+  exposureOptionText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  exposureOptionTextActive: {
+    color: '#1a1a2e',
+  },
+  exposureHint: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
   publishButton: {
     borderRadius: 25,

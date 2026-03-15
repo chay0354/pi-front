@@ -16,8 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors} from '../constants/styles';
-import {getListings} from '../utils/api';
-import {categoryImages} from '../utils/constant';
+import {getListings, recordListingView, likeListing, unlikeListing} from '../utils/api';
+import {categoryImages, subscriptionTypes} from '../utils/constant';
 
 // Sidebar filter buttons: each filters ads by type (maps to API subscription_type / has_video)
 // Top bar center filters - icons from assets/top-filters
@@ -28,12 +28,12 @@ const TOP_BAR_FILTERS = [
   {id: 'liked', icon: require('../assets/top-filters/liked.png')},
 ];
 
-// Bottom bar: 5 icons with labels (assets from buttom-bar)
+// Bottom bar: 5 icons with labels (assets from buttom-bar). On global category, apartment item shows "סוג" + menu icon.
 const BOTTOM_BAR_ITEMS = [
   {id: 'price', label: 'מחיר', icon: require('../assets/buttom-bar/price.png'), isPost: false},
-  {id: 'rooms', label: 'חדרים', icon: require('../assets/buttom-bar/rooms_number.png'), isPost: false},
+  {id: 'rooms', label: 'חדרים', icon: require('../assets/buttom-bar/rooms_number.png'), iconCommerce: require('../assets/meter.png'), labelCommerce: 'מטר', iconLand: require('../assets/type-icon-global.png'), labelLand: 'סוג', iconPartners: require('../assets/haadafot.png'), labelPartners: 'העדפות', isPost: false},
   {id: 'post', label: 'פרסם', icon: require('../assets/buttom-bar/post.png'), isPost: true},
-  {id: 'apartment', label: 'סוג דירה', icon: require('../assets/buttom-bar/appartment_type.png'), isPost: false},
+  {id: 'apartment', label: 'סוג דירה', icon: require('../assets/buttom-bar/appartment_type.png'), iconGlobal: require('../assets/type-icon-global.png'), labelGlobal: 'סוג', iconLandDonam: require('../assets/donam.png'), labelLandDonam: 'דונם', isPost: false},
   {id: 'city', label: 'עיר', icon: require('../assets/buttom-bar/city.png'), isPost: false},
 ];
 
@@ -291,17 +291,28 @@ const ImageSwiper = ({
 const TikTokFeedScreen = ({
   onClose,
   onOpenOfficeListing,
+  onOpenEditPublishAdWithCategory,
   onOpenPostEditor,
   onOpenCityFilter,
   onOpenApartmentTypeFilter,
+  onOpenTypeFilter,
+  onOpenRoomsFilter,
+  onOpenMeterFilter,
+  onOpenDonamFilter,
+  onOpenPreferencesFilter,
+  onOpenPriceFilter,
+  onOpenUserProfile,
   uploadedListings = [],
   selectedCategory = null,
+  feedFilters = {},
+  currentUser = null,
 }) => {
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [dbListings, setDbListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
+  const [listingsError, setListingsError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh when this changes
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Start sidebar fully scrolled down (all filters hidden) for intro animation
@@ -311,6 +322,7 @@ const TikTokFeedScreen = ({
   const [selectedSidebarFilter, setSelectedSidebarFilter] = useState(null); // id from SIDEBAR_FILTERS or null = all
   const [selectedTopBarFilter, setSelectedTopBarFilter] = useState(null); // 'pics' | 'video' | 'liked' | null; list does nothing
   const [likedListingIds, setLikedListingIds] = useState(new Set()); // persisted to AsyncStorage
+  const lastViewedListingIdRef = useRef(null); // avoid recording same view twice
   const [dimensions, setDimensions] = useState({
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
@@ -361,6 +373,7 @@ const TikTokFeedScreen = ({
   // Auto-scroll sidebar intro once when TikTok feed opens: (1) start fully down, (2) scroll up to show all, (3) scroll down to hide bottom 2
   const sidebarIntroDone = useRef(false);
   const SIDEBAR_DRAG_HIDE_BOTTOM_2 = 150; // part 3: scroll further down (~4 items hidden)
+  const useNativeDriver = Platform.OS !== 'web'; // web does not support native driver
   useEffect(() => {
     if (selectedTopBarFilter === 'list' || sidebarIntroDone.current) return;
     sidebarIntroDone.current = true;
@@ -373,20 +386,20 @@ const TikTokFeedScreen = ({
         Animated.timing(sidebarDragY, {
           toValue: 0,
           duration: scrollDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
         Animated.delay(waitBetweenParts), // wait 1s after part 2 (all visible)
         Animated.timing(sidebarDragY, {
           toValue: SIDEBAR_DRAG_HIDE_BOTTOM_2,
           duration: scrollDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]).start(() => {
         sidebarDragOffset.current = SIDEBAR_DRAG_HIDE_BOTTOM_2;
       });
     }, startDelay);
     return () => clearTimeout(timer);
-  }, [selectedTopBarFilter, sidebarDragY]);
+  }, [selectedTopBarFilter, sidebarDragY, useNativeDriver]);
 
   // Fetch listings from database (all users can see all published listings)
   // Filter by selectedCategory and selectedSidebarFilter if provided
@@ -407,11 +420,17 @@ const TikTokFeedScreen = ({
           category: categoryToFetch,
           ...(subscriptionType != null && {subscription_type: subscriptionType}),
           ...(hasVideo && {has_video: true}),
+          ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         });
 
+        if (result.offline) {
+          setListingsError(result.message || 'Could not load listings. Check your connection.');
+        } else {
+          setListingsError(null);
+        }
         console.log('✅ [TikTokFeedScreen] getListings returned:', result);
 
-        console.log('✅ Fetched listings result:', result);
+          console.log('✅ Fetched listings result:', result);
         console.log('📊 Result structure:', {
           success: result.success,
           listingsCount: result.listings?.length || 0,
@@ -523,6 +542,8 @@ const TikTokFeedScreen = ({
                 isTextOnlyPost: !!isTextOnly,
                 displayOption: listing.display_option || 'slideshow', // 'collage' or 'slideshow'
                 location: listing.address || 'תל אביב',
+                address: listing.address || '', // for city/location filter
+                rawPrice: parseFloat(listing.price || listing.budget || 0) || 0,
                 price: `₪${parseFloat(listing.price || listing.budget || 0).toLocaleString()}`,
                 purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
                 description: listing.description || '',
@@ -532,6 +553,7 @@ const TikTokFeedScreen = ({
                     : listing.property_type === 'post'
                       ? 'post'
                       : 'קומה שלמה',
+                apartmentTypeId: listing.property_type || listing.apartment_type || listing.preferred_apartment_type || null,
                 area: listing.area,
                 rooms: listing.rooms,
                 floor: listing.floor,
@@ -555,9 +577,14 @@ const TikTokFeedScreen = ({
                 budget: listing.budget,
                 isUploaded: true,
                 fromDatabase: true,
-                profileImageUrl: listing.profile_image_url || null,
+                profileImageUrl: listing.profile_image_url || listing.creator_profile_image_url || null,
+                creator_name: listing.creator_name || null,
+                creator_email: listing.creator_email || null,
                 overlayX: listing.overlay_x != null ? Number(listing.overlay_x) : 80,
                 overlayY: listing.overlay_y != null ? Number(listing.overlay_y) : 80,
+                view_count: listing.view_count != null ? Number(listing.view_count) : 0,
+                like_count: listing.like_count != null ? Number(listing.like_count) : 0,
+                liked: listing.liked === true,
               };
             });
 
@@ -592,6 +619,12 @@ const TikTokFeedScreen = ({
             })),
           );
           setDbListings(filteredListings);
+          // Sync server liked state into local set (so heart and "liked" filter stay correct)
+          setLikedListingIds(prev => {
+            const next = new Set(prev);
+            filteredListings.forEach(l => { if (l.liked) next.add(l.id); });
+            return next;
+          });
         } else {
           console.log(
             'No listings found or result was not successful. Result:',
@@ -603,22 +636,44 @@ const TikTokFeedScreen = ({
         console.error('❌ Error fetching listings from database:', error);
         console.error('Error details:', error.message, error.stack);
         setDbListings([]);
+        setListingsError(error?.message || 'Failed to fetch listings');
       } finally {
         setLoadingListings(false);
       }
     };
 
     fetchListings();
-  }, [selectedCategory, selectedSidebarFilter, selectedTopBarFilter, refreshKey]);
+  }, [selectedCategory, selectedSidebarFilter, selectedTopBarFilter, refreshKey, currentUser?.id]);
 
   // Map tik image numbers to require statements
   const getTikImage = num => {
     return categoryImages[num] || categoryImages[1];
   };
 
-  // Toggle like for current listing and persist to AsyncStorage
+  const formatCount = (n) => {
+    const num = Number(n) || 0;
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(num);
+  };
+
+  // Toggle like: update server when logged in, always update local state and AsyncStorage
   const toggleLiked = async (listingId) => {
     if (listingId == null) return;
+    const isCurrentlyLiked = likedListingIds.has(listingId);
+    const willBeLiked = !isCurrentlyLiked;
+    const userId = currentUser?.id != null ? String(currentUser.id) : null;
+
+    if (userId) {
+      try {
+        if (willBeLiked) await likeListing(listingId, userId);
+        else await unlikeListing(listingId, userId);
+      } catch (e) {
+        console.warn('Like/unlike API failed:', e.message);
+        return;
+      }
+    }
+
     setLikedListingIds(prev => {
       const next = new Set(prev);
       if (next.has(listingId)) next.delete(listingId);
@@ -626,16 +681,79 @@ const TikTokFeedScreen = ({
       AsyncStorage.setItem('tikTokFeedLikedIds', JSON.stringify([...next])).catch(() => {});
       return next;
     });
+    // Optimistically update like_count in dbListings so UI updates immediately
+    setDbListings(prev =>
+      prev.map(l =>
+        l.id === listingId
+          ? { ...l, like_count: Math.max(0, (l.like_count || 0) + (willBeLiked ? 1 : -1)) }
+          : l
+      )
+    );
   };
 
   // Use database listings as primary source (they persist after refresh)
   // When a category is selected, show ONLY database listings (no mock data)
   // Top bar "liked" filter applied at display time so liking/unliking updates without refetch
-  const uploadedVideos = [
-    ...(selectedTopBarFilter === 'liked'
-      ? dbListings.filter(l => likedListingIds.has(l.id))
-      : dbListings),
-  ];
+  // Apply feed filters (price, rooms, city, apartment type) when set
+  const applyFeedFilters = (list) => {
+    let out = list;
+    if (feedFilters.price != null) {
+      const {minPrice = 0, maxPrice = 10000000} = feedFilters.price;
+      out = out.filter(l => (l.rawPrice != null && l.rawPrice >= minPrice && l.rawPrice <= maxPrice));
+    }
+    if (feedFilters.rooms != null) {
+      const {rooms, area, floor} = feedFilters.rooms;
+      out = out.filter(l => {
+        if (rooms != null && (l.rooms == null || Number(l.rooms) < rooms)) return false;
+        if (area != null && (l.area == null || Number(l.area) < area)) return false;
+        if (floor != null && (l.floor == null || Number(l.floor) < floor)) return false;
+        return true;
+      });
+    }
+    if (feedFilters.city != null && feedFilters.city.city) {
+      const cityStr = String(feedFilters.city.city || '').trim().toLowerCase();
+      if (cityStr) {
+        out = out.filter(l => (l.address || l.location || '').toLowerCase().includes(cityStr));
+      }
+    }
+    if (feedFilters.apartmentType != null && feedFilters.apartmentType !== '') {
+      const apt = feedFilters.apartmentType;
+      const matchId = apt === 'apartment' ? 'regular' : apt; // UI 'apartment' = API 'regular'
+      out = out.filter(l => (l.apartmentTypeId || '') === matchId || (l.apartmentTypeId || '') === apt);
+    }
+    if (feedFilters.meter != null) {
+      const minMeter = Number(feedFilters.meter);
+      out = out.filter(l => l.area != null && Number(l.area) >= minMeter);
+    }
+    if (feedFilters.donam != null && (feedFilters.donam.minDonam != null || feedFilters.donam.maxDonam != null)) {
+      const minDonam = Number(feedFilters.donam.minDonam ?? 0);
+      const maxDonam = Number(feedFilters.donam.maxDonam ?? 999999);
+      const minSqm = minDonam * 1000; // 1 dunam = 1000 m²
+      const maxSqm = maxDonam * 1000;
+      out = out.filter(l => l.area != null && Number(l.area) >= minSqm && Number(l.area) <= maxSqm);
+    }
+    if (feedFilters.preferences != null && feedFilters.preferences !== '') {
+      const pref = feedFilters.preferences;
+      if (typeof pref === 'object') {
+        if (pref.gender === 'female') out = out.filter(l => l.preferredGender === 'אישה');
+        else if (pref.gender === 'male') out = out.filter(l => l.preferredGender === 'גבר');
+        if (pref.ageMin != null || pref.ageMax != null) {
+          const minAge = Number(pref.ageMin ?? 0);
+          const maxAge = Number(pref.ageMax ?? 999);
+          out = out.filter(l => l.age != null && Number(l.age) >= minAge && Number(l.age) <= maxAge);
+        }
+        // nonSmoker, students, stableJob, occasionalJob, immediateEntry: apply when listing exposes these
+      } else {
+        if (pref === 'gender_female') out = out.filter(l => l.preferredGender === 'אישה');
+        else if (pref === 'gender_male') out = out.filter(l => l.preferredGender === 'גבר');
+      }
+    }
+    return out;
+  };
+  const baseList = selectedTopBarFilter === 'liked'
+    ? dbListings.filter(l => likedListingIds.has(l.id))
+    : dbListings;
+  const uploadedVideos = applyFeedFilters(baseList);
 
   // Mock video data - only used when NO category is selected (for general browsing)
   // When a category is opened, show ONLY database content
@@ -778,6 +896,15 @@ const TikTokFeedScreen = ({
     );
   }
 
+  // Record a view when user lands on a DB listing (once per listing per session)
+  useEffect(() => {
+    const item = videos[currentIndex];
+    if (item?.fromDatabase && item?.id && item.id !== lastViewedListingIdRef.current) {
+      lastViewedListingIdRef.current = item.id;
+      recordListingView(item.id);
+    }
+  }, [currentIndex, videos]);
+
   // Define scroll handlers and panResponder before any early return (hooks must run every render)
   const scrollToIndex = index => {
     if (index >= 0 && index < videos.length && scrollViewRef.current) {
@@ -904,27 +1031,67 @@ const TikTokFeedScreen = ({
             styles.container,
             {justifyContent: 'center', alignItems: 'center'},
           ]}>
-          <Text
-            style={{
-              color: '#fff',
-              fontSize: 18,
-              textAlign: 'center',
-              padding: 20,
-            }}>
-            אין רשימות זמינות בקטגוריה זו
-          </Text>
-          <TouchableOpacity
-            onPress={() => onOpenOfficeListing(selectedCategory)}
-            style={{
-              marginTop: 20,
-              padding: 15,
-              backgroundColor: Colors.yellowIcons,
-              borderRadius: 8,
-            }}>
-            <Text style={{color: '#000', fontWeight: 'bold'}}>
-              פרסם רשימה חדשה
-            </Text>
-          </TouchableOpacity>
+          {listingsError ? (
+            <>
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: 18,
+                  textAlign: 'center',
+                  padding: 20,
+                }}>
+                שגיאה בטעינת הרשימות
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setListingsError(null);
+                  setRefreshKey(k => k + 1);
+                }}
+                style={{
+                  marginTop: 20,
+                  padding: 15,
+                  backgroundColor: Colors.yellowIcons,
+                  borderRadius: 8,
+                }}>
+                <Text style={{color: '#000', fontWeight: 'bold'}}>
+                  נסה שוב
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: 18,
+                  textAlign: 'center',
+                  padding: 20,
+                }}>
+                אין רשימות זמינות בקטגוריה זו
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  const isCompanyOrBroker =
+                    currentUser?.subscription_type === subscriptionTypes.company ||
+                    currentUser?.subscription_type === subscriptionTypes.broker;
+                  if (isCompanyOrBroker && onOpenEditPublishAdWithCategory) {
+                    onOpenEditPublishAdWithCategory(selectedCategory);
+                  } else if (onOpenOfficeListing) {
+                    onOpenOfficeListing(selectedCategory);
+                  }
+                }}
+                style={{
+                  marginTop: 20,
+                  padding: 15,
+                  backgroundColor: Colors.yellowIcons,
+                  borderRadius: 8,
+                }}>
+                <Text style={{color: '#000', fontWeight: 'bold'}}>
+                  פרסם רשימה חדשה
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </>
     );
@@ -1072,8 +1239,11 @@ const TikTokFeedScreen = ({
               styles.sidebarDragContent,
               { transform: [{ translateY: sidebarDragY }] },
             ]}>
-            {/* Profile pic of current ad uploader */}
-            <View style={styles.sidebarProfileWrap}>
+            {/* Profile pic of current ad uploader – tap opens UserProfileScreen */}
+            <TouchableOpacity
+              style={styles.sidebarProfileWrap}
+              onPress={() => onOpenUserProfile?.(videos[currentIndex] ?? null)}
+              activeOpacity={0.8}>
               {videos[currentIndex]?.profileImageUrl ? (
                 <Image
                   source={{uri: videos[currentIndex].profileImageUrl}}
@@ -1085,7 +1255,7 @@ const TikTokFeedScreen = ({
                   <MaterialCommunityIcons name="account" size={28} color="#fff" />
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
             {SIDEBAR_FILTERS.map((filter) => {
               const isSelected = selectedSidebarFilter === filter.id;
               return (
@@ -1289,6 +1459,7 @@ const TikTokFeedScreen = ({
                   styles.actionIcon,
                   likedListingIds.has(videos[currentIndex]?.id) && styles.actionIconLiked,
                 ]}
+                tintColor={likedListingIds.has(videos[currentIndex]?.id) ? '#ff3b5c' : undefined}
                 resizeMode="contain"
               />
             </TouchableOpacity>
@@ -1336,35 +1507,76 @@ const TikTokFeedScreen = ({
                 />
               </View>
             ))}
+          {videos[currentIndex]?.fromDatabase && (
+            <View style={styles.viewsLikesRow}>
+              <Text style={styles.viewsLikesText}>
+                {formatCount(videos[currentIndex]?.view_count ?? 0)} צפיות
+              </Text>
+              <Text style={styles.viewsLikesDot}> • </Text>
+              <Text style={styles.viewsLikesText}>
+                {formatCount(videos[currentIndex]?.like_count ?? 0)} לייקים
+              </Text>
+            </View>
+          )}
         </View>
       </View>
       </>
       )}
 
-      {/* Bottom Bar - 5 icons: מחיר, חדרים, פרסם, סוג דירה, עיר */}
+      {/* Bottom Bar - 5 icons: on global category, apartment item shows "סוג" + menu icon */}
       {!showBottomSheet && (
         <View style={styles.bottomBar}>
           <View style={styles.bottomBarRow}>
-            {BOTTOM_BAR_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.bottomBarItem, item.isPost && styles.bottomBarItemPost]}
-                onPress={() => {
-                  if (item.isPost) setShowBottomSheet(true);
-                  if (item.id === 'city' && onOpenCityFilter) onOpenCityFilter();
-                  if (item.id === 'apartment' && onOpenApartmentTypeFilter) onOpenApartmentTypeFilter();
-                }}
-                activeOpacity={0.8}>
-                <View style={[styles.bottomBarIconWrap, item.isPost && styles.bottomBarIconWrapPost]}>
-                  <Image
-                    source={item.icon}
-                    style={[styles.bottomBarIcon, item.isPost && styles.bottomBarIconPost]}
-                    resizeMode="contain"
-                  />
-                </View>
-                <Text style={[styles.bottomBarLabel, item.isPost && styles.bottomBarLabelPost]}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
+            {BOTTOM_BAR_ITEMS.map((item) => {
+              // גלובל (4), BNB (5), and מסחר (8): show "סוג" + type icon and open Type filter; קרקעות (7): apartment slot shows "דונם"
+              const isGlobal = selectedCategory == null || selectedCategory === '' || selectedCategory === 4 || selectedCategory === '4' || selectedCategory === 5 || selectedCategory === '5' || selectedCategory === 8 || selectedCategory === '8';
+              const isLand = selectedCategory === 7 || selectedCategory === '7';
+              const useGlobalStyle = item.id === 'apartment' && isGlobal && item.iconGlobal;
+              const useLandDonamStyle = item.id === 'apartment' && isLand && item.iconLandDonam;
+              // מסחר (8): rooms slot shows "מטר"; קרקעות (7): rooms slot shows "סוג"; שותפים (3): rooms slot shows "העדפות"
+              const isCommerce = selectedCategory === 8 || selectedCategory === '8';
+              const isPartners = selectedCategory === 3 || selectedCategory === '3';
+              const useCommerceStyle = item.id === 'rooms' && isCommerce && item.iconCommerce;
+              const useLandStyle = item.id === 'rooms' && isLand && item.iconLand;
+              const usePartnersStyle = item.id === 'rooms' && isPartners && item.iconPartners;
+              const iconSource = usePartnersStyle ? item.iconPartners : (useLandDonamStyle ? item.iconLandDonam : (useLandStyle ? item.iconLand : (useCommerceStyle ? item.iconCommerce : (useGlobalStyle ? item.iconGlobal : item.icon))));
+              const label = usePartnersStyle ? (item.labelPartners || item.label) : (useLandDonamStyle ? (item.labelLandDonam || item.label) : (useLandStyle ? (item.labelLand || item.label) : (useCommerceStyle ? (item.labelCommerce || item.label) : (useGlobalStyle ? (item.labelGlobal || item.label) : item.label))));
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.bottomBarItem, item.isPost && styles.bottomBarItemPost]}
+                  onPress={() => {
+                    if (item.isPost) setShowBottomSheet(true);
+                    if (item.id === 'city' && onOpenCityFilter) onOpenCityFilter();
+                    if (item.id === 'apartment') {
+                      if (useLandDonamStyle && onOpenDonamFilter) onOpenDonamFilter();
+                      else if (useGlobalStyle && onOpenTypeFilter) onOpenTypeFilter();
+                      else if (onOpenApartmentTypeFilter) onOpenApartmentTypeFilter();
+                    }
+                    if (item.id === 'rooms') {
+                      if (usePartnersStyle && onOpenPreferencesFilter) onOpenPreferencesFilter();
+                      else if (useLandStyle && onOpenTypeFilter) onOpenTypeFilter();
+                      else if (useCommerceStyle && onOpenMeterFilter) onOpenMeterFilter();
+                      else if (onOpenRoomsFilter) onOpenRoomsFilter();
+                    }
+                    if (item.id === 'price' && onOpenPriceFilter) onOpenPriceFilter();
+                  }}
+                  activeOpacity={0.8}>
+                  <View style={[styles.bottomBarIconWrap, item.isPost && styles.bottomBarIconWrapPost]}>
+                    <Image
+                      source={iconSource}
+                      style={[
+                        styles.bottomBarIcon,
+                        item.isPost && styles.bottomBarIconPost,
+                        (useGlobalStyle || useLandStyle || useLandDonamStyle || usePartnersStyle) && styles.bottomBarIconGlobal,
+                      ]}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <Text style={[styles.bottomBarLabel, item.isPost && styles.bottomBarLabelPost]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       )}
@@ -1381,8 +1593,16 @@ const TikTokFeedScreen = ({
             style={styles.bottomSheetOption}
             onPress={() => {
               setShowBottomSheet(false);
-              if (onOpenOfficeListing) {
-                onOpenOfficeListing(selectedCategory); // Pass the selected category
+              const isCompanyOrBroker =
+                currentUser?.subscription_type === subscriptionTypes.company ||
+                currentUser?.subscription_type === subscriptionTypes.broker;
+              // Company/broker always go to ערוך/פרסם מודעה (Edit/Publish), never to יצירת מודעה (Create)
+              if (isCompanyOrBroker) {
+                if (onOpenEditPublishAdWithCategory) {
+                  onOpenEditPublishAdWithCategory(selectedCategory);
+                }
+              } else if (onOpenOfficeListing) {
+                onOpenOfficeListing(selectedCategory);
               }
             }}>
             <Text style={styles.bottomSheetArrow}>‹</Text>
@@ -1912,6 +2132,10 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
   },
+  bottomBarIconGlobal: {
+    width: 28,
+    height: 28,
+  },
   bottomBarIconPost: {
     width: 40,
     height: 40,
@@ -2044,9 +2268,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
-  actionIconLiked: {
-    tintColor: '#ff3b5c',
-  },
+  actionIconLiked: {},
   forRentButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     paddingHorizontal: 12,
@@ -2086,6 +2308,22 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
+  },
+  viewsLikesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  viewsLikesText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 2,
+  },
+  viewsLikesDot: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
   },
   bottomSheet: {
     position: 'absolute',

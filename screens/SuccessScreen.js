@@ -54,14 +54,15 @@ const SuccessScreen = ({
           />
         </View>
 
-        {/* User Profile Section */}
+        {/* User Profile Section - show the profile pic the user uploaded at registration */}
         <View style={styles.profileSection}>
           <View style={styles.profilePictureContainer}>
-            {subscription?.profile_picture_url ? (
+            {(subscription?.profile_picture_url || subscription?.profilePictureUrl) ? (
               <Image
-                source={{uri: subscription.profile_picture_url}}
+                source={{ uri: subscription.profile_picture_url || subscription.profilePictureUrl }}
                 style={styles.profilePicture}
                 resizeMode="cover"
+                key={subscription.profile_picture_url || subscription.profilePictureUrl}
               />
             ) : (
               <Image
@@ -79,8 +80,9 @@ const SuccessScreen = ({
             </View>
           </View>
           <Text style={styles.userName}>
-            {subscription?.name ||
-              subscription?.agent_name ||
+            {subscription?.business_name ||
+              subscription?.broker_office_name ||
+              subscription?.name ||
               subscription?.contact_person_name ||
               'משתמש'}
           </Text>

@@ -2,11 +2,12 @@ import {StyleSheet, Text, View, TouchableOpacity} from 'react-native';
 import {Colors} from '../../constants/styles';
 
 export const CardPriceField = ({price = 0, setPrice}) => {
+  const safeSetPrice = typeof setPrice === 'function' ? setPrice : () => {};
   return (
     <View style={styles.priceInput}>
       <TouchableOpacity
         style={styles.counterButtonLeft}
-        onPress={() => setPrice(Math.max(0, (price || 0) - 10000))}>
+        onPress={() => safeSetPrice(Math.max(0, (price || 0) - 10000))}>
         <Text style={styles.counterButtonMinus}>−</Text>
       </TouchableOpacity>
       <View style={styles.counterDivider} />
@@ -18,7 +19,7 @@ export const CardPriceField = ({price = 0, setPrice}) => {
       <View style={styles.counterDivider} />
       <TouchableOpacity
         style={styles.counterButtonRight}
-        onPress={() => setPrice((price || 0) + 10000)}>
+        onPress={() => safeSetPrice((price || 0) + 10000)}>
         <Text style={styles.counterButtonPlus}>+</Text>
       </TouchableOpacity>
     </View>

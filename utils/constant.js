@@ -808,6 +808,7 @@ export const brokerCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'building_count',
                   isArea: false,
                   value: 0,
                   subTitle: '',
@@ -822,6 +823,7 @@ export const brokerCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'floor_count',
                   isArea: false,
                   value: 0,
                   subTitle: '',
@@ -836,6 +838,7 @@ export const brokerCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'apartment_count',
                   isArea: false,
                   value: 0,
                   subTitle: '',
@@ -857,19 +860,8 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_3_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_3_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -877,19 +869,8 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_4_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_4_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -897,19 +878,8 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_5_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_5_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -917,26 +887,9 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'garden_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'garden_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'garden_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -944,26 +897,9 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'penthouse_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'penthouse_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'penthouse_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -971,26 +907,9 @@ export const brokerCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'private_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'private_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'private_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
           ],
@@ -1498,13 +1417,7 @@ export const companyCategoryForm = {
               titleRequired: true,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: '',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'building_count', isArea: false, value: 0, subTitle: '', subTitleRequired: false },
               ],
             },
             {
@@ -1512,13 +1425,7 @@ export const companyCategoryForm = {
               titleRequired: true,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: '',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'floor_count', isArea: false, value: 0, subTitle: '', subTitleRequired: false },
               ],
             },
             {
@@ -1541,19 +1448,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל המשרד',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'office_1_area', isArea: true, value: 0, subTitle: 'גודל המשרד', subTitleRequired: true },
+                { type: 'price', key: 'office_1_price', value: 0, subTitle: 'מחיר למטר', subTitleRequired: true },
               ],
             },
             {
@@ -1561,20 +1457,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל המשרד',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'office_2_area', isArea: true, value: 0, subTitle: 'גודל המשרד', subTitleRequired: true },
+                { type: 'price', key: 'office_2_price', value: 0, subTitle: 'מחיר למטר', subTitleRequired: true },
               ],
             },
             {
@@ -1597,19 +1481,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל הקומה',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'whole_floor_1_area', isArea: true, value: 0, subTitle: 'גודל הקומה', subTitleRequired: true },
+                { type: 'price', key: 'whole_floor_1_price', value: 0, subTitle: 'מחיר למטר', subTitleRequired: true },
               ],
             },
             {
@@ -1617,20 +1490,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל הקומה',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'whole_floor_2_area', isArea: true, value: 0, subTitle: 'גודל הקומה', subTitleRequired: true },
+                { type: 'price', key: 'whole_floor_2_price', value: 0, subTitle: 'מחיר למטר', subTitleRequired: true },
               ],
             },
             {
@@ -1670,42 +1531,9 @@ export const companyCategoryForm = {
           title: 'פרטים כלליים',
           titleRequired: false,
           groups: [
-            {
-              title: 'כמות מבנים',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'מספר קומות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'כמות דירות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
+            { title: 'כמות מבנים', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'building_count', isArea: false, value: 0 }] },
+            { title: 'מספר קומות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'floor_count', isArea: false, value: 0 }] },
+            { title: 'כמות דירות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'apartment_count', isArea: false, value: 0 }] },
           ],
         },
       },
@@ -1720,19 +1548,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_3_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_3_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -1740,19 +1557,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_4_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_4_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -1760,19 +1566,7 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_5_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true }, { type: 'price', key: 'rooms_5_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -1780,26 +1574,9 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'penthouse_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'penthouse_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'penthouse_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -1903,42 +1680,9 @@ export const companyCategoryForm = {
           title: 'פרטים כלליים',
           titleRequired: false,
           groups: [
-            {
-              title: 'כמות מבנים',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'מספר קומות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'כמות דירות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
+            { title: 'כמות מבנים', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'building_count', isArea: false, value: 0 }] },
+            { title: 'מספר קומות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'floor_count', isArea: false, value: 0 }] },
+            { title: 'כמות דירות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'apartment_count', isArea: false, value: 0 }] },
           ],
         },
       },
@@ -1953,38 +1697,11 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מעלית שבת',
-                  titleRequired: false,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל מרפסת',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'rooms_3_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_3_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
+                { type: 'radiowithtext', value: 0, title: 'כולל מעלית שבת', titleRequired: false },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'count', key: 'rooms_3_balcony_area', isArea: true, value: 0, subTitle: 'גודל מרפסת', subTitleRequired: false },
               ],
             },
             {
@@ -1992,38 +1709,11 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מעלית שבת',
-                  titleRequired: false,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל מרפסת',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'rooms_4_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_4_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
+                { type: 'radiowithtext', value: 0, title: 'כולל מעלית שבת', titleRequired: false },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'count', key: 'rooms_4_balcony_area', isArea: true, value: 0, subTitle: 'גודל מרפסת', subTitleRequired: false },
               ],
             },
             {
@@ -2031,38 +1721,11 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מעלית שבת',
-                  titleRequired: false,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל מרפסת',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'rooms_5_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_5_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
+                { type: 'radiowithtext', value: 0, title: 'כולל מעלית שבת', titleRequired: false },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'count', key: 'rooms_5_balcony_area', isArea: true, value: 0, subTitle: 'גודל מרפסת', subTitleRequired: false },
               ],
             },
             {
@@ -2070,45 +1733,12 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל מרפסת',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'garden_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'garden_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'garden_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'count', key: 'garden_balcony_area', isArea: true, value: 0, subTitle: 'גודל מרפסת', subTitleRequired: false },
               ],
             },
             {
@@ -2116,45 +1746,12 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'radiowithtext',
-                  value: 0,
-                  title: 'כולל מרפסת לסוכה',
-                  titleRequired: false,
-                },
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל מרפסת',
-                  subTitleRequired: false,
-                },
+                { type: 'count', key: 'penthouse_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'penthouse_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'penthouse_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'radiowithtext', value: 0, title: 'כולל מרפסת לסוכה', titleRequired: false },
+                { type: 'count', key: 'penthouse_balcony_area', isArea: true, value: 0, subTitle: 'גודל מרפסת', subTitleRequired: false },
               ],
             },
             {
@@ -2162,26 +1759,9 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'private_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'private_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'private_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
           ],
@@ -2519,19 +2099,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_3_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_3_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2539,20 +2108,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_4_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_4_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2560,20 +2117,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_5_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_5_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2637,27 +2182,9 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'private_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'private_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'private_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
           ],
@@ -2691,42 +2218,9 @@ export const companyCategoryForm = {
           title: 'פרטים כלליים',
           titleRequired: false,
           groups: [
-            {
-              title: 'כמות מבנים',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'מספר קומות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'כמות דירות',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
+            { title: 'כמות מבנים', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'building_count', isArea: false, value: 0 }] },
+            { title: 'מספר קומות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'floor_count', isArea: false, value: 0 }] },
+            { title: 'כמות דירות', titleRequired: true, isSelected: true, fields: [{ type: 'count', key: 'apartment_count', isArea: false, value: 0 }] },
           ],
         },
       },
@@ -2741,19 +2235,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_3_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_3_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2761,19 +2244,8 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_4_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'price', key: 'rooms_4_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2781,19 +2253,7 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'rooms_5_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true }, { type: 'price', key: 'rooms_5_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2801,26 +2261,9 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'penthouse_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true },
+                { type: 'count', key: 'penthouse_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true },
+                { type: 'price', key: 'penthouse_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
             {
@@ -2828,26 +2271,7 @@ export const companyCategoryForm = {
               titleRequired: false,
               isSelected: true,
               fields: [
-                {
-                  type: 'count',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
+                { type: 'count', key: 'private_area', isArea: true, value: 0, subTitle: 'גודל', subTitleRequired: true }, { type: 'count', key: 'private_rooms', isArea: false, value: 0, subTitle: 'כמות חדרים', subTitleRequired: true }, { type: 'price', key: 'private_price', value: 0, subTitle: 'הוסף מחיר ״החל מ-״', subTitleRequired: true },
               ],
             },
           ],

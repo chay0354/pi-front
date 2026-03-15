@@ -1,3 +1,4 @@
+import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
@@ -35,8 +36,9 @@ export const GeneralDetailsWithRadio = ({groups}) => {
                     const isLast = idx === group.fields.length - 1;
 
                     if (f.type === 'count') {
+                      const key = f.key || `field-${gi}-${idx}`;
                       return (
-                        <>
+                        <React.Fragment key={key}>
                           {f.subTitle && (
                             <Text style={styles.subFields}>
                               {f.subTitle}
@@ -44,23 +46,23 @@ export const GeneralDetailsWithRadio = ({groups}) => {
                             </Text>
                           )}
                           <CountUpdate
-                            key={f.key || `${gi}-${idx}`}
                             title={f.title}
                             count={f.value}
-                            setCount={f.onChange}
+                            setCount={typeof f.onChange === 'function' ? f.onChange : () => {}}
                             isArea={!!f.isArea}
                             isDivider={false}
                             isLast={!isNotLastIndex}
                             containerStyle={{marginBottom: 0}}
                           />
-                        </>
+                        </React.Fragment>
                       );
                     }
 
                     // price field
                     if (f.type === 'price') {
+                      const key = f.key || `field-${gi}-${idx}`;
                       return (
-                        <>
+                        <React.Fragment key={key}>
                           {f.subTitle && (
                             <Text style={styles.subFields}>
                               {f.subTitle}
@@ -69,17 +71,17 @@ export const GeneralDetailsWithRadio = ({groups}) => {
                           )}
                           <CardPriceField
                             price={f.value}
-                            setPrice={f.onChange}
+                            setPrice={typeof f.onChange === 'function' ? f.onChange : () => {}}
                           />
-                        </>
+                        </React.Fragment>
                       );
                     }
 
                     if (f.type === 'radiowithtext') {
+                      const key = f.key || `field-${gi}-${idx}`;
                       return (
-                        <View style={{marginRight: 16, marginBottom: 20}}>
+                        <View key={key} style={{marginRight: 16, marginBottom: 20}}>
                           <RadioWithText
-                            key={0}
                             isNotLastIndex={false}
                             title={f.title}
                             name={f.name}

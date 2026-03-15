@@ -10,18 +10,20 @@ export const CountUpdate = ({
   isArea = false,
   isLast = false,
   isDivider = true,
+  min = 0,
   counterInputStyle,
   containerStyle,
   deviderStyle,
 }) => {
   const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
+  const minVal = typeof min === 'number' ? min : 0;
   return (
     <View style={[{marginBottom: isLast ? 0 : 20}, containerStyle]}>
       {title && <Title text={title} required textStyle={{marginBottom: 15}} />}
       <View style={[styles.counterInput, counterInputStyle]}>
         <TouchableOpacity
           style={styles.counterButtonLeft}
-          onPress={() => safeSetCount(Math.max(1, (count ?? 0) - 1))}>
+          onPress={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}>
           <Text style={styles.counterButtonMinus}>−</Text>
         </TouchableOpacity>
         <View style={styles.counterDivider} />

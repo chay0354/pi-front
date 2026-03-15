@@ -10,23 +10,14 @@ import {
 import React, {useContext} from 'react';
 import Carusel from '../components/Carusel';
 import {ContextHook} from '../hooks/ContextHook';
-import {
-  brokerCategories,
-  companyCategories,
-  subscriptionTypes,
-  userCategories,
-} from '../utils/constant';
+import {userCategories} from '../utils/constant';
 import ProfilePic from '../components/ProfilePic';
 import {TouchableOpacity} from 'react-native';
 
 const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
   const {currentUser} = useContext(ContextHook);
-  const categoriesList =
-    currentUser?.subscription_type === subscriptionTypes.user
-      ? userCategories
-      : currentUser?.subscription_type === subscriptionTypes.broker
-        ? brokerCategories
-        : companyCategories;
+  // All users see all categories (same list for everyone; design unchanged)
+  const categoriesList = userCategories;
   const profilePicItems = [
     {
       profilePic: require('../assets/userProfile.png'),
@@ -72,6 +63,7 @@ const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
         <Image source={require('../assets/homeLogo.png')} style={styles.logo} />
         <View style={styles.content}>
           <Carusel
+            categoriesList={categoriesList}
             onCategorySelect={category => {
               if (onOpenTikTokFeed) {
                 onOpenTikTokFeed(category);

@@ -15,7 +15,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
 import {subscriptionTypes} from '../utils/constant';
-import {uploadFile} from '../utils/api';
+import {uploadProfilePicture} from '../utils/api';
 
 /**
  * Regular user registration – shown when user without profile tries to publish an ad.
@@ -96,7 +96,7 @@ const UserRegistrationScreen = ({
             type: profileImage.mimeType || profileImage.type || 'image/jpeg',
             name: profileImage.fileName || profileImage.uri?.split('/').pop() || 'profile.jpg',
           };
-          const data = await uploadFile(file, 'profile-pics');
+          const data = await uploadProfilePicture(file);
           if (data && data.url) profilePictureUrl = data.url;
         } catch (uploadErr) {
           console.warn('Profile picture upload failed:', uploadErr);

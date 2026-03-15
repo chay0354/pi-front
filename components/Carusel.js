@@ -1,4 +1,4 @@
-import React, {useRef, useState, useEffect, useContext} from 'react';
+import React, {useRef, useState, useEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -7,28 +7,17 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import {
-  brokerCategories,
-  companyCategories,
-  subscriptionTypes,
-  userCategories,
-} from '../utils/constant';
-import {ContextHook} from '../hooks/ContextHook';
+import {userCategories} from '../utils/constant';
 
-const Carusel = ({style, onCategorySelect}) => {
+const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => {
   const {width: screenWidth} = useWindowDimensions();
-  const {currentUser} = useContext(ContextHook);
-  const categoriesList =
-    currentUser?.subscription_type === subscriptionTypes.user
-      ? userCategories
-      : currentUser?.subscription_type === subscriptionTypes.broker
-        ? brokerCategories
-        : companyCategories;
+  // Use provided list or full list so all users can see all categories
+  const list = categoriesList && categoriesList.length > 0 ? categoriesList : userCategories;
   const scrollViewRef = useRef(null);
   const hasInitialScrollDone = useRef(false);
   const scrollEndTimeoutRef = useRef(null);
   const lastScrollPositionRef = useRef(0);
-  const initialCenterIndex = Math.min(2, Math.max(0, categoriesList.length - 1));
+  const initialCenterIndex = Math.min(2, Math.max(0, list.length - 1));
   const [centerIndex, setCenterIndex] = useState(initialCenterIndex);
 
   // Single source of truth: item width matches categoryItem style (screenWidth / 3)
@@ -39,7 +28,7 @@ const Carusel = ({style, onCategorySelect}) => {
     const viewportCenter = scrollPosition + screenWidth / 2;
     let closestIndex = 0;
     let minDistance = Infinity;
-    categoriesList.forEach((_, index) => {
+    list.forEach((_, index) => {
       const itemCenter = (index + 0.5) * itemWidth;
       const distance = Math.abs(viewportCenter - itemCenter);
       if (distance < minDistance) {
@@ -73,7 +62,7 @@ const Carusel = ({style, onCategorySelect}) => {
     let closestIndex = 0;
     let minDistance = Infinity;
 
-    categoriesList.forEach((_, index) => {
+    list.forEach((_, index) => {
       const itemCenter = (index + 0.5) * itemWidth;
       const distance = Math.abs(viewportCenter - itemCenter);
 
@@ -178,7 +167,7 @@ const Carusel = ({style, onCategorySelect}) => {
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
         scrollEventThrottle={16}>
-        {categoriesList.map((item, index) => {
+        {list.map((item, index) => {
           const isCenter = isCenterItem(index);
           const isLeft = isLeftItem(index);
           const isRight = isRightItem(index);
@@ -192,7 +181,7 @@ const Carusel = ({style, onCategorySelect}) => {
                 if (
                   (isCenter ||
                     index === 0 ||
-                    index === categoriesList.length - 1) &&
+                    index === list.length - 1) &&
                   onCategorySelect
                 ) {
                   onCategorySelect(item.id);

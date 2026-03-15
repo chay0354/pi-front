@@ -37,6 +37,25 @@
         -moz-osx-font-smoothing: grayscale;
         -ms-overflow-style: scrollbar;
       }
+      /* Dark scrollbar to match app theme (not white) */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.25) rgba(26,25,38,0.6);
+      }
+      *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      *::-webkit-scrollbar-track {
+        background: rgba(26,25,38,0.6);
+      }
+      *::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.25);
+        border-radius: 4px;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: rgba(255,255,255,0.4);
+      }
     </style>
   </head>
   <body>

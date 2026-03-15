@@ -14,7 +14,7 @@ import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
 /**
  * SubscriptionScreen Component
- * Subscription signup page for brokers/realtors
+ * Stage 1: agree, then Next → go to stage 2 (form). Profile pic is chosen on the form screen.
  */
 const SubscriptionScreen = ({
   onClose,
@@ -22,6 +22,11 @@ const SubscriptionScreen = ({
   subscriptionType = subscriptionTypes.broker,
 }) => {
   const [isAgreed, setIsAgreed] = useState(false);
+
+  const handleStart = () => {
+    if (!isAgreed || !onStart) return;
+    onStart();
+  };
 
   const getProfileQuestion = () => {
     switch (subscriptionType) {
@@ -57,8 +62,8 @@ const SubscriptionScreen = ({
         showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-right" size={24} color="#fff" />
+          <TouchableOpacity onPress={onClose} style={styles.backButton} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+            <MaterialCommunityIcons name="chevron-left" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
           <View style={styles.headerSpacer} />
@@ -126,11 +131,7 @@ const SubscriptionScreen = ({
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             disabled={!isAgreed}
-            onPress={() => {
-              if (isAgreed && onStart) {
-                onStart();
-              }
-            }}
+            onPress={handleStart}
             style={styles.buttonWrapper}>
             <Image
               source={

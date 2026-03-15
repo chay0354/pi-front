@@ -56,7 +56,7 @@ const SubscriptionFormScreen = ({
   const [businessAddress, setBusinessAddress] = useState('');
   const [phone2, setPhone2] = useState('');
 
-  // Image state
+  // Image state (profile pic is chosen on this screen; uploaded to bucket when you press Next/Submit)
   const [profilePicture, setProfilePicture] = useState(null);
   const [additionalImages, setAdditionalImages] = useState([]);
   const [companyLogo, setCompanyLogo] = useState(null);
@@ -388,9 +388,18 @@ const SubscriptionFormScreen = ({
         agreedToTerms: true,
       };
 
-      // Prepare files
+      // Prepare files (profile pic chosen on this screen → uploaded to profile-pics when you press Next)
       const files = {};
-      if (profilePicture) files.profilePicture = profilePicture;
+      const profilePicIsUrl = profilePicture?.uri && (profilePicture.uri.startsWith('http://') || profilePicture.uri.startsWith('https://'));
+      if (profilePicIsUrl) {
+        formData.profile_picture_url = profilePicture.uri;
+      } else if (profilePicture) {
+        files.profilePicture = profilePicture;
+      }
+
+      const hasProfileImage = !!profilePicIsUrl || !!files.profilePicture;
+      console.log('[SubscriptionFormScreen] Next (stage 2 → verification): profile image included:', hasProfileImage, hasProfileImage ? '(will be uploaded to profile-pics bucket)' : '(no image)');
+
       if (additionalImages.length > 0)
         files.additionalImages = additionalImages.filter(img => img !== null);
       if (companyLogo) files.companyLogo = companyLogo;

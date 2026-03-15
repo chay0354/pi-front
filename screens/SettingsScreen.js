@@ -18,9 +18,12 @@ import {subscriptionTypes} from '../utils/constant';
  */
 const SettingsScreen = ({
   onClose,
+  onOpenEditPublishAd,
+  onOpenChat,
   onOpenSubscription,
   onLogout,
   onOpenLogin,
+  unreadChatCount = 0,
 }) => {
   const {currentUser, setCurrentUser} = useContext(ContextHook);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -97,6 +100,7 @@ const SettingsScreen = ({
             <Image
               source={require('../assets/pencil-icon.png')}
               style={styles.profileEditIcon}
+              tintColor={Colors.white100}
               resizeMode="contain"
             />
           </TouchableOpacity>
@@ -137,26 +141,40 @@ const SettingsScreen = ({
             </View>
           </View>
 
-          {/* Subscriber Number at bottom */}
-          <View style={styles.profileBottom}>
-            <Text style={styles.subscriberNumber}>
-              {currentUser.subscriber_number || 'לא זמין'}
-            </Text>
-            <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
-          </View>
+          {/* Subscriber Number at bottom - only for broker, company, professional (not regular user) */}
+          {currentUser.subscription_type !== subscriptionTypes.user ? (
+            <View style={styles.profileBottom}>
+              <Text style={styles.subscriberNumber}>
+                {currentUser.subscriber_number || 'לא זמין'}
+              </Text>
+              <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
       {/* Messages/Ads Section */}
       <View style={styles.section}>
-        <Image
-          source={require('../assets/buttons.png')}
-          style={styles.buttonsImage}
-          resizeMode="contain"
-        />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={onOpenChat}
+          style={styles.buttonsImageWrap}>
+          <Image
+            source={require('../assets/buttons.png')}
+            style={styles.buttonsImage}
+            resizeMode="contain"
+          />
+          {unreadChatCount > 0 && (
+            <View style={styles.chatBadge}>
+              <Text style={styles.chatBadgeText}>
+                {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>ניהול המודעות</Text>
-          <TouchableOpacity style={styles.cardItem}>
+          <TouchableOpacity style={styles.cardItem} onPress={onOpenEditPublishAd}>
             <Text style={styles.chevron}>›</Text>
             <Text style={styles.cardItemText}>ערוך / פרסם</Text>
             <Image
@@ -319,11 +337,42 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 12,
   },
+  buttonsImageWrap: {
+    width: '100%',
+    height: 50,
+    position: 'relative',
+    maxWidth: 366,
+    alignSelf: 'center',
+    overflow: 'visible',
+  },
   buttonsImage: {
     width: '100%',
     height: 50,
     maxWidth: 366,
     alignSelf: 'center',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#5EEAD4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    zIndex: 10,
+    elevation: 4,
+    shadowColor: '#5EEAD4',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 4,
+  },
+  chatBadgeText: {
+    color: '#1a1a2e',
+    fontSize: 12,
+    fontWeight: '700',
   },
   card: {
     backgroundColor: '#2a2933',
@@ -392,7 +441,6 @@ const styles = StyleSheet.create({
   profileEditIcon: {
     width: 20,
     height: 20,
-    tintColor: Colors.white100,
   },
   profileContentRow: {
     flexDirection: 'row',
