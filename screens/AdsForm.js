@@ -14,7 +14,7 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
+import {uploadFile, createListing, toSubscriptionId, getApiUrl} from '../utils/api';
 import {
   brokerCategoryForm,
   companyCategoryForm,
@@ -648,7 +648,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -692,7 +692,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               formData.append('folder', 'listings/images');
 
               const uploadResponse = await fetch(
-                `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+                `${getApiUrl()}/api/upload`,
                 {
                   method: 'POST',
                   body: formData,
@@ -729,7 +729,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           formData.append('folder', 'listings/images');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -764,7 +764,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -795,7 +795,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           formData.append('folder', 'listings/videos');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,

@@ -557,6 +557,8 @@ const TikTokFeedScreen = ({
                 area: listing.area,
                 rooms: listing.rooms,
                 floor: listing.floor,
+                condition: listing.condition || null,
+                amenities: listing.amenities && typeof listing.amenities === 'object' ? listing.amenities : null,
                 category: listingCategory,
                 // Category 3 specific fields
                 searchPurpose: listing.search_purpose
@@ -2229,6 +2231,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+    top: -1,
   },
   sidebarProfilePlaceholder: {
     backgroundColor: 'rgba(255,255,255,0.2)',

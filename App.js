@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useRef} from 'react';
-import {StyleSheet, View, ActivityIndicator} from 'react-native';
+import {StyleSheet, View, ActivityIndicator, Text} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AdsForm,
@@ -195,6 +195,12 @@ export default function App() {
   return (
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <View style={styles.container}>
+        {/* Dev build indicator – if you see "✓ latest" in bottom-left, the new bundle is loaded */}
+        {__DEV__ && typeof window !== 'undefined' && (
+          <View style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+            <Text style={{ color: '#2DD4BF', fontSize: 11 }}>✓ latest</Text>
+          </View>
+        )}
         {currentScreen === screenName.home && (
           <Home
             onOpenSettings={() => setCurrentScreen(screenName.settings)}

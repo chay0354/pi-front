@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing} from '../utils/api';
+import {uploadFile, createListing, getApiUrl} from '../utils/api';
 import {categoryImages} from '../utils/constant';
 
 /**
@@ -371,7 +371,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -420,7 +420,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               formData.append('folder', 'listings/images');
 
               const uploadResponse = await fetch(
-                `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+                `${getApiUrl()}/api/upload`,
                 {
                   method: 'POST',
                   body: formData,
@@ -465,7 +465,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           formData.append('folder', 'listings/images');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -501,7 +501,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -537,7 +537,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           formData.append('folder', 'listings/videos');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,

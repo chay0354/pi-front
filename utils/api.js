@@ -2,9 +2,17 @@
  * API utility functions for communicating with the backend
  */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+// On web: when opened via network IP (e.g. http://192.168.1.5:8084), use same host for API so it works from other devices
+export function getApiUrl() {
+  if (isWeb && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `${window.location.protocol}//${window.location.hostname}:3000`;
+  }
+  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+}
+
+const API_URL = isWeb ? getApiUrl() : (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
 
 /** On web, FormData doesn't accept { uri, type, name }; convert blob/data URIs to Blob/File so the server receives a real file. */
 async function toFormDataFile(file, fieldName = 'file') {

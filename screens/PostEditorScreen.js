@@ -17,7 +17,7 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
+import {uploadFile, createListing, toSubscriptionId, getApiUrl} from '../utils/api';
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 const TEXT_CANVAS_HEIGHT = SCREEN_HEIGHT * 0.82;
@@ -246,7 +246,7 @@ const PostEditorScreen = ({
           });
         }
         formData.append('folder', 'listings/images');
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+        const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/upload`, {
           method: 'POST',
           body: formData,
@@ -268,7 +268,7 @@ const PostEditorScreen = ({
           });
         }
         formData.append('folder', 'listings/videos');
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+        const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/upload`, {
           method: 'POST',
           body: formData,

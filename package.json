@@ -7,6 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web --port 8084",
+    "web:clear": "expo start --web --port 8085 --clear",
+    "web:dev": "node scripts/start-web-dev.js",
+    "web:lan": "expo start --web --port 8084",
+    "web:fresh": "powershell -ExecutionPolicy Bypass -File scripts/start-web-fresh.ps1",
     "open-web": "start http://localhost:8084"
   },
   "dependencies": {
