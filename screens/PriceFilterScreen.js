@@ -129,8 +129,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
               ]}
             />
           </View>
-          <View style={[styles.sliderThumb, {left: `${minPercent}%`}]} pointerEvents="none" />
-          <View style={[styles.sliderThumb, {left: `${maxPercent}%`}]} pointerEvents="none" />
+          <View style={[styles.sliderThumb, { left: `${minPercent}%`, pointerEvents: 'none' }]} />
+          <View style={[styles.sliderThumb, { left: `${maxPercent}%`, pointerEvents: 'none' }]} />
         </View>
       </ScrollView>
 

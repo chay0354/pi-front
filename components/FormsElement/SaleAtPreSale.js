@@ -32,7 +32,8 @@ export const SaleAtPreSale = () => {
           style={styles.preSaleRadiant}>
           <Image
             source={require('../../assets/pre-sale.png')}
-            style={{width: 93, height: 34, resizeMode: 'contain'}}
+            style={{width: 93, height: 34}}
+            resizeMode="contain"
           />
         </LinearGradient>
       </TouchableOpacity>

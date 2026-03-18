@@ -582,6 +582,10 @@ const TikTokFeedScreen = ({
                 profileImageUrl: listing.profile_image_url || listing.creator_profile_image_url || null,
                 creator_name: listing.creator_name || null,
                 creator_email: listing.creator_email || null,
+                creator_specialties: listing.creator_specialties || null,
+                creator_bio: listing.creator_bio || null,
+                subscription_id: listing.subscription_id || null,
+                owner_id: listing.owner_id || null,
                 overlayX: listing.overlay_x != null ? Number(listing.overlay_x) : 80,
                 overlayY: listing.overlay_y != null ? Number(listing.overlay_y) : 80,
                 view_count: listing.view_count != null ? Number(listing.view_count) : 0,
@@ -1177,7 +1181,10 @@ const TikTokFeedScreen = ({
                       ))}
                     </View>
                   )}
-                  <View style={styles.listCardProfile}>
+                  <TouchableOpacity
+                    style={styles.listCardProfile}
+                    onPress={() => onOpenUserProfile?.(listing)}
+                    activeOpacity={0.8}>
                     {listing.profileImageUrl ? (
                       <Image
                         source={{uri: listing.profileImageUrl}}
@@ -1189,7 +1196,7 @@ const TikTokFeedScreen = ({
                         <MaterialCommunityIcons name="account" size={20} color="#fff" />
                       </View>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.listCardBody}>
                   <View style={styles.listCardPurposeRow}>
@@ -1241,7 +1248,7 @@ const TikTokFeedScreen = ({
               styles.sidebarDragContent,
               { transform: [{ translateY: sidebarDragY }] },
             ]}>
-            {/* Profile pic of current ad uploader – tap opens UserProfileScreen */}
+            {/* Profile pic of current ad uploader. Tap passes full listing (with creator_*, subscription_id from API) to UserProfileScreen. */}
             <TouchableOpacity
               style={styles.sidebarProfileWrap}
               onPress={() => onOpenUserProfile?.(videos[currentIndex] ?? null)}
@@ -1410,9 +1417,9 @@ const TikTokFeedScreen = ({
                         {
                           left: video.overlayX ?? 80,
                           top: video.overlayY ?? 80,
+                          pointerEvents: 'none',
                         },
-                      ]}
-                      pointerEvents="none">
+                      ]}>
                       <Text style={styles.postDescriptionOverlayText} numberOfLines={6}>
                         {video.description}
                       </Text>

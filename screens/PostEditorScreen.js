@@ -418,8 +418,8 @@ const PostEditorScreen = ({
                 ) : null}
               </LinearGradient>
             </View>
-            <View style={styles.textModeOverlayRows} pointerEvents="box-none">
-              <View style={styles.styleRow} pointerEvents="box-none">
+            <View style={[styles.textModeOverlayRows, { pointerEvents: 'box-none' }]}>
+              <View style={[styles.styleRow, { pointerEvents: 'box-none' }]}>
                 {STYLES.map((label, i) => (
                   <TouchableOpacity
                     key={label}
@@ -536,8 +536,8 @@ const PostEditorScreen = ({
                 ) : null}
               </LinearGradient>
             </View>
-            <View style={styles.textModeOverlayRows} pointerEvents="box-none">
-              <View style={styles.styleRow} pointerEvents="box-none">
+            <View style={[styles.textModeOverlayRows, { pointerEvents: 'box-none' }]}>
+              <View style={[styles.styleRow, { pointerEvents: 'box-none' }]}>
                 {STYLES.map((label, i) => (
                   <TouchableOpacity
                     key={label}
@@ -645,9 +645,9 @@ const PostEditorScreen = ({
                       left: isEditingOverlay ? editPositionRef.current.x : overlayX,
                       top: isEditingOverlay ? editPositionRef.current.y : overlayY,
                     },
+                    { pointerEvents: 'box-none' },
                   ]}
-                  {...(!isEditingOverlay ? overlayPanResponder.panHandlers : {})}
-                  pointerEvents="box-none">
+                  {...(!isEditingOverlay ? overlayPanResponder.panHandlers : {})}>
                   {isEditingOverlay ? (
                     <TextInput
                       style={styles.overlayTextInputInline}

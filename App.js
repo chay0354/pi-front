@@ -195,10 +195,10 @@ export default function App() {
   return (
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <View style={styles.container}>
-        {/* Dev build indicator – if you see "✓ latest" in bottom-left, the new bundle is loaded */}
+        {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
         {__DEV__ && typeof window !== 'undefined' && (
-          <View style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-            <Text style={{ color: '#2DD4BF', fontSize: 11 }}>✓ latest</Text>
+          <View style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.8)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+            <Text style={{ color: '#2DD4BF', fontSize: 10 }}>load {Date.now()}</Text>
           </View>
         )}
         {currentScreen === screenName.home && (

@@ -173,8 +173,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
           <View style={styles.sliderTrack}>
             <View style={[styles.sliderTrackFill, { left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }]} />
           </View>
-          <View style={[styles.sliderThumb, { left: `${minPercent}%` }]} pointerEvents="none" />
-          <View style={[styles.sliderThumb, { left: `${maxPercent}%` }]} pointerEvents="none" />
+          <View style={[styles.sliderThumb, { left: `${minPercent}%`, pointerEvents: 'none' }]} />
+          <View style={[styles.sliderThumb, { left: `${maxPercent}%`, pointerEvents: 'none' }]} />
         </View>
 
         {/* Checkbox list */}

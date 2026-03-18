@@ -206,12 +206,19 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
   }
 };
 
+// Subscription IDs that returned 404 – skip refetch to avoid repeated 404 logs
+const subscription404Cache = new Set();
+
 /**
  * Get subscription by ID
  * @param {string} subscriptionId - Subscription ID
  * @returns {Promise} API response
  */
 export const getSubscription = async subscriptionId => {
+  if (!subscriptionId) return { success: false, subscription: null };
+  if (subscription404Cache.has(subscriptionId)) {
+    return { success: false, subscription: null };
+  }
   try {
     const response = await fetch(
       `${API_URL}/api/subscription/${subscriptionId}`,
@@ -226,6 +233,10 @@ export const getSubscription = async subscriptionId => {
     const data = await response.json();
 
     if (!response.ok) {
+      if (response.status === 404) {
+        subscription404Cache.add(subscriptionId);
+        return { success: false, subscription: null };
+      }
       throw new Error(data.error || 'Failed to fetch subscription');
     }
 

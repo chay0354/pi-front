@@ -60,7 +60,7 @@ const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
         <TouchableOpacity onPress={onOpenSettings}>
           <Image source={require('../assets/menu.png')} style={styles.menu} />
         </TouchableOpacity>
-        <Image source={require('../assets/homeLogo.png')} style={styles.logo} />
+        <Image source={require('../assets/homeLogo.png')} style={styles.logo} resizeMode="contain" />
         <View style={styles.content}>
           <Carusel
             categoriesList={categoriesList}
@@ -91,10 +91,12 @@ const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
             <Image
               source={require('../assets/videoLogo.png')}
               style={styles.videoLogo}
+              resizeMode="contain"
             />
             <Image
               source={require('../assets/popular.png')}
               style={styles.popularLogo}
+              resizeMode="contain"
             />
           </View>
         </View>
@@ -148,7 +150,6 @@ const styles = StyleSheet.create({
     width: 130,
     height: 122,
     marginTop: -40,
-    resizeMode: 'contain',
   },
   content: {
     flex: 1,
@@ -163,7 +164,6 @@ const styles = StyleSheet.create({
     top: 10,
     width: 45,
     height: 45,
-    resizeMode: 'contain',
   },
   popularLogo: {
     position: 'absolute',
@@ -171,7 +171,6 @@ const styles = StyleSheet.create({
     top: 5,
     width: 95,
     height: 48,
-    resizeMode: 'contain',
   },
   profileBar: {
     paddingVertical: 10,
