@@ -23,4 +23,5 @@ export {default as EditPublishAdScreen} from './EditPublishAdScreen';
 export {default as ChatScreen} from './ChatScreen';
 export {default as ChatListScreen} from './ChatListScreen';
 export {default as UserProfileScreen} from './UserProfileScreen';
+export {default as UserListingsScreen} from './UserListingsScreen';
 export {default as Home} from './Home';

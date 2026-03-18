@@ -22,6 +22,7 @@ import {
   ChatScreen,
   ChatListScreen,
   UserProfileScreen,
+  UserListingsScreen,
   SubscriptionScreen,
   SubscriptionFormScreen,
   VerificationScreen,
@@ -71,6 +72,7 @@ const screenName = {
   chatList: 'chatList',
   chat: 'chat',
   userProfile: 'userProfile',
+  userListings: 'userListings',
 };
 
 /**
@@ -93,6 +95,7 @@ export default function App() {
   const lastOpenedChatAtRef = useRef(null); // ISO timestamp; unread = messages after this
   const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
+  const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null); // 'userProfile' when registration was opened from profile (to post review)
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
   // Feed filters (price, rooms, city, apartment type) – applied client-side in TikTokFeedScreen
   const [feedFilters, setFeedFilters] = useState({
@@ -271,6 +274,23 @@ export default function App() {
               setCurrentScreen(screenName.chat);
             }}
             user={profileUser}
+            currentUser={currentUser}
+            onOpenLogin={() => {
+              setReturnToScreenAfterAuth('userProfile');
+              setCurrentScreen(screenName.login);
+            }}
+            onOpenUserRegistration={() => {
+              setReturnToScreenAfterAuth('userProfile');
+              setCurrentScreen(screenName.userRegistration);
+            }}
+            onOpenAllListings={() => setCurrentScreen(screenName.userListings)}
+          />
+        )}
+        {currentScreen === screenName.userListings && (
+          <UserListingsScreen
+            creatorId={profileUser?.subscription_id || profileUser?.owner_id}
+            displayName={profileUser?.creator_name || profileUser?.name || profileUser?.agent_name || profileUser?.business_name || ''}
+            onClose={() => setCurrentScreen(screenName.userProfile)}
           />
         )}
         {currentScreen === screenName.cityFilter && (
@@ -541,10 +561,18 @@ export default function App() {
         )}
         {currentScreen === screenName.login && (
           <LoginScreen
-            onClose={() => setCurrentScreen(screenName.settings)}
+            onClose={() => {
+              setReturnToScreenAfterAuth(null);
+              setCurrentScreen(screenName.settings);
+            }}
             onLoginSuccess={subscription => {
               setCurrentUser(subscription);
-              setCurrentScreen(screenName.home);
+              if (returnToScreenAfterAuth === 'userProfile') {
+                setReturnToScreenAfterAuth(null);
+                setCurrentScreen(screenName.userProfile);
+              } else {
+                setCurrentScreen(screenName.home);
+              }
             }}
           />
         )}
@@ -553,9 +581,17 @@ export default function App() {
             selectedCategory={selectedCategory}
             onSuccess={user => {
               setCurrentUser(user);
-              setCurrentScreen(screenName.adsForm);
+              if (returnToScreenAfterAuth === 'userProfile') {
+                setReturnToScreenAfterAuth(null);
+                setCurrentScreen(screenName.userProfile);
+              } else {
+                setCurrentScreen(screenName.adsForm);
+              }
             }}
-            onCancel={() => setCurrentScreen(screenName.tikTokFeed)}
+            onCancel={() => {
+              setReturnToScreenAfterAuth(null);
+              setCurrentScreen(screenName.tikTokFeed);
+            }}
             onOpenLogin={() => setCurrentScreen(screenName.login)}
           />
         )}

@@ -209,6 +209,11 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
 // Subscription IDs that returned 404 – skip refetch to avoid repeated 404 logs
 const subscription404Cache = new Set();
 
+/** Clear 404 cache for an id so profile screen can refetch (e.g. to get updated description). */
+export const clearSubscription404Cache = subscriptionId => {
+  if (subscriptionId) subscription404Cache.delete(subscriptionId);
+};
+
 /**
  * Get subscription by ID
  * @param {string} subscriptionId - Subscription ID
@@ -240,10 +245,93 @@ export const getSubscription = async subscriptionId => {
       throw new Error(data.error || 'Failed to fetch subscription');
     }
 
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && data.subscription) {
+      const sub = data.subscription;
+      console.log('[api.getSubscription] subscription keys:', Object.keys(sub), 'description' in sub ? 'description=' + JSON.stringify((sub.description || '').slice(0, 80)) : 'no description key');
+    }
     return data;
   } catch (error) {
     console.error('Error fetching subscription:', error);
     throw error;
+  }
+};
+
+/**
+ * Ask AI for smart info about a topic (e.g. transport, security) for an address.
+ * @param {string} topic - Topic key (e.g. 'transport', 'security')
+ * @param {string} topicLabel - Hebrew label (e.g. 'תחבורה', 'ביטחון')
+ * @param {string} address - Property address (e.g. 'בן גוריון 4')
+ * @returns {Promise<{ success: boolean, text?: string, error?: string }>}
+ */
+export const askSmartInfo = async (topic, topicLabel, address) => {
+  try {
+    const response = await fetch(`${API_URL}/api/ai/smart-info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, topicLabel, address: address || '' }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, text: data.text || data.error || 'שגיאה', error: data.error };
+    }
+    return { success: true, text: data.text || '' };
+  } catch (error) {
+    console.error('askSmartInfo error:', error);
+    return { success: false, text: 'שגיאה בקבלת מידע. נסה שוב.', error: error.message };
+  }
+};
+
+/**
+ * Get reviews for a profile (target subscription).
+ * @param {string} targetSubscriptionId - Subscription ID of the profile being viewed
+ * @returns {Promise<{ success: boolean, reviews: Array }>}
+ */
+export const getReviews = async (targetSubscriptionId) => {
+  try {
+    if (!targetSubscriptionId) return { success: true, reviews: [] };
+    const response = await fetch(
+      `${API_URL}/api/reviews?target_subscription_id=${encodeURIComponent(targetSubscriptionId)}`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to fetch reviews');
+    return { success: true, reviews: data.reviews || [] };
+  } catch (error) {
+    console.error('getReviews error:', error);
+    return { success: false, reviews: [] };
+  }
+};
+
+/**
+ * Submit a review (rating 1–5 and optional comment).
+ * @param {string} targetSubscriptionId - Profile (subscription) being reviewed
+ * @param {number} rating - 1–5
+ * @param {string} comment - Optional review text
+ * @param {string} reviewerName - Optional display name
+ * @param {string} reviewerImageUrl - Optional avatar URL
+ * @param {string} reviewerSubscriptionId - Optional subscription id of the reviewer (links review to user in DB)
+ * @returns {Promise<{ success: boolean, review?: object }>}
+ */
+export const submitReview = async (targetSubscriptionId, rating, comment = '', reviewerName = null, reviewerImageUrl = null, reviewerSubscriptionId = null) => {
+  try {
+    const response = await fetch(`${API_URL}/api/reviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_subscription_id: targetSubscriptionId,
+        rating: Number(rating),
+        comment: comment && String(comment).trim() ? String(comment).trim() : '',
+        reviewer_name: reviewerName && String(reviewerName).trim() ? String(reviewerName).trim() : null,
+        reviewer_image_url: reviewerImageUrl && String(reviewerImageUrl).trim() ? String(reviewerImageUrl).trim() : null,
+        reviewer_subscription_id: reviewerSubscriptionId && String(reviewerSubscriptionId).trim() ? String(reviewerSubscriptionId).trim() : null,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to submit review');
+    return { success: true, review: data.review };
+  } catch (error) {
+    console.error('submitReview error:', error);
+    return { success: false, error: error.message };
   }
 };
 

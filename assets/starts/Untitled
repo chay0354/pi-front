@@ -1,0 +1,3 @@
+[UserProfile] Rate button pressed state=true
+C:\Users\Administrator\Downloads\pi\front\screens\UserProfileScreen.js:758 [UserProfile] Rate button onPress fired {disabled: false}
+C:\Users\Administrator\Downloads\pi\front\screens\UserProfileScreen.js:238 [UserProfile] handleRate called {selectedRating: 3, creatorId: 'b44e2d7a-1e28-405d-af15-50680ae2c10c', submitReviewLoading: false}
