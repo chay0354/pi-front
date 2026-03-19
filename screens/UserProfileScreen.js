@@ -888,6 +888,7 @@ const UserProfileScreen = ({
             ))}
           </View>
           <TextInput
+            nativeID="smartInfoTextEntry"
             style={styles.smartInfoTextEntry}
             value={smartInfoText}
             onChangeText={setSmartInfoText}
@@ -1170,7 +1171,21 @@ const styles = StyleSheet.create({
   smartInfoBtnDisabled: { opacity: 0.6 },
   smartInfoBtnIcon: { width: 22, height: 22 },
   smartInfoBtnLabel: { color: '#fff', fontSize: 12, fontWeight: '600', flex: 1 },
-  smartInfoTextEntry: { width: '100%', minHeight: 80, backgroundColor: Colors.mainDeepBlue, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, marginTop: 16, color: '#fff', fontSize: 14, textAlign: 'right', borderWidth: 1, borderColor: '#555' },
+  smartInfoTextEntry: {
+    width: '100%',
+    minHeight: 160,
+    backgroundColor: Colors.mainDeepBlue,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 16,
+    color: '#fff',
+    fontSize: 14,
+    textAlign: 'right',
+    borderWidth: 1,
+    borderColor: '#555',
+    ...(Platform.OS === 'web' ? { scrollbarColor: '#555 #1e1d27' } : {}),
+  },
 
   brokerBlock: { paddingHorizontal: 24, marginBottom: 32 },
   brokerCardPiBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 0, paddingHorizontal: 0, marginBottom: 8 },

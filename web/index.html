@@ -59,6 +59,23 @@
       *::-webkit-scrollbar-thumb:hover {
         background: rgba(255,255,255,0.4);
       }
+      /* AI answer area: dark scrollbar (black not white) */
+      #smartInfoTextEntry::-webkit-scrollbar-track,
+      textarea#smartInfoTextEntry::-webkit-scrollbar-track,
+      #smartInfoTextEntry textarea::-webkit-scrollbar-track {
+        background: #1e1d27;
+      }
+      #smartInfoTextEntry::-webkit-scrollbar-thumb,
+      textarea#smartInfoTextEntry::-webkit-scrollbar-thumb,
+      #smartInfoTextEntry textarea::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 4px;
+      }
+      #smartInfoTextEntry::-webkit-scrollbar-thumb:hover,
+      textarea#smartInfoTextEntry::-webkit-scrollbar-thumb:hover,
+      #smartInfoTextEntry textarea::-webkit-scrollbar-thumb:hover {
+        background: #666;
+      }
     </style>
   </head>
   <body>
