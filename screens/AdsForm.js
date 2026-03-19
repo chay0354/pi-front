@@ -52,7 +52,7 @@ import {
   SalesImage,
   SaleAtPreSale,
   GeneralDetailsWithRadio,
-  ConsructionStatus,
+  ConstructionStatus,
   PropertyAddress,
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
@@ -217,6 +217,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   const [condition, setCondition] = useState(null);
   const [purpose, setPurpose] = useState('sale'); // 'sale' or 'rent'
   const [price, setPrice] = useState(1000000);
+  const [projectName, setProjectName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
@@ -290,11 +291,17 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
       setProjectOffers(prev => ({ ...prev, ...initialListing.project_offers }));
     }
     if (initialListing.construction_status != null) {
-      setConsructionStatus(initialListing.construction_status);
+      setConstructionStatus(initialListing.construction_status);
     }
     if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
       setExposureLevel(String(initialListing.exposure_level).toLowerCase());
     }
+    if (initialListing.sale_at_presale === true || initialListing.sale_at_presale === 'true') {
+      setSaleAtPresale(true);
+    }
+    setProjectName(initialListing.project_name ?? '');
+    setAddress(initialListing.address ?? '');
+    setPhone(initialListing.phone ?? '');
   }, [initialListing?.id]);
 
   // Request camera and media library permissions on mount
@@ -335,7 +342,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
 
   // File input refs for web
   const mainImageInputRef = useRef(null);
-  const [consructionStatus, setConsructionStatus] = useState(null);
+  const [constructionStatus, setConstructionStatus] = useState(null);
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
   // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
@@ -366,8 +373,44 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   });
   // Catch-all for company (and any) form keys not in generalDetailsCounts/projectOffers (e.g. office_1_area, whole_floor_1_price)
   const [otherFormValues, setOtherFormValues] = useState({});
+  // מכירה בפריסייל: when true, listing is tagged as sale-at-presale (saved in DB)
+  const [saleAtPresale, setSaleAtPresale] = useState(false);
+  // הפרויקט מציע: which option rows are expanded (selected). Key = group title, value = boolean. Deselected = details hidden and values cleared.
+  const [projectOfferSelected, setProjectOfferSelected] = useState({
+    'דירות 3 חדרים': true,
+    'דירות 4 חדרים': true,
+    'דירות 5 חדרים': true,
+    'דירות גן': true,
+    'נטהאוזים': true,
+    'בתים פרטיים': true,
+  });
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
+
+  // Keys per project-offer group; when group is deselected we clear these in projectOffers
+  const PROJECT_OFFER_KEYS_BY_TITLE = {
+    'דירות 3 חדרים': ['rooms_3_area', 'rooms_3_price'],
+    'דירות 4 חדרים': ['rooms_4_area', 'rooms_4_price'],
+    'דירות 5 חדרים': ['rooms_5_area', 'rooms_5_price'],
+    'דירות גן': ['garden_area', 'garden_rooms', 'garden_price'],
+    'נטהאוזים': ['penthouse_area', 'penthouse_rooms', 'penthouse_price'],
+    'בתים פרטיים': ['private_area', 'private_rooms', 'private_price'],
+  };
+  const setProjectOfferGroupSelected = (title, selected, keysToClear) => {
+    setProjectOfferSelected(prev => ({ ...prev, [title]: selected }));
+    if (!selected) {
+      const keys = keysToClear && keysToClear.length
+        ? keysToClear
+        : (PROJECT_OFFER_KEYS_BY_TITLE[title] || []);
+      if (keys.length) {
+        setProjectOffers(prev => {
+          const next = { ...prev };
+          keys.forEach(k => { next[k] = 0; });
+          return next;
+        });
+      }
+    }
+  };
 
   // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
   const hydrateGeneralDetailsWithRadio = (groups) => {
@@ -388,10 +431,14 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
         setOtherFormValues(prev => ({ ...prev, [key]: numVal }));
       }
     };
+    const isProjectOffersSection =
+    groups.title === 'הפרויקט מציע' ||
+    (groups.title && groups.title.startsWith('הפרוייקט מציע'));
     return {
       ...groups,
       groups: groups.groups.map(grp => ({
         ...grp,
+        isSelected: isProjectOffersSection ? (projectOfferSelected[grp.title] !== false) : true,
         fields: (grp.fields || []).map(f => {
           if ((f.type === 'count' || f.type === 'price') && f.key) {
             return {
@@ -600,7 +647,13 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           fieldKeys.includes('address-phone-description') ||
           fieldKeys.includes('propertyaddress') ||
           fieldKeys.includes('landaddress');
+        if (fieldKeys.includes('propertyaddress') && (!projectName?.trim() || !address || !phone || !description)) {
+          alert('אנא מלא את כל השדות הנדרשים (שם הפרויקט, כתובת, טלפון, תיאור)');
+          setUploading(false);
+          return;
+        }
         if (
+          !fieldKeys.includes('propertyaddress') &&
           needsAddressPhoneDescription &&
           (!address || !phone || !description)
         ) {
@@ -860,6 +913,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               condition: condition || null,
               purpose: purpose || 'sale',
               price: parseFloat(price) || 0,
+              projectName: fieldKeys.includes('propertyaddress') ? (projectName?.trim() || undefined) : undefined,
               address: address.trim(),
               phone: phone.trim(),
               description: description.trim(),
@@ -889,7 +943,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                 const hasAny = Object.values(merged).some(v => v !== 0 && v !== undefined && v !== '');
                 return hasAny ? merged : undefined;
               })(),
-              constructionStatus: consructionStatus || undefined,
+              constructionStatus: constructionStatus || undefined,
+              saleAtPresale: saleAtPresale,
             };
 
       // Create listing in database
@@ -1110,6 +1165,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                   return (
                     <PropertyAddress
                       key="propertyaddress"
+                      projectName={projectName}
+                      setProjectName={setProjectName}
                       address={address}
                       setAddress={setAddress}
                       phone={phone}
@@ -1228,22 +1285,43 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                     />
                   );
                 case 'saleatpresale':
-                  return <SaleAtPreSale key="saleatpresale" />;
+                  return (
+                    <SaleAtPreSale
+                      key="saleatpresale"
+                      value={saleAtPresale}
+                      onChange={setSaleAtPresale}
+                    />
+                  );
                 case 'generaldetailswithradio':
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
                       groups={hydrateGeneralDetailsWithRadio(field.groups)}
+                      onGroupToggle={
+                        (field.groups?.title === 'הפרויקט מציע' ||
+                         (field.groups?.title && field.groups.title.startsWith('הפרוייקט מציע')))
+                          ? (gi) => {
+                              const grp = field.groups?.groups?.[gi];
+                              if (grp?.title != null) {
+                                const next = !(projectOfferSelected[grp.title] !== false);
+                                const keysFromFields = (grp.fields || [])
+                                  .filter(f => f && f.key)
+                                  .map(f => f.key);
+                                setProjectOfferGroupSelected(grp.title, next, keysFromFields);
+                              }
+                            }
+                          : undefined
+                      }
                     />
                   );
-                case 'consructionstatus':
+                case 'constructionstatus':
                   return (
-                    <ConsructionStatus
-                      key="consructionstatus"
+                    <ConstructionStatus
+                      key="constructionstatus"
                       data={field.data || []}
                       title={field.title}
-                      consructionStatus={consructionStatus}
-                      setConsructionStatus={setConsructionStatus}
+                      constructionStatus={constructionStatus}
+                      setConstructionStatus={setConstructionStatus}
                     />
                   );
                 case 'companyofferslandsizes':

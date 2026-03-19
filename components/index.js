@@ -30,5 +30,5 @@ export {LandAddress} from './FormsElement/LandAddress';
 export {SalesImage} from './FormsElement/SalesImage';
 export {SaleAtPreSale} from './FormsElement/SaleAtPreSale';
 export {GeneralDetailsWithRadio} from './FormsElement/GeneralDetailsWithRadio';
-export {ConsructionStatus} from './FormsElement/ConstructionStatus';
+export {ConstructionStatus} from './FormsElement/ConstructionStatus';
 export {PropertyAddress} from './FormsElement/PropertyAddress';

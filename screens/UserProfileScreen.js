@@ -445,6 +445,14 @@ const UserProfileScreen = ({
   if (__DEV__) console.log('[UserProfile] description/bio:', { 'user.creator_bio': user?.creator_bio, 'resolvedCreator?.description': resolvedCreator?.description, brokerBioRaw, brokerBio });
   const brokerPiRating = user?.pi_value ?? lastAd?.pi_value ?? profile?.pi_value ?? 5;
 
+  // Average of star ratings from reviews (1–5); fallback to brokerPiRating when no reviews
+  const displayPiRating = React.useMemo(() => {
+    if (!reviews || reviews.length === 0) return brokerPiRating;
+    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    const avg = sum / reviews.length;
+    return Math.round(avg * 10) / 10; // 1 decimal (e.g. 4.3)
+  }, [reviews, brokerPiRating]);
+
   // Filter out display name from tags so it doesn't appear as a specialty/region
   const tagLabel = (s) => (typeof s === 'string' ? s : (s?.label ?? s?.name ?? String(s))).trim();
   const filteredActivityRegions = (activityRegions.length > 0 ? activityRegions : brokerSpecialties).filter(s => tagLabel(s) !== displayName);
@@ -545,8 +553,22 @@ const UserProfileScreen = ({
         </View>
 
         <View style={styles.actionRow}>
-          <Image source={callSource} style={styles.actionBtnImage} resizeMode="contain" />
-          <Image source={messageSource} style={styles.actionBtnImage} resizeMode="contain" />
+          <TouchableOpacity onPress={() => typeof onCall === 'function' && onCall()} activeOpacity={0.8} style={styles.actionBtnTouch}>
+            <Image source={callSource} style={styles.actionBtnImage} resizeMode="contain" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!currentUser && typeof onOpenUserRegistration === 'function') {
+                onOpenUserRegistration();
+              } else if (typeof onMessage === 'function') {
+                onMessage();
+              }
+            }}
+            activeOpacity={0.8}
+            style={styles.actionBtnTouch}
+          >
+            <Image source={messageSource} style={styles.actionBtnImage} resizeMode="contain" />
+          </TouchableOpacity>
         </View>
 
         {/* Last ad card - full width, no bubble */}
@@ -595,7 +617,7 @@ const UserProfileScreen = ({
               <View style={styles.lastAdPiAndPurposeRow}>
                 <View style={styles.lastAdPiBadge}>
                   <Image source={piBadgeSource} style={styles.lastAdPiBadgeImage} resizeMode="contain" />
-                  <Text style={styles.lastAdPiText}>{String(lastAd.pi_value ?? 5)}</Text>
+                  <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
                 </View>
                 <View style={styles.lastAdPurposeTag}>
                   <Text style={styles.lastAdPurposeText}>{lastAd.purpose || 'להשכרה'}</Text>
@@ -689,8 +711,8 @@ const UserProfileScreen = ({
               </View>
             </View>
             <View style={styles.brokerCardBottomPiWrap}>
-              <Text style={styles.brokerCardBottomPiValue}>{String(brokerPiRating)}</Text>
               <Image source={piBadgeSource} style={styles.brokerCardBottomPiImage} resizeMode="contain" />
+              <Text style={styles.brokerCardBottomPiValue}>{String(displayPiRating)}</Text>
             </View>
           </View>
           <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
@@ -911,6 +933,7 @@ const styles = StyleSheet.create({
   statNumber: { color: '#fff', fontSize: 18, fontWeight: '700' },
   statLabel: { color: Colors.grey200, fontSize: 12, marginTop: 2 },
   actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', paddingVertical: 8, paddingHorizontal: 24, backgroundColor: Colors.mainDeepBlue },
+  actionBtnTouch: { padding: 0 },
   actionBtnImage: { width: 120, height: 46 },
   profileDivider: { height: 2, backgroundColor: '#555', marginVertical: 16, alignSelf: 'stretch', marginHorizontal: 24 },
 

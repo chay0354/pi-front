@@ -3,9 +3,9 @@ import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
 
-export const ConsructionStatus = ({
-  consructionStatus,
-  setConsructionStatus,
+export const ConstructionStatus = ({
+  constructionStatus,
+  setConstructionStatus,
   data = [],
   title,
 }) => {
@@ -25,9 +25,9 @@ export const ConsructionStatus = ({
               isNotLastIndex={isNotLastIndex}
               title={item.title}
               name={item.name}
-              setName={setConsructionStatus}
+              setName={setConstructionStatus}
               index={index}
-              isSelected={item.name === consructionStatus}
+              isSelected={item.name === constructionStatus}
             />
           );
         })}

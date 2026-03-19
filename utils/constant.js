@@ -916,7 +916,7 @@ export const brokerCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -1504,7 +1504,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -1652,7 +1652,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -1768,7 +1768,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -2016,7 +2016,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -2191,7 +2191,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},
@@ -2278,7 +2278,7 @@ export const companyCategoryForm = {
         },
       },
       {
-        key: 'consructionstatus',
+        key: 'constructionstatus',
         title: 'מצב בניה',
         data: [
           {name: 'on_paper', title: 'על הנייר'},

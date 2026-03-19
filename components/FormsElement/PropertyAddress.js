@@ -5,6 +5,8 @@ import {TextAreaBox} from './TextAreaBox';
 import {Title} from './Title';
 
 export const PropertyAddress = ({
+  projectName,
+  setProjectName,
   address,
   setAddress,
   phone,
@@ -16,20 +18,24 @@ export const PropertyAddress = ({
     <View style={styles.container}>
       {/* Address Section */}
       <Title text={'פרטי כתובת הנכס'} />
-      <InputBox
-        value={address}
-        setValue={setAddress}
-        title={'שם הפרויקט'}
-        required={true}
-        placeholder={'הזן שם'}
-      />
-      <InputBox
-        value={address}
-        setValue={setAddress}
-        title={'כתובת הפרויקט'}
-        required={true}
-        placeholder={'הזן עיר, רחוב ומספר'}
-      />
+      <View style={styles.fieldSection}>
+        <InputBox
+          value={projectName}
+          setValue={setProjectName}
+          title={'שם הפרויקט'}
+          required={true}
+          placeholder={'הזן שם'}
+        />
+      </View>
+      <View style={styles.fieldSection}>
+        <InputBox
+          value={address}
+          setValue={setAddress}
+          title={'כתובת הפרויקט'}
+          required={true}
+          placeholder={'הזן עיר, רחוב ומספר'}
+        />
+      </View>
 
       {/* Phone Section */}
       <PhoneInput phone={phone} setPhone={setPhone} />
@@ -49,6 +55,9 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  fieldSection: {
+    marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
