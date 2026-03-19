@@ -15,11 +15,19 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/styles';
+import LocationMap from '../components/LocationMap';
 import { getSubscription, getListings, askSmartInfo, clearSubscription404Cache, getReviews, submitReview } from '../utils/api';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
 const CARD_BG = '#252436';
+const CONSTRUCTION_STATUS_STEPS = [
+  { name: 'on_paper', title: 'על הנייר' },
+  { name: 'beginning_of_construction', title: 'תחילת בנייה' },
+  { name: 'middle_of_construction', title: 'אמצע בנייה' },
+  { name: 'built', title: 'בנוי' },
+];
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const LAST_AD_IMAGE_HEIGHT = 280;
 const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padding 24*2, gap 10
@@ -86,6 +94,27 @@ function getFeatureIconSource(key) {
   const num = featureIconFileNumByKey[key] ?? 1;
   const asset = featureIconAssetsByNum[num] ?? featureIconAssetsByNum[1];
   return isWeb ? { uri: `${baseUrl}/apr-details/${num}.png` } : asset;
+}
+const companyIconBuilding = require('../assets/company-icons/icons (11).png');
+const companyIconFloors = require('../assets/company-icons/icons (12).png');
+const companyIconApartments = require('../assets/company-icons/door.png');
+const companyIconBuildingSource = isWeb && typeof window !== 'undefined' ? { uri: `${baseUrl}/company-icons/icons%20(11).png` } : companyIconBuilding;
+const companyIconFloorsSource = isWeb && typeof window !== 'undefined' ? { uri: `${baseUrl}/company-icons/icons%20(12).png` } : companyIconFloors;
+const companyIconApartmentsSource = isWeb && typeof window !== 'undefined' ? { uri: `${baseUrl}/company-icons/door.png` } : companyIconApartments;
+const aptTypeIcons = {
+  '3-5rooms': require('../assets/apt-types/3-5rooms.png'),
+  garden: require('../assets/apt-types/garden.png'),
+  penthouses: require('../assets/apt-types/penthouses.png'),
+  private: require('../assets/apt-types/private.png'),
+};
+function getProjectOfferIconSource(key) {
+  const k = key === '3rooms' || key === '4rooms' || key === '5rooms' ? '3-5rooms' : (key || '3-5rooms');
+  const asset = aptTypeIcons[k] || aptTypeIcons['3-5rooms'];
+  if (isWeb && typeof window !== 'undefined') {
+    const name = k === '3-5rooms' ? '3-5rooms' : k;
+    return { uri: `${baseUrl}/apt-types/${name}.png` };
+  }
+  return asset;
 }
 const SMART_BUTTONS = [
   { label: 'תחבורה', key: 'transport' },
@@ -211,6 +240,7 @@ const UserProfileScreen = ({
           specializations: specializations && specializations.length > 0 ? specializations : null,
           description: description || null,
           phones: phones.length > 0 ? phones : null,
+          subscription_type: (s.subscription_type || '').toLowerCase() || null,
         });
       })
       .catch((err) => {
@@ -384,20 +414,37 @@ const UserProfileScreen = ({
     console.log('[UserProfile] Resolved display:', { rawName, rawEmail, displayName, displayEmail: displayEmail ?? '(hidden)' });
   }
 
-  // Last ad: when opened from feed, the current listing is the "last ad"
-  const lastAd = isListingFromFeed ? user : (profile.properties && profile.properties[0]) ? {
-    images: profile.properties[0].image ? [{ uri: profile.properties[0].image }] : [],
-    price: profile.properties[0].price,
-    address: profile.properties[0].address,
-    purpose: profile.properties[0].status || 'להשכרה',
-    description: '',
-    creator_name: displayName,
-    profileImageUrl: displayImage,
-  } : null;
+  // Last ad: when opened from feed, the current listing is the "last ad"; else prefer first full listing from userListings (has project_offers), then profile.properties[0]
+  const lastAd = (() => {
+    if (isListingFromFeed) return user;
+    if (userListings.length > 0) {
+      const L = userListings[0];
+      const images = (L.listing_images && L.listing_images.length > 0)
+        ? L.listing_images.map(img => (img && typeof img === 'object' && img.image_url ? { uri: img.image_url } : typeof img === 'string' ? { uri: img } : img))
+        : (L.images && L.images.length > 0 ? L.images : []);
+      return { ...L, images };
+    }
+    if (profile.properties && profile.properties[0]) {
+      const p = profile.properties[0];
+      return {
+        images: p.image ? [{ uri: p.image }] : [],
+        price: p.price,
+        address: p.address,
+        purpose: p.status || 'להשכרה',
+        description: '',
+        creator_name: displayName,
+        profileImageUrl: displayImage,
+      };
+    }
+    return null;
+  })();
 
-  const lastAdImages = lastAd?.images && lastAd.images.length > 0
-    ? lastAd.images.map(img => (typeof img === 'string' ? { uri: img } : img))
-    : [];
+  const lastAdImages = (() => {
+    if (!lastAd) return [];
+    if (lastAd.images && lastAd.images.length > 0) return lastAd.images.map(img => (typeof img === 'string' ? { uri: img } : img));
+    if (lastAd.listing_images && lastAd.listing_images.length > 0) return lastAd.listing_images.map(img => (img && typeof img === 'object' && img.image_url ? { uri: img.image_url } : typeof img === 'string' ? { uri: img } : img));
+    return [];
+  })();
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
   const lastAdCardWidth = SCREEN_WIDTH;
@@ -419,6 +466,14 @@ const UserProfileScreen = ({
   // Broker profile card data (real user details with fallbacks)
   const brokerProfession = user?.profession ?? user?.title ?? profile.profession ?? 'מתווך נדל״ן';
   const brokerAddress = user?.address ?? user?.location ?? lastAd?.address ?? lastAd?.location ?? profile.address ?? 'אבן גבירול 104, תל אביב';
+  const profileSubscriptionType = (resolvedCreator?.subscription_type || user?.subscription_type || '').toLowerCase();
+  const isCompany = profileSubscriptionType === 'company';
+  const isBroker = profileSubscriptionType === 'broker';
+  const firstListingWithGeneral = userListings.find(l => l.general_details && typeof l.general_details === 'object');
+  const gd = firstListingWithGeneral?.general_details;
+  const companyBuildingCount = gd?.building_count != null ? Number(gd.building_count) : 0;
+  const companyFloorCount = gd?.floor_count != null ? Number(gd.floor_count) : 0;
+  const companyApartmentCount = gd?.apartment_count != null ? Number(gd.apartment_count) : 0;
   const specialtiesRaw = user?.creator_specialties ?? user?.specialties ?? user?.specialties_list ?? resolvedCreator?.specializations ?? profile.specialties;
   const brokerSpecialties = Array.isArray(specialtiesRaw)
     ? specialtiesRaw
@@ -492,6 +547,23 @@ const UserProfileScreen = ({
       { iconKey: 'immediate', label: am && (am.immediate_entry || am.entry_immediate) ? 'כניסה מיידית' : 'ללא כניסה מיידית' },
     ];
   }, [lastAd]);
+
+  const projectOffersCards = React.useMemo(() => {
+    if (!isCompany || !lastAd) return [];
+    const raw = lastAd.project_offers ?? lastAd.projectOffers;
+    const po = raw && typeof raw === 'object' ? raw : {};
+    const n = (v) => (v != null && !isNaN(Number(v)) ? Number(v) : null);
+    const allCards = [
+      { key: '3rooms', title: '3 חדרים', iconKey: '3-5rooms', area: n(po.rooms_3_area), price: n(po.rooms_3_price), rooms: null },
+      { key: '4rooms', title: '4 חדרים', iconKey: '3-5rooms', area: n(po.rooms_4_area), price: n(po.rooms_4_price), rooms: null },
+      { key: '5rooms', title: '5 חדרים', iconKey: '3-5rooms', area: n(po.rooms_5_area), price: n(po.rooms_5_price), rooms: null },
+      { key: 'garden', title: 'דירות גן', iconKey: 'garden', area: n(po.garden_area), price: n(po.garden_price), rooms: n(po.garden_rooms) },
+      { key: 'penthouses', title: 'נטהאוזים', iconKey: 'penthouses', area: n(po.penthouse_area), price: n(po.penthouse_price), rooms: n(po.penthouse_rooms) },
+      { key: 'private', title: 'בתים פרטיים', iconKey: 'private', area: n(po.private_area), price: n(po.private_price), rooms: n(po.private_rooms) },
+    ];
+    const hasValue = (c) => (c.area != null && c.area > 0) || (c.price != null && c.price > 0) || (c.rooms != null && c.rooms > 0);
+    return allCards.filter(hasValue);
+  }, [isCompany, lastAd]);
 
   useEffect(() => {
     if (lastAdImages.length <= 1) return;
@@ -630,7 +702,22 @@ const UserProfileScreen = ({
                 <MaterialCommunityIcons name="map-marker" size={18} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.lastAdLocationText}>{lastAd.address || lastAd.location || 'תל אביב, אבן גבירול 104'}</Text>
               </View>
-              <View style={styles.lastAdDivider} />
+              {isCompany && (
+                <View style={styles.companyStatsRow}>
+                  <View style={styles.companyStatItem}>
+                    <Image source={companyIconBuildingSource} style={styles.companyStatIconImage} resizeMode="contain" />
+                    <Text style={styles.companyStatText}>{companyBuildingCount} בניין</Text>
+                  </View>
+                  <View style={styles.companyStatItem}>
+                    <Image source={companyIconFloorsSource} style={styles.companyStatIconImage} resizeMode="contain" />
+                    <Text style={styles.companyStatText}>{companyFloorCount} קומות</Text>
+                  </View>
+                  <View style={styles.companyStatItem}>
+                    <Image source={companyIconApartmentsSource} style={styles.companyStatIconImage} resizeMode="contain" />
+                    <Text style={styles.companyStatText}>{companyApartmentCount} דירות</Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.lastAdPostedBy}>
                 <Text style={styles.lastAdPostedByLabel}>פורסם ע"י</Text>
                 <View style={styles.lastAdPostedByRow}>
@@ -647,16 +734,128 @@ const UserProfileScreen = ({
               <Text style={styles.lastAdDescription} numberOfLines={6}>
                 {lastAd.description || 'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
               </Text>
-              <View style={styles.lastAdDividerWhite} />
-              <View style={styles.lastAdFeaturesGrid}>
-                {adFeatures.map((item, index) => (
-                  <View key={`feat-${item.iconKey}-${index}`} style={styles.lastAdFeatureChip}>
-                    <Image source={getFeatureIconSource(item.iconKey)} style={styles.lastAdFeatureChipIcon} resizeMode="contain" />
-                    <Text style={styles.lastAdFeatureLabel}>{item.label}</Text>
+              <View style={styles.lastAdDivider} />
+              {isBroker ? (
+                <>
+                  <View style={styles.lastAdFeaturesGrid}>
+                    {adFeatures.map((item, index) => (
+                      <View key={`feat-${item.iconKey}-${index}`} style={styles.lastAdFeatureChip}>
+                        <Image source={getFeatureIconSource(item.iconKey)} style={styles.lastAdFeatureChipIcon} resizeMode="contain" />
+                        <Text style={styles.lastAdFeatureLabel}>{item.label}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-              <View style={styles.lastAdDividerWhite} />
+                  <View style={styles.lastAdDividerWhite} />
+                  {lastAd && (lastAd.address || lastAd.location) ? (
+                    <LocationMap
+                      address={lastAd.address || lastAd.location}
+                      containerStyle={styles.locationMapContainer}
+                    />
+                  ) : null}
+                </>
+              ) : isCompany && projectOffersCards.length > 0 ? (
+                <>
+                  <View style={styles.projectOffersSection}>
+                    <Text style={styles.projectOffersTitle}>הפרויקט מציע</Text>
+                    {projectOffersCards.map((card) => {
+                      const areaStr = card.area != null ? `גודל: ${card.area} מ"ר` : 'גודל: —';
+                      const priceStr = card.price != null ? `החל מ-${Number(card.price).toLocaleString('he-IL')}₪` : null;
+                      const roomsStr = card.rooms != null ? `מס' חדרים: ${card.rooms}` : null;
+                      const isSimple = card.rooms == null;
+                      const detailsLine = isSimple
+                        ? `${areaStr} | ${priceStr || 'החל מ-—₪'}`
+                        : [areaStr, roomsStr].filter(Boolean).join(' | ');
+                      return (
+                        <View key={card.key} style={styles.projectOfferCard}>
+                          <View style={styles.projectOfferCardHeader}>
+                            <Image source={getProjectOfferIconSource(card.iconKey)} style={styles.projectOfferCardIcon} resizeMode="contain" />
+                            <Text style={styles.projectOfferCardTitle}>{card.title}</Text>
+                          </View>
+                          <Text style={styles.projectOfferCardDetails}>{detailsLine}</Text>
+                          {!isSimple && <Text style={styles.projectOfferCardPrice}>{priceStr || 'החל מ-—₪'}</Text>}
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.lastAdDividerWhite} />
+                  <View style={styles.constructionStatusBlock}>
+                    <Text style={styles.constructionStatusTitle}>מצב בנייה</Text>
+                    <View style={styles.constructionStatusRow}>
+                      {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
+                        const status = (lastAd?.construction_status ?? '').toString().toLowerCase();
+                        const isSelected = status === (step.name || '').toLowerCase();
+                        const isNotLast = index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                        return (
+                          <React.Fragment key={step.name}>
+                            <View style={styles.constructionStatusStep}>
+                              <View style={[styles.constructionStatusCircle, isSelected && styles.constructionStatusCircleActive]}>
+                                {isSelected ? (
+                                  <MaterialCommunityIcons name="check" size={12} color={GOLD} />
+                                ) : null}
+                              </View>
+                              <Text style={[styles.constructionStatusLabel, isSelected && styles.constructionStatusLabelActive]}>{step.title}</Text>
+                            </View>
+                            {isNotLast ? <View style={styles.constructionStatusDottedLine} /> : null}
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  {lastAd && (lastAd.address || lastAd.location) ? (
+                    <LocationMap
+                      address={lastAd.address || lastAd.location}
+                      containerStyle={styles.locationMapContainer}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  {isCompany ? (
+                    <>
+                      <View style={styles.constructionStatusBlock}>
+                        <Text style={styles.constructionStatusTitle}>מצב בנייה</Text>
+                        <View style={styles.constructionStatusRow}>
+                          {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
+                            const status = (lastAd?.construction_status ?? '').toString().toLowerCase();
+                            const isSelected = status === (step.name || '').toLowerCase();
+                            const isNotLast = index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                            return (
+                              <React.Fragment key={step.name}>
+                                <View style={styles.constructionStatusStep}>
+                                  <View style={[styles.constructionStatusCircle, isSelected && styles.constructionStatusCircleActive]}>
+                                    {isSelected ? (
+                                      <MaterialCommunityIcons name="check" size={12} color={GOLD} />
+                                    ) : null}
+                                  </View>
+                                  <Text style={[styles.constructionStatusLabel, isSelected && styles.constructionStatusLabelActive]}>{step.title}</Text>
+                                </View>
+                                {isNotLast ? <View style={styles.constructionStatusDottedLine} /> : null}
+                              </React.Fragment>
+                            );
+                          })}
+                        </View>
+                      </View>
+                      <View style={styles.lastAdDividerWhite} />
+                    </>
+                  ) : null}
+                  {lastAd && (lastAd.address || lastAd.location) ? (
+                    <LocationMap
+                      address={lastAd.address || lastAd.location}
+                      containerStyle={styles.locationMapContainer}
+                    />
+                  ) : null}
+                  <View style={styles.lastAdDividerWhite} />
+                  <View style={styles.lastAdFeaturesGrid}>
+                    {adFeatures.map((item, index) => (
+                      <View key={`feat-${item.iconKey}-${index}`} style={styles.lastAdFeatureChip}>
+                        <Image source={getFeatureIconSource(item.iconKey)} style={styles.lastAdFeatureChipIcon} resizeMode="contain" />
+                        <Text style={styles.lastAdFeatureLabel}>{item.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+              {!isBroker && !isCompany ? <View style={styles.lastAdDividerWhite} /> : null}
             </View>
           </View>
         )}
@@ -702,29 +901,36 @@ const UserProfileScreen = ({
         {/* Broker block + My Properties – same scroll as whole screen */}
         <View style={styles.brokerCardOverlayLine} />
         <View style={styles.brokerCardBottom}>
-          <View style={styles.brokerCardBottomHeader}>
-            <View style={styles.brokerCardBottomNameBlock}>
-              <Text style={styles.brokerCardBottomName}>{displayName}</Text>
-              <View style={styles.brokerCardBottomLocation}>
-                <MaterialCommunityIcons name="map-marker" size={16} color="rgba(255,255,255,0.85)" />
-                <Text style={styles.brokerCardBottomAddress}>{brokerAddress}</Text>
+          {!isCompany ? (
+            <>
+              <View style={styles.brokerCardBottomHeader}>
+                <View style={styles.brokerCardBottomNameBlock}>
+                  <Text style={styles.brokerCardBottomName}>{displayName}</Text>
+                  <View style={styles.brokerCardBottomLocation}>
+                    <MaterialCommunityIcons name="map-marker" size={16} color="rgba(255,255,255,0.85)" />
+                    <Text style={styles.brokerCardBottomAddress}>{brokerAddress}</Text>
+                  </View>
+                </View>
+                <View style={styles.brokerCardBottomPiWrap}>
+                  <Image source={piBadgeSource} style={styles.brokerCardBottomPiImage} resizeMode="contain" />
+                  <Text style={styles.brokerCardBottomPiValue}>{String(displayPiRating)}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.brokerCardBottomPiWrap}>
-              <Image source={piBadgeSource} style={styles.brokerCardBottomPiImage} resizeMode="contain" />
-              <Text style={styles.brokerCardBottomPiValue}>{String(displayPiRating)}</Text>
-            </View>
-          </View>
-          <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
-          <View style={styles.brokerCardBottomTags}>
-            {overlayActivityRegions.length > 0 ? overlayActivityRegions.map((s, i) => (
-              <View key={i} style={styles.brokerCardBottomTag}>
-                <Text style={styles.brokerCardBottomTagText}>{typeof s === 'string' ? s : (s?.label ?? s?.name ?? String(s))}</Text>
+              <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
+              <View style={styles.brokerCardBottomTags}>
+                {overlayActivityRegions.length > 0 ? overlayActivityRegions.map((s, i) => (
+                  <View key={i} style={styles.brokerCardBottomTag}>
+                    <Text style={styles.brokerCardBottomTagText}>{typeof s === 'string' ? s : (s?.label ?? s?.name ?? String(s))}</Text>
+                  </View>
+                )) : (
+                  <Text style={styles.brokerCardBottomTagEmpty}>אין התמחויות</Text>
+                )}
               </View>
-            )) : (
-              <Text style={styles.brokerCardBottomTagEmpty}>אין התמחויות</Text>
-            )}
-          </View>
+            </>
+          ) : null}
+          {isCompany ? (
+            <Text style={styles.brokerCardBottomSectionTitle}>אודות החברה</Text>
+          ) : null}
           <Text style={styles.brokerCardBottomBio}>{brokerBio && String(brokerBio).trim() ? brokerBio : 'אין תיאור'}</Text>
           <View style={styles.brokerCardBottomDivider} />
         </View>
@@ -1002,6 +1208,10 @@ const styles = StyleSheet.create({
   brokerCardBottomName: { color: '#fff', fontSize: 20, fontWeight: '700', textAlign: 'right', marginBottom: 4 },
   brokerCardBottomLocation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   brokerCardBottomAddress: { color: Colors.grey200, fontSize: 14, textAlign: 'right' },
+  companyStatsRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', width: '100%', alignSelf: 'stretch', marginTop: 10, paddingHorizontal: 0 },
+  companyStatItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  companyStatIconImage: { width: 24, height: 24 },
+  companyStatText: { color: '#fff', fontSize: 14 },
   brokerCardBottomSectionTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginBottom: 6, alignSelf: 'stretch', textAlign: 'right' },
   brokerCardBottomTags: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, marginBottom: 12, alignSelf: 'stretch' },
   brokerCardBottomTag: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12 },
@@ -1088,6 +1298,16 @@ const styles = StyleSheet.create({
   lastAdLocationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginBottom: 10 },
   lastAdLocationText: { color: 'rgba(255,255,255,0.9)', fontSize: 14, textAlign: 'right' },
   lastAdDivider: { height: 2, backgroundColor: '#555', marginVertical: 12, alignSelf: 'stretch' },
+  locationMapContainer: { alignSelf: 'stretch', width: '100%' },
+  constructionStatusBlock: { marginBottom: 12, alignSelf: 'stretch', width: '100%', alignItems: 'flex-end' },
+  constructionStatusTitle: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '600', marginBottom: 10, textAlign: 'right' },
+  constructionStatusRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', width: '100%', alignSelf: 'stretch' },
+  constructionStatusStep: { alignItems: 'center', minWidth: 48 },
+  constructionStatusCircle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
+  constructionStatusCircleActive: { borderColor: GOLD, borderWidth: 1, backgroundColor: Colors.mainDeepBlue },
+  constructionStatusLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 6, textAlign: 'center' },
+  constructionStatusLabelActive: { color: GOLD, fontWeight: '600' },
+  constructionStatusDottedLine: { width: 24, height: 0, borderTopWidth: 2, borderStyle: 'dotted', borderColor: 'rgba(255,255,255,0.35)', marginBottom: 18 },
   lastAdPostedBy: { alignItems: 'flex-end', marginBottom: 8 },
   lastAdPostedByLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, textAlign: 'right', marginBottom: 4 },
   lastAdPostedByRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
@@ -1101,6 +1321,14 @@ const styles = StyleSheet.create({
   lastAdFeatureIcon: { marginRight: 4 },
   lastAdFeatureChipIcon: { width: 22, height: 22, marginRight: 4 },
   lastAdFeatureLabel: { color: '#fff', fontSize: 14 },
+  projectOffersSection: { marginTop: 0, marginBottom: 0, width: '100%', alignSelf: 'stretch' },
+  projectOffersTitle: { color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 12 },
+  projectOfferCard: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 10, width: '100%', alignSelf: 'stretch', alignItems: 'flex-end' },
+  projectOfferCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 6 },
+  projectOfferCardIcon: { width: 24, height: 24 },
+  projectOfferCardTitle: { color: '#fff', fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  projectOfferCardDetails: { color: 'rgba(255,255,255,0.9)', fontSize: 13, textAlign: 'right', marginBottom: 4, alignSelf: 'stretch' },
+  projectOfferCardPrice: { color: GOLD, fontSize: 13, fontWeight: '600', textAlign: 'right', alignSelf: 'stretch' },
 });
 
 export default UserProfileScreen;

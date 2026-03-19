@@ -591,6 +591,9 @@ const TikTokFeedScreen = ({
                 view_count: listing.view_count != null ? Number(listing.view_count) : 0,
                 like_count: listing.like_count != null ? Number(listing.like_count) : 0,
                 liked: listing.liked === true,
+                project_offers: listing.project_offers && typeof listing.project_offers === 'object' ? listing.project_offers : null,
+                general_details: listing.general_details && typeof listing.general_details === 'object' ? listing.general_details : null,
+                construction_status: listing.construction_status ?? null,
               };
             });
 

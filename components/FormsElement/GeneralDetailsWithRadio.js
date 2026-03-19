@@ -11,7 +11,7 @@ import {RadioIcon} from './RadioIcon';
 
 const isRowTappable = (onGroupToggle) => typeof onGroupToggle === 'function';
 
-export const GeneralDetailsWithRadio = ({ groups, onGroupToggle }) => {
+export const GeneralDetailsWithRadio = ({ groups, onGroupToggle, onStaticCountChange }) => {
   const radioOptions = groups;
   return (
     <FormContainer>
@@ -43,6 +43,11 @@ export const GeneralDetailsWithRadio = ({ groups, onGroupToggle }) => {
 
                     if (f.type === 'count') {
                       const key = f.key || `field-${gi}-${idx}`;
+                      const setCount = typeof f.onChange === 'function'
+                        ? f.onChange
+                        : (typeof onStaticCountChange === 'function' && f.key
+                          ? (val) => onStaticCountChange(f.key, val)
+                          : () => {});
                       return (
                         <React.Fragment key={key}>
                           {f.subTitle && (
@@ -52,9 +57,9 @@ export const GeneralDetailsWithRadio = ({ groups, onGroupToggle }) => {
                             </Text>
                           )}
                           <CountUpdate
-                            title={f.title}
+                            title={f.title ?? group.title}
                             count={f.value}
-                            setCount={typeof f.onChange === 'function' ? f.onChange : () => {}}
+                            setCount={setCount}
                             isArea={!!f.isArea}
                             isDivider={false}
                             isLast={!isNotLastIndex}
@@ -120,6 +125,9 @@ export const GeneralDetailsWithRadio = ({ groups, onGroupToggle }) => {
                   const isLast = idx === group.fields.length - 1;
                   if (f.type === 'count') {
                     const key = f.key || `field-${gi}-${idx}`;
+                    const setCount = (typeof onStaticCountChange === 'function' && f.key)
+                      ? (val) => onStaticCountChange(f.key, val)
+                      : (typeof f.onChange === 'function' ? f.onChange : () => {});
                     return (
                       <React.Fragment key={key}>
                         {f.subTitle && (
@@ -129,9 +137,9 @@ export const GeneralDetailsWithRadio = ({ groups, onGroupToggle }) => {
                           </Text>
                         )}
                         <CountUpdate
-                          title={f.title}
+                          title={f.title ?? group.title}
                           count={f.value}
-                          setCount={typeof f.onChange === 'function' ? f.onChange : () => {}}
+                          setCount={setCount}
                           isArea={!!f.isArea}
                           isDivider={false}
                           isLast={!isNotLastIndex}

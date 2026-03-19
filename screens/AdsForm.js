@@ -56,6 +56,7 @@ import {
   PropertyAddress,
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
+import {CountUpdate} from '../components/FormsElement/CountUpdate';
 import {ContextHook} from '../hooks/ContextHook';
 
 /**
@@ -1292,7 +1293,37 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                       onChange={setSaleAtPresale}
                     />
                   );
-                case 'generaldetailswithradio':
+                case 'generaldetailswithradio': {
+                  const isGeneralDetailsSection = field.groups?.title === 'פרטים כלליים';
+                  if (isGeneralDetailsSection) {
+                    return (
+                      <FormContainer key="generaldetails-static">
+                        <Title text="פרטים כלליים" />
+                        <CountUpdate
+                          title="כמות מבנים"
+                          count={generalDetailsCounts.building_count}
+                          setCount={(v) => setGeneralDetailsCounts(prev => ({ ...prev, building_count: Math.max(0, Number(v) || 0) }))}
+                          isDivider={false}
+                          containerStyle={{ marginBottom: 0 }}
+                        />
+                        <CountUpdate
+                          title="מספר קומות"
+                          count={generalDetailsCounts.floor_count}
+                          setCount={(v) => setGeneralDetailsCounts(prev => ({ ...prev, floor_count: Math.max(0, Number(v) || 0) }))}
+                          isDivider={false}
+                          containerStyle={{ marginBottom: 0 }}
+                        />
+                        <CountUpdate
+                          title="כמות דירות"
+                          count={generalDetailsCounts.apartment_count}
+                          setCount={(v) => setGeneralDetailsCounts(prev => ({ ...prev, apartment_count: Math.max(0, Number(v) || 0) }))}
+                          isLast
+                          isDivider={false}
+                          containerStyle={{ marginBottom: 0 }}
+                        />
+                      </FormContainer>
+                    );
+                  }
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
@@ -1314,6 +1345,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                       }
                     />
                   );
+                }
                 case 'constructionstatus':
                   return (
                     <ConstructionStatus
