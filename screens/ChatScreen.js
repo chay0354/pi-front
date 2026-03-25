@@ -17,6 +17,7 @@ import {createClient} from '@supabase/supabase-js';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {DEFAULT_WELCOME_MESSAGE} from '../utils/chatDefaults';
 import {getChatMessages, getChatParticipantDisplay, sendChatMessage} from '../utils/api';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -54,7 +55,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const scrollRef = useRef(null);
 
   const displayName = (resolvedDisplay?.name != null ? resolvedDisplay.name : conversation?.name) ?? DEFAULT_WELCOME_MESSAGE.senderName;
-  const profileImageUrl = resolvedDisplay?.profileImageUrl != null ? resolvedDisplay.profileImageUrl : conversation?.profileImageUrl;
+  const profileImageUrl =
+    getUserProfileImageUrl(resolvedDisplay) || getUserProfileImageUrl(conversation);
 
   const fetchMessages = useCallback(() => {
     if (!isUser || !myEmail || !otherUserEmail) return;
@@ -68,13 +70,17 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
 
   useEffect(() => {
     if (!isUser || !otherUserEmail) return;
-    const hasGoodDisplay = conversation?.name && conversation.name !== 'משתמש' || conversation?.profileImageUrl;
+    const hasGoodDisplay =
+      (conversation?.name && conversation.name !== 'משתמש') || getUserProfileImageUrl(conversation);
     if (hasGoodDisplay) return;
     let cancelled = false;
     getChatParticipantDisplay(otherUserEmail)
       .then((res) => {
-        if (!cancelled && res.success && (res.name || res.profileImageUrl))
-          setResolvedDisplay({ name: res.name || null, profileImageUrl: res.profileImageUrl || null });
+        if (!cancelled && res.success && (res.name || getUserProfileImageUrl(res)))
+          setResolvedDisplay({
+            name: res.name || null,
+            profileImageUrl: getUserProfileImageUrl(res) || null,
+          });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -166,11 +172,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     setSending(true);
     setInputText('');
     try {
-      const receiverDisplay = (conversation?.name || conversation?.profileImageUrl)
-        ? { name: conversation.name, profileImageUrl: conversation.profileImageUrl }
-        : null;
+      const receiverPic = getUserProfileImageUrl(conversation);
+      const receiverDisplay =
+        conversation?.name || receiverPic
+          ? {name: conversation?.name || null, profileImageUrl: receiverPic || null}
+          : null;
       const senderName = currentUser?.name || currentUser?.contact_person_name || currentUser?.agent_name || currentUser?.business_name || currentUser?.broker_office_name;
-      const senderPic = currentUser?.profile_picture_url || currentUser?.profileImageUrl;
+      const senderPic = getUserProfileImageUrl(currentUser);
       const senderDisplay = (senderName || senderPic) ? { name: senderName || null, profileImageUrl: senderPic || null } : null;
       const res = await sendChatMessage(myEmail, otherUserEmail, text, receiverDisplay, senderDisplay);
       if (res.message) {

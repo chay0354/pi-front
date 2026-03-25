@@ -16,6 +16,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/styles';
 import { getSubscription, getListings, askSmartInfo, clearSubscription404Cache, getReviews, submitReview } from '../utils/api';
+import { getUserProfileImageUrl } from '../utils/userProfileImage';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -282,11 +283,7 @@ const UserProfileScreen = ({
     else name = u.name || u.contact_person_name || u.business_name || u.broker_office_name || u.creator_name || u.email || null;
     return (name && String(name).trim()) ? String(name).trim() : null;
   };
-  const getReviewerImageUrl = (u) => {
-    if (!u) return null;
-    const url = u.profile_picture_url || u.profilePictureUrl || u.profile_image_url || u.profileImageUrl || u.company_logo_url || u.creator_profile_image_url || null;
-    return (url && String(url).trim()) ? String(url).trim() : null;
-  };
+  const getReviewerImageUrl = (u) => getUserProfileImageUrl(u);
 
   const handleRate = async () => {
     console.log('[UserProfile] handleRate called', { selectedRating, creatorId, submitReviewLoading, hasCurrentUser: !!(currentUser?.id || currentUser?.email) });
@@ -364,7 +361,10 @@ const UserProfileScreen = ({
   const rawEmail = isPlaceholderCreator(rawNameFromSource, rawEmailFromSource) ? (isListingFromFeed ? '' : rawEmailFromSource) : rawEmailFromSource;
   const displayName = rawName && String(rawName).trim() ? String(rawName).trim() : (isListingFromFeed ? 'משתמש' : profile.name);
   const displayEmail = rawEmail && String(rawEmail).trim() ? String(rawEmail).trim() : (isListingFromFeed ? null : profile.email);
-  const displayImage = user?.profileImageUrl || user?.profile_image_url || user?.creator_profile_image_url || resolvedCreator?.profilePictureUrl || profile.profileImageUrl;
+  const displayImage =
+    getUserProfileImageUrl(user) ||
+    getUserProfileImageUrl(resolvedCreator) ||
+    getUserProfileImageUrl(profile);
   const contactPhones = resolvedCreator?.phones && resolvedCreator.phones.length > 0 ? resolvedCreator.phones : [];
   const contactEmail = displayEmail;
 
@@ -394,6 +394,8 @@ const UserProfileScreen = ({
     creator_name: displayName,
     profileImageUrl: displayImage,
   } : null;
+
+  const lastAdPostedByAvatarUrl = lastAd ? getUserProfileImageUrl(lastAd) || displayImage : null;
 
   const lastAdImages = lastAd?.images && lastAd.images.length > 0
     ? lastAd.images.map(img => (typeof img === 'string' ? { uri: img } : img))
@@ -635,8 +637,8 @@ const UserProfileScreen = ({
                 <Text style={styles.lastAdPostedByLabel}>פורסם ע"י</Text>
                 <View style={styles.lastAdPostedByRow}>
                   <Text style={styles.lastAdPostedByName}>{displayName}</Text>
-                  {(lastAd.profileImageUrl || displayImage) ? (
-                    <Image source={{ uri: lastAd.profileImageUrl || displayImage }} style={styles.lastAdPostedByAvatar} resizeMode="cover" />
+                  {lastAdPostedByAvatarUrl ? (
+                    <Image source={{ uri: lastAdPostedByAvatarUrl }} style={styles.lastAdPostedByAvatar} resizeMode="cover" />
                   ) : (
                     <View style={[styles.lastAdPostedByAvatar, styles.lastAdPostedByAvatarPlaceholder]}>
                       <MaterialCommunityIcons name="account" size={14} color="#fff" />

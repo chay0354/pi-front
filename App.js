@@ -29,12 +29,20 @@ import {
   VerificationCodeScreen,
   LoginScreen,
   UserRegistrationScreen,
+  SecretCodeRecoveryScreen,
+  SecretCodeRecoverySentScreen,
+  FavoritesScreen,
+  FeedbackSuggestionScreen,
+  TermsOfUseScreen,
+  AccessibilityStatementScreen,
 } from './screens';
 import {ContextHook} from './hooks/ContextHook';
 import {subscriptionTypes} from './utils/constant';
 import {getChatUnreadCount} from './utils/api';
+import {getUserProfileImageUrl} from './utils/userProfileImage';
 import {useFonts} from 'expo-font';
 import {fonts} from './utils/fonts';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 const screenName = {
   home: 'home',
@@ -73,6 +81,11 @@ const screenName = {
   chat: 'chat',
   userProfile: 'userProfile',
   userListings: 'userListings',
+  secretCodeRecovery: 'secretCodeRecovery',
+  secretCodeRecoverySent: 'secretCodeRecoverySent',
+  favorites: 'favorites',
+  termsOfUse: 'termsOfUse',
+  accessibilityStatement: 'accessibilityStatement',
 };
 
 /**
@@ -97,6 +110,11 @@ export default function App() {
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
   const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null); // 'userProfile' when registration was opened from profile (to post review)
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
+  const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שחזור קוד סודי success screen
+  const [postEditorConfig, setPostEditorConfig] = useState(() => ({
+    publishTarget: 'post',
+    returnScreen: screenName.tikTokFeed,
+  }));
   // Feed filters (price, rooms, city, apartment type) – applied client-side in TikTokFeedScreen
   const [feedFilters, setFeedFilters] = useState({
     price: null,       // null | { minPrice, maxPrice }
@@ -197,6 +215,7 @@ export default function App() {
 
   return (
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
+      <SafeAreaProvider>
       <View style={styles.container}>
         {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
         {__DEV__ && typeof window !== 'undefined' && (
@@ -206,10 +225,22 @@ export default function App() {
         )}
         {currentScreen === screenName.home && (
           <Home
+            currentUser={currentUser}
             onOpenSettings={() => setCurrentScreen(screenName.settings)}
             onOpenTikTokFeed={category => {
               setSelectedCategory(category);
               setCurrentScreen(screenName.tikTokFeed);
+            }}
+            onOpenStoryUpload={() => {
+              setPostEditorConfig({
+                publishTarget: 'story',
+                returnScreen: screenName.home,
+              });
+              setCurrentScreen(screenName.postEditor);
+            }}
+            onRequireLoginForStory={() => {
+              setReturnToScreenAfterAuth('home');
+              setCurrentScreen(screenName.userRegistration);
             }}
           />
         )}
@@ -234,6 +265,10 @@ export default function App() {
             }}
             onOpenPostEditor={category => {
               if (category) setSelectedCategory(category);
+              setPostEditorConfig({
+                publishTarget: 'post',
+                returnScreen: screenName.tikTokFeed,
+              });
               setCurrentScreen(screenName.postEditor);
             }}
             onOpenCityFilter={() => setCurrentScreen(screenName.cityFilter)}
@@ -267,7 +302,7 @@ export default function App() {
                 name: displayName,
                 preview: '',
                 time: '',
-                profileImageUrl: u?.profileImageUrl || u?.profile_image_url || u?.creator_profile_image_url || null,
+                profileImageUrl: getUserProfileImageUrl(u),
               };
               setSelectedConversation(conversation);
               setChatReturnScreen(screenName.userProfile);
@@ -375,14 +410,21 @@ export default function App() {
         )}
         {currentScreen === screenName.postEditor && (
           <PostEditorScreen
+            publishTarget={postEditorConfig.publishTarget}
             selectedCategory={selectedCategory}
             currentUser={currentUser}
-            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
-            onPublish={async () => {
-              setCurrentScreen(screenName.tikTokFeed);
-              setTimeout(() => {
-                setTikTokFeedRefreshKey(prev => prev + 1);
-              }, 800);
+            onClose={() =>
+              setCurrentScreen(postEditorConfig.returnScreen)
+            }
+            onPublish={() => {
+              if (
+                postEditorConfig.publishTarget === 'post' &&
+                postEditorConfig.returnScreen === screenName.tikTokFeed
+              ) {
+                setTimeout(() => {
+                  setTikTokFeedRefreshKey(prev => prev + 1);
+                }, 800);
+              }
             }}
           />
         )}
@@ -479,6 +521,44 @@ export default function App() {
             }}
             onLogout={() => setCurrentUser(null)}
             onOpenLogin={() => setCurrentScreen(screenName.login)}
+            onOpenSecretCodeRecovery={() =>
+              setCurrentScreen(screenName.secretCodeRecovery)
+            }
+            onOpenFavorites={() => setCurrentScreen(screenName.favorites)}
+            onOpenFeedback={() => setCurrentScreen(screenName.feedbackSuggestion)}
+            onOpenTermsOfUse={() => setCurrentScreen(screenName.termsOfUse)}
+            onOpenAccessibilityStatement={() =>
+              setCurrentScreen(screenName.accessibilityStatement)
+            }
+          />
+        )}
+        {currentScreen === screenName.termsOfUse && (
+          <TermsOfUseScreen onClose={() => setCurrentScreen(screenName.settings)} />
+        )}
+        {currentScreen === screenName.accessibilityStatement && (
+          <AccessibilityStatementScreen
+            onClose={() => setCurrentScreen(screenName.settings)}
+          />
+        )}
+        {currentScreen === screenName.feedbackSuggestion && (
+          <FeedbackSuggestionScreen onClose={() => setCurrentScreen(screenName.settings)} />
+        )}
+        {currentScreen === screenName.favorites && (
+          <FavoritesScreen onClose={() => setCurrentScreen(screenName.settings)} />
+        )}
+        {currentScreen === screenName.secretCodeRecovery && (
+          <SecretCodeRecoveryScreen
+            onClose={() => setCurrentScreen(screenName.settings)}
+            onSent={em => {
+              setSecretRecoveryEmail(em);
+              setCurrentScreen(screenName.secretCodeRecoverySent);
+            }}
+          />
+        )}
+        {currentScreen === screenName.secretCodeRecoverySent && (
+          <SecretCodeRecoverySentScreen
+            email={secretRecoveryEmail}
+            onBack={() => setCurrentScreen(screenName.settings)}
           />
         )}
         {currentScreen === screenName.editPublishAd && (
@@ -584,13 +664,19 @@ export default function App() {
               if (returnToScreenAfterAuth === 'userProfile') {
                 setReturnToScreenAfterAuth(null);
                 setCurrentScreen(screenName.userProfile);
+              } else if (returnToScreenAfterAuth === 'home') {
+                setReturnToScreenAfterAuth(null);
+                setCurrentScreen(screenName.home);
               } else {
                 setCurrentScreen(screenName.adsForm);
               }
             }}
             onCancel={() => {
+              const goHome = returnToScreenAfterAuth === 'home';
               setReturnToScreenAfterAuth(null);
-              setCurrentScreen(screenName.tikTokFeed);
+              setCurrentScreen(
+                goHome ? screenName.home : screenName.tikTokFeed,
+              );
             }}
             onOpenLogin={() => setCurrentScreen(screenName.login)}
           />
@@ -787,6 +873,7 @@ export default function App() {
           />
         )}
       </View>
+      </SafeAreaProvider>
     </ContextHook.Provider>
   );
 }

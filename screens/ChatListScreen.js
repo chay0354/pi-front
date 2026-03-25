@@ -14,6 +14,7 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getConversationWithWelcomeMessage} from '../utils/chatDefaults';
 import {getChatConversations} from '../utils/api';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
 
 const BG = '#1a1926';
 const CARD_BG = '#252436';
@@ -47,7 +48,7 @@ const ChatListScreen = ({onClose, onOpenChat, currentUser = null, refreshKey = 0
       const asConv = list.map((c) => ({
         id: c.otherUserEmail || c.id,
         name: c.name || 'משתמש',
-        profileImageUrl: c.profileImageUrl || null,
+        profileImageUrl: getUserProfileImageUrl(c) || null,
         preview: c.preview || '',
         time: c.time || '',
       }));

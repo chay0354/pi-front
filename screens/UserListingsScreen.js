@@ -12,6 +12,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/styles';
 import { getListings } from '../utils/api';
+import { getUserProfileImageUrl } from '../utils/userProfileImage';
 
 
 const GOLD = '#ffc40a';
@@ -54,8 +55,7 @@ const UserListingsScreen = ({ creatorId, displayName = '', onClose }) => {
     const priceStr =
       priceNum != null && !isNaN(priceNum) ? `₪${Math.round(priceNum).toLocaleString('he-IL')}` : '—';
     const location = (item.address || item.land_address || item.search_address || '').trim() || '—';
-    const creatorImage =
-      item.creator_profile_image_url || item.profile_image_url || item.profileImageUrl;
+    const creatorImage = getUserProfileImageUrl(item);
 
     return (
       <View style={styles.card}>

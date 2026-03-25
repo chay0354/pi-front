@@ -14,7 +14,8 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, toSubscriptionId, getApiUrl} from '../utils/api';
+import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   brokerCategoryForm,
   companyCategoryForm,
@@ -217,7 +218,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   const [condition, setCondition] = useState(null);
   const [purpose, setPurpose] = useState('sale'); // 'sale' or 'rent'
   const [price, setPrice] = useState(1000000);
-  const [projectName, setProjectName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
@@ -296,12 +296,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
     if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
       setExposureLevel(String(initialListing.exposure_level).toLowerCase());
     }
-    if (initialListing.sale_at_presale === true || initialListing.sale_at_presale === 'true') {
-      setSaleAtPresale(true);
-    }
-    setProjectName(initialListing.project_name ?? '');
-    setAddress(initialListing.address ?? '');
-    setPhone(initialListing.phone ?? '');
   }, [initialListing?.id]);
 
   // Request camera and media library permissions on mount
@@ -373,44 +367,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   });
   // Catch-all for company (and any) form keys not in generalDetailsCounts/projectOffers (e.g. office_1_area, whole_floor_1_price)
   const [otherFormValues, setOtherFormValues] = useState({});
-  // מכירה בפריסייל: when true, listing is tagged as sale-at-presale (saved in DB)
-  const [saleAtPresale, setSaleAtPresale] = useState(false);
-  // הפרויקט מציע: which option rows are expanded (selected). Key = group title, value = boolean. Deselected = details hidden and values cleared.
-  const [projectOfferSelected, setProjectOfferSelected] = useState({
-    'דירות 3 חדרים': true,
-    'דירות 4 חדרים': true,
-    'דירות 5 חדרים': true,
-    'דירות גן': true,
-    'נטהאוזים': true,
-    'בתים פרטיים': true,
-  });
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
-
-  // Keys per project-offer group; when group is deselected we clear these in projectOffers
-  const PROJECT_OFFER_KEYS_BY_TITLE = {
-    'דירות 3 חדרים': ['rooms_3_area', 'rooms_3_price'],
-    'דירות 4 חדרים': ['rooms_4_area', 'rooms_4_price'],
-    'דירות 5 חדרים': ['rooms_5_area', 'rooms_5_price'],
-    'דירות גן': ['garden_area', 'garden_rooms', 'garden_price'],
-    'נטהאוזים': ['penthouse_area', 'penthouse_rooms', 'penthouse_price'],
-    'בתים פרטיים': ['private_area', 'private_rooms', 'private_price'],
-  };
-  const setProjectOfferGroupSelected = (title, selected, keysToClear) => {
-    setProjectOfferSelected(prev => ({ ...prev, [title]: selected }));
-    if (!selected) {
-      const keys = keysToClear && keysToClear.length
-        ? keysToClear
-        : (PROJECT_OFFER_KEYS_BY_TITLE[title] || []);
-      if (keys.length) {
-        setProjectOffers(prev => {
-          const next = { ...prev };
-          keys.forEach(k => { next[k] = 0; });
-          return next;
-        });
-      }
-    }
-  };
 
   // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
   const hydrateGeneralDetailsWithRadio = (groups) => {
@@ -431,14 +389,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
         setOtherFormValues(prev => ({ ...prev, [key]: numVal }));
       }
     };
-    const isProjectOffersSection =
-    groups.title === 'הפרויקט מציע' ||
-    (groups.title && groups.title.startsWith('הפרוייקט מציע'));
     return {
       ...groups,
       groups: groups.groups.map(grp => ({
         ...grp,
-        isSelected: isProjectOffersSection ? (projectOfferSelected[grp.title] !== false) : true,
         fields: (grp.fields || []).map(f => {
           if ((f.type === 'count' || f.type === 'price') && f.key) {
             return {
@@ -647,13 +601,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           fieldKeys.includes('address-phone-description') ||
           fieldKeys.includes('propertyaddress') ||
           fieldKeys.includes('landaddress');
-        if (fieldKeys.includes('propertyaddress') && (!projectName?.trim() || !address || !phone || !description)) {
-          alert('אנא מלא את כל השדות הנדרשים (שם הפרויקט, כתובת, טלפון, תיאור)');
-          setUploading(false);
-          return;
-        }
         if (
-          !fieldKeys.includes('propertyaddress') &&
           needsAddressPhoneDescription &&
           (!address || !phone || !description)
         ) {
@@ -701,7 +649,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${getApiUrl()}/api/upload`,
+              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -745,7 +693,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               formData.append('folder', 'listings/images');
 
               const uploadResponse = await fetch(
-                `${getApiUrl()}/api/upload`,
+                `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
                 {
                   method: 'POST',
                   body: formData,
@@ -782,7 +730,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           formData.append('folder', 'listings/images');
 
           const response = await fetch(
-            `${getApiUrl()}/api/upload`,
+            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -817,7 +765,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${getApiUrl()}/api/upload`,
+              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -848,7 +796,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           formData.append('folder', 'listings/videos');
 
           const response = await fetch(
-            `${getApiUrl()}/api/upload`,
+            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -887,7 +835,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               budget: parseFloat(budget) || 0,
               description: description.trim(),
               mainImageUrl: uploadedMainImageUrl,
-              profileImageUrl: currentUser?.profile_picture_url || null,
+              profileImageUrl: getUserProfileImageUrl(currentUser),
               category: listingCategory,
               // Set defaults for required fields that don't apply to category 3
               propertyType: 'office', // Default
@@ -913,7 +861,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               condition: condition || null,
               purpose: purpose || 'sale',
               price: parseFloat(price) || 0,
-              projectName: fieldKeys.includes('propertyaddress') ? (projectName?.trim() || undefined) : undefined,
               address: address.trim(),
               phone: phone.trim(),
               description: description.trim(),
@@ -924,7 +871,7 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               ),
               videoUrl: uploadedVideoUrl,
               hasVideo: !!uploadedVideoUrl,
-              profileImageUrl: currentUser?.profile_picture_url || null,
+              profileImageUrl: getUserProfileImageUrl(currentUser),
               feed_display_priority: feedDisplayPriority,
               exposure_level: exposureLevel,
               category: listingCategory,
@@ -944,7 +891,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                 return hasAny ? merged : undefined;
               })(),
               constructionStatus: constructionStatus || undefined,
-              saleAtPresale: saleAtPresale,
             };
 
       // Create listing in database
@@ -1165,8 +1111,6 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                   return (
                     <PropertyAddress
                       key="propertyaddress"
-                      projectName={projectName}
-                      setProjectName={setProjectName}
                       address={address}
                       setAddress={setAddress}
                       phone={phone}
@@ -1285,33 +1229,12 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                     />
                   );
                 case 'saleatpresale':
-                  return (
-                    <SaleAtPreSale
-                      key="saleatpresale"
-                      value={saleAtPresale}
-                      onChange={setSaleAtPresale}
-                    />
-                  );
+                  return <SaleAtPreSale key="saleatpresale" />;
                 case 'generaldetailswithradio':
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
                       groups={hydrateGeneralDetailsWithRadio(field.groups)}
-                      onGroupToggle={
-                        (field.groups?.title === 'הפרויקט מציע' ||
-                         (field.groups?.title && field.groups.title.startsWith('הפרוייקט מציע')))
-                          ? (gi) => {
-                              const grp = field.groups?.groups?.[gi];
-                              if (grp?.title != null) {
-                                const next = !(projectOfferSelected[grp.title] !== false);
-                                const keysFromFields = (grp.fields || [])
-                                  .filter(f => f && f.key)
-                                  .map(f => f.key);
-                                setProjectOfferGroupSelected(grp.title, next, keysFromFields);
-                              }
-                            }
-                          : undefined
-                      }
                     />
                   );
                 case 'constructionstatus':
@@ -1528,7 +1451,10 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     marginLeft: -10,
     marginTop: -8,
-    boxShadow: '0 2px 3px rgba(0,0,0,0.3)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
     elevation: 5,
   },
 });

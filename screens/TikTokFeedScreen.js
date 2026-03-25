@@ -17,6 +17,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors} from '../constants/styles';
 import {getListings, recordListingView, likeListing, unlikeListing} from '../utils/api';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {categoryImages, subscriptionTypes} from '../utils/constant';
 
 // Sidebar filter buttons: each filters ads by type (maps to API subscription_type / has_video)
@@ -579,7 +580,7 @@ const TikTokFeedScreen = ({
                 budget: listing.budget,
                 isUploaded: true,
                 fromDatabase: true,
-                profileImageUrl: listing.profile_image_url || listing.creator_profile_image_url || null,
+                profileImageUrl: getUserProfileImageUrl(listing),
                 creator_name: listing.creator_name || null,
                 creator_email: listing.creator_email || null,
                 creator_specialties: listing.creator_specialties || null,

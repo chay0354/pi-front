@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
 
 /**
  * SuccessScreen Component
@@ -57,12 +58,12 @@ const SuccessScreen = ({
         {/* User Profile Section - show the profile pic the user uploaded at registration */}
         <View style={styles.profileSection}>
           <View style={styles.profilePictureContainer}>
-            {(subscription?.profile_picture_url || subscription?.profilePictureUrl) ? (
+            {successProfilePicUrl ? (
               <Image
-                source={{ uri: subscription.profile_picture_url || subscription.profilePictureUrl }}
+                source={{ uri: successProfilePicUrl }}
                 style={styles.profilePicture}
                 resizeMode="cover"
-                key={subscription.profile_picture_url || subscription.profilePictureUrl}
+                key={successProfilePicUrl}
               />
             ) : (
               <Image

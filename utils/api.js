@@ -206,6 +206,22 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
   }
 };
 
+/**
+ * Request מספר מנוי by email (שחזור קוד סודי). Server sends email if verified subscription exists.
+ */
+export const recoverSubscriberCodeByEmail = async email => {
+  const response = await fetch(`${API_URL}/api/subscription/recover-subscriber-code`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: String(email || '').trim()}),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'שגיאה בשליחת הבקשה');
+  }
+  return data;
+};
+
 // Subscription IDs that returned 404 – skip refetch to avoid repeated 404 logs
 const subscription404Cache = new Set();
 
@@ -379,25 +395,47 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
 export const uploadFile = async (file, folder = 'general') => {
   try {
     const formData = new FormData();
-    formData.append('file', {
-      uri: file.uri,
-      type: file.type || 'image/jpeg',
-      name: file.name || 'file.jpg',
-    });
+    if (isWeb) {
+      const filePart = await toFormDataFile(file, 'file');
+      if (filePart instanceof File) {
+        formData.append('file', filePart);
+      } else {
+        throw new Error(
+          'Web upload needs a data: or blob: image URI (or File).',
+        );
+      }
+    } else {
+      formData.append('file', {
+        uri: file.uri,
+        type: file.type || 'image/jpeg',
+        name: file.name || 'file.jpg',
+      });
+    }
     formData.append('folder', folder);
 
     const response = await fetch(`${API_URL}/api/upload`, {
       method: 'POST',
       body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // Do not set Content-Type — fetch must add multipart boundary automatically.
+      // Setting "multipart/form-data" without boundary breaks multer and often yields 500 + HTML.
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (_) {
+      throw new Error(
+        response.ok
+          ? 'Invalid response from upload server'
+          : `Upload failed (${response.status}): ${responseText.slice(0, 200)}`,
+      );
+    }
 
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to upload file');
+      throw new Error(
+        data.error || data.message || 'Failed to upload file',
+      );
     }
 
     return data;
@@ -414,7 +452,15 @@ export const uploadFile = async (file, folder = 'general') => {
  */
 export const getListings = async (options = {}) => {
   try {
-    const {status = 'published', category, subscription_type: subscriptionType, has_video: hasVideo, subscription_id: subscriptionId, user_id: userId} = options;
+    const {
+      status = 'published',
+      category,
+      subscription_type: subscriptionType,
+      has_video: hasVideo,
+      subscription_id: subscriptionId,
+      user_id: userId,
+      favorites_only: favoritesOnly,
+    } = options;
     const params = new URLSearchParams({status});
     if (category) {
       params.append('category', category);
@@ -431,6 +477,9 @@ export const getListings = async (options = {}) => {
     }
     if (userId != null && String(userId).trim() !== '') {
       params.append('user_id', String(userId).trim());
+    }
+    if (favoritesOnly === true) {
+      params.append('favorites_only', 'true');
     }
 
     const url = `${API_URL}/api/listings?${params.toString()}`;
@@ -663,6 +712,39 @@ export const toSubscriptionId = id => {
  * @param {Object} listingData - Listing data including form fields and file URLs
  * @returns {Promise} API response with listing ID
  */
+/**
+ * Active story rings (last 24h) for home row
+ * @returns {Promise<{ success: boolean, rings?: Array }>}
+ */
+export const getStoriesFeed = async () => {
+  const response = await fetch(`${API_URL}/api/stories/feed`, {
+    method: 'GET',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {success: false, rings: [], error: data.error};
+  }
+  return data;
+};
+
+/**
+ * Create a story slide (separate from ads)
+ * @param {{ subscription_id: string, media_url: string }} payload
+ */
+export const createStory = async payload => {
+  const response = await fetch(`${API_URL}/api/stories`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to create story');
+  }
+  return data;
+};
+
 export const createListing = async listingData => {
   try {
     console.log('Sending listing data to API:', listingData);

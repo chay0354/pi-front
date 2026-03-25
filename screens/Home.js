@@ -5,53 +5,83 @@ import {
   Text,
   View,
   Image,
-  ScrollView,
 } from 'react-native';
-import React, {useContext} from 'react';
+import React, {useRef, useState, useCallback, useEffect} from 'react';
 import Carusel from '../components/Carusel';
-import {ContextHook} from '../hooks/ContextHook';
 import {userCategories} from '../utils/constant';
-import ProfilePic from '../components/ProfilePic';
-import {TouchableOpacity} from 'react-native';
+import {TouchableOpacity, Pressable} from 'react-native';
+import PiAiSearchModal from '../components/PiAiSearchModal';
+import HomeStoryStrip from '../components/HomeStoryStrip';
+import StoryViewerModal from '../components/StoryViewerModal';
+import {getStoriesFeed, toSubscriptionId} from '../utils/api';
 
-const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
-  const {currentUser} = useContext(ContextHook);
-  // All users see all categories (same list for everyone; design unchanged)
+const TRIPLE_TAP_WINDOW_MS = 700;
+
+const Home = ({
+  onOpenSettings,
+  onOpenTikTokFeed,
+  currentUser,
+  onOpenStoryUpload,
+  onRequireLoginForStory,
+}) => {
+  const [piAiVisible, setPiAiVisible] = useState(false);
+  const logoTapTimesRef = useRef([]);
+  const [storyRings, setStoryRings] = useState([]);
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [viewerRing, setViewerRing] = useState(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+
+  const loadStories = useCallback(async () => {
+    setStoriesLoading(true);
+    try {
+      const res = await getStoriesFeed();
+      setStoryRings(Array.isArray(res?.rings) ? res.rings : []);
+    } catch (e) {
+      setStoryRings([]);
+    } finally {
+      setStoriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStories();
+  }, [loadStories]);
+
+  const onLogoPress = useCallback(() => {
+    const now = Date.now();
+    logoTapTimesRef.current = logoTapTimesRef.current.filter(
+      t => now - t < TRIPLE_TAP_WINDOW_MS,
+    );
+    logoTapTimesRef.current.push(now);
+    if (logoTapTimesRef.current.length >= 3) {
+      logoTapTimesRef.current = [];
+      setPiAiVisible(true);
+    }
+  }, []);
+
+  const handleAddStory = useCallback(() => {
+    const subId = toSubscriptionId(currentUser?.id);
+    if (!currentUser || !subId) {
+      onRequireLoginForStory?.();
+      return;
+    }
+    onOpenStoryUpload?.();
+  }, [currentUser, onOpenStoryUpload, onRequireLoginForStory]);
+
+  const handleOpenRing = useCallback(ring => {
+    if (!ring?.slides?.length) return;
+    setViewerRing(ring);
+    setViewerVisible(true);
+  }, []);
+
+  const handleCloseViewer = useCallback(() => {
+    setViewerVisible(false);
+    setViewerRing(null);
+    loadStories();
+  }, [loadStories]);
+
   const categoriesList = userCategories;
-  const profilePicItems = [
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-    {
-      profilePic: require('../assets/userProfile.png'),
-      name: 'עו״ד אבישג צוברי',
-    },
-  ];
+
   return (
     <ImageBackground
       source={require('../assets/background.png')}
@@ -60,7 +90,26 @@ const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
         <TouchableOpacity onPress={onOpenSettings}>
           <Image source={require('../assets/menu.png')} style={styles.menu} />
         </TouchableOpacity>
-        <Image source={require('../assets/homeLogo.png')} style={styles.logo} resizeMode="contain" />
+        <Pressable
+          onPress={onLogoPress}
+          style={({pressed}) => [pressed && styles.logoPressed]}
+          accessibilityLabel="לוגו הבית"
+          accessibilityHint="לחיצה שלוש פעמים פותחת את Pi AI">
+          <Image
+            source={require('../assets/homeLogo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Pressable>
+        <PiAiSearchModal
+          visible={piAiVisible}
+          onClose={() => setPiAiVisible(false)}
+        />
+        <StoryViewerModal
+          visible={viewerVisible}
+          ring={viewerRing}
+          onClose={handleCloseViewer}
+        />
         <View style={styles.content}>
           <Carusel
             categoriesList={categoriesList}
@@ -113,14 +162,12 @@ const Home = ({onOpenSettings, onOpenTikTokFeed}) => {
               בעלי מקצוע בתחום הנדל״ן
             </Text>
           </View>
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.profileListContentContainer}
-            showsHorizontalScrollIndicator={false}>
-            {profilePicItems.map((item, index) => (
-              <ProfilePic key={index} item={item} />
-            ))}
-          </ScrollView>
+          <HomeStoryStrip
+            rings={storyRings}
+            loading={storiesLoading}
+            onAddPress={handleAddStory}
+            onRingPress={handleOpenRing}
+          />
         </View>
       </SafeAreaView>
     </ImageBackground>
@@ -150,6 +197,9 @@ const styles = StyleSheet.create({
     width: 130,
     height: 122,
     marginTop: -40,
+  },
+  logoPressed: {
+    opacity: 0.92,
   },
   content: {
     flex: 1,
@@ -194,9 +244,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-  },
-  profileListContentContainer: {
-    gap: 17,
-    paddingHorizontal: 20,
   },
 });
