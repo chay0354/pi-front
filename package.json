@@ -33,7 +33,8 @@
     "react-native-svg": "^15.15.1",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-view-shot": "3.7.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "react-native-webview": "^13.2.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
