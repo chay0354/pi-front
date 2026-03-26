@@ -8,30 +8,53 @@ import {Text} from 'react-native';
 import {Divider} from './Divider';
 import {CardPriceField} from './CardPriceField';
 
-export const GeneralDetailsWithRadio = ({groups}) => {
+export const GeneralDetailsWithRadio = ({
+  groups,
+  toggleableOfferGroups = false,
+  offerToggleKeyPrefix = '',
+  isOfferGroupIncluded,
+  onToggleOfferGroup,
+}) => {
   const radioOptions = groups;
+  const groupIncluded = (group) => {
+    if (!toggleableOfferGroups || !isOfferGroupIncluded) {
+      return group.isSelected !== false;
+    }
+    return isOfferGroupIncluded(group.title);
+  };
   return (
     <FormContainer>
       <Title text={radioOptions.title} required={radioOptions.titleRequired} />
+      {toggleableOfferGroups ? (
+        <Text style={styles.toggleHint}>
+          לחצו על השורה כדי להסיר או להחזיר סוג דירה מהמודעה
+        </Text>
+      ) : null}
       {radioOptions.groups.map((group, gi) => {
         const isNotLastIndex = gi !== radioOptions.groups.length - 1;
+        const included = groupIncluded(group);
+        const showFields = included && group.isSelected !== false;
         return (
-          <View key={gi} style={{}}>
+          <View key={offerToggleKeyPrefix ? `${offerToggleKeyPrefix}-${gi}` : gi} style={{}}>
             {group.title && (
               <RadioWithText
                 title={group.title}
                 name={group.title}
-                setName={() => {}}
+                setName={
+                  toggleableOfferGroups && onToggleOfferGroup
+                    ? () => onToggleOfferGroup(group.title)
+                    : () => {}
+                }
                 index={gi}
-                isSelected={group.isSelected}
+                isSelected={included}
                 radioOptionStyle={{
                   paddingTop: 0,
-                  paddingBottom: group.isSelected || isNotLastIndex ? 20 : 0,
+                  paddingBottom: showFields || isNotLastIndex ? 20 : 0,
                 }}
                 isRequired={group.titleRequired}
-                isNotLastIndex={!group.isSelected && isNotLastIndex}
+                isNotLastIndex={!showFields && isNotLastIndex}
                 styleDevider={{marginBottom: 15}}>
-                {group.isSelected &&
+                {showFields &&
                   group.fields.map((f, idx) => {
                     const isLast = idx === group.fields.length - 1;
 
@@ -99,7 +122,7 @@ export const GeneralDetailsWithRadio = ({groups}) => {
 
                     return null;
                   })}
-                {isNotLastIndex && group.isSelected && (
+                {isNotLastIndex && showFields && (
                   <Divider style={{marginBottom: 20}} />
                 )}
               </RadioWithText>
@@ -112,6 +135,14 @@ export const GeneralDetailsWithRadio = ({groups}) => {
 };
 
 const styles = StyleSheet.create({
+  toggleHint: {
+    fontSize: 13,
+    color: 'rgba(210,208,220,0.75)',
+    textAlign: 'right',
+    marginBottom: 8,
+    marginRight: 4,
+    fontFamily: 'Rubik-Regular',
+  },
   subFields: {
     fontSize: 14,
     color: '#D2D0DC',

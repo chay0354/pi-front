@@ -16,6 +16,7 @@ export {default as ApartmentTypeFilterScreen} from './ApartmentTypeFilterScreen'
 export {default as RoomsFilterScreen} from './RoomsFilterScreen';
 export {default as PriceFilterScreen} from './PriceFilterScreen';
 export {default as TypeFilterScreen} from './TypeFilterScreen';
+export {default as OfficeFilterScreen} from './OfficeFilterScreen';
 export {default as MeterFilterScreen} from './MeterFilterScreen';
 export {default as DonamFilterScreen} from './DonamFilterScreen';
 export {default as PreferencesFilterScreen} from './PreferencesFilterScreen';

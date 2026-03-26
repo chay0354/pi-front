@@ -1857,13 +1857,15 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
-                  isArea: false,
+                  key: 'cat8_commercial_space_1_sqm',
+                  isArea: true,
                   value: 0,
                   subTitle: 'גודל השטח',
                   subTitleRequired: true,
                 },
                 {
                   type: 'price',
+                  key: 'cat8_commercial_space_1_price',
                   value: 0,
                   subTitle: 'מחיר למטר',
                   subTitleRequired: true,
@@ -1892,6 +1894,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'cat8_whole_floor_1_sqm',
                   isArea: true,
                   value: 0,
                   subTitle: 'גודל הקומה',
@@ -1899,6 +1902,7 @@ export const companyCategoryForm = {
                 },
                 {
                   type: 'price',
+                  key: 'cat8_whole_floor_1_price',
                   value: 0,
                   subTitle: 'מחיר למטר',
                   subTitleRequired: true,
@@ -1919,18 +1923,21 @@ export const companyCategoryForm = {
         counterData: [
           {
             title: 'כמות מבנים',
+            key: 'building_count',
             isArea: false,
             value: 0,
             required: true,
           },
           {
             title: 'מספר קומות',
+            key: 'floor_count',
             isArea: false,
             value: 0,
             required: true,
           },
           {
             title: 'מספר חנויות',
+            key: 'shop_count',
             isArea: false,
             value: 0,
             isLast: true,
@@ -1959,6 +1966,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'building_count',
                   isArea: false,
                   value: 0,
                 },
@@ -1971,6 +1979,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'floor_count',
                   isArea: false,
                   value: 0,
                 },
@@ -1983,6 +1992,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'shop_count',
                   isArea: false,
                   value: 0,
                 },
@@ -1995,6 +2005,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'parking_structured_count',
                   isArea: false,
                   value: 0,
                 },
@@ -2093,6 +2104,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרויקט מציע',
           titleRequired: true,
+          toggleableOfferGroups: true,
           groups: [
             {
               title: 'דירות 3 חדרים',
@@ -2128,6 +2140,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'garden_area',
                   isArea: true,
                   value: 0,
                   subTitle: 'גודל',
@@ -2135,6 +2148,7 @@ export const companyCategoryForm = {
                 },
                 {
                   type: 'count',
+                  key: 'garden_rooms',
                   isArea: false,
                   value: 0,
                   subTitle: 'כמות חדרים',
@@ -2142,6 +2156,7 @@ export const companyCategoryForm = {
                 },
                 {
                   type: 'price',
+                  key: 'garden_price',
                   isArea: false,
                   value: 0,
                   subTitle: 'הוסף מחיר ״החל מ-״',
@@ -2156,6 +2171,7 @@ export const companyCategoryForm = {
               fields: [
                 {
                   type: 'count',
+                  key: 'penthouse_area',
                   isArea: true,
                   value: 0,
                   subTitle: 'גודל',
@@ -2163,6 +2179,7 @@ export const companyCategoryForm = {
                 },
                 {
                   type: 'count',
+                  key: 'penthouse_rooms',
                   isArea: false,
                   value: 0,
                   subTitle: 'כמות חדרים',
@@ -2170,6 +2187,7 @@ export const companyCategoryForm = {
                 },
                 {
                   type: 'price',
+                  key: 'penthouse_price',
                   isArea: false,
                   value: 0,
                   subTitle: 'הוסף מחיר ״החל מ-״',
@@ -2229,6 +2247,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרויקט מציע',
           titleRequired: true,
+          toggleableOfferGroups: true,
           groups: [
             {
               title: 'דירות 3 חדרים',

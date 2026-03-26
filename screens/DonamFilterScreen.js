@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -18,14 +18,30 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [minDonam, setMinDonam] = useState(initialFilter?.minDonam ?? 1);
   const [maxDonam, setMaxDonam] = useState(initialFilter?.maxDonam ?? 2);
 
+  useEffect(() => {
+    if (initialFilter?.minDonam != null && initialFilter?.maxDonam != null) {
+      setMinDonam(Number(initialFilter.minDonam));
+      setMaxDonam(Number(initialFilter.maxDonam));
+    } else {
+      setMinDonam(1);
+      setMaxDonam(2);
+    }
+  }, [initialFilter]);
+
   const handleSave = () => {
-    if (onSave) onSave({minDonam, maxDonam});
+    if (onSave) {
+      onSave({minDonam, maxDonam});
+    }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
     setMinDonam(1);
     setMaxDonam(2);
+    if (onSave) {
+      onSave(null);
+    }
+    if (onClose) onClose();
   };
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number((v).toFixed(1))));

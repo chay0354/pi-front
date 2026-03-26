@@ -218,7 +218,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   const [condition, setCondition] = useState(null);
   const [purpose, setPurpose] = useState('sale'); // 'sale' or 'rent'
   const [price, setPrice] = useState(1000000);
+  const [projectName, setProjectName] = useState('');
   const [address, setAddress] = useState('');
+  const [landParcel, setLandParcel] = useState('');
+  const [landBlock, setLandBlock] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
@@ -256,12 +259,47 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
     }
   }, [initialCategory]);
 
+  useEffect(() => {
+    setProjectOfferGroupsOn({});
+  }, [category]);
+
   // Pre-fill form when editing an existing listing
   useEffect(() => {
     if (!initialListing) return;
     const cat = initialListing.category != null ? parseInt(initialListing.category) : null;
-    if (cat >= 1 && cat <= 11) setCategory(cat);
+    if (cat >= 1 && cat <= 12) setCategory(cat);
     setDescription(initialListing.description ?? '');
+    setProjectName(
+      initialListing.project_name != null
+        ? String(initialListing.project_name)
+        : '',
+    );
+    setAddress(initialListing.address != null ? String(initialListing.address) : '');
+    let parcel =
+      initialListing.land_parcel != null ? String(initialListing.land_parcel) : '';
+    let block =
+      initialListing.land_block != null ? String(initialListing.land_block) : '';
+    if (
+      (!parcel || !block) &&
+      initialListing.land_address != null &&
+      String(initialListing.land_address).trim()
+    ) {
+      const segs = String(initialListing.land_address)
+        .split(/\s*\|\s*/)
+        .map(x => x.trim())
+        .filter(Boolean);
+      for (const seg of segs) {
+        if (!parcel && seg.startsWith('חלקה')) {
+          parcel = seg.replace(/^חלקה\s*/, '').trim();
+        }
+        if (!block && seg.startsWith('גוש')) {
+          block = seg.replace(/^גוש\s*/, '').trim();
+        }
+      }
+    }
+    setLandParcel(parcel);
+    setLandBlock(block);
+    setPhone(initialListing.phone != null ? String(initialListing.phone) : '');
     setPrice(initialListing.price ?? 1000000);
     setBudget(initialListing.budget ?? 1000);
     const imgs = initialListing.images ?? (initialListing.image ? [{uri: initialListing.image}] : []);
@@ -346,6 +384,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
     building_count: 0,
     floor_count: 0,
     apartment_count: 0,
+    shop_count: 0,
+    parking_structured_count: 0,
   });
   // הפרויקט מציע: דירות 3/4/5 חדרים, דירות גן, פנטהאוזים, בתים פרטיים (area, rooms, price per type)
   const [projectOffers, setProjectOffers] = useState({
@@ -367,6 +407,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   });
   // Catch-all for company (and any) form keys not in generalDetailsCounts/projectOffers (e.g. office_1_area, whole_floor_1_price)
   const [otherFormValues, setOtherFormValues] = useState({});
+  // בלעדי (10): הסרת סוגי דירה מ"הפרויקט מציע" — מפתח `${fieldIndex}-${groupTitle}` → false = מוסתר
+  const [projectOfferGroupsOn, setProjectOfferGroupsOn] = useState({});
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
@@ -405,6 +447,36 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
         }),
       })),
     };
+  };
+
+  const toggleProjectOfferGroup = (fieldIndex, groupsDef) => title => {
+    const stateKey = `${fieldIndex}-${title}`;
+    setProjectOfferGroupsOn(prev => {
+      const wasOn = prev[stateKey] !== false;
+      if (wasOn) {
+        const grp = (groupsDef.groups || []).find(g => g.title === title);
+        const keys = (grp?.fields || []).map(f => f.key).filter(Boolean);
+        if (keys.length) {
+          setProjectOffers(p => {
+            const n = {...p};
+            keys.forEach(k => {
+              if (k in n) {
+                n[k] = 0;
+              }
+            });
+            return n;
+          });
+          setOtherFormValues(o => {
+            const n = {...o};
+            keys.forEach(k => {
+              delete n[k];
+            });
+            return n;
+          });
+        }
+      }
+      return {...prev, [stateKey]: wasOn ? false : true};
+    });
   };
 
   const toggleAmenity = amenity => {
@@ -601,11 +673,31 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           fieldKeys.includes('address-phone-description') ||
           fieldKeys.includes('propertyaddress') ||
           fieldKeys.includes('landaddress');
+        const needsProjectNameAndAddress =
+          fieldKeys.includes('propertyaddress');
         if (
           needsAddressPhoneDescription &&
           (!address || !phone || !description)
         ) {
           alert('אנא מלא את כל השדות הנדרשים (כתובת, טלפון, תיאור)');
+          setUploading(false);
+          return;
+        }
+        if (
+          fieldKeys.includes('landaddress') &&
+          (!String(address || '').trim() ||
+            !String(landParcel || '').trim() ||
+            !String(landBlock || '').trim())
+        ) {
+          alert('אנא מלא כתובת קרקע, חלקה וגוש');
+          setUploading(false);
+          return;
+        }
+        if (
+          needsProjectNameAndAddress &&
+          (!projectName?.trim() || !address?.trim())
+        ) {
+          alert('אנא מלא שם פרויקט וכתובת פרויקט');
           setUploading(false);
           return;
         }
@@ -620,6 +712,23 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
           alert('אנא העלה לפחות תמונה אחת');
           setUploading(false);
           return;
+        }
+        for (let fi = 0; fi < fields.length; fi++) {
+          const f = fields[fi];
+          if (!f.groups?.toggleableOfferGroups) {
+            continue;
+          }
+          const titles = (f.groups.groups || []).map(g => g.title);
+          const anyOn = titles.some(
+            t => projectOfferGroupsOn[`${fi}-${t}`] !== false,
+          );
+          if (!anyOn) {
+            alert(
+              'בחרו לפחות סוג דירה אחד ב"הפרויקט מציע", או הפעילו שוב שורה שהוסרה (לחיצה על הכותרת).',
+            );
+            setUploading(false);
+            return;
+          }
         }
       }
 
@@ -861,7 +970,11 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
               condition: condition || null,
               purpose: purpose || 'sale',
               price: parseFloat(price) || 0,
+              projectName: projectName.trim() || undefined,
               address: address.trim(),
+              landAddress: address.trim() || undefined,
+              landParcel: landParcel.trim() || undefined,
+              landBlock: landBlock.trim() || undefined,
               phone: phone.trim(),
               description: description.trim(),
               displayOption: displayOption || null,
@@ -1101,6 +1214,10 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                       key="landaddress"
                       address={address}
                       setAddress={setAddress}
+                      landParcel={landParcel}
+                      setLandParcel={setLandParcel}
+                      landBlock={landBlock}
+                      setLandBlock={setLandBlock}
                       phone={phone}
                       setPhone={setPhone}
                       description={description}
@@ -1111,6 +1228,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                   return (
                     <PropertyAddress
                       key="propertyaddress"
+                      projectName={projectName}
+                      setProjectName={setProjectName}
                       address={address}
                       setAddress={setAddress}
                       phone={phone}
@@ -1122,6 +1241,22 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                 case 'generaldetails': {
                   const counterDataWithSetters = (field.counterData || []).map(
                     (c) => {
+                      if (c.key) {
+                        const raw = generalDetailsCounts[c.key];
+                        const num =
+                          raw !== undefined && raw !== null ? Number(raw) : 0;
+                        return {
+                          ...c,
+                          value: Number.isFinite(num) ? num : 0,
+                          setCount: (val) => {
+                            const n = Math.max(0, Number(val) || 0);
+                            setGeneralDetailsCounts((prev) => ({
+                              ...prev,
+                              [c.key]: n,
+                            }));
+                          },
+                        };
+                      }
                       const isAreaField = c.title && c.title.includes('שטח');
                       const isRoomsField =
                         c.title && c.title.includes('חדרים');
@@ -1230,13 +1365,30 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                   );
                 case 'saleatpresale':
                   return <SaleAtPreSale key="saleatpresale" />;
-                case 'generaldetailswithradio':
+                case 'generaldetailswithradio': {
+                  const toggleable =
+                    field.groups?.toggleableOfferGroups === true;
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
                       groups={hydrateGeneralDetailsWithRadio(field.groups)}
+                      toggleableOfferGroups={toggleable}
+                      offerToggleKeyPrefix={toggleable ? String(index) : ''}
+                      isOfferGroupIncluded={
+                        toggleable
+                          ? title =>
+                              projectOfferGroupsOn[`${index}-${title}`] !==
+                              false
+                          : undefined
+                      }
+                      onToggleOfferGroup={
+                        toggleable
+                          ? toggleProjectOfferGroup(index, field.groups)
+                          : undefined
+                      }
                     />
                   );
+                }
                 case 'constructionstatus':
                   return (
                     <ConstructionStatus

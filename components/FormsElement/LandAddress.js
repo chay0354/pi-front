@@ -7,6 +7,10 @@ import {Title} from './Title';
 export const LandAddress = ({
   address,
   setAddress,
+  landParcel,
+  setLandParcel,
+  landBlock,
+  setLandBlock,
   phone,
   setPhone,
   description,
@@ -25,16 +29,16 @@ export const LandAddress = ({
       />
       <View style={styles.inputContainer}>
         <InputBox
-          value={address}
-          setValue={setAddress}
+          value={landParcel}
+          setValue={setLandParcel}
           title={'חלקה'}
           required={true}
           placeholder={'הזן מספר חלקה'}
           inputBoxContainerStyle={styles.flexInput}
         />
         <InputBox
-          value={address}
-          setValue={setAddress}
+          value={landBlock}
+          setValue={setLandBlock}
           title={'גוש'}
           required={true}
           placeholder={'הזן מספר גוש'}

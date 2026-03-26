@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -15,15 +15,34 @@ const MIN_METER = 10;
 const MAX_METER = 1000;
 
 const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
-  const [meterValue, setMeterValue] = useState(initialFilter?.meter ?? 50);
+  const [meterValue, setMeterValue] = useState(
+    initialFilter?.meter != null ? Number(initialFilter.meter) : null,
+  );
+
+  useEffect(() => {
+    setMeterValue(
+      initialFilter?.meter != null ? Number(initialFilter.meter) : null,
+    );
+  }, [initialFilter]);
 
   const handleSave = () => {
-    if (onSave) onSave({meter: meterValue});
+    if (onSave) {
+      onSave({
+        meter:
+          meterValue != null && Number.isFinite(Number(meterValue))
+            ? Number(meterValue)
+            : null,
+      });
+    }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
-    setMeterValue(50);
+    setMeterValue(null);
+    if (onSave) {
+      onSave({meter: null});
+    }
+    if (onClose) onClose();
   };
 
   return (
@@ -51,17 +70,32 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
           <View style={styles.counterInput}>
             <TouchableOpacity
               style={styles.counterButtonLeft}
-              onPress={() => setMeterValue(v => Math.max(MIN_METER, v - 10))}>
+              onPress={() =>
+                setMeterValue(v => {
+                  if (v == null) return null;
+                  const next = v - 10;
+                  return next < MIN_METER ? null : next;
+                })
+              }>
               <Text style={styles.counterButton}>-</Text>
             </TouchableOpacity>
             <View style={styles.counterDivider} />
             <View style={styles.counterValueContainer}>
-              <Text style={styles.counterValue}>{`${meterValue} מ"ר`}</Text>
+              <Text style={styles.counterValue}>
+                {meterValue == null
+                  ? 'ללא סינון'
+                  : `${meterValue} מ"ר`}
+              </Text>
             </View>
             <View style={styles.counterDivider} />
             <TouchableOpacity
               style={styles.counterButtonRight}
-              onPress={() => setMeterValue(v => Math.min(MAX_METER, v + 10))}>
+              onPress={() =>
+                setMeterValue(v => {
+                  const base = v == null ? MIN_METER - 10 : v;
+                  return Math.min(MAX_METER, base + 10);
+                })
+              }>
               <Text style={styles.counterButton}>+</Text>
             </TouchableOpacity>
           </View>

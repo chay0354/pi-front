@@ -54,7 +54,16 @@ const UserListingsScreen = ({ creatorId, displayName = '', onClose }) => {
     const priceNum = item.price != null ? Number(item.price) : null;
     const priceStr =
       priceNum != null && !isNaN(priceNum) ? `₪${Math.round(priceNum).toLocaleString('he-IL')}` : '—';
-    const location = (item.address || item.land_address || item.search_address || '').trim() || '—';
+    const locBase = (item.address || item.land_address || item.search_address || '').trim();
+    const parcel =
+      item.land_parcel != null && String(item.land_parcel).trim()
+        ? `חלקה ${String(item.land_parcel).trim()}`
+        : '';
+    const block =
+      item.land_block != null && String(item.land_block).trim()
+        ? `גוש ${String(item.land_block).trim()}`
+        : '';
+    const location = [locBase, parcel, block].filter(Boolean).join(' · ') || '—';
     const creatorImage = getUserProfileImageUrl(item);
 
     return (

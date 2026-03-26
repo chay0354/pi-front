@@ -473,11 +473,16 @@ const PostEditorScreen = ({
         if (!el) {
           throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
         }
-        captureUri = await capturePostPreviewToDataUrl(el);
+        captureUri = await capturePostPreviewToDataUrl(
+          el,
+          publishTarget === 'story'
+            ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
+            : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
+        );
       } else {
         captureUri = await captureRef(postPreviewRef.current, {
           format: 'jpg',
-          quality: 0.9,
+          quality: publishTarget === 'story' ? 0.95 : 0.9,
           result: 'tmpfile',
         });
       }
@@ -539,6 +544,25 @@ const PostEditorScreen = ({
     () => textBlocks.find(b => b.id === editingTextBlockId) || null,
     [textBlocks, editingTextBlockId],
   );
+
+  // RN Web often never fires Keyboard show/hide; still show the format bar while editing text.
+  const showTextFormatToolbar =
+    Boolean(editingTextBlockId) &&
+    !isCapturing &&
+    (isKeyboardVisible || Platform.OS === 'web');
+
+  const webToolbarInputMarginBottom = useMemo(() => {
+    if (Platform.OS !== 'web' || !editingTextBlockId || isCapturing) {
+      return 0;
+    }
+    if (selectedFormat === 'color') {
+      return 260;
+    }
+    if (selectedFormat === 'aa') {
+      return 140;
+    }
+    return 88;
+  }, [selectedFormat, editingTextBlockId, isCapturing]);
 
   useEffect(() => {
     const onShow = e => {
@@ -1026,7 +1050,9 @@ const PostEditorScreen = ({
                                 : textAlignMode === 'right'
                                   ? 'flex-end'
                                   : 'center',
-                            marginBottom: isKeyboardVisible ? 400 : 0,
+                            marginBottom: isKeyboardVisible
+                              ? 400
+                              : webToolbarInputMarginBottom,
                           },
                         ]}>
                         <TextInput
@@ -1065,11 +1091,19 @@ const PostEditorScreen = ({
             )}
           </View>
 
-          {isKeyboardVisible && editingTextBlockId && !isCapturing && (
+          {showTextFormatToolbar && (
             <View
               style={[
                 styles.keyboardControls,
-                {bottom: keyboardInset, paddingBottom: 5},
+                {
+                  bottom: Platform.OS === 'web' ? 0 : keyboardInset,
+                  paddingBottom:
+                    Platform.OS === 'web' ? Math.max(bottom, 10) : 5,
+                  zIndex: 100,
+                  ...(Platform.OS === 'web'
+                    ? {backgroundColor: '#1a1926'}
+                    : {}),
+                },
               ]}>
               {selectedFormat === 'aa' && (
                 <View style={styles.textStylesRow}>

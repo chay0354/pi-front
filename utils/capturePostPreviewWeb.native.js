@@ -3,7 +3,7 @@
  * This file exists so Metro never bundles html2canvas on native.
  */
 
-export async function capturePostPreviewToDataUrl() {
+export async function capturePostPreviewToDataUrl(_domElement, _options) {
   throw new Error('capturePostPreviewToDataUrl is web-only');
 }
 

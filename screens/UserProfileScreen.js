@@ -34,12 +34,13 @@ const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padd
 
 /** Bundled placeholder when specific PNGs are not in repo (add assets under /public for web). */
 const bundledImg = require('../assets/image-7.png');
+/** Pi badge: always bundle — web `{ uri: origin + '/pi-badge.png' }` often 404s or breaks on subpaths. */
+const piBadgeSource = require('../assets/pi-badge.png');
 
 const isWeb = Platform.OS === 'web';
 const baseUrl = isWeb && typeof window !== 'undefined' ? window.location.origin : '';
 const callSource = isWeb ? { uri: `${baseUrl}/call.png` } : bundledImg;
 const messageSource = isWeb ? { uri: `${baseUrl}/message.png` } : bundledImg;
-const piBadgeSource = isWeb ? { uri: `${baseUrl}/pi-badge.png` } : bundledImg;
 
 const logoPiAi = bundledImg;
 const contactPhoneIconSource = isWeb && typeof window !== 'undefined' ? { uri: `${baseUrl}/conections-icons/image.png` } : bundledImg;
@@ -55,20 +56,25 @@ function getStarSource(index) {
 const buttonSources = isWeb
   ? [1, 2, 3, 4, 5, 6, 7, 8].map(i => ({ uri: `${baseUrl}/ai-icon-${i}.png` }))
   : [bundledImg, bundledImg, bundledImg, bundledImg, bundledImg, bundledImg, bundledImg, bundledImg];
-function getFeatureIconName(key) {
-  const k = key || 'area';
-  const map = {
-    area: 'square-outline',
-    floor: 'stairs',
-    elevator: 'elevator-passenger',
-    mamad: 'shield-home',
-    immediate: 'door-arrow-right',
-    rooms: 'door-open',
-    balcony: 'view-grid-outline',
-    condition: 'brush',
-    parking: 'car-side',
-  };
-  return map[k] || 'help-box-outline';
+
+// apr-details layout (assets/apr-details): (1)=מ"ר, (2)=קומה, (3)=מעלית, (4)=ממ"ד, (5)=כניסה מיידית,
+// (6)=חדרים, (7)=מרפסת, (8)=משופץ, (10)=חנייה. Web: public/apr-details/{n}.png
+const featureIconFileNumByKey = { area: 1, floor: 2, elevator: 3, mamad: 4, immediate: 5, rooms: 6, balcony: 7, condition: 8, parking: 10 };
+const featureIconAssetsByNum = {
+  1: require('../assets/apr-details/icons (1).png'),
+  2: require('../assets/apr-details/icons (2).png'),
+  3: require('../assets/apr-details/icons (3).png'),
+  4: require('../assets/apr-details/icons (4).png'),
+  5: require('../assets/apr-details/icons (5).png'),
+  6: require('../assets/apr-details/icons (6).png'),
+  7: require('../assets/apr-details/icons (7).png'),
+  8: require('../assets/apr-details/icons (8).png'),
+  10: require('../assets/apr-details/icons (10).png'),
+};
+function getFeatureIconSource(key) {
+  const num = featureIconFileNumByKey[key] ?? 1;
+  const asset = featureIconAssetsByNum[num] ?? featureIconAssetsByNum[1];
+  return isWeb ? { uri: `${baseUrl}/apr-details/${num}.png` } : asset;
 }
 function getProjectOfferIconName(key) {
   const k = key === '3rooms' || key === '4rooms' || key === '5rooms' ? '3-5rooms' : (key || '3-5rooms');
@@ -701,7 +707,7 @@ const UserProfileScreen = ({
                   <View style={styles.lastAdFeaturesGrid}>
                     {adFeatures.map((item, index) => (
                       <View key={`feat-${item.iconKey}-${index}`} style={styles.lastAdFeatureChip}>
-                        <MaterialCommunityIcons name={getFeatureIconName(item.iconKey)} size={22} color={GOLD} style={styles.lastAdFeatureChipIcon} />
+                        <Image source={getFeatureIconSource(item.iconKey)} style={styles.lastAdFeatureChipIcon} resizeMode="contain" />
                         <Text style={styles.lastAdFeatureLabel}>{item.label}</Text>
                       </View>
                     ))}
@@ -809,7 +815,7 @@ const UserProfileScreen = ({
                   <View style={styles.lastAdFeaturesGrid}>
                     {adFeatures.map((item, index) => (
                       <View key={`feat-${item.iconKey}-${index}`} style={styles.lastAdFeatureChip}>
-                        <MaterialCommunityIcons name={getFeatureIconName(item.iconKey)} size={22} color={GOLD} style={styles.lastAdFeatureChipIcon} />
+                        <Image source={getFeatureIconSource(item.iconKey)} style={styles.lastAdFeatureChipIcon} resizeMode="contain" />
                         <Text style={styles.lastAdFeatureLabel}>{item.label}</Text>
                       </View>
                     ))}
@@ -920,9 +926,10 @@ const UserProfileScreen = ({
             <FlatList
               data={userListings}
               horizontal
+              inverted
               showsHorizontalScrollIndicator={false}
               style={styles.myPropertiesFlatList}
-              contentContainerStyle={[styles.myPropertiesListContent, styles.myPropertiesListContentRtl]}
+              contentContainerStyle={styles.myPropertiesListContent}
               keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => {
                 const imgs = item.listing_images || [];
@@ -1111,7 +1118,6 @@ const styles = StyleSheet.create({
   myPropertiesSeeAll: { paddingVertical: 6, paddingHorizontal: 8 },
   myPropertiesSeeAllText: { color: GOLD, fontSize: 14, fontWeight: '600' },
   myPropertiesListContent: { paddingHorizontal: 24 },
-  myPropertiesListContentRtl: { flexDirection: 'row-reverse' },
   myPropertiesListPlaceholder: { paddingVertical: 24, paddingHorizontal: 24, alignItems: 'center' },
   myPropertiesPlaceholderText: { color: Colors.grey200, fontSize: 14 },
   myPropertiesCard: { width: Math.round(SCREEN_WIDTH * 0.52), marginHorizontal: 10, borderRadius: 12, overflow: 'hidden', backgroundColor: CARD_BG },

@@ -5,6 +5,8 @@ import {TextAreaBox} from './TextAreaBox';
 import {Title} from './Title';
 
 export const PropertyAddress = ({
+  projectName,
+  setProjectName,
   address,
   setAddress,
   phone,
@@ -17,8 +19,8 @@ export const PropertyAddress = ({
       {/* Address Section */}
       <Title text={'פרטי כתובת הנכס'} />
       <InputBox
-        value={address}
-        setValue={setAddress}
+        value={projectName}
+        setValue={setProjectName}
         title={'שם הפרויקט'}
         required={true}
         placeholder={'הזן שם'}

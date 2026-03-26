@@ -21,7 +21,13 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
         </View>
 
         <View style={styles.card}>
-          <KeyIcon />
+          <View style={styles.keyImageWrap}>
+            <Image
+              source={require('../assets/key.png')}
+              style={styles.keyImage}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={styles.cardTitle}>הקוד בדרך אליך!</Text>
           <Text style={styles.subLine}>שלחנו את קוד המנוי שלך לכתובת</Text>
           <Text style={styles.emailBold}>{email || ''}</Text>

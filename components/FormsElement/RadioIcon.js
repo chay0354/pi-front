@@ -16,6 +16,7 @@ export const RadioIcon = ({isSelected}) => {
             source={require('../../assets/checkbox-selected.png')}
             style={styles.radioButtonSelected}
             resizeMode="contain"
+            pointerEvents="none"
           />
         </LinearGradient>
       )}

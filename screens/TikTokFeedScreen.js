@@ -34,7 +34,18 @@ const BOTTOM_BAR_ITEMS = [
   {id: 'price', label: 'מחיר', icon: require('../assets/buttom-bar/price.png'), isPost: false},
   {id: 'rooms', label: 'חדרים', icon: require('../assets/buttom-bar/rooms_number.png'), iconCommerce: require('../assets/meter.png'), labelCommerce: 'מטר', iconLand: require('../assets/type-icon-global.png'), labelLand: 'סוג', iconPartners: require('../assets/haadafot.png'), labelPartners: 'העדפות', isPost: false},
   {id: 'post', label: 'פרסם', icon: require('../assets/buttom-bar/post.png'), isPost: true},
-  {id: 'apartment', label: 'סוג דירה', icon: require('../assets/buttom-bar/appartment_type.png'), iconGlobal: require('../assets/type-icon-global.png'), labelGlobal: 'סוג', iconLandDonam: require('../assets/donam.png'), labelLandDonam: 'דונם', isPost: false},
+  {
+    id: 'apartment',
+    label: 'סוג דירה',
+    icon: require('../assets/buttom-bar/appartment_type.png'),
+    iconGlobal: require('../assets/type-icon-global.png'),
+    labelGlobal: 'סוג',
+    iconOffices: require('../assets/type-icon-global.png'),
+    labelOffices: 'סוג',
+    iconLandDonam: require('../assets/donam.png'),
+    labelLandDonam: 'דונם',
+    isPost: false,
+  },
   {id: 'city', label: 'עיר', icon: require('../assets/buttom-bar/city.png'), isPost: false},
 ];
 
@@ -297,6 +308,7 @@ const TikTokFeedScreen = ({
   onOpenCityFilter,
   onOpenApartmentTypeFilter,
   onOpenTypeFilter,
+  onOpenOfficeFilter,
   onOpenRoomsFilter,
   onOpenMeterFilter,
   onOpenDonamFilter,
@@ -346,6 +358,13 @@ const TikTokFeedScreen = ({
 
   const screenHeight = dimensions.height;
   const screenWidth = dimensions.width;
+
+  // גלובל (4) ומגזר דתי (6): טעינת כל הקטגוריות מה-API, סינון לפי מחיר/חדרים/סוג/עיר בצד לקוח
+  const isAggregateCategoryFeed =
+    selectedCategory === 4 ||
+    selectedCategory === '4' ||
+    selectedCategory === 6 ||
+    selectedCategory === '6';
 
   // Load liked listing IDs from AsyncStorage on mount
   useEffect(() => {
@@ -408,9 +427,10 @@ const TikTokFeedScreen = ({
     const fetchListings = async () => {
       try {
         setLoadingListings(true);
-        const categoryToFetch = selectedCategory
-          ? parseInt(selectedCategory)
-          : undefined;
+        const categoryToFetch =
+          selectedCategory && !isAggregateCategoryFeed
+            ? parseInt(selectedCategory, 10)
+            : undefined;
         const sidebarFilter = SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter);
         const subscriptionType = sidebarFilter?.subscription_type;
         const hasVideo =
@@ -547,6 +567,12 @@ const TikTokFeedScreen = ({
                 rawPrice: parseFloat(listing.price || listing.budget || 0) || 0,
                 price: `₪${parseFloat(listing.price || listing.budget || 0).toLocaleString()}`,
                 purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
+                listingPurpose: listing.purpose === 'rent' ? 'rent' : 'sale',
+                planApproval: listing.plan_approval ?? null,
+                landInMortgage: listing.land_in_mortgage ?? null,
+                permit: listing.permit ?? null,
+                agriculturalLand: listing.agricultural_land ?? null,
+                landOwnership: listing.land_ownership ?? null,
                 description: listing.description || '',
                 propertyType:
                   listing.property_type === 'office'
@@ -600,18 +626,20 @@ const TikTokFeedScreen = ({
           if (selectedTopBarFilter === 'pics') {
             afterTopBar = transformedListings.filter(l => l.type === 'images');
           }
-          // Backend already filters by category, but double-check client-side
-          const filteredListings = selectedCategory
-            ? afterTopBar.filter(listing => {
-                const matches = listing.category === parseInt(selectedCategory);
-                if (!matches) {
-                  console.log(
-                    `Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`,
-                  );
-                }
-                return matches;
-              })
-            : afterTopBar;
+          // Backend already filters by category, but double-check client-side (skip for גלובל / מגזר דתי)
+          const filteredListings =
+            selectedCategory && !isAggregateCategoryFeed
+              ? afterTopBar.filter(listing => {
+                  const matches =
+                    listing.category === parseInt(selectedCategory, 10);
+                  if (!matches) {
+                    console.log(
+                      `Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`,
+                    );
+                  }
+                  return matches;
+                })
+              : afterTopBar;
 
           console.log(
             `Loaded ${filteredListings.length} listings for category ${selectedCategory || 'all'}`,
@@ -717,10 +745,70 @@ const TikTokFeedScreen = ({
         return true;
       });
     }
-    if (feedFilters.city != null && feedFilters.city.city) {
-      const cityStr = String(feedFilters.city.city || '').trim().toLowerCase();
+    const officeCategoryActive =
+      selectedCategory != null &&
+      selectedCategory !== '' &&
+      Number(selectedCategory) === 2;
+    if (
+      officeCategoryActive &&
+      feedFilters.office != null &&
+      typeof feedFilters.office === 'object'
+    ) {
+      const o = feedFilters.office;
+      const amenityOn = (l, keys) => {
+        const a = l.amenities;
+        if (!a || typeof a !== 'object') return false;
+        return keys.some(k => {
+          const v = a[k];
+          return v === true || (typeof v === 'number' && v > 0);
+        });
+      };
+      if (o.minArea != null) {
+        out = out.filter(
+          l => l.area != null && Number(l.area) >= Number(o.minArea),
+        );
+      }
+      if (o.minRooms != null) {
+        out = out.filter(
+          l => l.rooms != null && Number(l.rooms) >= Number(o.minRooms),
+        );
+      }
+      if (o.wholeFloor === true) {
+        out = out.filter(l => (l.apartmentTypeId || '') === 'whole_floor');
+      }
+      if (o.parking === true) {
+        out = out.filter(l => amenityOn(l, ['חניה', 'חנייה']));
+      }
+      if (o.elevator === true) {
+        out = out.filter(l => amenityOn(l, ['מעלית']));
+      }
+      if (o.mamad === true) {
+        out = out.filter(l => amenityOn(l, ['ממ״ד', 'ממ"ד']));
+      }
+    }
+    if (feedFilters.city != null) {
+      const c = feedFilters.city;
+      const cityStr = String(c.city || '').trim().toLowerCase();
+      const streetStr = String(c.street || '').trim().toLowerCase();
+      const hasLocation = !!(cityStr || streetStr);
+      const purpose = c.purpose;
+      if (
+        hasLocation &&
+        (purpose === 'rent' || purpose === 'sale')
+      ) {
+        out = out.filter(
+          l => (l.listingPurpose || 'sale') === purpose,
+        );
+      }
       if (cityStr) {
-        out = out.filter(l => (l.address || l.location || '').toLowerCase().includes(cityStr));
+        out = out.filter(l =>
+          (l.address || l.location || '').toLowerCase().includes(cityStr),
+        );
+      }
+      if (streetStr) {
+        out = out.filter(l =>
+          (l.address || l.location || '').toLowerCase().includes(streetStr),
+        );
       }
     }
     if (feedFilters.apartmentType != null && feedFilters.apartmentType !== '') {
@@ -728,9 +816,67 @@ const TikTokFeedScreen = ({
       const matchId = apt === 'apartment' ? 'regular' : apt; // UI 'apartment' = API 'regular'
       out = out.filter(l => (l.apartmentTypeId || '') === matchId || (l.apartmentTypeId || '') === apt);
     }
-    if (feedFilters.meter != null) {
+    if (
+      feedFilters.meter != null &&
+      feedFilters.meter !== '' &&
+      Number.isFinite(Number(feedFilters.meter))
+    ) {
       const minMeter = Number(feedFilters.meter);
-      out = out.filter(l => l.area != null && Number(l.area) >= minMeter);
+      out = out.filter(
+        l => l.area != null && Number(l.area) >= minMeter,
+      );
+    }
+    if (feedFilters.type != null && String(feedFilters.type).trim() !== '') {
+      const t = String(feedFilters.type).trim();
+      const landFeed =
+        selectedCategory === 7 || selectedCategory === '7';
+      if (landFeed) {
+        const landPredicates = {
+          own_private: l => l.landOwnership === 'private',
+          own_administration: l => l.landOwnership === 'administration',
+          agri_yes: l => l.agriculturalLand === 'yes',
+          agri_not: l => l.agriculturalLand === 'not',
+          plan_happy: l => l.planApproval === 'happy',
+          plan_nothing: l => l.planApproval === 'nothing',
+          plan_there_is: l => l.planApproval === 'there_is',
+          mortgage_not: l => l.landInMortgage === 'not',
+          mortgage_yes: l => l.landInMortgage === 'yes',
+          permit_nothing: l => l.permit === 'nothing',
+          permit_there_is: l => l.permit === 'there_is',
+        };
+        const pred = landPredicates[t];
+        if (pred) {
+          out = out.filter(pred);
+        }
+      } else {
+        const commercePropertyTypes = new Set([
+          'store',
+          'shopping_center',
+          'industrial_buildings',
+          'warehouse',
+          'commercial_space',
+          'whole_floor',
+        ]);
+        if (commercePropertyTypes.has(t)) {
+          out = out.filter(l => (l.apartmentTypeId || '') === t);
+        } else {
+          const typeToCategory = {
+            offices: 2,
+            commercial: 8,
+            land: 7,
+            apartments: 10,
+            penthouses: 10,
+            private_houses: 10,
+            villas: 10,
+            estates: 10,
+            multi_family: 10,
+          };
+          const cat = typeToCategory[t];
+          if (cat != null) {
+            out = out.filter(l => Number(l.category) === cat);
+          }
+        }
+      }
     }
     if (feedFilters.donam != null && (feedFilters.donam.minDonam != null || feedFilters.donam.maxDonam != null)) {
       const minDonam = Number(feedFilters.donam.minDonam ?? 0);
@@ -1537,7 +1683,13 @@ const TikTokFeedScreen = ({
       {!showBottomSheet && (
         <View style={styles.bottomBar}>
           <View style={styles.bottomBarRow}>
-            {BOTTOM_BAR_ITEMS.map((item) => {
+            {(() => {
+              const categoryNum =
+                selectedCategory != null && selectedCategory !== ''
+                  ? Number(selectedCategory)
+                  : NaN;
+              const isOffices = categoryNum === 2;
+              return BOTTOM_BAR_ITEMS.map((item) => {
               // גלובל (4), BNB (5), and מסחר (8): show "סוג" + type icon and open Type filter; קרקעות (7): apartment slot shows "דונם"
               const isGlobal = selectedCategory == null || selectedCategory === '' || selectedCategory === 4 || selectedCategory === '4' || selectedCategory === 5 || selectedCategory === '5' || selectedCategory === 8 || selectedCategory === '8';
               const isLand = selectedCategory === 7 || selectedCategory === '7';
@@ -1549,8 +1701,33 @@ const TikTokFeedScreen = ({
               const useCommerceStyle = item.id === 'rooms' && isCommerce && item.iconCommerce;
               const useLandStyle = item.id === 'rooms' && isLand && item.iconLand;
               const usePartnersStyle = item.id === 'rooms' && isPartners && item.iconPartners;
-              const iconSource = usePartnersStyle ? item.iconPartners : (useLandDonamStyle ? item.iconLandDonam : (useLandStyle ? item.iconLand : (useCommerceStyle ? item.iconCommerce : (useGlobalStyle ? item.iconGlobal : item.icon))));
-              const label = usePartnersStyle ? (item.labelPartners || item.label) : (useLandDonamStyle ? (item.labelLandDonam || item.label) : (useLandStyle ? (item.labelLand || item.label) : (useCommerceStyle ? (item.labelCommerce || item.label) : (useGlobalStyle ? (item.labelGlobal || item.label) : item.label))));
+              const useOfficesStyle = item.id === 'apartment' && isOffices;
+              const iconSource = usePartnersStyle
+                ? item.iconPartners
+                : useLandDonamStyle
+                  ? item.iconLandDonam
+                  : useLandStyle
+                    ? item.iconLand
+                    : useCommerceStyle
+                      ? item.iconCommerce
+                      : useOfficesStyle
+                        ? item.iconOffices
+                        : useGlobalStyle
+                          ? item.iconGlobal
+                          : item.icon;
+              const label = usePartnersStyle
+                ? item.labelPartners || item.label
+                : useLandDonamStyle
+                  ? item.labelLandDonam || item.label
+                  : useLandStyle
+                    ? item.labelLand || item.label
+                    : useCommerceStyle
+                      ? item.labelCommerce || item.label
+                      : useOfficesStyle
+                        ? item.labelOffices || item.label
+                        : useGlobalStyle
+                          ? item.labelGlobal || item.label
+                          : item.label;
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -1561,6 +1738,7 @@ const TikTokFeedScreen = ({
                     if (item.id === 'apartment') {
                       if (useLandDonamStyle && onOpenDonamFilter) onOpenDonamFilter();
                       else if (useGlobalStyle && onOpenTypeFilter) onOpenTypeFilter();
+                      else if (useOfficesStyle && onOpenOfficeFilter) onOpenOfficeFilter();
                       else if (onOpenApartmentTypeFilter) onOpenApartmentTypeFilter();
                     }
                     if (item.id === 'rooms') {
@@ -1578,7 +1756,11 @@ const TikTokFeedScreen = ({
                       style={[
                         styles.bottomBarIcon,
                         item.isPost && styles.bottomBarIconPost,
-                        (useGlobalStyle || useLandStyle || useLandDonamStyle || usePartnersStyle) && styles.bottomBarIconGlobal,
+                        (useGlobalStyle ||
+                          useOfficesStyle ||
+                          useLandStyle ||
+                          useLandDonamStyle ||
+                          usePartnersStyle) && styles.bottomBarIconGlobal,
                       ]}
                       resizeMode="contain"
                     />
@@ -1586,7 +1768,8 @@ const TikTokFeedScreen = ({
                   <Text style={[styles.bottomBarLabel, item.isPost && styles.bottomBarLabelPost]}>{label}</Text>
                 </TouchableOpacity>
               );
-            })}
+            });
+            })()}
           </View>
         </View>
       )}
@@ -1618,11 +1801,37 @@ const TikTokFeedScreen = ({
             <Text style={styles.bottomSheetArrow}>‹</Text>
             <View style={styles.bottomSheetOptionContent}>
               <View style={styles.bottomSheetTextContainer}>
-                {selectedCategory === 3 ? (
+                {selectedCategory === 3 || selectedCategory === '3' ? (
                   <>
                     <Text style={styles.bottomSheetTitle}>שותפים</Text>
                     <Text style={styles.bottomSheetSubtitle}>
                       פרסם חיפוש שותף או דירת שותפים
+                    </Text>
+                  </>
+                ) : selectedCategory === 7 || selectedCategory === '7' ? (
+                  <>
+                    <Text style={styles.bottomSheetTitle}>קרקע</Text>
+                    <Text style={styles.bottomSheetSubtitle}>
+                      פרסם קרקע למכירה או השכרה
+                    </Text>
+                  </>
+                ) : selectedCategory === 8 || selectedCategory === '8' ? (
+                  <>
+                    <Text style={styles.bottomSheetTitle}>נכס מסחרי</Text>
+                    <Text style={styles.bottomSheetSubtitle}>
+                      פרסם נכס מסחרי למכירה או השכרה
+                    </Text>
+                  </>
+                ) : selectedCategory === 4 ||
+                  selectedCategory === '4' ||
+                  selectedCategory === 6 ||
+                  selectedCategory === '6' ||
+                  selectedCategory === 12 ||
+                  selectedCategory === '12' ? (
+                  <>
+                    <Text style={styles.bottomSheetTitle}>נכס</Text>
+                    <Text style={styles.bottomSheetSubtitle}>
+                      פרסם נכס למכירה או השכרה
                     </Text>
                   </>
                 ) : (
@@ -1636,9 +1845,20 @@ const TikTokFeedScreen = ({
               </View>
               <Image
                 source={
-                  selectedCategory === 3
+                  selectedCategory === 3 || selectedCategory === '3'
                     ? require('../assets/image22221.png')
-                    : require('../assets/post-office-icon.png')
+                    : selectedCategory === 7 || selectedCategory === '7'
+                      ? require('../assets/categories/image-copy.png')
+                      : selectedCategory === 8 || selectedCategory === '8'
+                        ? require('../assets/categories/image.png')
+                        : selectedCategory === 4 ||
+                            selectedCategory === '4' ||
+                            selectedCategory === 6 ||
+                            selectedCategory === '6' ||
+                            selectedCategory === 12 ||
+                            selectedCategory === '12'
+                          ? require('../assets/categories/exclusive-post-icon.png')
+                          : require('../assets/post-office-icon.png')
                 }
                 style={styles.bottomSheetIcon}
                 resizeMode="contain"
@@ -2343,7 +2563,7 @@ const styles = StyleSheet.create({
     right: 0,
     width: '100%',
     maxWidth: 414,
-    backgroundColor: '#1E1D27',
+    backgroundColor: '#2B2A39',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 10,

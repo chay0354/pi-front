@@ -42,6 +42,8 @@ export function buildListingSearchText(listing) {
   push(listing.address);
   push(listing.search_address);
   push(listing.land_address);
+  push(listing.land_parcel);
+  push(listing.land_block);
   push(listing.project_name);
   push(listing.purpose);
   push(listing.property_type);

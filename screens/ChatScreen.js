@@ -360,16 +360,16 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     backgroundColor: CHAT_BG,
-    ...(isWeb && { overflow: 'hidden', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }),
+    overflow: 'hidden',
+    ...(isWeb && { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }),
   },
+  // Slightly larger than the frame so cover crops less (subtle zoom-out vs full-bleed 100%).
   chatBackgroundImage: {
     position: 'absolute',
-    left: 0,
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
+    left: '-7%',
+    top: '-7%',
+    width: '114%',
+    height: '114%',
   },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {

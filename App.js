@@ -15,6 +15,7 @@ import {
   RoomsFilterScreen,
   PriceFilterScreen,
   TypeFilterScreen,
+  OfficeFilterScreen,
   MeterFilterScreen,
   DonamFilterScreen,
   PreferencesFilterScreen,
@@ -77,6 +78,7 @@ const screenName = {
   meterFilter: 'meterFilter',
   donamFilter: 'donamFilter',
   preferencesFilter: 'preferencesFilter',
+  officeFilter: 'officeFilter',
   editPublishAd: 'editPublishAd',
   listingAnalysis: 'listingAnalysis',
   chatList: 'chatList',
@@ -126,6 +128,7 @@ export default function App() {
     type: null,          // null | string (global category "סוג" type id)
     meter: null,         // null | number (מסחר category: min sq meters)
     donam: null,         // null | { minDonam, maxDonam } for קרקעות
+    office: null,        // null | { minArea, minRooms, wholeFloor, parking, elevator, mamad } — משרדים (2)
     preferences: null,   // null | object { gender, ageMin, ageMax, nonSmoker, students, ... }
   });
 
@@ -276,6 +279,7 @@ export default function App() {
             onOpenCityFilter={() => setCurrentScreen(screenName.cityFilter)}
             onOpenApartmentTypeFilter={() => setCurrentScreen(screenName.apartmentTypeFilter)}
             onOpenTypeFilter={() => setCurrentScreen(screenName.typeFilter)}
+            onOpenOfficeFilter={() => setCurrentScreen(screenName.officeFilter)}
             onOpenRoomsFilter={() => setCurrentScreen(screenName.roomsFilter)}
             onOpenMeterFilter={() => setCurrentScreen(screenName.meterFilter)}
             onOpenDonamFilter={() => setCurrentScreen(screenName.donamFilter)}
@@ -376,6 +380,16 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.tikTokFeed)}
             onSave={filter => {
               setFeedFilters(prev => ({...prev, type: filter?.type ?? null}));
+              setCurrentScreen(screenName.tikTokFeed);
+            }}
+          />
+        )}
+        {currentScreen === screenName.officeFilter && (
+          <OfficeFilterScreen
+            initialFilter={feedFilters.office}
+            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
+            onSave={filter => {
+              setFeedFilters(prev => ({...prev, office: filter ?? null}));
               setCurrentScreen(screenName.tikTokFeed);
             }}
           />

@@ -5,16 +5,32 @@ import html2canvas from 'html2canvas';
 
 /**
  * @param {HTMLElement} domElement
+ * @param {{ minShortSidePx?: number, jpegQuality?: number, maxScale?: number }} [options]
  * @returns {Promise<string>} data:image/jpeg;base64,...
  */
-export async function capturePostPreviewToDataUrl(domElement) {
+export async function capturePostPreviewToDataUrl(domElement, options = {}) {
   if (typeof document === 'undefined' || !domElement) {
     throw new Error('Web capture requires a DOM element');
   }
+  const {
+    minShortSidePx = 1080,
+    jpegQuality = 0.95,
+    maxScale = 4,
+  } = options;
+
+  const rect = domElement.getBoundingClientRect();
+  const shortSideCss = Math.min(rect.width, rect.height) || 400;
+  const dpr =
+    typeof window !== 'undefined' && window.devicePixelRatio
+      ? window.devicePixelRatio
+      : 1;
+  // At least 2× so DPR=1 desktops are not blurry; scale up layout so shorter axis reaches minShortSidePx.
+  const scaleForResolution = minShortSidePx / shortSideCss;
   const scale = Math.min(
-    2,
-    (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
+    maxScale,
+    Math.max(2, dpr, scaleForResolution),
   );
+
   const canvas = await html2canvas(domElement, {
     useCORS: true,
     allowTaint: true,
@@ -22,7 +38,7 @@ export async function capturePostPreviewToDataUrl(domElement) {
     scale,
     backgroundColor: null,
   });
-  return canvas.toDataURL('image/jpeg', 0.9);
+  return canvas.toDataURL('image/jpeg', jpegQuality);
 }
 
 /**

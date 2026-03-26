@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Linking, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const MAP_HEIGHT = 200;
 
@@ -11,17 +10,11 @@ function googleEmbedSrc(address) {
 }
 
 /**
- * Embedded map for the listing address (Google Maps). Tap footer to open full maps app.
+ * Embedded map for the listing address (Google Maps).
  */
 export default function LocationMap({ address, containerStyle }) {
   const addr = (address && String(address).trim()) ? String(address).trim() : '';
   const embedUri = googleEmbedSrc(addr);
-
-  const openMaps = () => {
-    if (!addr) return;
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
-    Linking.openURL(url).catch(() => {});
-  };
 
   if (!addr) return null;
 
@@ -55,13 +48,6 @@ export default function LocationMap({ address, containerStyle }) {
         <View style={styles.mapFrame}>
           {mapNode}
         </View>
-        <TouchableOpacity activeOpacity={0.85} onPress={openMaps}>
-          <View style={styles.footer}>
-            <MaterialCommunityIcons name="map-marker" size={20} color="#ffc40a" />
-            <Text style={styles.address} numberOfLines={2}>{addr}</Text>
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.hint}>הקש על הכתובת לפתיחה בגוגל מפות</Text>
       </View>
     </View>
   );
@@ -86,27 +72,5 @@ const styles = StyleSheet.create({
     width: '100%',
     height: MAP_HEIGHT,
     backgroundColor: 'transparent',
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  address: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 14,
-    textAlign: 'right',
-    lineHeight: 20,
-  },
-  hint: {
-    paddingBottom: 10,
-    paddingHorizontal: 12,
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 12,
-    textAlign: 'center',
   },
 });

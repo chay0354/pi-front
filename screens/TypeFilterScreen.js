@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,8 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 const BG = '#1a1926';
 const BORDER = 'rgba(255,255,255,0.2)';
 
-// סוג (Type) options for global category – matches design: דירות, פנטהאוזים, etc.
-const TYPE_OPTIONS = [
+// סוג (Type) options for global feed – maps to listing.category in applyFeedFilters
+const TYPE_OPTIONS_GLOBAL = [
   {id: 'apartments', label: 'דירות'},
   {id: 'penthouses', label: 'נטהאוזים'},
   {id: 'private_houses', label: 'בתים פרטיים'},
@@ -25,18 +25,64 @@ const TYPE_OPTIONS = [
   {id: 'land', label: 'קרקעות'},
 ];
 
-const TypeFilterScreen = ({initialFilter, onClose, onSave}) => {
+// מסחר (category 8): סוג נכס – matches property_type from ads form
+const TYPE_OPTIONS_COMMERCE = [
+  {id: 'store', label: 'חנות'},
+  {id: 'shopping_center', label: 'מרכז קניות / קומה שלמה'},
+  {id: 'industrial_buildings', label: 'מבני תעשייה'},
+  {id: 'warehouse', label: 'מחסן'},
+  {id: 'commercial_space', label: 'שטח מסחרי'},
+  {id: 'whole_floor', label: 'קומה שלמה'},
+];
+
+// קרקעות (category 7): סוג — matches land form radio values (plan_approval, etc.)
+const TYPE_OPTIONS_LAND = [
+  {id: 'own_private', label: 'בעלות קרקע — פרטי'},
+  {id: 'own_administration', label: 'בעלות קרקע — מינהל'},
+  {id: 'agri_yes', label: 'קרקע חקלאית — כן'},
+  {id: 'agri_not', label: 'קרקע חקלאית — לא'},
+  {id: 'plan_happy', label: 'תב״ע — מאושרת'},
+  {id: 'plan_nothing', label: 'תב״ע — אין'},
+  {id: 'plan_there_is', label: 'תב״ע — יש'},
+  {id: 'mortgage_not', label: 'קרקע במושע — לא'},
+  {id: 'mortgage_yes', label: 'קרקע במושע — כן'},
+  {id: 'permit_nothing', label: 'היתר — אין'},
+  {id: 'permit_there_is', label: 'היתר — יש'},
+];
+
+const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+  const isCommerce =
+    selectedCategory === 8 || selectedCategory === '8';
+  const isLand = selectedCategory === 7 || selectedCategory === '7';
+  const options = useMemo(() => {
+    if (isCommerce) {
+      return TYPE_OPTIONS_COMMERCE;
+    }
+    if (isLand) {
+      return TYPE_OPTIONS_LAND;
+    }
+    return TYPE_OPTIONS_GLOBAL;
+  }, [isCommerce, isLand]);
+
   const [selectedId, setSelectedId] = useState(initialFilter ?? null);
 
+  useEffect(() => {
+    setSelectedId(initialFilter ?? null);
+  }, [initialFilter, isCommerce, isLand]);
+
   const handleSave = () => {
-    if (onSave && selectedId) {
-      onSave({type: selectedId});
+    if (onSave) {
+      onSave({type: selectedId ?? null});
     }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
     setSelectedId(null);
+    if (onSave) {
+      onSave({type: null});
+    }
+    if (onClose) onClose();
   };
 
   return (
@@ -55,7 +101,7 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave}) => {
         </View>
 
         <View style={styles.radioList}>
-          {TYPE_OPTIONS.map((option) => (
+          {options.map((option) => (
             <TouchableOpacity
               key={option.id}
               style={styles.radioRow}
