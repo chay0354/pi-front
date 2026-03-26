@@ -19,6 +19,7 @@ import {
   DonamFilterScreen,
   PreferencesFilterScreen,
   EditPublishAdScreen,
+  ListingAnalysisScreen,
   ChatScreen,
   ChatListScreen,
   UserProfileScreen,
@@ -77,6 +78,7 @@ const screenName = {
   donamFilter: 'donamFilter',
   preferencesFilter: 'preferencesFilter',
   editPublishAd: 'editPublishAd',
+  listingAnalysis: 'listingAnalysis',
   chatList: 'chatList',
   chat: 'chat',
   userProfile: 'userProfile',
@@ -561,12 +563,19 @@ export default function App() {
             onBack={() => setCurrentScreen(screenName.settings)}
           />
         )}
+        {currentScreen === screenName.listingAnalysis && (
+          <ListingAnalysisScreen
+            onClose={() => setCurrentScreen(screenName.editPublishAd)}
+            currentUser={currentUser}
+          />
+        )}
         {currentScreen === screenName.editPublishAd && (
           <EditPublishAdScreen
             onClose={() => setCurrentScreen(screenName.settings)}
             uploadedListings={uploadedListings}
             currentUser={currentUser}
             initialCategoryId={selectedCategory ? parseInt(selectedCategory, 10) : 8}
+            onOpenListingAnalysis={() => setCurrentScreen(screenName.listingAnalysis)}
             onCreateAd={categoryId => {
               setSelectedCategory(String(categoryId));
               setCurrentScreen(screenName.adsForm);

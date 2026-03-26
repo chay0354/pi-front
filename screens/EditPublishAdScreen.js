@@ -52,6 +52,7 @@ const EditPublishAdScreen = ({
   onFreeze,
   onUnfreeze,
   onRemove,
+  onOpenListingAnalysis,
 }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
   const [selectedCategoryId, setSelectedCategoryId] = useState(initialCategoryId);
@@ -306,7 +307,12 @@ const EditPublishAdScreen = ({
           <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>ערוך/פרסם מודעה</Text>
-        <TouchableOpacity style={styles.headerBtn}>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => onOpenListingAnalysis && onOpenListingAnalysis()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="ניתוח מודעות">
           <MaterialCommunityIcons name="chart-box-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>

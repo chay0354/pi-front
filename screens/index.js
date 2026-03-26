@@ -20,6 +20,7 @@ export {default as MeterFilterScreen} from './MeterFilterScreen';
 export {default as DonamFilterScreen} from './DonamFilterScreen';
 export {default as PreferencesFilterScreen} from './PreferencesFilterScreen';
 export {default as EditPublishAdScreen} from './EditPublishAdScreen';
+export {default as ListingAnalysisScreen} from './ListingAnalysisScreen';
 export {default as ChatScreen} from './ChatScreen';
 export {default as ChatListScreen} from './ChatListScreen';
 export {default as UserProfileScreen} from './UserProfileScreen';
