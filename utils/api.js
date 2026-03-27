@@ -159,9 +159,9 @@ export const verifyEmail = async (
       }),
     });
 
-    console.log('Verify API response status:', response.status);
+    // console.log('Verify API response status:', response.status);
     const data = await response.json();
-    console.log('Verify API response data:', data);
+    // console.log('Verify API response data:', data);
 
     if (!response.ok) {
       throw new Error(data.error || 'Verification failed');
@@ -483,9 +483,9 @@ export const getListings = async (options = {}) => {
     }
 
     const url = `${API_URL}/api/listings?${params.toString()}`;
-    console.log('🌐 [api.js] Fetching listings from:', url);
-    console.log('🌐 [api.js] API_URL:', API_URL);
-    console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo});
+    // console.log('🌐 [api.js] Fetching listings from:', url);
+    // console.log('🌐 [api.js] API_URL:', API_URL);
+    // console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo});
 
     const response = await fetch(url, {
       method: 'GET',
@@ -494,15 +494,15 @@ export const getListings = async (options = {}) => {
       },
     });
 
-    console.log(
-      '🌐 [api.js] Response status:',
-      response.status,
-      response.statusText,
-    );
+    // console.log(
+    //   '🌐 [api.js] Response status:',
+    //   response.status,
+    //   response.statusText,
+    // );
 
     const data = await response.json();
 
-    console.log('🌐 [api.js] Response data:', data);
+    // console.log('🌐 [api.js] Response data:', data);
 
     if (!response.ok) {
       console.error('❌ [api.js] Response not OK:', data);
@@ -759,8 +759,8 @@ export const createListing = async listingData => {
 
     const data = await response.json();
 
-    console.log('API response status:', response.status);
-    console.log('API response data:', data);
+    // console.log('API response status:', response.status);
+    // console.log('API response data:', data);
 
     if (!response.ok) {
       const errorMsg = data.error || data.details || 'Failed to create listing';

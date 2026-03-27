@@ -130,23 +130,6 @@ const SettingsScreen = ({
     }
   };
 
-  useEffect(() => {
-    console.log('SettingsScreen - currentUser:', currentUser);
-    if (currentUser) {
-      console.log(
-        'SettingsScreen - subscriber_number:',
-        currentUser.subscriber_number,
-      );
-      console.log(
-        'SettingsScreen - name:',
-        currentUser.name ||
-          currentUser.agent_name ||
-          currentUser.contact_person_name,
-      );
-      console.log('SettingsScreen - email:', currentUser.email);
-    }
-  }, [currentUser]);
-
   // Refresh subscription from API so profile_picture_url / company_logo_url are not stale vs AsyncStorage
   useEffect(() => {
     const email = currentUser?.email && String(currentUser.email).trim();
