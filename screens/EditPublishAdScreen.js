@@ -33,9 +33,9 @@ const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
 
 // All broker categories in same design; optional imageCrop, imageAdjust, borderRadius per item
 const PUBLISH_CATEGORIES = brokerCategories.map(c => {
-  const item = { id: c.id, name: c.name, image: c.image };
+  const item = {id: c.id, name: c.name, image: c.image};
   if (c.id === 8) {
-    item.imageAdjust = { marginLeft: 0, marginTop: 4 };
+    item.imageAdjust = {marginLeft: 0, marginTop: 4};
   }
   return item;
 });
@@ -55,7 +55,8 @@ const EditPublishAdScreen = ({
   onOpenListingAnalysis,
 }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
-  const [selectedCategoryId, setSelectedCategoryId] = useState(initialCategoryId);
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState(initialCategoryId);
   const [fetchedListings, setFetchedListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
   const [removeConfirmListing, setRemoveConfirmListing] = useState(null);
@@ -72,18 +73,32 @@ const EditPublishAdScreen = ({
     let cancelled = false;
     (async () => {
       try {
-        const raw = Platform.OS === 'web' ? localStorage.getItem(FROZEN_IDS_KEY) : await AsyncStorage.getItem(FROZEN_IDS_KEY);
-        const parsed = raw ? (() => { try { return JSON.parse(raw); } catch (_) { return []; } })() : [];
+        const raw =
+          Platform.OS === 'web'
+            ? localStorage.getItem(FROZEN_IDS_KEY)
+            : await AsyncStorage.getItem(FROZEN_IDS_KEY);
+        const parsed = raw
+          ? (() => {
+              try {
+                return JSON.parse(raw);
+              } catch (_) {
+                return [];
+              }
+            })()
+          : [];
         const ids = Array.isArray(parsed) ? parsed.map(x => String(x)) : [];
         if (ids.length && !cancelled) setFrozenListingIds(ids);
       } catch (_) {}
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persistFrozenIds = ids => {
     const next = Array.isArray(ids) ? ids : [];
-    if (Platform.OS === 'web') localStorage.setItem(FROZEN_IDS_KEY, JSON.stringify(next));
+    if (Platform.OS === 'web')
+      localStorage.setItem(FROZEN_IDS_KEY, JSON.stringify(next));
     else AsyncStorage.setItem(FROZEN_IDS_KEY, JSON.stringify(next));
   };
 
@@ -98,17 +113,16 @@ const EditPublishAdScreen = ({
         });
         if (cancelled) return;
         if (result?.success && result?.listings?.length) {
-          const list =
-            currentUser?.id == null
-              ? []
-              : result.listings;
+          const list = currentUser?.id == null ? [] : result.listings;
           const transformed = list.map(l => {
             const imgs = l.listing_images || [];
             const main = imgs.find(i => i.image_type === 'main');
             const additional = imgs.filter(i => i.image_type === 'additional');
             const images = [];
             if (main?.image_url) images.push({uri: main.image_url});
-            additional.filter(i => i.image_url).forEach(i => images.push({uri: i.image_url}));
+            additional
+              .filter(i => i.image_url)
+              .forEach(i => images.push({uri: i.image_url}));
             return {
               id: l.id,
               category: l.category,
@@ -136,7 +150,9 @@ const EditPublishAdScreen = ({
       }
     };
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser?.id]);
 
   const mergedListings = (() => {
@@ -150,7 +166,11 @@ const EditPublishAdScreen = ({
   })();
 
   const filteredListings = selectedCategoryId
-    ? mergedListings.filter(l => (l.category != null && parseInt(l.category, 10)) === selectedCategoryId)
+    ? mergedListings.filter(
+        l =>
+          (l.category != null && parseInt(l.category, 10)) ===
+          selectedCategoryId,
+      )
     : mergedListings;
 
   const getFirstImage = listing => {
@@ -158,7 +178,10 @@ const EditPublishAdScreen = ({
       const img = listing.images[0];
       return typeof img === 'string' ? {uri: img} : img;
     }
-    if (listing.image) return typeof listing.image === 'number' ? listing.image : {uri: listing.image};
+    if (listing.image)
+      return typeof listing.image === 'number'
+        ? listing.image
+        : {uri: listing.image};
     return null;
   };
 
@@ -172,7 +195,8 @@ const EditPublishAdScreen = ({
     const id = listing?.id ?? listing?.ad_number;
     if (id == null) return false;
     const idStr = String(id);
-    const fromApi = listing?.is_frozen === true || listing?.is_frozen === 'true';
+    const fromApi =
+      listing?.is_frozen === true || listing?.is_frozen === 'true';
     return fromApi || frozenListingIds.some(fid => String(fid) === idStr);
   };
 
@@ -192,45 +216,94 @@ const EditPublishAdScreen = ({
       return (
         <View style={styles.adCardList}>
           <View style={styles.adCardListLeft}>
-            <Text style={styles.adCardListDescription} numberOfLines={3}>{listing.description || '—'}</Text>
+            <Text style={styles.adCardListDescription} numberOfLines={3}>
+              {listing.description || '—'}
+            </Text>
             <View style={styles.adCardListExposure}>
-              <Image source={getExposureAsset(exposure)} style={styles.adCardListExposureIcon} resizeMode="contain" />
+              <Image
+                source={getExposureAsset(exposure)}
+                style={styles.adCardListExposureIcon}
+                resizeMode="contain"
+              />
             </View>
             <View style={[styles.statsRow, styles.statsRowList]}>
               <View style={styles.statItem}>
-                <MaterialCommunityIcons name="eye-outline" size={16} color={TEXT_LIGHT} />
-                <Text style={[styles.statText, styles.statTextList]}>{views}</Text>
+                <MaterialCommunityIcons
+                  name="eye-outline"
+                  size={16}
+                  color={TEXT_LIGHT}
+                />
+                <Text style={[styles.statText, styles.statTextList]}>
+                  {views}
+                </Text>
               </View>
               <View style={styles.statItem}>
-                <MaterialCommunityIcons name="heart-outline" size={16} color={TEXT_LIGHT} />
-                <Text style={[styles.statText, styles.statTextList]}>{likes}</Text>
+                <MaterialCommunityIcons
+                  name="heart-outline"
+                  size={16}
+                  color={TEXT_LIGHT}
+                />
+                <Text style={[styles.statText, styles.statTextList]}>
+                  {likes}
+                </Text>
               </View>
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnList, isFrozen(listing) && styles.actionBtnFrozen]}
-                onPress={() => (isFrozen(listing) ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}
+                style={[
+                  styles.actionBtn,
+                  styles.actionBtnList,
+                  isFrozen(listing) && styles.actionBtnFrozen,
+                ]}
+                onPress={() =>
+                  isFrozen(listing)
+                    ? setUnfreezeConfirmListing(listing)
+                    : setFreezeConfirmListing(listing)
+                }
                 activeOpacity={0.8}>
-                <MaterialCommunityIcons name="snowflake" size={18} color={isFrozen(listing) ? TEXT_LIGHT : '#fff'} />
-                {isFrozen(listing) ? <Text style={styles.actionBtnTextList}>הוקפאה</Text> : null}
+                <MaterialCommunityIcons
+                  name="snowflake"
+                  size={18}
+                  color={isFrozen(listing) ? TEXT_LIGHT : '#fff'}
+                />
+                {isFrozen(listing) ? (
+                  <Text style={styles.actionBtnTextList}>הוקפאה</Text>
+                ) : null}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionBtnList]}
-                onPress={() => (onShare ? onShare(listing) : onBoost && onBoost(listing))}
+                onPress={() =>
+                  onShare ? onShare(listing) : onBoost && onBoost(listing)
+                }
                 activeOpacity={0.8}>
-                <MaterialCommunityIcons name="arrow-up" size={18} color="#fff" />
+                <MaterialCommunityIcons
+                  name="arrow-up"
+                  size={18}
+                  color="#fff"
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnList]} onPress={() => setRemoveConfirmListing(listing)} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnList]}
+                onPress={() => setRemoveConfirmListing(listing)}
+                activeOpacity={0.8}>
                 <MaterialCommunityIcons name="close" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
           <View style={styles.adCardListRight}>
             {imageSource ? (
-              <Image source={imageSource} style={styles.adCardListImage} resizeMode="cover" />
+              <Image
+                source={imageSource}
+                style={styles.adCardListImage}
+                resizeMode="cover"
+              />
             ) : (
-              <View style={[styles.adImagePlaceholder, { minHeight: 200 }]}>
-                <MaterialCommunityIcons name="image-off" size={48} color={TEXT_LIGHT} />
+              <View style={[styles.adImagePlaceholder, {minHeight: 200}]}>
+                <MaterialCommunityIcons
+                  name="image-off"
+                  size={48}
+                  color={TEXT_LIGHT}
+                />
               </View>
             )}
             <TouchableOpacity
@@ -248,10 +321,18 @@ const EditPublishAdScreen = ({
       <View style={styles.adCard}>
         <View style={styles.adImageWrap}>
           {imageSource ? (
-            <Image source={imageSource} style={styles.adImage} resizeMode="cover" />
+            <Image
+              source={imageSource}
+              style={styles.adImage}
+              resizeMode="cover"
+            />
           ) : (
             <View style={styles.adImagePlaceholder}>
-              <MaterialCommunityIcons name="image-off" size={48} color={TEXT_LIGHT} />
+              <MaterialCommunityIcons
+                name="image-off"
+                size={48}
+                color={TEXT_LIGHT}
+              />
             </View>
           )}
           <TouchableOpacity
@@ -261,36 +342,68 @@ const EditPublishAdScreen = ({
             <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.adDescription} numberOfLines={3}>{listing.description || '—'}</Text>
+        <Text style={styles.adDescription} numberOfLines={3}>
+          {listing.description || '—'}
+        </Text>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <MaterialCommunityIcons name="eye-outline" size={20} color={TEXT_LIGHT} />
+            <MaterialCommunityIcons
+              name="eye-outline"
+              size={20}
+              color={TEXT_LIGHT}
+            />
             <Text style={styles.statText}>{views}</Text>
           </View>
           <View style={styles.statItem}>
-            <MaterialCommunityIcons name="heart-outline" size={20} color={TEXT_LIGHT} />
+            <MaterialCommunityIcons
+              name="heart-outline"
+              size={20}
+              color={TEXT_LIGHT}
+            />
             <Text style={styles.statText}>{likes}</Text>
           </View>
         </View>
         <View style={styles.exposureRow}>
-          <Image source={require('../assets/exposure-icon.png')} style={styles.exposureImage} resizeMode="contain" />
+          <Image
+            source={require('../assets/exposure-icon.png')}
+            style={styles.exposureImage}
+            resizeMode="contain"
+          />
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, isFrozen(listing) && styles.actionBtnFrozen]}
-            onPress={() => (isFrozen(listing) ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}
+            style={[
+              styles.actionBtn,
+              isFrozen(listing) && styles.actionBtnFrozen,
+            ]}
+            onPress={() =>
+              isFrozen(listing)
+                ? setUnfreezeConfirmListing(listing)
+                : setFreezeConfirmListing(listing)
+            }
             activeOpacity={0.8}>
-            <MaterialCommunityIcons name="snowflake" size={18} color={isFrozen(listing) ? TEXT_LIGHT : '#fff'} />
-            <Text style={styles.actionBtnText}>{isFrozen(listing) ? 'הוקפאה' : 'הקפאה'}</Text>
+            <MaterialCommunityIcons
+              name="snowflake"
+              size={18}
+              color={isFrozen(listing) ? TEXT_LIGHT : '#fff'}
+            />
+            <Text style={styles.actionBtnText}>
+              {isFrozen(listing) ? 'הוקפאה' : 'הקפאה'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => (onShare ? onShare(listing) : onBoost && onBoost(listing))}
+            onPress={() =>
+              onShare ? onShare(listing) : onBoost && onBoost(listing)
+            }
             activeOpacity={0.8}>
             <MaterialCommunityIcons name="arrow-up" size={18} color="#fff" />
             <Text style={styles.actionBtnText}>הקפצה</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setRemoveConfirmListing(listing)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => setRemoveConfirmListing(listing)}
+            activeOpacity={0.8}>
             <MaterialCommunityIcons name="close" size={18} color="#fff" />
             <Text style={styles.actionBtnText}>הסרה</Text>
           </TouchableOpacity>
@@ -303,17 +416,24 @@ const EditPublishAdScreen = ({
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.headerBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.headerBtn}
+          hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
           <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>ערוך/פרסם מודעה</Text>
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={() => onOpenListingAnalysis && onOpenListingAnalysis()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           accessibilityRole="button"
           accessibilityLabel="ניתוח מודעות">
-          <MaterialCommunityIcons name="chart-box-outline" size={24} color="#fff" />
+          <MaterialCommunityIcons
+            name="chart-box-outline"
+            size={24}
+            color="#fff"
+          />
         </TouchableOpacity>
       </View>
 
@@ -328,8 +448,7 @@ const EditPublishAdScreen = ({
           directionalLockEnabled
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryScrollContent}
-          style={styles.categoryScroll}
-        >
+          style={styles.categoryScroll}>
           {PUBLISH_CATEGORIES.map(cat => {
             const selected = selectedCategoryId === cat.id;
             return (
@@ -372,9 +491,19 @@ const EditPublishAdScreen = ({
                 })()}
                 <View style={styles.categoryNameRow}>
                   {selected ? (
-                    <Image source={require('../assets/checkbox.png')} style={styles.categoryCheckbox} resizeMode="contain" />
+                    <Image
+                      source={require('../assets/checkbox.png')}
+                      style={styles.categoryCheckbox}
+                      resizeMode="contain"
+                    />
                   ) : null}
-                  <Text style={[styles.categoryName, selected && styles.categoryNameSelected]}>{cat.name}</Text>
+                  <Text
+                    style={[
+                      styles.categoryName,
+                      selected && styles.categoryNameSelected,
+                    ]}>
+                    {cat.name}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -383,15 +512,26 @@ const EditPublishAdScreen = ({
 
         {/* Action bar: Create Ad + view toggles */}
         <View style={styles.actionBar}>
-          <TouchableOpacity style={styles.createBtn} onPress={() => onCreateAd && onCreateAd(selectedCategoryId)} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={() => onCreateAd && onCreateAd(selectedCategoryId)}
+            activeOpacity={0.9}>
             <Text style={styles.createBtnText}>צור מודעה</Text>
             <MaterialCommunityIcons name="plus" size={24} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.viewToggle, (viewMode === 'list' || viewMode === 'grid') && styles.viewToggleActive]}
+            style={[
+              styles.viewToggle,
+              (viewMode === 'list' || viewMode === 'grid') &&
+                styles.viewToggleActive,
+            ]}
             onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
             <Image
-              source={viewMode === 'grid' ? require('../assets/swipereight.png') : require('../assets/swiperleft.png')}
+              source={
+                viewMode === 'grid'
+                  ? require('../assets/swipereight.png')
+                  : require('../assets/swiperleft.png')
+              }
               style={styles.viewToggleIcon}
               resizeMode="contain"
             />
@@ -406,14 +546,22 @@ const EditPublishAdScreen = ({
           </View>
         ) : filteredListings.length === 0 ? (
           <View style={styles.emptyWrap}>
-            <MaterialCommunityIcons name="bullhorn-outline" size={56} color={TEXT_LIGHT} />
+            <MaterialCommunityIcons
+              name="bullhorn-outline"
+              size={56}
+              color={TEXT_LIGHT}
+            />
             <Text style={styles.emptyText}>אין מודעות בקטגוריה זו</Text>
-            <Text style={styles.emptySubtext}>לחצו על "צור מודעה" כדי לפרסם</Text>
+            <Text style={styles.emptySubtext}>
+              לחצו על "צור מודעה" כדי לפרסם
+            </Text>
           </View>
         ) : viewMode === 'grid' ? (
           <View style={styles.grid}>
             {filteredListings.map(listing => (
-              <View key={listing.id || listing.ad_number || Math.random()} style={styles.gridItem}>
+              <View
+                key={listing.id || listing.ad_number || Math.random()}
+                style={styles.gridItem}>
                 {renderAdCard({item: listing})}
               </View>
             ))}
@@ -423,7 +571,9 @@ const EditPublishAdScreen = ({
             {filteredListings.map((listing, index) => (
               <View key={listing.id ?? listing.ad_number ?? index}>
                 {renderAdCard({item: listing})}
-                {index < filteredListings.length - 1 ? <View style={styles.listSeparator} /> : null}
+                {index < filteredListings.length - 1 ? (
+                  <View style={styles.listSeparator} />
+                ) : null}
               </View>
             ))}
           </View>
@@ -435,13 +585,23 @@ const EditPublishAdScreen = ({
         transparent
         animationType="fade"
         onRequestClose={() => setRemoveConfirmListing(null)}>
-        <Pressable style={styles.removeModalOverlay} onPress={() => setRemoveConfirmListing(null)}>
-          <View style={styles.removeModalContent} onStartShouldSetResponder={() => true}>
+        <Pressable
+          style={styles.removeModalOverlay}
+          onPress={() => setRemoveConfirmListing(null)}>
+          <View
+            style={styles.removeModalContent}
+            onStartShouldSetResponder={() => true}>
             <View style={styles.removeModalIconWrap}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={48} color={BORDER_GOLD} />
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={48}
+                color={BORDER_GOLD}
+              />
             </View>
             <Text style={styles.removeModalTitle}>האם אתה בטוח?</Text>
-            <Text style={styles.removeModalMessage}>המודעה תוסר מהרשימה. לא ניתן לשחזר פעולה זו.</Text>
+            <Text style={styles.removeModalMessage}>
+              המודעה תוסר מהרשימה. לא ניתן לשחזר פעולה זו.
+            </Text>
             <View style={styles.removeModalButtons}>
               <TouchableOpacity
                 style={styles.removeModalCancelBtn}
@@ -452,7 +612,8 @@ const EditPublishAdScreen = ({
               <TouchableOpacity
                 style={styles.removeModalConfirmBtn}
                 onPress={() => {
-                  if (removeConfirmListing && onRemove) onRemove(removeConfirmListing);
+                  if (removeConfirmListing && onRemove)
+                    onRemove(removeConfirmListing);
                   setRemoveConfirmListing(null);
                 }}
                 activeOpacity={0.8}>
@@ -468,13 +629,23 @@ const EditPublishAdScreen = ({
         transparent
         animationType="fade"
         onRequestClose={() => setFreezeConfirmListing(null)}>
-        <Pressable style={styles.removeModalOverlay} onPress={() => setFreezeConfirmListing(null)}>
-          <View style={styles.removeModalContent} onStartShouldSetResponder={() => true}>
+        <Pressable
+          style={styles.removeModalOverlay}
+          onPress={() => setFreezeConfirmListing(null)}>
+          <View
+            style={styles.removeModalContent}
+            onStartShouldSetResponder={() => true}>
             <View style={styles.removeModalIconWrap}>
-              <MaterialCommunityIcons name="snowflake" size={48} color={BORDER_GOLD} />
+              <MaterialCommunityIcons
+                name="snowflake"
+                size={48}
+                color={BORDER_GOLD}
+              />
             </View>
             <Text style={styles.removeModalTitle}>הקפיא מודעה?</Text>
-            <Text style={styles.removeModalMessage}>המודעה תישאר אצלך אך לא תוצג במערכת. ניתן לבטל הקפאה בהמשך.</Text>
+            <Text style={styles.removeModalMessage}>
+              המודעה תישאר אצלך אך לא תוצג במערכת. ניתן לבטל הקפאה בהמשך.
+            </Text>
             <View style={styles.removeModalButtons}>
               <TouchableOpacity
                 style={styles.removeModalCancelBtn}
@@ -485,8 +656,10 @@ const EditPublishAdScreen = ({
               <TouchableOpacity
                 style={styles.freezeModalConfirmBtn}
                 onPress={() => {
-                  if (freezeConfirmListing && onFreeze) onFreeze(freezeConfirmListing);
-                  const id = freezeConfirmListing?.id ?? freezeConfirmListing?.ad_number;
+                  if (freezeConfirmListing && onFreeze)
+                    onFreeze(freezeConfirmListing);
+                  const id =
+                    freezeConfirmListing?.id ?? freezeConfirmListing?.ad_number;
                   if (id != null) {
                     const idStr = String(id);
                     setFrozenListingIds(prev => {
@@ -511,13 +684,23 @@ const EditPublishAdScreen = ({
         transparent
         animationType="fade"
         onRequestClose={() => setUnfreezeConfirmListing(null)}>
-        <Pressable style={styles.removeModalOverlay} onPress={() => setUnfreezeConfirmListing(null)}>
-          <View style={styles.removeModalContent} onStartShouldSetResponder={() => true}>
+        <Pressable
+          style={styles.removeModalOverlay}
+          onPress={() => setUnfreezeConfirmListing(null)}>
+          <View
+            style={styles.removeModalContent}
+            onStartShouldSetResponder={() => true}>
             <View style={styles.removeModalIconWrap}>
-              <MaterialCommunityIcons name="snowflake-melt" size={48} color={BORDER_GOLD} />
+              <MaterialCommunityIcons
+                name="snowflake-melt"
+                size={48}
+                color={BORDER_GOLD}
+              />
             </View>
             <Text style={styles.removeModalTitle}>בטל הקפאה?</Text>
-            <Text style={styles.removeModalMessage}>המודעה תוצג שוב במערכת.</Text>
+            <Text style={styles.removeModalMessage}>
+              המודעה תוצג שוב במערכת.
+            </Text>
             <View style={styles.removeModalButtons}>
               <TouchableOpacity
                 style={styles.removeModalCancelBtn}
@@ -553,7 +736,7 @@ const EditPublishAdScreen = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
+  container: {flex: 1, backgroundColor: BG},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -564,10 +747,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  headerBtn: { padding: 4, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  headerBtn: {
+    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
+  scroll: {flex: 1},
+  scrollContent: {paddingHorizontal: 20, paddingBottom: 40},
   sectionLabel: {
     color: '#fff',
     fontSize: 15,
@@ -601,9 +790,9 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
-  categoryName: { color: '#fff', fontSize: 14, fontFamily: 'Rubik-Medium' },
-  categoryNameSelected: { color: BORDER_GOLD },
-  categoryCheckbox: { width: 18, height: 18 },
+  categoryName: {color: '#fff', fontSize: 14, fontFamily: 'Rubik-Medium'},
+  categoryNameSelected: {color: BORDER_GOLD},
+  categoryCheckbox: {width: 18, height: 18},
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -619,7 +808,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 26,
   },
-  createBtnText: { color: '#fff', fontSize: 16 },
+  createBtnText: {color: '#fff', fontSize: 16},
   viewToggle: {
     width: 40,
     height: 40,
@@ -627,7 +816,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   viewToggleActive: {},
-  viewToggleIcon: { width: 40, height: 40 },
+  viewToggleIcon: {width: 40, height: 40},
   adCard: {
     width: Dimensions.get('window').width * 0.88,
     alignSelf: 'center',
@@ -650,17 +839,27 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'space-between',
   },
-  adCardListExposure: { marginBottom: 8 },
-  adCardListExposureIcon: { width: 64, height: 96, marginBottom: 4 },
-  adCardListExposureTitle: { color: '#fff', fontSize: 12 },
-  adCardListExposureValue: { color: '#4ade80', fontSize: 14, fontFamily: 'Rubik-Medium' },
-  adCardListDescription: { color: '#fff', fontSize: 16, fontFamily: 'Rubik-Medium', textAlign: 'right', marginVertical: 8 },
+  adCardListExposure: {marginBottom: 8},
+  adCardListExposureIcon: {width: 64, height: 96, marginBottom: 4},
+  adCardListExposureTitle: {color: '#fff', fontSize: 12},
+  adCardListExposureValue: {
+    color: '#4ade80',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+  },
+  adCardListDescription: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+    marginVertical: 8,
+  },
   adCardListRight: {
     width: 120,
     minHeight: 200,
     position: 'relative',
   },
-  adCardListImage: { width: '100%', height: '100%', minHeight: 200 },
+  adCardListImage: {width: '100%', height: '100%', minHeight: 200},
   adCardListTag: {
     position: 'absolute',
     top: 10,
@@ -670,7 +869,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
   },
-  adCardListTagText: { color: '#fff', fontSize: 12 },
+  adCardListTagText: {color: '#fff', fontSize: 12},
   editBadgeList: {
     position: 'absolute',
     bottom: 12,
@@ -682,9 +881,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  adImageWrap: { position: 'relative', width: '100%', height: 180 },
-  adImage: { width: '100%', height: '100%' },
-  adImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#1e1d2b', alignItems: 'center', justifyContent: 'center' },
+  adImageWrap: {position: 'relative', width: '100%', height: 180},
+  adImage: {width: '100%', height: '100%'},
+  adImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1e1d2b',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   editBadge: {
     position: 'absolute',
     top: 12,
@@ -696,14 +901,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  adDescription: { color: '#fff', fontSize: 22, fontFamily: 'Rubik-Medium', marginHorizontal: 14, marginTop: 10, textAlign: 'right' },
-  statsRow: { flexDirection: 'row', gap: 16, marginHorizontal: 14, marginTop: 8, justifyContent: 'flex-end' },
-  statsRowList: { gap: 10, marginHorizontal: 0 },
-  statItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statText: { color: TEXT_LIGHT, fontSize: 17 },
-  statTextList: { fontSize: 14 },
-  exposureRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 14, marginTop: 10 },
-  exposureImage: { width: 72, height: 84 },
+  adDescription: {
+    color: '#fff',
+    fontSize: 22,
+    fontFamily: 'Rubik-Medium',
+    marginHorizontal: 14,
+    marginTop: 10,
+    textAlign: 'right',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginHorizontal: 14,
+    marginTop: 8,
+    justifyContent: 'flex-end',
+  },
+  statsRowList: {gap: 10, marginHorizontal: 0},
+  statItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  statText: {color: TEXT_LIGHT, fontSize: 17},
+  statTextList: {fontSize: 14},
+  exposureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 14,
+    marginTop: 10,
+  },
+  exposureImage: {width: 72, height: 84},
   actionRow: {
     flexDirection: 'row',
     marginTop: 14,
@@ -721,16 +944,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
   },
-  actionBtnList: { minWidth: 52, paddingHorizontal: 20 },
-  actionBtnFrozen: { opacity: 0.85 },
-  actionBtnTextList: { color: TEXT_LIGHT, fontSize: 12 },
-  actionBtnText: { color: '#fff', fontSize: 13 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center' },
-  gridItem: { width: Dimensions.get('window').width * 0.88, alignSelf: 'center' },
-  listSeparator: { height: 16 },
-  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
-  emptyText: { color: '#fff', fontSize: 16, marginTop: 12 },
-  emptySubtext: { color: TEXT_LIGHT, fontSize: 14, marginTop: 4 },
+  actionBtnList: {minWidth: 52, paddingHorizontal: 20},
+  actionBtnFrozen: {opacity: 0.85},
+  actionBtnTextList: {color: TEXT_LIGHT, fontSize: 12},
+  actionBtnText: {color: '#fff', fontSize: 13},
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    justifyContent: 'center',
+  },
+  gridItem: {width: Dimensions.get('window').width * 0.88, alignSelf: 'center'},
+  listSeparator: {height: 16},
+  emptyWrap: {alignItems: 'center', paddingVertical: 48},
+  emptyText: {color: '#fff', fontSize: 16, marginTop: 12},
+  emptySubtext: {color: TEXT_LIGHT, fontSize: 14, marginTop: 4},
   removeModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -746,10 +974,21 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     alignItems: 'center',
   },
-  removeModalIconWrap: { marginBottom: 16 },
-  removeModalTitle: { color: '#fff', fontSize: 20, fontFamily: 'Rubik-Medium', marginBottom: 8, textAlign: 'center' },
-  removeModalMessage: { color: TEXT_LIGHT, fontSize: 14, textAlign: 'center', marginBottom: 24 },
-  removeModalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  removeModalIconWrap: {marginBottom: 16},
+  removeModalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  removeModalMessage: {
+    color: TEXT_LIGHT,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  removeModalButtons: {flexDirection: 'row', gap: 12, width: '100%'},
   removeModalCancelBtn: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -757,7 +996,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  removeModalCancelText: { color: '#fff', fontSize: 16 },
+  removeModalCancelText: {color: '#fff', fontSize: 16},
   removeModalConfirmBtn: {
     flex: 1,
     backgroundColor: '#c62828',
@@ -765,7 +1004,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  removeModalConfirmText: { color: '#fff', fontSize: 16, fontFamily: 'Rubik-Medium' },
+  removeModalConfirmText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+  },
   freezeModalConfirmBtn: {
     flex: 1,
     backgroundColor: BORDER_GOLD,
@@ -773,7 +1016,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  freezeModalConfirmText: { color: '#1a1926', fontSize: 16, fontFamily: 'Rubik-Medium' },
+  freezeModalConfirmText: {
+    color: '#1a1926',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+  },
 });
 
 export default EditPublishAdScreen;
