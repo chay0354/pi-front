@@ -20,6 +20,7 @@ export {Preferences} from './FormsElement/Preferences';
 export {AgeRangeSlider} from './FormsElement/AgeRangeSlider';
 export {AdditionalDetails} from './FormsElement/AdditionalDetails';
 export {HospitalityNature} from './FormsElement/HospitalityNature';
+export {BnbBusinessLogoUpload} from './FormsElement/BnbBusinessLogoUpload';
 export {ServiceAndFacility} from './FormsElement/ServiceAndFacility';
 export {AccommodationOffers} from './FormsElement/AccommodationOffers';
 export {CancellationPolicy} from './FormsElement/CancellationPolicy';

@@ -59,6 +59,10 @@
       *::-webkit-scrollbar-thumb:hover {
         background: rgba(255,255,255,0.4);
       }
+      /* Chat composer: placeholder line-height can diverge from the textarea (WebKit/Blink) */
+      #pi-chat-composer-textarea::placeholder {
+        line-height: 30px;
+      }
     </style>
   </head>
   <body>

@@ -17,6 +17,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/styles';
 import LocationMap from '../components/LocationMap';
 import { getSubscription, getListings, askSmartInfo, clearSubscription404Cache, getReviews, submitReview } from '../utils/api';
+import { isAdsListingRecord } from '../utils/listingShape';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -105,7 +106,7 @@ const UserProfileScreen = ({
   onOpenAllListings = null,
 }) => {
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
-  const isListingFromFeed = user && (user.images || user.price || user.address);
+  const isListingFromFeed = user && isAdsListingRecord(user);
   const profile = !isListingFromFeed && user ? user : {
     name: 'דוד לוי תיווך בע"מ',
     email: 'davidlevi@gmail.com',

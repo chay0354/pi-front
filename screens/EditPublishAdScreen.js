@@ -123,6 +123,14 @@ const EditPublishAdScreen = ({
               comments: l.comment_count,
               is_frozen: l.is_frozen === true || l.is_frozen === 'true',
               exposure_level: l.exposure_level || 'medium',
+              bnb_business_logo_url: l.bnb_business_logo_url ?? null,
+              general_details: l.general_details,
+              cancellation_policy: l.cancellation_policy ?? null,
+              hot_deal: l.hot_deal === true || l.hot_deal === 'true' || l.hot_deal === 't',
+              price_per_night:
+                l.price_per_night != null && !Number.isNaN(Number(l.price_per_night))
+                  ? Number(l.price_per_night)
+                  : null,
             };
           });
           setFetchedListings(transformed);
