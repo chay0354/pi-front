@@ -26,6 +26,7 @@ import {
 } from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Divider} from '../components';
+import { isAdsListingRecord } from '../utils/listingShape';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -154,18 +155,15 @@ const UserProfileScreen = ({
   const top = insets.top;
   const bottom = insets.bottom;
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
-  const isListingFromFeed = user && (user.images || user.price || user.address);
-  const profile =
-    !isListingFromFeed && user
-      ? user
-      : {
-          name: 'דוד לוי תיווך בע"מ',
-          email: 'davidlevi@gmail.com',
-          profileImageUrl: null,
-          likes: 246,
-          following: 626,
-          followers: 257,
-        };
+  const isListingFromFeed = user && isAdsListingRecord(user);
+  const profile = !isListingFromFeed && user ? user : {
+    name: 'דוד לוי תיווך בע"מ',
+    email: 'davidlevi@gmail.com',
+    profileImageUrl: null,
+    likes: 246,
+    following: 626,
+    followers: 257,
+  };
 
   // [UserProfile] Log how we resolve user details (filter console by "UserProfile" to see)
   const creatorId = user?.subscription_id || user?.owner_id;

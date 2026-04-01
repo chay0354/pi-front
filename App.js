@@ -42,6 +42,8 @@ import {ContextHook} from './hooks/ContextHook';
 import {subscriptionTypes} from './utils/constant';
 import {getChatUnreadCount} from './utils/api';
 import {getUserProfileImageUrl} from './utils/userProfileImage';
+import {getChatListingCategoryLabel} from './utils/chatListingCategory';
+import {isAdsListingRecord} from './utils/listingShape';
 import {useFonts} from 'expo-font';
 import {fonts} from './utils/fonts';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
@@ -103,6 +105,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null); // Store current logged-in user data
   const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed (temporary, for immediate display)
   const [selectedCategory, setSelectedCategory] = useState(null); // Store selected category for TikTok feed
+  /** BnB (category 5): 'private' | 'business' from feed bottom sheet; cleared when leaving AdsForm */
+  const [bnbPublishHostType, setBnbPublishHostType] = useState(null);
   const [editingListing, setEditingListing] = useState(null); // When editing an ad from EditPublishAdScreen
   const [sharedListingForChat, setSharedListingForChat] = useState(null); // When opening chat from share
   const [chatReturnScreen, setChatReturnScreen] = useState(screenName.settings); // Where to return when closing chat
@@ -254,18 +258,21 @@ export default function App() {
             key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
             onClose={() => {
               setSelectedCategory(null);
+              setBnbPublishHostType(null);
               setCurrentScreen(screenName.home);
             }}
-            onOpenOfficeListing={category => {
+            onOpenOfficeListing={(category, opts) => {
               if (category) setSelectedCategory(category);
+              setBnbPublishHostType(opts?.bnbHostType ?? null);
               if (!currentUser) {
                 setCurrentScreen(screenName.userRegistration);
               } else {
                 setCurrentScreen(screenName.adsForm);
               }
             }}
-            onOpenEditPublishAdWithCategory={category => {
+            onOpenEditPublishAdWithCategory={(category, opts) => {
               if (category != null) setSelectedCategory(String(category));
+              setBnbPublishHostType(opts?.bnbHostType ?? null);
               setCurrentScreen(screenName.editPublishAd);
             }}
             onOpenPostEditor={category => {
@@ -303,13 +310,18 @@ export default function App() {
               const u = profileUser;
               const displayName = u?.creator_name || u?.name || u?.agent_name || u?.contact_person_name || u?.business_name || u?.broker_office_name || 'משתמש';
               const otherEmail = (u?.creator_email || u?.email || '').trim().toLowerCase() || null;
+              const fromFeedListing = isAdsListingRecord(u);
+              const listingId = fromFeedListing ? String(u.id).trim() : null;
+              const listingCategoryLabel = fromFeedListing ? getChatListingCategoryLabel(u?.category) : null;
               const conversation = {
                 id: otherEmail || u?.subscription_id || u?.id || 'profile',
                 name: displayName,
                 preview: '',
                 time: '',
                 profileImageUrl: getUserProfileImageUrl(u),
+                ...(listingId ? {listingId, listingCategoryLabel: listingCategoryLabel || null} : {}),
               };
+              setSharedListingForChat(fromFeedListing ? u : null);
               setSelectedConversation(conversation);
               setChatReturnScreen(screenName.userProfile);
               setCurrentScreen(screenName.chat);
@@ -448,7 +460,9 @@ export default function App() {
           <AdsForm
             initialCategory={selectedCategory}
             initialListing={editingListing}
+            initialBnbHostType={editingListing ? null : bnbPublishHostType}
             onClose={() => {
+              setBnbPublishHostType(null);
               if (editingListing) {
                 setEditingListing(null);
                 setCurrentScreen(screenName.editPublishAd);
@@ -585,7 +599,10 @@ export default function App() {
         )}
         {currentScreen === screenName.editPublishAd && (
           <EditPublishAdScreen
-            onClose={() => setCurrentScreen(screenName.settings)}
+            onClose={() => {
+              setBnbPublishHostType(null);
+              setCurrentScreen(screenName.settings);
+            }}
             uploadedListings={uploadedListings}
             currentUser={currentUser}
             initialCategoryId={selectedCategory ? parseInt(selectedCategory, 10) : 8}
@@ -595,6 +612,7 @@ export default function App() {
               setCurrentScreen(screenName.adsForm);
             }}
             onEditAd={listing => {
+              setBnbPublishHostType(null);
               if (listing?.category != null) setSelectedCategory(String(listing.category));
               setEditingListing(listing ?? null);
               setCurrentScreen(screenName.adsForm);

@@ -208,9 +208,17 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
  * AdsForm Component
  * Form for creating an office listing
  */
-const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = null}) => {
+const AdsForm = ({
+  onClose,
+  onPublish,
+  initialCategory = null,
+  initialListing = null,
+  initialBnbHostType = null,
+}) => {
   const [propertyType, setPropertyType] = useState(null);
   const [cancellationPolicy, setCancellationPolicy] = useState(null);
+  /** מחיר ללילה — "מחיר במבצע" / Hot deal (saved as ads.hot_deal) */
+  const [hotDeal, setHotDeal] = useState(false);
   const [area, setArea] = useState(1);
   const [rooms, setRooms] = useState(1);
   const [floor, setFloor] = useState(1);
@@ -248,6 +256,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   const [preferredAgeMax, setPreferredAgeMax] = useState(100);
   const [preferences, setPreferences] = useState({}); // { nonSmokers: false, students: false, etc. }
   const [budget, setBudget] = useState(1000);
+  /** BnB category 5: from feed sheet — persisted in general_details.bnb_host_type */
+  const [bnbHostType, setBnbHostType] = useState(null);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -262,6 +272,27 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   useEffect(() => {
     setProjectOfferGroupsOn({});
   }, [category]);
+
+  useEffect(() => {
+    if (initialListing) {
+      const gd = initialListing.general_details;
+      let host =
+        gd && typeof gd === 'object' &&
+        (gd.bnb_host_type === 'private' || gd.bnb_host_type === 'business')
+          ? gd.bnb_host_type
+          : null;
+      if (!host && initialListing.bnb_business_logo_url) {
+        host = 'business';
+      }
+      setBnbHostType(host);
+      return;
+    }
+    setBnbHostType(
+      initialBnbHostType === 'private' || initialBnbHostType === 'business'
+        ? initialBnbHostType
+        : null,
+    );
+  }, [initialListing, initialBnbHostType]);
 
   // Pre-fill form when editing an existing listing
   useEffect(() => {
@@ -300,8 +331,30 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
     setLandParcel(parcel);
     setLandBlock(block);
     setPhone(initialListing.phone != null ? String(initialListing.phone) : '');
-    setPrice(initialListing.price ?? 1000000);
-    setBudget(initialListing.budget ?? 1000);
+    if (
+      cat === 5 &&
+      initialListing.price_per_night != null &&
+      String(initialListing.price_per_night).trim() !== '' &&
+      !Number.isNaN(Number(initialListing.price_per_night))
+    ) {
+      setPrice(Number(initialListing.price_per_night));
+    } else {
+      setPrice(initialListing.price ?? 1000000);
+    }
+    // שותפים: API may store amount in price; keep form in sync with budget field
+    if (cat === 3) {
+      const b = initialListing.budget;
+      const p = initialListing.price;
+      setBudget(
+        b != null && b !== '' && !Number.isNaN(Number(b))
+          ? Number(b)
+          : p != null && p !== '' && !Number.isNaN(Number(p))
+            ? Number(p)
+            : 1000,
+      );
+    } else {
+      setBudget(initialListing.budget ?? 1000);
+    }
     const imgs = initialListing.images ?? (initialListing.image ? [{uri: initialListing.image}] : []);
     if (imgs.length > 0) {
       const first = imgs[0];
@@ -315,6 +368,18 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
         setAdditionalImages(rest.filter(i => i?.uri));
         setAdditionalImageUrls(rest.map(i => i?.uri).filter(Boolean));
       }
+    }
+    const bnbLogoRaw =
+      initialListing.bnb_business_logo_url ??
+      initialListing.bnbBusinessLogoUrl ??
+      null;
+    if (bnbLogoRaw) {
+      const u = String(bnbLogoRaw).trim();
+      setBnbBusinessLogo({uri: u});
+      setBnbBusinessLogoUrl(u);
+    } else {
+      setBnbBusinessLogo(null);
+      setBnbBusinessLogoUrl(null);
     }
     if (initialListing.general_details && typeof initialListing.general_details === 'object') {
       const gd = initialListing.general_details;
@@ -334,6 +399,16 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
     if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
       setExposureLevel(String(initialListing.exposure_level).toLowerCase());
     }
+    const cpRaw = initialListing.cancellation_policy ?? null;
+    setCancellationPolicy(
+      cpRaw != null && String(cpRaw).trim() !== '' ? String(cpRaw).trim() : null,
+    );
+    setHotDeal(
+      initialListing.hot_deal === true ||
+        initialListing.hot_deal === 'true' ||
+        initialListing.hot_deal === 't' ||
+        initialListing.hot_deal === 1,
+    );
   }, [initialListing?.id]);
 
   // Request camera and media library permissions on mount
@@ -377,6 +452,9 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
   const [constructionStatus, setConstructionStatus] = useState(null);
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
+  const bnbBusinessLogoInputRef = useRef(null);
+  const [bnbBusinessLogo, setBnbBusinessLogo] = useState(null);
+  const [bnbBusinessLogoUrl, setBnbBusinessLogoUrl] = useState(null);
   // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
@@ -540,6 +618,44 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
       };
       setMainImage(fileObj);
       // Don't upload yet - will upload when publish button is pressed
+    }
+  };
+
+  const handleBnbBusinessLogoUpload = async () => {
+    if (Platform.OS === 'web' && bnbBusinessLogoInputRef.current) {
+      bnbBusinessLogoInputRef.current.click();
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.92,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setBnbBusinessLogo({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.filename || `bnb-logo-${Date.now()}.jpg`,
+          file: asset,
+        });
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת לוגו: ' + (error.message || ''));
+    }
+  };
+
+  const handleBnbBusinessLogoChange = event => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      setBnbBusinessLogo({
+        uri: URL.createObjectURL(file),
+        type: file.type,
+        name: file.name,
+        file,
+      });
     }
   };
 
@@ -923,6 +1039,40 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
         }
       }
 
+      let uploadedBnbBusinessLogoUrl = null;
+      if (category === 5 && bnbHostType === 'business') {
+        if (initialListing && bnbBusinessLogo?.uri && !bnbBusinessLogo?.file) {
+          uploadedBnbBusinessLogoUrl =
+            bnbBusinessLogo.uri || bnbBusinessLogoUrl;
+        } else if (bnbBusinessLogo?.file) {
+          try {
+            setUploadProgress(prev => ({...prev, bnbBusinessLogo: true}));
+            const formData = new FormData();
+            formData.append('file', bnbBusinessLogo.file);
+            formData.append('folder', 'listings/images');
+            const response = await fetch(
+              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              {
+                method: 'POST',
+                body: formData,
+              },
+            );
+            const data = await response.json();
+            if (data.success && data.url) {
+              uploadedBnbBusinessLogoUrl = data.url;
+            } else {
+              throw new Error(data.error || 'Failed to upload logo');
+            }
+          } catch (error) {
+            alert('שגיאה בהעלאת הלוגו. נסה שוב.');
+            setUploading(false);
+            return;
+          } finally {
+            setUploadProgress(prev => ({...prev, bnbBusinessLogo: false}));
+          }
+        }
+      }
+
       // Prepare listing data with uploaded Supabase URLs
       const listingCategory =
         parseInt(category) || (initialCategory ? parseInt(initialCategory) : 1);
@@ -1004,6 +1154,27 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                 return hasAny ? merged : undefined;
               })(),
               constructionStatus: constructionStatus || undefined,
+              ...(listingCategory === 5 &&
+                (bnbHostType === 'private' || bnbHostType === 'business') && {
+                  bnbHostType,
+                }),
+              ...(listingCategory === 5 &&
+                bnbHostType === 'business' &&
+                uploadedBnbBusinessLogoUrl && {
+                  bnbBusinessLogoUrl: uploadedBnbBusinessLogoUrl,
+                }),
+              ...(listingCategory === 5 &&
+                preferredApartmentType && {
+                  hospitalityNature: preferredApartmentType,
+                }),
+              ...(fieldKeys.includes('cancellationpolicy') &&
+                cancellationPolicy && {
+                  cancellationPolicy,
+                }),
+              ...(fieldKeys.includes('pricepernight') && {
+                pricePerNight: parseFloat(price) || 0,
+                hotDeal: !!hotDeal,
+              }),
             };
 
       // Create listing in database
@@ -1112,8 +1283,8 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                   return (
                     <PriceCount
                       key="price"
-                      price={price}
-                      setPrice={setPrice}
+                      price={category === 3 ? budget : price}
+                      setPrice={category === 3 ? setBudget : setPrice}
                       title={category === 3 ? 'התקציב שלי' : 'מחיר'}
                     />
                   );
@@ -1125,10 +1296,25 @@ const AdsForm = ({onClose, onPublish, initialCategory = null, initialListing = n
                       setPrice={setPrice}
                       title={field.title}
                       isPricePerNight={true}
+                      hotDeal={hotDeal}
+                      setHotDeal={setHotDeal}
                     />
                   );
                 case 'contactdetails':
-                  return <ContactDetails key="contactdetails" />;
+                  return (
+                    <ContactDetails
+                      key="contactdetails"
+                      showBnbBusinessLogo={
+                        category === 5 && bnbHostType === 'business'
+                      }
+                      bnbBusinessLogo={bnbBusinessLogo}
+                      onBnbBusinessLogoPress={handleBnbBusinessLogoUpload}
+                      bnbBusinessLogoInputRef={bnbBusinessLogoInputRef}
+                      onBnbBusinessLogoWebFileChange={
+                        handleBnbBusinessLogoChange
+                      }
+                    />
+                  );
                 case 'additionaldetails':
                   return (
                     <AdditionalDetails

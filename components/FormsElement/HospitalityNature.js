@@ -12,6 +12,7 @@ export const HospitalityNature = ({
     {name: 'on_the_beach', title: 'על הים'},
     {name: 'with_pool', title: 'עם בריכה'},
     {name: 'nature', title: 'טבע'},
+    {name: 'experiences', title: 'חוויות'},
     {name: 'special', title: 'מיוחדים'},
     {name: 'rural', title: 'כפרי'},
     {name: 'desert', title: 'מדבר'},

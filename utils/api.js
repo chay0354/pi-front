@@ -2,6 +2,9 @@
  * API utility functions for communicating with the backend
  */
 
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
 // On web: when opened via network IP (e.g. http://192.168.1.5:8084), use same host for API so it works from other devices
@@ -12,7 +15,40 @@ export function getApiUrl() {
   return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 }
 
-const API_URL = isWeb ? getApiUrl() : (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
+/**
+ * On a physical device, localhost points at the phone — use the machine running Metro (LAN IP) or Android emulator host.
+ */
+function getNativeApiUrl() {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  const looksLocal = /localhost|127\.0\.0\.1/i.test(fromEnv);
+  if (!looksLocal) return fromEnv;
+
+  const debuggerHost =
+    Constants.expoGoConfig?.debuggerHost ||
+    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+    Constants.manifest?.debuggerHost;
+  if (debuggerHost) {
+    const host = String(debuggerHost).split(':')[0];
+    if (host && !/^localhost$/i.test(host) && host !== '127.0.0.1') {
+      return `http://${host}:3000`;
+    }
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3000';
+  }
+  return fromEnv;
+}
+
+const API_URL = isWeb ? getApiUrl() : getNativeApiUrl();
+
+/** Resolved API base URL (for debugging broker search / connectivity). */
+export function getResolvedApiUrl() {
+  return isWeb ? getApiUrl() : getNativeApiUrl();
+}
+
+function logBrokerSearch(step, payload) {
+  console.log(`[pi-chat][broker-search] ${step}`, payload);
+}
 
 /** On web, FormData doesn't accept { uri, type, name }; convert blob/data URIs to Blob/File so the server receives a real file. */
 async function toFormDataFile(file, fieldName = 'file') {
@@ -457,9 +493,13 @@ export const getListings = async (options = {}) => {
       category,
       subscription_type: subscriptionType,
       has_video: hasVideo,
+      condition: listingCondition,
       subscription_id: subscriptionId,
       user_id: userId,
       favorites_only: favoritesOnly,
+      search_purpose: searchPurpose,
+      feed_post: feedPost,
+      hospitality_nature: hospitalityNature,
     } = options;
     const params = new URLSearchParams({status});
     if (category) {
@@ -472,6 +512,9 @@ export const getListings = async (options = {}) => {
     if (hasVideo === true) {
       params.append('has_video', 'true');
     }
+    if (listingCondition != null && String(listingCondition).trim() !== '') {
+      params.append('condition', String(listingCondition).trim().toLowerCase());
+    }
     if (subscriptionId != null && subscriptionId !== '') {
       params.append('subscription_id', String(subscriptionId));
     }
@@ -481,11 +524,20 @@ export const getListings = async (options = {}) => {
     if (favoritesOnly === true) {
       params.append('favorites_only', 'true');
     }
+    if (searchPurpose != null && String(searchPurpose).trim() !== '') {
+      params.append('search_purpose', String(searchPurpose).trim().toLowerCase());
+    }
+    if (feedPost === true) {
+      params.append('feed_post', 'true');
+    }
+    if (hospitalityNature != null && String(hospitalityNature).trim() !== '') {
+      params.append('hospitality_nature', String(hospitalityNature).trim());
+    }
 
     const url = `${API_URL}/api/listings?${params.toString()}`;
-    // console.log('🌐 [api.js] Fetching listings from:', url);
-    // console.log('🌐 [api.js] API_URL:', API_URL);
-    // console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo});
+    console.log('🌐 [api.js] Fetching listings from:', url);
+    console.log('🌐 [api.js] API_URL:', API_URL);
+    console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo, listingCondition, searchPurpose, feedPost, hospitalityNature});
 
     const response = await fetch(url, {
       method: 'GET',
@@ -625,6 +677,178 @@ export const getChatConversations = async (userEmail) => {
 };
 
 /**
+ * Search brokers (verified, active, or pending verification — not suspended) by name, contact, or office text (min 2 characters).
+ * @param {string} q - search query
+ * @param {string|null} [excludeEmail] - omit this email from results (e.g. current user)
+ * @returns {Promise<{ success: boolean, brokers: Array<{ id, email, title, subtitle, profileImageUrl }> }>}
+ */
+export const searchBrokers = async (q, excludeEmail = null) => {
+  const query = String(q || '').trim();
+  if (query.length < 2) {
+    logBrokerSearch('skip', { reason: 'query_too_short', queryLen: query.length });
+    return { success: true, brokers: [] };
+  }
+  const params = new URLSearchParams({ q: query });
+  if (excludeEmail) {
+    params.set('exclude_email', String(excludeEmail).trim().toLowerCase());
+  }
+  const resolvedBase = getResolvedApiUrl();
+  const url = `${resolvedBase}/api/brokers/search?${params.toString()}`;
+  logBrokerSearch('request', {
+    platform: Platform.OS,
+    isWeb,
+    EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || '(unset)',
+    resolvedApiBase: resolvedBase,
+    fullUrl: url,
+    query,
+    excludeEmail: excludeEmail || null,
+    expoDebuggerHost:
+      Constants.expoGoConfig?.debuggerHost ||
+      Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+      Constants.manifest?.debuggerHost ||
+      null,
+  });
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (fetchErr) {
+    logBrokerSearch('fetch_failed', {
+      resolvedApiBase: resolvedBase,
+      fullUrl: url,
+      errorName: fetchErr?.name,
+      errorMessage: fetchErr?.message,
+      string: String(fetchErr),
+    });
+    const hint =
+      !isWeb && /localhost|127\.0\.0\.1/i.test(resolvedBase)
+        ? ' במכשיר פיזי הגדר EXPO_PUBLIC_API_URL לכתובת ה-IP של המחשב (או השתמש ב-Expo Go — נבחר IP אוטומטית).'
+        : '';
+    throw new Error(`לא ניתן להתחבר לשרת (${resolvedBase}).${hint}`);
+  }
+  const text = await response.text();
+  const bodyPreview = text.length > 500 ? `${text.slice(0, 500)}…` : text;
+  logBrokerSearch('response', {
+    status: response.status,
+    ok: response.ok,
+    bodyLength: text.length,
+    bodyPreview,
+  });
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (parseErr) {
+    logBrokerSearch('json_parse_failed', {
+      status: response.status,
+      bodyPreview: text.slice(0, 400),
+      parseError: parseErr?.message ? String(parseErr.message) : String(parseErr),
+    });
+    throw new Error('תשובה לא תקינה מהשרת');
+  }
+  if (!response.ok) {
+    logBrokerSearch('http_error', { status: response.status, error: data?.error, data });
+    throw new Error(data.error || 'Broker search failed');
+  }
+  const brokers = data.brokers || [];
+  logBrokerSearch('ok', {
+    success: !!data.success,
+    brokerCount: brokers.length,
+    sampleTitles: brokers.slice(0, 5).map((b) => b.title || b.email || '?'),
+  });
+  return { success: !!data.success, brokers };
+};
+
+/** 1:1 chat partners for customer group picker */
+export const getDirectContactsForGroup = async (userEmail, q = '') => {
+  if (!userEmail) return { success: true, contacts: [] };
+  const params = new URLSearchParams({
+    user_email: String(userEmail).trim().toLowerCase(),
+    q: String(q || '').trim(),
+  });
+  const response = await fetch(`${API_URL}/api/chat/direct-contacts?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to load contacts');
+  return { success: !!data.success, contacts: data.contacts || [] };
+};
+
+/** Brokers list for group picker (q optional; empty returns first page) */
+export const getBrokersForGroupPicker = async (q, excludeEmail = null) => {
+  const params = new URLSearchParams();
+  if (q != null && String(q).trim()) params.set('q', String(q).trim());
+  if (excludeEmail) params.set('exclude_email', String(excludeEmail).trim().toLowerCase());
+  const response = await fetch(`${API_URL}/api/brokers/group-picker?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to load brokers');
+  return { success: !!data.success, brokers: data.brokers || [] };
+};
+
+export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind, groupImageUrl = null }) => {
+  const payload = {
+    creator_email: String(creatorEmail).trim().toLowerCase(),
+    member_emails: (memberEmails || []).map((e) => String(e).trim().toLowerCase()).filter(Boolean),
+    title: title != null ? String(title).trim() : '',
+    kind: kind === 'brokers' ? 'brokers' : 'customers',
+  };
+  if (groupImageUrl != null && String(groupImageUrl).trim()) {
+    payload.group_image_url = String(groupImageUrl).trim();
+  }
+  const response = await fetch(`${API_URL}/api/chat/groups`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to create group');
+  return data;
+};
+
+export const getGroupChatMessages = async (userEmail, conversationId) => {
+  if (!userEmail || !conversationId) return { success: true, messages: [], conversation_id: null };
+  const params = new URLSearchParams({
+    user_email: String(userEmail).trim().toLowerCase(),
+    conversation_id: String(conversationId).trim(),
+  });
+  const response = await fetch(`${API_URL}/api/chat/group-messages?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to load messages');
+  return data;
+};
+
+export const updateGroupDescription = async ({userEmail, conversationId, description}) => {
+  const response = await fetch(`${API_URL}/api/chat/group-description`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      user_email: String(userEmail).trim().toLowerCase(),
+      conversation_id: String(conversationId).trim(),
+      group_description: description != null ? String(description) : '',
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to save description');
+  return data;
+};
+
+export const sendGroupChatMessage = async (conversationId, senderEmail, body, media = null) => {
+  const payload = {
+    conversation_id: String(conversationId).trim(),
+    sender_email: String(senderEmail).trim().toLowerCase(),
+    body: body != null ? String(body).trim() : '',
+  };
+  if (media && media.url && (media.type === 'image' || media.type === 'audio')) {
+    payload.media_type = media.type;
+    payload.media_url = String(media.url).trim();
+  }
+  const response = await fetch(`${API_URL}/api/chat/group-messages`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to send');
+  return data;
+};
+
+/**
  * Get display name and profile image for a chat participant by email.
  * @param {string} userEmail - participant email
  * @returns {Promise<{ success: boolean, name?: string, profileImageUrl?: string }>}
@@ -666,15 +890,36 @@ export const getChatMessages = async (myEmail, otherUserEmail) => {
  * @param {{ name?: string, profileImageUrl?: string }} [senderDisplay] - optional
  * @returns {Promise<{ success: boolean, message: object }>}
  */
-export const sendChatMessage = async (senderEmail, receiverEmail, body, receiverDisplay = null, senderDisplay = null) => {
-  if (!senderEmail || !receiverEmail || body == null || String(body).trim() === '') {
-    throw new Error('senderEmail, receiverEmail and body required');
+/**
+ * @param {{ type: 'image'|'audio', url: string }} [media] - optional; use with empty body for media-only messages
+ * @param {string|null} [listingId] - optional ads.id (UUID); stored on message for inbox listing badges
+ */
+export const sendChatMessage = async (
+  senderEmail,
+  receiverEmail,
+  body,
+  receiverDisplay = null,
+  senderDisplay = null,
+  media = null,
+  listingId = null,
+) => {
+  const text = body != null ? String(body).trim() : '';
+  const hasMedia =
+    media &&
+    media.url &&
+    (media.type === 'image' || media.type === 'audio');
+  if (!senderEmail || !receiverEmail || (!text && !hasMedia)) {
+    throw new Error('senderEmail, receiverEmail and body or media required');
   }
   const payload = {
     sender_email: String(senderEmail).trim().toLowerCase(),
     receiver_email: String(receiverEmail).trim().toLowerCase(),
-    body: String(body).trim(),
+    body: text,
   };
+  if (hasMedia) {
+    payload.media_type = media.type;
+    payload.media_url = String(media.url).trim();
+  }
   if (receiverDisplay) {
     if (receiverDisplay.name != null) payload.receiver_display_name = String(receiverDisplay.name);
     if (receiverDisplay.profileImageUrl != null) payload.receiver_profile_picture_url = String(receiverDisplay.profileImageUrl);
@@ -683,6 +928,9 @@ export const sendChatMessage = async (senderEmail, receiverEmail, body, receiver
     if (senderDisplay.name != null) payload.sender_display_name = String(senderDisplay.name);
     if (senderDisplay.profileImageUrl != null) payload.sender_profile_picture_url = String(senderDisplay.profileImageUrl);
   }
+  if (listingId != null && String(listingId).trim() !== '') {
+    payload.listing_id = String(listingId).trim();
+  }
   const response = await fetch(`${API_URL}/api/chat/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -690,6 +938,24 @@ export const sendChatMessage = async (senderEmail, receiverEmail, body, receiver
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to send message');
+  return data;
+};
+
+/**
+ * Upload a chat image or voice note to Supabase Storage bucket "chat" (via backend).
+ * @param {{ uri: string, type?: string, name?: string }} file
+ */
+export const uploadChatMedia = async (file) => {
+  const formData = new FormData();
+  const toAppend = await toFormDataFile(file, 'file');
+  if (!toAppend) throw new Error('No file to upload');
+  formData.append('file', toAppend);
+  const response = await fetch(`${API_URL}/api/chat/upload-media`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || data.details || 'Failed to upload media');
   return data;
 };
 

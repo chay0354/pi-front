@@ -11,6 +11,8 @@ export const PriceCount = ({
   setPrice,
   title,
   isPricePerNight = false,
+  hotDeal = false,
+  setHotDeal,
 }) => {
   return (
     <FormContainer>
@@ -49,9 +51,9 @@ export const PriceCount = ({
             <RadioWithText
               title={'הוסף ״מחיר במבצע״'}
               name={'sale_price'}
-              setName={() => {}}
+              setName={() => setHotDeal?.(v => !v)}
               index={0}
-              isSelected={false}
+              isSelected={!!hotDeal}
               radioOptionStyle={{paddingTop: 0, paddingLeft: 10}}
             />
           </View>

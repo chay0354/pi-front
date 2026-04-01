@@ -56,7 +56,93 @@ const SIDEBAR_FILTERS = [
   {id: 'renderings', label: 'הדמיות', has_video: true, icon: require('../assets/side-filters/animation.png')},
   {id: 'new', label: 'חדשות', icon: require('../assets/side-filters/new.png')},
   {id: 'posts', label: 'פוסטים', icon: require('../assets/side-filters/posts.png')},
-  {id: 'service', label: 'נותני שירות', subscription_type: ['professional', 'company'], icon: require('../assets/side-filters/services.png')},
+  {id: 'service', label: 'נותני שירות', subscription_type: 'professional', icon: require('../assets/side-filters/services.png')},
+];
+
+// שותפים (category 3): dedicated sidebar — icons from assets/partners-filters
+const PARTNERS_SIDEBAR_FILTERS = [
+  {
+    id: 'partners_enter',
+    label: 'מחפש להיכנס',
+    search_purpose: 'enter',
+    icon: require('../assets/partners-filters/looking-to-get-in.png'),
+  },
+  {
+    id: 'partners_bring_in',
+    label: 'מחפש להכניס',
+    search_purpose: 'bring_in',
+    icon: require('../assets/partners-filters/looking-for-somone-for-my-apaprtment.png'),
+  },
+  {
+    id: 'partners_partner',
+    label: 'מחפש שותף',
+    search_purpose: 'partner',
+    icon: require('../assets/partners-filters/looking-for-patner.png'),
+  },
+  {
+    id: 'partners_posts',
+    label: 'פוסטים',
+    feed_post: true,
+    icon: require('../assets/partners-filters/posts.png'),
+  },
+  {
+    id: 'partners_professional',
+    label: 'נותני שירות',
+    subscription_type: 'professional',
+    icon: require('../assets/partners-filters/profetional.png'),
+  },
+];
+
+// BnB (category 5): אופי האירוח + פוסטים — icons from assets/bnb-filters
+const BNB_SIDEBAR_FILTERS = [
+  {
+    id: 'bnb_landscapes',
+    label: 'נופים',
+    hospitality_nature: 'landscapes',
+    icon: require('../assets/bnb-filters/view.png'),
+  },
+  {
+    id: 'bnb_beach',
+    label: 'על הים',
+    hospitality_nature: 'on_the_beach',
+    icon: require('../assets/bnb-filters/on-the-sea.png'),
+  },
+  {
+    id: 'bnb_pool',
+    label: 'עם בריכה',
+    hospitality_nature: 'with_pool',
+    icon: require('../assets/bnb-filters/pool.png'),
+  },
+  {
+    id: 'bnb_nature',
+    label: 'טבע',
+    hospitality_nature: 'nature',
+    icon: require('../assets/bnb-filters/neture.png'),
+  },
+  {
+    id: 'bnb_experiences',
+    label: 'חוויות',
+    hospitality_nature: 'experiences',
+    icon: require('../assets/bnb-filters/expiriance.png'),
+  },
+  {
+    id: 'bnb_rural',
+    label: 'כפרי',
+    hospitality_nature: 'rural',
+    icon: require('../assets/bnb-filters/vilage.png'),
+  },
+  {
+    id: 'bnb_desert',
+    label: 'מדבר',
+    hospitality_nature: 'desert',
+    icon: require('../assets/bnb-filters/desert.png'),
+  },
+  {
+    id: 'bnb_posts',
+    label: 'פוסטים',
+    feed_post: true,
+    icon: require('../assets/bnb-filters/posts.png'),
+  },
 ];
 
 // Image Swiper Component for multiple photos - supports slideshow and collage
@@ -323,6 +409,8 @@ const TikTokFeedScreen = ({
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const bottomSheetTranslateY = useRef(new Animated.Value(0)).current;
+  const bottomSheetUseNativeDriver = Platform.OS !== 'web';
   const [dbListings, setDbListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
   const [listingsError, setListingsError] = useState(null);
@@ -365,6 +453,18 @@ const TikTokFeedScreen = ({
     selectedCategory === '4' ||
     selectedCategory === 6 ||
     selectedCategory === '6';
+
+  const closeSheetAndOpenListing = opts => {
+    setShowBottomSheet(false);
+    const isCompanyOrBroker =
+      currentUser?.subscription_type === subscriptionTypes.company ||
+      currentUser?.subscription_type === subscriptionTypes.broker;
+    if (isCompanyOrBroker) {
+      onOpenEditPublishAdWithCategory?.(selectedCategory, opts);
+    } else {
+      onOpenOfficeListing?.(selectedCategory, opts);
+    }
+  };
 
   // Load liked listing IDs from AsyncStorage on mount
   useEffect(() => {
@@ -431,16 +531,43 @@ const TikTokFeedScreen = ({
           selectedCategory && !isAggregateCategoryFeed
             ? parseInt(selectedCategory, 10)
             : undefined;
-        const sidebarFilter = SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter);
-        const subscriptionType = sidebarFilter?.subscription_type;
+        const partnersFilter =
+          categoryToFetch === 3
+            ? PARTNERS_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
+        const bnbFilter =
+          categoryToFetch === 5
+            ? BNB_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
+        const legacySidebarFilter =
+          categoryToFetch !== 3 && categoryToFetch !== 5
+            ? SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
+        const subscriptionType =
+          partnersFilter?.subscription_type ??
+          bnbFilter?.subscription_type ??
+          legacySidebarFilter?.subscription_type;
+        const sidebarCondition = legacySidebarFilter?.condition;
         const hasVideo =
-          sidebarFilter?.has_video === true || selectedTopBarFilter === 'video';
+          legacySidebarFilter?.has_video === true || selectedTopBarFilter === 'video';
 
         const result = await getListings({
           status: 'published',
           category: categoryToFetch,
           ...(subscriptionType != null && {subscription_type: subscriptionType}),
           ...(hasVideo && {has_video: true}),
+          ...(sidebarCondition != null &&
+            String(sidebarCondition).trim() !== '' && {
+              condition: String(sidebarCondition).trim().toLowerCase(),
+            }),
+          ...(partnersFilter?.search_purpose && {
+            search_purpose: partnersFilter.search_purpose,
+          }),
+          ...(partnersFilter?.feed_post === true && {feed_post: true}),
+          ...(bnbFilter?.hospitality_nature && {
+            hospitality_nature: bnbFilter.hospitality_nature,
+          }),
+          ...(bnbFilter?.feed_post === true && {feed_post: true}),
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         });
 
@@ -1103,24 +1230,54 @@ const TikTokFeedScreen = ({
     [handleNext, handlePrevious],
   );
 
-  const BOTTOM_SHEET_DRAG_CLOSE_THRESHOLD = 40;
+  const BOTTOM_SHEET_DRAG_CLOSE_THRESHOLD = 56;
   const bottomSheetPanResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
-          const {dy} = gestureState;
-          return dy > 10;
+          const {dy, dx} = gestureState;
+          return dy > 8 && dy > Math.abs(dx) * 0.55;
+        },
+        onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+          const {dy, dx} = gestureState;
+          return dy > 8 && dy > Math.abs(dx) * 0.55;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            bottomSheetTranslateY.setValue(gestureState.dy);
+          }
         },
         onPanResponderRelease: (_, gestureState) => {
-          const {dy} = gestureState;
-          if (dy > BOTTOM_SHEET_DRAG_CLOSE_THRESHOLD) {
-            setShowBottomSheet(false);
+          const {dy, vy} = gestureState;
+          const shouldClose =
+            dy > BOTTOM_SHEET_DRAG_CLOSE_THRESHOLD || vy > 1.1;
+          if (shouldClose) {
+            Animated.timing(bottomSheetTranslateY, {
+              toValue: 480,
+              duration: 220,
+              useNativeDriver: bottomSheetUseNativeDriver,
+            }).start(() => {
+              bottomSheetTranslateY.setValue(0);
+              setShowBottomSheet(false);
+            });
+          } else {
+            Animated.spring(bottomSheetTranslateY, {
+              toValue: 0,
+              friction: 9,
+              useNativeDriver: bottomSheetUseNativeDriver,
+            }).start();
           }
         },
       }),
-    [],
+    [bottomSheetTranslateY, bottomSheetUseNativeDriver],
   );
+
+  useEffect(() => {
+    if (showBottomSheet) {
+      bottomSheetTranslateY.setValue(0);
+    }
+  }, [showBottomSheet, bottomSheetTranslateY]);
 
   // Sidebar drag: hold and swipe up/down; bottom icons disappear off screen when dragged down
   // Slightly more than the 6 filter items height so it can scroll a little more down when only profile is visible
@@ -1253,6 +1410,12 @@ const TikTokFeedScreen = ({
   const isLandCategory = categoryId === 7; // קרקעות
   const isBnbCategory = categoryId === 5; // BnB
   const isPartnersCategory = categoryId === 3; // שותפים
+  const sidebarFiltersForFeed =
+    isPartnersCategory && !isAggregateCategoryFeed
+      ? PARTNERS_SIDEBAR_FILTERS
+      : isBnbCategory && !isAggregateCategoryFeed
+        ? BNB_SIDEBAR_FILTERS
+        : SIDEBAR_FILTERS;
   const bottomBarSource = isLandCategory
     ? require('../assets/lands/Frame 2 (2).png')
     : isPartnersCategory
@@ -1261,25 +1424,30 @@ const TikTokFeedScreen = ({
 
   return (
     <View style={styles.container}>
-      {/* Top bar - back, center filters, search */}
+      {/* Top bar - back, center filters (spacer keeps filters centered) */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.topBarSideBtn} hitSlop={12} onPress={onClose}>
           <MaterialCommunityIcons name="chevron-left" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={styles.topBarCenter}>
-          {TOP_BAR_FILTERS.map((f) => (
-            <TouchableOpacity
-              key={f.id}
-              style={[styles.topBarFilterBtn, selectedTopBarFilter === f.id && styles.topBarFilterBtnSelected]}
-              hitSlop={8}
-              onPress={() => setSelectedTopBarFilter(prev => (prev === f.id ? null : f.id))}>
-              <Image source={f.icon} style={styles.topBarFilterIcon} resizeMode="contain" />
-            </TouchableOpacity>
-          ))}
+          {TOP_BAR_FILTERS.map((f) => {
+            const topSelected = selectedTopBarFilter === f.id;
+            return (
+              <TouchableOpacity
+                key={f.id}
+                style={styles.topBarFilterBtn}
+                hitSlop={8}
+                onPress={() => setSelectedTopBarFilter(prev => (prev === f.id ? null : f.id))}>
+                <Image
+                  source={f.icon}
+                  style={[styles.topBarFilterIcon, topSelected && styles.filterIconSelectedTint]}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
-        <TouchableOpacity style={styles.topBarSideBtn} hitSlop={12}>
-          <MaterialCommunityIcons name="magnify" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.topBarSideBtn} />
       </View>
 
       {/* List view: scrollable cards when list icon is selected */}
@@ -1412,22 +1580,28 @@ const TikTokFeedScreen = ({
                 </View>
               )}
             </TouchableOpacity>
-            {SIDEBAR_FILTERS.map((filter) => {
+            {sidebarFiltersForFeed.map((filter) => {
               const isSelected = selectedSidebarFilter === filter.id;
+              const labelWords = String(filter.label || '')
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+              const labelText =
+                labelWords.length === 2
+                  ? `${labelWords[0]}\n${labelWords[1]}`
+                  : filter.label;
               return (
                 <TouchableOpacity
                   key={filter.id}
-                  style={[styles.sidebarFilterBtn, isSelected && styles.sidebarFilterBtnSelected]}
+                  style={styles.sidebarFilterBtn}
                   onPress={() => setSelectedSidebarFilter(prev => prev === filter.id ? null : filter.id)}
                   activeOpacity={0.7}>
                   <Image
                     source={filter.icon}
-                    style={styles.sidebarFilterIcon}
+                    style={[styles.sidebarFilterIcon, isSelected && styles.filterIconSelectedTint]}
                     resizeMode="contain"
                   />
-                  <Text style={[styles.sidebarFilterLabel, isSelected && styles.sidebarFilterLabelSelected]}>
-                    {filter.label}
-                  </Text>
+                  <Text style={styles.sidebarFilterLabel}>{labelText}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -1776,95 +1950,140 @@ const TikTokFeedScreen = ({
 
       {/* Bottom Sheet */}
       {showBottomSheet && (
-        <View style={styles.bottomSheet}>
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {transform: [{translateY: bottomSheetTranslateY}]},
+          ]}>
           <View
             style={styles.bottomSheetHandleWrap}
             {...bottomSheetPanResponder.panHandlers}>
             <View style={styles.bottomSheetHandle} />
           </View>
-          <TouchableOpacity
-            style={styles.bottomSheetOption}
-            onPress={() => {
-              setShowBottomSheet(false);
-              const isCompanyOrBroker =
-                currentUser?.subscription_type === subscriptionTypes.company ||
-                currentUser?.subscription_type === subscriptionTypes.broker;
-              // Company/broker always go to ערוך/פרסם מודעה (Edit/Publish), never to יצירת מודעה (Create)
-              if (isCompanyOrBroker) {
-                if (onOpenEditPublishAdWithCategory) {
-                  onOpenEditPublishAdWithCategory(selectedCategory);
-                }
-              } else if (onOpenOfficeListing) {
-                onOpenOfficeListing(selectedCategory);
-              }
-            }}>
-            <Text style={styles.bottomSheetArrow}>‹</Text>
-            <View style={styles.bottomSheetOptionContent}>
-              <View style={styles.bottomSheetTextContainer}>
-                {selectedCategory === 3 || selectedCategory === '3' ? (
-                  <>
-                    <Text style={styles.bottomSheetTitle}>שותפים</Text>
+          {selectedCategory === 5 || selectedCategory === '5' ? (
+            <>
+              <TouchableOpacity
+                style={styles.bottomSheetOption}
+                onPress={() => closeSheetAndOpenListing({bnbHostType: 'private'})}
+                activeOpacity={0.85}>
+                <Text style={styles.bottomSheetArrow}>‹</Text>
+                <View style={styles.bottomSheetOptionContent}>
+                  <View style={styles.bottomSheetTextContainer}>
+                    <Text style={styles.bottomSheetTitle}>פרסם כפרטי</Text>
                     <Text style={styles.bottomSheetSubtitle}>
-                      פרסם חיפוש שותף או דירת שותפים
+                      פרסם חדר או אתר נופש פרטי
                     </Text>
-                  </>
-                ) : selectedCategory === 7 || selectedCategory === '7' ? (
-                  <>
-                    <Text style={styles.bottomSheetTitle}>קרקע</Text>
+                  </View>
+                  <Image
+                    source={require('../assets/ad-uplaud/bnb-private.png')}
+                    style={styles.bottomSheetIcon}
+                    resizeMode="contain"
+                  />
+                </View>
+              </TouchableOpacity>
+              <View style={styles.bottomSheetDivider} />
+              <TouchableOpacity
+                style={styles.bottomSheetOption}
+                onPress={() => closeSheetAndOpenListing({bnbHostType: 'business'})}
+                activeOpacity={0.85}>
+                <Text style={styles.bottomSheetArrow}>‹</Text>
+                <View style={styles.bottomSheetOptionContent}>
+                  <View style={styles.bottomSheetTextContainer}>
+                    <Text style={styles.bottomSheetTitle}>פרסם כעסק</Text>
                     <Text style={styles.bottomSheetSubtitle}>
-                      פרסם קרקע למכירה או השכרה
+                      פרסם חדר או אתר נופש עסקי
                     </Text>
-                  </>
-                ) : selectedCategory === 8 || selectedCategory === '8' ? (
-                  <>
-                    <Text style={styles.bottomSheetTitle}>נכס מסחרי</Text>
-                    <Text style={styles.bottomSheetSubtitle}>
-                      פרסם נכס מסחרי למכירה או השכרה
-                    </Text>
-                  </>
-                ) : selectedCategory === 4 ||
-                  selectedCategory === '4' ||
-                  selectedCategory === 6 ||
-                  selectedCategory === '6' ||
-                  selectedCategory === 12 ||
-                  selectedCategory === '12' ? (
-                  <>
-                    <Text style={styles.bottomSheetTitle}>נכס</Text>
-                    <Text style={styles.bottomSheetSubtitle}>
-                      פרסם נכס למכירה או השכרה
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.bottomSheetTitle}>משרד</Text>
-                    <Text style={styles.bottomSheetSubtitle}>
-                      פרסם משרד למכירה או השכרה
-                    </Text>
-                  </>
-                )}
+                  </View>
+                  <Image
+                    source={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                    style={styles.bottomSheetIcon}
+                    resizeMode="contain"
+                  />
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.bottomSheetOption}
+              onPress={() => closeSheetAndOpenListing()}
+              activeOpacity={0.85}>
+              <Text style={styles.bottomSheetArrow}>‹</Text>
+              <View style={styles.bottomSheetOptionContent}>
+                <View style={styles.bottomSheetTextContainer}>
+                  {selectedCategory === 10 || selectedCategory === '10' ? (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>פרויקט</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        פרסם נכס למכירה או השכרה
+                      </Text>
+                    </>
+                  ) : selectedCategory === 3 || selectedCategory === '3' ? (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>פרסם מודעה</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        צור מודעה כדי להיכנס, להכניס או למצוא שותף
+                      </Text>
+                    </>
+                  ) : selectedCategory === 7 || selectedCategory === '7' ? (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>קרקע</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        פרסם קרקע למכירה או השכרה
+                      </Text>
+                    </>
+                  ) : selectedCategory === 8 || selectedCategory === '8' ? (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>נכס מסחרי</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        פרסם נכס מסחרי למכירה או השכרה
+                      </Text>
+                    </>
+                  ) : selectedCategory === 4 ||
+                    selectedCategory === '4' ||
+                    selectedCategory === 6 ||
+                    selectedCategory === '6' ||
+                    selectedCategory === 12 ||
+                    selectedCategory === '12' ? (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>נכס</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        פרסם נכס למכירה או השכרה
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.bottomSheetTitle}>משרד</Text>
+                      <Text style={styles.bottomSheetSubtitle}>
+                        פרסם משרד למכירה או השכרה
+                      </Text>
+                    </>
+                  )}
+                </View>
+                <Image
+                  source={
+                    selectedCategory === 10 || selectedCategory === '10'
+                      ? require('../assets/ad-uplaud/appartments.png')
+                      : selectedCategory === 3 || selectedCategory === '3'
+                        ? require('../assets/image22221.png')
+                        : selectedCategory === 7 || selectedCategory === '7'
+                          ? require('../assets/categories/image-copy.png')
+                          : selectedCategory === 8 || selectedCategory === '8'
+                            ? require('../assets/categories/image.png')
+                            : selectedCategory === 4 ||
+                                selectedCategory === '4' ||
+                                selectedCategory === 6 ||
+                                selectedCategory === '6' ||
+                                selectedCategory === 12 ||
+                                selectedCategory === '12'
+                              ? require('../assets/categories/exclusive-post-icon.png')
+                              : require('../assets/post-office-icon.png')
+                  }
+                  style={styles.bottomSheetIcon}
+                  resizeMode="contain"
+                />
               </View>
-              <Image
-                source={
-                  selectedCategory === 3 || selectedCategory === '3'
-                    ? require('../assets/image22221.png')
-                    : selectedCategory === 7 || selectedCategory === '7'
-                      ? require('../assets/categories/image-copy.png')
-                      : selectedCategory === 8 || selectedCategory === '8'
-                        ? require('../assets/categories/image.png')
-                        : selectedCategory === 4 ||
-                            selectedCategory === '4' ||
-                            selectedCategory === 6 ||
-                            selectedCategory === '6' ||
-                            selectedCategory === 12 ||
-                            selectedCategory === '12'
-                          ? require('../assets/categories/exclusive-post-icon.png')
-                          : require('../assets/post-office-icon.png')
-                }
-                style={styles.bottomSheetIcon}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.bottomSheetDivider} />
 
@@ -1885,13 +2104,13 @@ const TikTokFeedScreen = ({
                 </Text>
               </View>
               <Image
-                source={require('../assets/post-community-icon.png')}
+                source={require('../assets/ad-uplaud/posts.png')}
                 style={styles.bottomSheetIcon}
                 resizeMode="contain"
               />
             </View>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -1941,8 +2160,9 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
   },
-  topBarFilterBtnSelected: {
-    opacity: 0.7,
+  /** Selected feed filter: tint only the PNG strokes (#FFC40A), no extra background */
+  filterIconSelectedTint: {
+    tintColor: '#FFC40A',
   },
   listScrollView: {
     flex: 1,
@@ -2435,10 +2655,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 4,
   },
-  sidebarFilterBtnSelected: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 8,
-  },
   sidebarFilterIcon: {
     width: 22,
     height: 22,
@@ -2448,9 +2664,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     textAlign: 'center',
-  },
-  sidebarFilterLabelSelected: {
-    color: '#B8A9FF',
+    lineHeight: 15,
+    maxWidth: 72,
   },
   sidebarProfileWrap: {
     marginBottom: 12,
@@ -2574,8 +2789,11 @@ const styles = StyleSheet.create({
   bottomSheetHandleWrap: {
     alignSelf: 'stretch',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
     marginBottom: 8,
+    minHeight: 52,
   },
   bottomSheetHandle: {
     width: 40,

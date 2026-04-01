@@ -995,6 +995,19 @@ export const brokerCategoryForm = {
       },
     ],
   },
+  // שותפים (category 3) — same flow as userCategoryForm[3]; was missing so broker edit/create showed an empty form
+  3: {
+    role: 'broker',
+    fields: [
+      {key: 'profileverification'},
+      {key: 'profilepictureupload'},
+      {key: 'searchpurpose'},
+      {key: 'apartmenttype'},
+      {key: 'preferences'},
+      {key: 'price'},
+      {key: 'additionaldetails'},
+    ],
+  },
   4: {
     role: 'broker',
     fields: [
@@ -1516,6 +1529,19 @@ export const companyCategoryForm = {
       {
         key: 'propertyaddress',
       },
+    ],
+  },
+  // שותפים (category 3) — same as userCategoryForm[3]; was missing so company edit/create showed an empty form
+  3: {
+    role: 'company',
+    fields: [
+      {key: 'profileverification'},
+      {key: 'profilepictureupload'},
+      {key: 'searchpurpose'},
+      {key: 'apartmenttype'},
+      {key: 'preferences'},
+      {key: 'price'},
+      {key: 'additionaldetails'},
     ],
   },
   4: {
