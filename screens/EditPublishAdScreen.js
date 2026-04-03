@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Octicons} from '@expo/vector-icons';
-import {brokerCategories} from '../utils/constant';
+import {brokerCategories, categoriesEditProfile} from '../utils/constant';
 import {getListings} from '../utils/api';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
@@ -33,20 +33,11 @@ const CATEGORY_ICON_INNER = 1 - 2 * CATEGORY_ICON_CROP;
 const categoryImageSize = Math.ceil(CATEGORY_ICON_SIZE / CATEGORY_ICON_INNER); // ~196
 const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
 
-// All broker categories in same design; optional imageCrop, imageAdjust, borderRadius per item
-const PUBLISH_CATEGORIES = brokerCategories.map(c => {
-  const item = {id: c.id, name: c.name, image: c.image};
-  if (c.id === 8) {
-    item.imageAdjust = {marginLeft: 0, marginTop: 4};
-  }
-  return item;
-});
-
 const EditPublishAdScreen = ({
   onClose,
   uploadedListings = [],
   currentUser = null,
-  initialCategoryId = 12,
+  initialCategoryId = 9,
   onCreateAd,
   onEditAd,
   onBoost,
@@ -56,6 +47,16 @@ const EditPublishAdScreen = ({
   onRemove,
   onOpenListingAnalysis,
 }) => {
+  console.log('currentUser', currentUser);
+  // All broker categories in same design; optional imageCrop, imageAdjust, borderRadius per item
+  const PUBLISH_CATEGORIES = categoriesEditProfile;
+  //   userCategoriesEditProfile.map(c => {
+  //   const item = {id: c.id, name: c.name, image: c.image};
+  //   if (c.id === 8) {
+  //     item.imageAdjust = {marginLeft: 0, marginTop: 4};
+  //   }
+  //   return item;
+  // });
   const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
   const [selectedCategoryId, setSelectedCategoryId] =
     useState(initialCategoryId);
@@ -65,6 +66,16 @@ const EditPublishAdScreen = ({
   const [freezeConfirmListing, setFreezeConfirmListing] = useState(null);
   const [unfreezeConfirmListing, setUnfreezeConfirmListing] = useState(null);
   const [frozenListingIds, setFrozenListingIds] = useState([]);
+  const categoryScrollRef = useRef(null);
+  const didInitialCategoryScrollRef = useRef(false);
+
+  const onCategoryScrollContentSizeChange = () => {
+    if (didInitialCategoryScrollRef.current) return;
+    didInitialCategoryScrollRef.current = true;
+    requestAnimationFrame(() => {
+      categoryScrollRef.current?.scrollToEnd({animated: false});
+    });
+  };
 
   // Keep selected category in sync with the category we came from (e.g. from feed)
   useEffect(() => {
@@ -142,9 +153,13 @@ const EditPublishAdScreen = ({
               bnb_business_logo_url: l.bnb_business_logo_url ?? null,
               general_details: l.general_details,
               cancellation_policy: l.cancellation_policy ?? null,
-              hot_deal: l.hot_deal === true || l.hot_deal === 'true' || l.hot_deal === 't',
+              hot_deal:
+                l.hot_deal === true ||
+                l.hot_deal === 'true' ||
+                l.hot_deal === 't',
               price_per_night:
-                l.price_per_night != null && !Number.isNaN(Number(l.price_per_night))
+                l.price_per_night != null &&
+                !Number.isNaN(Number(l.price_per_night))
                   ? Number(l.price_per_night)
                   : null,
             };
@@ -243,20 +258,20 @@ const EditPublishAdScreen = ({
 
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
-                  <MaterialCommunityIcons
-                    name="eye-outline"
-                    size={16}
-                    color={TEXT_LIGHT}
+                  <Image
+                    source={require('../assets/eye_icon.png')}
+                    style={styles.actionBtnImage}
+                    resizeMode="contain"
                   />
                   <Text style={[styles.statText, styles.statTextList]}>
                     {views}
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <MaterialCommunityIcons
-                    name="heart-outline"
-                    size={16}
-                    color={TEXT_LIGHT}
+                  <Image
+                    source={require('../assets/chat_icon.png')}
+                    style={styles.actionBtnImage}
+                    resizeMode="contain"
                   />
                   <Text style={[styles.statText, styles.statTextList]}>
                     {likes}
@@ -272,7 +287,11 @@ const EditPublishAdScreen = ({
                 onShare ? onShare(listing) : onBoost && onBoost(listing)
               }
               activeOpacity={0.8}>
-              <MaterialCommunityIcons name="arrow-up" size={20} color="#fff" />
+              <Image
+                source={require('../assets/arrow_up.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -285,10 +304,10 @@ const EditPublishAdScreen = ({
                   : setFreezeConfirmListing(listing)
               }
               activeOpacity={0.8}>
-              <MaterialCommunityIcons
-                name="snowflake"
-                size={20}
-                color={isFrozen(listing) ? TEXT_LIGHT : '#fff'}
+              <Image
+                source={require('../assets/freeze.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
               />
               {isFrozen(listing) ? (
                 <Text style={styles.actionBtnTextList}>הוקפאה</Text>
@@ -298,7 +317,11 @@ const EditPublishAdScreen = ({
               style={[styles.actionBtn]}
               onPress={() => setRemoveConfirmListing(listing)}
               activeOpacity={0.8}>
-              <MaterialCommunityIcons name="close" size={20} color="#fff" />
+              <Image
+                source={require('../assets/close.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -335,6 +358,7 @@ const EditPublishAdScreen = ({
   const renderGridAdCard = ({item: listing, index}) => {
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
+    console.log('listing', listing);
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
     const exposure = listing.exposure_level || 'high';
 
@@ -389,18 +413,18 @@ const EditPublishAdScreen = ({
               </Text>
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
-                  <MaterialCommunityIcons
-                    name="eye-outline"
-                    size={20}
-                    color={TEXT_LIGHT}
+                  <Image
+                    source={require('../assets/eye_icon.png')}
+                    style={styles.actionBtnImage}
+                    resizeMode="contain"
                   />
                   <Text style={styles.statText}>{views}</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <MaterialCommunityIcons
-                    name="heart-outline"
-                    size={20}
-                    color={TEXT_LIGHT}
+                  <Image
+                    source={require('../assets/chat_icon.png')}
+                    style={styles.actionBtnImage}
+                    resizeMode="contain"
                   />
                   <Text style={styles.statText}>{likes}</Text>
                 </View>
@@ -416,7 +440,11 @@ const EditPublishAdScreen = ({
               }
               activeOpacity={0.8}>
               <Text style={styles.actionBtnText}>הקפצה</Text>
-              <MaterialCommunityIcons name="arrow-up" size={18} color="#fff" />
+              <Image
+                source={require('../assets/arrow_up.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -432,10 +460,10 @@ const EditPublishAdScreen = ({
               <Text style={styles.actionBtnText}>
                 {isFrozen(listing) ? 'הוקפאה' : 'הקפאה'}
               </Text>
-              <MaterialCommunityIcons
-                name="snowflake"
-                size={18}
-                color={isFrozen(listing) ? TEXT_LIGHT : '#fff'}
+              <Image
+                source={require('../assets/freeze.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
               />
             </TouchableOpacity>
             <TouchableOpacity
@@ -443,7 +471,11 @@ const EditPublishAdScreen = ({
               onPress={() => setRemoveConfirmListing(listing)}
               activeOpacity={0.8}>
               <Text style={styles.actionBtnText}>הסרה</Text>
-              <MaterialCommunityIcons name="close" size={18} color="#fff" />
+              <Image
+                source={require('../assets/close.png')}
+                style={styles.actionBtnImage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -488,11 +520,13 @@ const EditPublishAdScreen = ({
         {/* Category prompt - horizontal scroll */}
         <Text style={styles.sectionLabel}>בחרו קטגוריה לפרסם בה</Text>
         <ScrollView
+          ref={categoryScrollRef}
           horizontal
           directionalLockEnabled
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryScrollContent}
-          style={styles.categoryScroll}>
+          style={styles.categoryScroll}
+          onContentSizeChange={onCategoryScrollContentSizeChange}>
           {PUBLISH_CATEGORIES.map(cat => {
             const selected = selectedCategoryId === cat.id;
             return (
@@ -501,37 +535,16 @@ const EditPublishAdScreen = ({
                 style={styles.categoryItem}
                 onPress={() => setSelectedCategoryId(cat.id)}
                 activeOpacity={0.8}>
-                {(() => {
-                  const crop = cat.imageCrop ?? CATEGORY_ICON_CROP;
-                  const inner = 1 - 2 * crop;
-                  const size = Math.ceil(CATEGORY_ICON_SIZE / inner);
-                  const offset = (size - CATEGORY_ICON_SIZE) / 2;
-                  const adj = cat.imageAdjust || {};
-                  return (
-                    <View
-                      style={[
-                        styles.categoryImageWrap,
-                        {
-                          width: CATEGORY_ICON_SIZE,
-                          height: CATEGORY_ICON_SIZE,
-                          borderRadius: cat.borderRadius ?? 14,
-                        },
-                      ]}>
-                      <Image
-                        source={cat.image}
-                        style={[
-                          {
-                            width: size,
-                            height: size,
-                            marginLeft: -offset + (adj.marginLeft ?? 0),
-                            marginTop: -offset + (adj.marginTop ?? 0),
-                          },
-                        ]}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  );
-                })()}
+                <Image
+                  source={selected ? cat.selectedImage : cat.image}
+                  style={[
+                    {
+                      width: Dimensions.get('window').width * 0.27,
+                      height: Dimensions.get('window').width * 0.27,
+                    },
+                  ]}
+                  resizeMode="contain"
+                />
                 <View style={styles.categoryNameRow}>
                   <Text
                     style={[
@@ -813,13 +826,12 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
   },
   categoryScrollContent: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-end',
+    // flexDirection: 'row-reverse',
     gap: 16,
     paddingHorizontal: 20,
   },
   categoryItem: {
-    width: 110,
+    width: Dimensions.get('window').width * 0.27,
     alignItems: 'center',
   },
   categoryImageWrap: {
@@ -831,10 +843,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 2,
+    marginTop: 16,
   },
-  categoryName: {color: '#fff', fontSize: 14, fontFamily: 'Rubik-Medium'},
-  categoryNameSelected: {color: BORDER_GOLD},
+  categoryName: {color: '#fff', fontSize: 14, fontFamily: 'Rubik-Regular'},
+  categoryNameSelected: {fontFamily: 'Rubik-Medium'},
   categoryCheckbox: {width: 18, height: 18},
   actionBar: {
     flexDirection: 'row',
@@ -979,7 +991,11 @@ const styles = StyleSheet.create({
     right: 0,
   },
   statItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  statText: {color: TEXT_LIGHT, fontSize: 17},
+  statText: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+  },
   statTextList: {fontSize: 14},
   exposureImage: {width: 45, height: 101},
   actionRow: {
@@ -987,6 +1003,7 @@ const styles = StyleSheet.create({
     marginTop: 22,
     gap: 4,
   },
+  actionBtnImage: {width: 22, height: 22},
   actionBtn: {
     flex: 1,
     flexDirection: 'row',

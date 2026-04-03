@@ -26,7 +26,7 @@ import {
 } from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Divider} from '../components';
-import { isAdsListingRecord } from '../utils/listingShape';
+import {isAdsListingRecord} from '../utils/listingShape';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -156,14 +156,17 @@ const UserProfileScreen = ({
   const bottom = insets.bottom;
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
   const isListingFromFeed = user && isAdsListingRecord(user);
-  const profile = !isListingFromFeed && user ? user : {
-    name: 'דוד לוי תיווך בע"מ',
-    email: 'davidlevi@gmail.com',
-    profileImageUrl: null,
-    likes: 246,
-    following: 626,
-    followers: 257,
-  };
+  const profile =
+    !isListingFromFeed && user
+      ? user
+      : {
+          name: 'דוד לוי תיווך בע"מ',
+          email: 'davidlevi@gmail.com',
+          profileImageUrl: null,
+          likes: 246,
+          following: 626,
+          followers: 257,
+        };
 
   // [UserProfile] Log how we resolve user details (filter console by "UserProfile" to see)
   const creatorId = user?.subscription_id || user?.owner_id;
@@ -1027,11 +1030,13 @@ const UserProfileScreen = ({
         <View style={styles.profileBlock}>
           <View style={styles.avatarWrap}>
             {displayImage ? (
-              <Image
-                source={{uri: displayImage}}
-                style={styles.avatar}
-                resizeMode="cover"
-              />
+              <View style={styles.avatarImageWrap}>
+                <Image
+                  source={{uri: displayImage}}
+                  style={styles.avatar}
+                  resizeMode="cover"
+                />
+              </View>
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <MaterialCommunityIcons
@@ -1042,7 +1047,7 @@ const UserProfileScreen = ({
               </View>
             )}
             <View style={styles.avatarBadge}>
-              <MaterialCommunityIcons name="plus" size={16} color="#000" />
+              <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
             </View>
           </View>
           <Text style={styles.userName}>{displayName}</Text>
@@ -2063,13 +2068,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  avatarWrap: {position: 'relative', marginBottom: 12},
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+  avatarImageWrap: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     borderWidth: 3,
     borderColor: GOLD,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
   },
   avatarPlaceholder: {
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -2078,12 +2093,12 @@ const styles = StyleSheet.create({
   },
   avatarBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: GOLD,
+    bottom: -5,
+    right: -5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E1D27',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2105,12 +2120,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
+    gap: 54,
     marginBottom: 25,
   },
   stat: {alignItems: 'center'},
-  statNumber: {color: '#fff', fontSize: 18, fontWeight: '700'},
-  statLabel: {color: Colors.grey200, fontSize: 12, marginTop: 2},
+  statNumber: {
+    color: '#F7F3E6',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+  },
+  statLabel: {
+    color: '#FFFFFFCC',
+    fontFamily: 'Rubik-Regular',
+    fontSize: 12,
+    marginTop: 2,
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
