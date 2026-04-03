@@ -671,7 +671,6 @@ const UserProfileScreen = ({
       );
     return [];
   })();
-  console.log('lastAdImages', lastAdImages);
 
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
@@ -712,7 +711,6 @@ const UserProfileScreen = ({
   ).toLowerCase();
   const isCompany = profileSubscriptionType === 'company';
   const isBroker = profileSubscriptionType === 'broker';
-  console.log('profileSubscriptionType', profileSubscriptionType);
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
   );
@@ -883,18 +881,22 @@ const UserProfileScreen = ({
       : null;
     const parking = am ? (am.parking ?? am.parking_spaces) : null;
     return [
+      {iconKey: 'area', label: a != null && !isNaN(a) ? `${a} מ"ר` : 'ללא מ"ר'},
       {
         iconKey: 'rooms',
         label: r != null && !isNaN(r) ? `${r} חדרים` : 'ללא חדרים',
       },
-      {iconKey: 'area', label: a != null && !isNaN(a) ? `${a} מ"ר` : 'ללא מ"ר'},
+      {
+        iconKey: 'floor',
+        label: f != null && !isNaN(f) ? `קומה ${f}` : 'ללא קומה',
+      },
       {
         iconKey: 'balcony',
         label: am && (am.balcony || am.mirpeset) ? 'מרפסת' : 'ללא מרפסת',
       },
       {
-        iconKey: 'floor',
-        label: f != null && !isNaN(f) ? `קומה ${f}` : 'ללא קומה',
+        iconKey: 'elevator',
+        label: am && (am.elevator || am.maala) ? 'מעלית' : 'ללא מעלית',
       },
       {
         iconKey: 'parking',
@@ -906,14 +908,10 @@ const UserProfileScreen = ({
             : 'ללא חנייה',
       },
       {
-        iconKey: 'elevator',
-        label: am && (am.elevator || am.maala) ? 'מעלית' : 'ללא מעלית',
-      },
-      {iconKey: 'condition', label: condLabel || 'ללא מצב'},
-      {
         iconKey: 'mamad',
         label: am && (am.mamad || am.mamad_room) ? 'ממ"ד' : 'ללא ממ"ד',
       },
+      {iconKey: 'condition', label: condLabel || 'ללא מצב'},
       {
         iconKey: 'immediate',
         label:
@@ -1408,6 +1406,7 @@ const UserProfileScreen = ({
                         );
                       })}
                     </View>
+                    <View style={styles.lastAdDivider} />
                   </View>
                   {lastAd && (lastAd.address || lastAd.location) ? (
                     <LocationMap
@@ -1426,10 +1425,7 @@ const UserProfileScreen = ({
                         </Text>
                         <View style={styles.constructionStatusRow}>
                           {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
-                            const status = (
-                              lastAd?.construction_status ??
-                              'beginning_of_construction'
-                            )
+                            const status = (lastAd?.construction_status ?? '')
                               .toString()
                               .toLowerCase();
                             const isSelected =
@@ -1626,7 +1622,7 @@ const UserProfileScreen = ({
               }
               activeOpacity={0.7}>
               <Text style={styles.myPropertiesSeeAllText}>
-                לכל הפרוייקטים שלנו
+                {isCompany ? 'לכל הפרוייקטים שלנו' : 'לכל הנכסים שלי'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1751,16 +1747,18 @@ const UserProfileScreen = ({
                 )}
               </View>
               <Text style={styles.contactDetailsAgencyName}>{displayName}</Text>
-              <TouchableOpacity
-                style={[styles.contactDetailsRow]}
-                onPress={() => {}}>
-                <Text style={styles.contactDetailsLink}>{contactEmail}</Text>
-                <Image
-                  source={require('../assets/web-icon.png')}
-                  style={styles.contactDetailsIconImage}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
+              {isCompany && (
+                <TouchableOpacity
+                  style={[styles.contactDetailsRow]}
+                  onPress={() => {}}>
+                  <Text style={styles.contactDetailsLink}>{contactEmail}</Text>
+                  <Image
+                    source={require('../assets/web-icon.png')}
+                    style={styles.contactDetailsIconImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              )}
               {contactPhones.map((phone, i) => (
                 <TouchableOpacity
                   key={i}
@@ -1928,32 +1926,35 @@ const UserProfileScreen = ({
                 color="#F7F3E6"
               />
             </TouchableOpacity>
+            {isCompany && (
+              <>
+                <TouchableOpacity
+                  style={styles.profileCtaGoldBtn}
+                  onPress={handleChatPress}
+                  activeOpacity={0.85}>
+                  <Text style={styles.profileCtaGoldText}>פנייה למפרסם</Text>
+                  <Image
+                    source={require('../assets/image-copy-9.png')}
+                    style={styles.profileCtaChatBadgeLogo}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.profileCtaGoldBtn}
-              onPress={handleChatPress}
-              activeOpacity={0.85}>
-              <Text style={styles.profileCtaGoldText}>פנייה למפרסם</Text>
-              <Image
-                source={require('../assets/image-copy-9.png')}
-                style={styles.profileCtaChatBadgeLogo}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.profileCtaPhoneBtn}
-              onPress={handleCallPress}
-              activeOpacity={0.85}>
-              <Text style={styles.profileCtaPhoneText}>
-                פנייה בטלפון {primaryContactPhone}
-              </Text>
-              <Image
-                source={require('../assets/phone.png')}
-                style={styles.profileCtaPhoneIcon}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.profileCtaPhoneBtn}
+                  onPress={handleCallPress}
+                  activeOpacity={0.85}>
+                  <Text style={styles.profileCtaPhoneText}>
+                    פנייה בטלפון {primaryContactPhone}
+                  </Text>
+                  <Image
+                    source={require('../assets/phone.png')}
+                    style={styles.profileCtaPhoneIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -2119,9 +2120,9 @@ const styles = StyleSheet.create({
   },
   actionBtnImage: {width: 107, height: 59},
   profileDivider: {
-    height: 2,
-    backgroundColor: '#555',
-    marginVertical: 16,
+    height: 1,
+    backgroundColor: '#373548',
+    marginBottom: 16,
     alignSelf: 'stretch',
     marginHorizontal: 24,
   },
@@ -2265,7 +2266,7 @@ const styles = StyleSheet.create({
 
   brokerCardOverlayLine: {
     height: 1,
-    backgroundColor: '#555',
+    backgroundColor: '#373548',
     marginHorizontal: 24,
     marginTop: 16,
     marginBottom: 12,
@@ -2363,14 +2364,14 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomDivider: {
     height: 1,
-    backgroundColor: '#555',
+    backgroundColor: '#373548',
     alignSelf: 'stretch',
     marginTop: 12,
   },
   myPropertiesFlatList: {height: 170},
   contactDetailsDivider: {
     height: 1,
-    backgroundColor: '#555',
+    backgroundColor: '#373548',
     marginHorizontal: 24,
     marginVertical: 16,
   },
@@ -2750,7 +2751,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   lastAdDivider: {
-    height: 2,
+    height: 1,
     backgroundColor: '#373548',
     marginVertical: 12,
     alignSelf: 'stretch',
@@ -2835,13 +2836,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   lastAdDividerWhite: {
-    height: 2,
-    backgroundColor: '#555',
+    height: 1,
+    backgroundColor: '#373548',
     marginVertical: 16,
     alignSelf: 'stretch',
   },
   lastAdFeaturesGrid: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 10,
     marginTop: 0,
@@ -2871,7 +2872,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   projectOfferCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#2B2A39',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
