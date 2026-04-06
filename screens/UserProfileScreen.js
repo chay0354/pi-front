@@ -1154,10 +1154,10 @@ const UserProfileScreen = ({
                       setFullScreenImageModalVisible(true);
                     }}
                     activeOpacity={0.8}>
-                    <MaterialCommunityIcons
-                      name="arrow-expand"
-                      size={20}
-                      color="#fff"
+                    <Image
+                      source={require('../assets/full_screen.png')}
+                      style={styles.expandIcon}
+                      resizeMode="contain"
                     />
                   </TouchableOpacity>
                 </>
@@ -2241,7 +2241,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 1,
   },
-  smartInfoLogo: {width: 110, height: 38, marginBottom: 25},
+  smartInfoLogo: {
+    width: 87,
+    height: 35,
+    marginBottom: 25,
+  },
   smartInfoIntro: {
     color: '#fff',
     fontSize: 15,
@@ -2689,11 +2693,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   lastAdPiBadgeImage: {
-    width: 80,
-    height: 80,
+    width: 75,
+    height: 75,
     position: 'absolute',
     marginLeft: -5,
-    top: -32,
+    top: -28,
   },
   lastAdPiText: {
     color: '#FFD275',
@@ -2723,14 +2727,19 @@ const styles = StyleSheet.create({
   },
   lastAdExpandWrap: {
     position: 'absolute',
-    bottom: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    bottom: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  expandIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#fff',
   },
   lastAdBody: {
     paddingHorizontal: 16,
