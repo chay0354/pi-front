@@ -39,7 +39,7 @@ const CONSTRUCTION_STATUS_STEPS = [
 ];
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const LAST_AD_IMAGE_HEIGHT = 280;
+const LAST_AD_IMAGE_HEIGHT = 320;
 const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padding 24*2, gap 10
 
 /** Bundled placeholder when specific PNGs are not in repo (add assets under /public for web). */
@@ -2120,7 +2120,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 54,
+    gap: 65,
     marginBottom: 25,
   },
   stat: {alignItems: 'center'},
@@ -2689,9 +2689,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   lastAdPiBadgeImage: {
-    width: 55,
-    height: 40,
-    margin: -10,
+    width: 80,
+    height: 80,
+    position: 'absolute',
+    marginLeft: -5,
+    top: -32,
   },
   lastAdPiText: {
     color: '#FFD275',
