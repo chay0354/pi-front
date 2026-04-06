@@ -2693,11 +2693,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   lastAdPiBadgeImage: {
-    width: 75,
-    height: 75,
+    width: 80,
+    height: 80,
     position: 'absolute',
     marginLeft: -5,
-    top: -28,
+    top: -31,
   },
   lastAdPiText: {
     color: '#FFD275',

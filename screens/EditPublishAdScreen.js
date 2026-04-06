@@ -505,10 +505,10 @@ const EditPublishAdScreen = ({
           hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           accessibilityRole="button"
           accessibilityLabel="ניתוח מודעות">
-          <MaterialCommunityIcons
-            name="file-chart-outline"
-            size={24}
-            color="#fff"
+          <Image
+            source={require('../assets/action_icons.png')}
+            style={styles.actionImage}
+            resizeMode="contain"
           />
         </TouchableOpacity>
       </View>
@@ -800,9 +800,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 48,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   headerBtn: {
     padding: 4,
@@ -811,6 +808,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  actionImage: {width: 24, height: 24},
   headerTitle: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 20, paddingBottom: 40},
