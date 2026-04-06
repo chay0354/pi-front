@@ -517,82 +517,84 @@ const EditPublishAdScreen = ({
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* Category prompt - horizontal scroll */}
-        <Text style={styles.sectionLabel}>בחרו קטגוריה לפרסם בה</Text>
-        <ScrollView
-          ref={categoryScrollRef}
-          horizontal
-          directionalLockEnabled
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScrollContent}
-          style={styles.categoryScroll}
-          onContentSizeChange={onCategoryScrollContentSizeChange}>
-          {PUBLISH_CATEGORIES.map(cat => {
-            const selected = selectedCategoryId === cat.id;
-            return (
+        <View style={styles.topPanel}>
+          {/* Category prompt - horizontal scroll */}
+          <Text style={styles.sectionLabel}>בחרו קטגוריה לפרסם בה</Text>
+          <ScrollView
+            ref={categoryScrollRef}
+            horizontal
+            directionalLockEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScrollContent}
+            style={styles.categoryScroll}
+            onContentSizeChange={onCategoryScrollContentSizeChange}>
+            {PUBLISH_CATEGORIES.map(cat => {
+              const selected = selectedCategoryId === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={styles.categoryItem}
+                  onPress={() => setSelectedCategoryId(cat.id)}
+                  activeOpacity={0.8}>
+                  <Image
+                    source={selected ? cat.selectedImage : cat.image}
+                    style={[
+                      {
+                        width: Dimensions.get('window').width * 0.27,
+                        height: Dimensions.get('window').width * 0.27,
+                      },
+                    ]}
+                    resizeMode="contain"
+                  />
+                  <View style={styles.categoryNameRow}>
+                    <Text
+                      style={[
+                        styles.categoryName,
+                        selected && styles.categoryNameSelected,
+                      ]}>
+                      {cat.name}
+                    </Text>
+                    {selected ? (
+                      <Image
+                        source={require('../assets/checkbox.png')}
+                        style={styles.categoryCheckbox}
+                        resizeMode="contain"
+                      />
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Action bar: Create Ad + view toggles */}
+          {filteredListings && filteredListings.length > 0 && (
+            <View style={styles.actionBar}>
               <TouchableOpacity
-                key={cat.id}
-                style={styles.categoryItem}
-                onPress={() => setSelectedCategoryId(cat.id)}
-                activeOpacity={0.8}>
+                style={styles.createBtn}
+                onPress={() => onCreateAd && onCreateAd(selectedCategoryId)}
+                activeOpacity={0.9}>
+                <Text style={styles.createBtnText}>צור מודעה</Text>
+                <MaterialCommunityIcons name="plus" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewToggle]}
+                onPress={() =>
+                  setViewMode(viewMode === 'grid' ? 'list' : 'grid')
+                }>
                 <Image
-                  source={selected ? cat.selectedImage : cat.image}
-                  style={[
-                    {
-                      width: Dimensions.get('window').width * 0.27,
-                      height: Dimensions.get('window').width * 0.27,
-                    },
-                  ]}
+                  source={
+                    viewMode === 'grid'
+                      ? require('../assets/swipereight.png')
+                      : require('../assets/swiperleft.png')
+                  }
+                  style={styles.viewToggleIcon}
                   resizeMode="contain"
                 />
-                <View style={styles.categoryNameRow}>
-                  <Text
-                    style={[
-                      styles.categoryName,
-                      selected && styles.categoryNameSelected,
-                    ]}>
-                    {cat.name}
-                  </Text>
-                  {selected ? (
-                    <Image
-                      source={require('../assets/checkbox.png')}
-                      style={styles.categoryCheckbox}
-                      resizeMode="contain"
-                    />
-                  ) : null}
-                </View>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Action bar: Create Ad + view toggles */}
-        {filteredListings && filteredListings.length > 0 && (
-          <View style={styles.actionBar}>
-            <TouchableOpacity
-              style={styles.createBtn}
-              onPress={() => onCreateAd && onCreateAd(selectedCategoryId)}
-              activeOpacity={0.9}>
-              <Text style={styles.createBtnText}>צור מודעה</Text>
-              <MaterialCommunityIcons name="plus" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewToggle]}
-              onPress={() =>
-                setViewMode(viewMode === 'grid' ? 'list' : 'grid')
-              }>
-              <Image
-                source={
-                  viewMode === 'grid'
-                    ? require('../assets/swipereight.png')
-                    : require('../assets/swiperleft.png')
-                }
-                style={styles.viewToggleIcon}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-          </View>
-        )}
+            </View>
+          )}
+        </View>
 
         {/* Ad listing */}
         {loadingListings ? (
@@ -800,6 +802,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 48,
+    backgroundColor: '#21202F',
   },
   headerBtn: {
     padding: 4,
@@ -812,6 +815,17 @@ const styles = StyleSheet.create({
   headerTitle: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 20, paddingBottom: 40},
+  topPanel: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+    backgroundColor: '#21202F',
+    marginBottom: 18,
+  },
+  topPanelDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 8,
+  },
   sectionLabel: {
     color: '#fff',
     fontSize: 15,
