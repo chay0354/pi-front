@@ -800,9 +800,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     paddingTop: 48,
-    backgroundColor: '#21202F',
+    backgroundColor: '#27262F',
   },
   headerBtn: {
     padding: 4,
@@ -818,8 +818,9 @@ const styles = StyleSheet.create({
   topPanel: {
     marginHorizontal: -20,
     paddingHorizontal: 20,
-    backgroundColor: '#21202F',
-    marginBottom: 18,
+    backgroundColor: '#27262F',
+    marginBottom: 25,
+    paddingBottom: 10,
   },
   topPanelDivider: {
     height: 1,
@@ -829,7 +830,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     color: '#fff',
     fontSize: 15,
-    marginTop: 20,
+    marginTop: 8,
     marginBottom: 12,
     textAlign: 'right',
   },
@@ -857,14 +858,22 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 16,
   },
-  categoryName: {color: '#fff', fontSize: 14, fontFamily: 'Rubik-Regular'},
+  categoryName: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+  },
   categoryNameSelected: {fontFamily: 'Rubik-Medium'},
-  categoryCheckbox: {width: 18, height: 18},
+  categoryCheckbox: {
+    width: 24,
+    height: 24,
+  },
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
+    marginTop: 5,
   },
   createBtn: {
     flexDirection: 'row',
