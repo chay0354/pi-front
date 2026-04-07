@@ -1007,6 +1007,7 @@ const UserProfileScreen = ({
     return (
       <View style={styles.lastAdPiBadge}>
         <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
+        {/* <Text style={styles.lastAdPiText}>{5}</Text> */}
         <Image
           source={displayPiRating > 4 ? piBadgeSourceRing : piBadgeSource}
           style={styles.lastAdPiBadgeImage}
@@ -2694,11 +2695,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   lastAdPiBadgeImage: {
-    width: 80,
-    height: 80,
+    width: 85,
+    height: 85,
     position: 'absolute',
-    marginLeft: -5,
-    top: -31,
+    marginLeft: -7,
+    top: -35,
   },
   lastAdPiText: {
     color: '#FFD275',

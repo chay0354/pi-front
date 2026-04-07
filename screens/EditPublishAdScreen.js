@@ -18,6 +18,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Octicons} from '@expo/vector-icons';
 import {brokerCategories, categoriesEditProfile} from '../utils/constant';
 import {getListings} from '../utils/api';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 
@@ -48,6 +49,8 @@ const EditPublishAdScreen = ({
   onOpenListingAnalysis,
 }) => {
   console.log('currentUser', currentUser);
+  const insets = useSafeAreaInsets();
+
   // All broker categories in same design; optional imageCrop, imageAdjust, borderRadius per item
   const PUBLISH_CATEGORIES = categoriesEditProfile;
   //   userCategoriesEditProfile.map(c => {
@@ -489,9 +492,13 @@ const EditPublishAdScreen = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {height: insets.top + 40, paddingTop: insets.top},
+        ]}>
         <TouchableOpacity
           onPress={onClose}
           style={styles.headerBtn}
@@ -540,8 +547,10 @@ const EditPublishAdScreen = ({
                     source={selected ? cat.selectedImage : cat.image}
                     style={[
                       {
-                        width: Dimensions.get('window').width * 0.27,
-                        height: Dimensions.get('window').width * 0.27,
+                        width: 100,
+                        height: 100,
+                        // width: Dimensions.get('window').width * 0.27,
+                        // height: Dimensions.get('window').width * 0.27,
                       },
                     ]}
                     resizeMode="contain"
@@ -801,8 +810,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
-    paddingTop: 48,
     backgroundColor: '#27262F',
+    height: 40,
   },
   headerBtn: {
     padding: 4,
@@ -830,7 +839,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     color: '#fff',
     fontSize: 15,
-    marginTop: 8,
+    marginTop: 5,
     marginBottom: 12,
     textAlign: 'right',
   },
@@ -844,7 +853,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   categoryItem: {
-    width: Dimensions.get('window').width * 0.27,
+    // width: Dimensions.get('window').width * 0.27,
     alignItems: 'center',
   },
   categoryImageWrap: {
@@ -856,7 +865,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 16,
+    marginTop: 14,
   },
   categoryName: {
     color: '#fff',
@@ -865,24 +874,27 @@ const styles = StyleSheet.create({
   },
   categoryNameSelected: {fontFamily: 'Rubik-Medium'},
   categoryCheckbox: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
   },
   actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    marginTop: 5,
+    marginBottom: 15,
+    marginTop: 10,
   },
   createBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     backgroundColor: '#3d3b52',
-    paddingVertical: 6,
-    paddingHorizontal: 20,
+    // paddingVertical: 6,
+    // paddingHorizontal: 20,
     borderRadius: 26,
+    height: 38,
+    width: 168,
   },
   createBtnText: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
   viewToggle: {
@@ -944,7 +956,7 @@ const styles = StyleSheet.create({
   adImageWrap: {
     position: 'relative',
     width: '100%',
-    height: 245,
+    height: 230,
     overflow: 'hidden',
   },
   adImage: {width: '100%', height: '100%'},
