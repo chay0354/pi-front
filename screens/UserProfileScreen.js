@@ -46,6 +46,7 @@ const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padd
 const bundledImg = require('../assets/image-7.png');
 /** Pi badge: always bundle — web `{ uri: origin + '/pi-badge.png' }` often 404s or breaks on subpaths. */
 const piBadgeSource = require('../assets/pi-badge.png');
+const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
 const logoPiAi = require('../assets/paiailogo.png');
 
 const isWeb = Platform.OS === 'web';
@@ -1007,7 +1008,7 @@ const UserProfileScreen = ({
       <View style={styles.lastAdPiBadge}>
         <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
         <Image
-          source={piBadgeSource}
+          source={displayPiRating > 4 ? piBadgeSourceRing : piBadgeSource}
           style={styles.lastAdPiBadgeImage}
           resizeMode="cover"
         />
