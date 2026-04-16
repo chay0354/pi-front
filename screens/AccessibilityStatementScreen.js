@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 15,
     lineHeight: 24,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
     backgroundColor: '#ffffff',
   },

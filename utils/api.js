@@ -50,21 +50,52 @@ function logBrokerSearch(step, payload) {
   console.log(`[pi-chat][broker-search] ${step}`, payload);
 }
 
-/** On web, FormData doesn't accept { uri, type, name }; convert blob/data URIs to Blob/File so the server receives a real file. */
+/** On web, FormData doesn't accept { uri, type, name }; convert fetchable URIs to File so multipart works. */
 async function toFormDataFile(file, fieldName = 'file') {
   if (!file || !file.uri) return null;
   if (!isWeb) return file; // React Native: keep { uri, type, name }
+
   const uri = file.uri;
-  if (!uri.startsWith('blob:') && !uri.startsWith('data:')) return file;
+  const fetchable =
+    uri.startsWith('blob:') ||
+    uri.startsWith('data:') ||
+    uri.startsWith('http://') ||
+    uri.startsWith('https://');
+
+  if (!fetchable) {
+    console.warn(
+      '[toFormDataFile] Web upload needs blob/data/http URI, got:',
+      String(uri).slice(0, 64),
+    );
+    return null;
+  }
+
   try {
     const res = await fetch(uri);
     const blob = await res.blob();
-    const name = file.name || (fieldName === 'profilePicture' ? 'profile.jpg' : 'file.jpg');
-    const type = file.type || blob.type || 'image/jpeg';
+    let name = file.name;
+    let type = file.type || blob.type || '';
+
+    if (fieldName === 'profilePicture') {
+      name = name || 'profile.jpg';
+      type = type || 'image/jpeg';
+    } else if (fieldName === 'video') {
+      name = name || 'video.mp4';
+      if (!type || type === 'application/octet-stream') {
+        type = blob.type && blob.type.startsWith('video/') ? blob.type : 'video/mp4';
+      }
+    } else if (fieldName === 'companyLogo') {
+      name = name || 'logo.jpg';
+      type = type || 'image/jpeg';
+    } else {
+      name = name || 'image.jpg';
+      type = type || blob.type || 'image/jpeg';
+    }
+
     return new File([blob], name, { type });
   } catch (e) {
-    console.warn('Could not convert uri to File for web upload:', e);
-    return file;
+    console.warn('Could not convert uri to File for web upload:', fieldName, e);
+    return null;
   }
 }
 
@@ -98,29 +129,31 @@ export const submitSubscription = async (formData, files = {}) => {
     }
 
     if (files.additionalImages && files.additionalImages.length > 0) {
-      files.additionalImages.forEach((image, index) => {
-        formDataToSend.append('additionalImages', {
-          uri: image.uri,
-          type: image.type || 'image/jpeg',
-          name: image.name || `image-${index}.jpg`,
-        });
-      });
+      for (let index = 0; index < files.additionalImages.length; index++) {
+        const image = files.additionalImages[index];
+        const part = await toFormDataFile(image, 'additionalImage');
+        if (part) {
+          formDataToSend.append('additionalImages', part);
+        }
+      }
     }
 
     if (files.companyLogo) {
-      formDataToSend.append('companyLogo', {
-        uri: files.companyLogo.uri,
-        type: files.companyLogo.type || 'image/jpeg',
-        name: files.companyLogo.name || 'logo.jpg',
-      });
+      const logoAppend = await toFormDataFile(files.companyLogo, 'companyLogo');
+      if (logoAppend) {
+        formDataToSend.append('companyLogo', logoAppend);
+      }
     }
 
     if (files.video) {
-      formDataToSend.append('video', {
-        uri: files.video.uri,
-        type: files.video.type || 'video/mp4',
-        name: files.video.name || 'video.mp4',
-      });
+      const videoAppend = await toFormDataFile(files.video, 'video');
+      if (videoAppend) {
+        formDataToSend.append('video', videoAppend);
+      } else {
+        console.error(
+          '[submitSubscription] Video file could not be attached (web needs blob/data URL from picker).',
+        );
+      }
     }
 
     const response = await fetch(`${API_URL}/api/subscription/submit`, {
@@ -212,6 +245,40 @@ export const verifyEmail = async (
     console.error('Error verifying email:', error);
     throw error;
   }
+};
+
+/**
+ * Test only: mark subscription verified without code. Backend must set ALLOW_SKIP_EMAIL_VERIFICATION=1.
+ */
+export const verifyEmailSkipTest = async (email, subscriptionId) => {
+  if (!subscriptionId) {
+    throw new Error('subscriptionId is required');
+  }
+  const response = await fetch(`${API_URL}/api/subscription/verify-skip-test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: email || undefined,
+      subscriptionId,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Skip verification failed');
+  }
+  if (!data.success) {
+    throw new Error(data.error || 'Skip verification failed');
+  }
+  if (
+    data.subscription &&
+    !data.subscription.subscriber_number &&
+    data.subscriberNumber
+  ) {
+    data.subscription.subscriber_number = data.subscriberNumber;
+  }
+  return data;
 };
 
 /**
@@ -646,6 +713,130 @@ export const unlikeListing = async (listingId, userId) => {
 };
 
 /**
+ * Like a post (separate from ad likes).
+ * @param {string} listingId - UUID of the post listing in ads table
+ * @param {string} userId - current user id
+ * @returns {Promise<{success: boolean}>}
+ */
+export const likePost = async (listingId, userId) => {
+  if (!listingId || !userId) throw new Error('listingId and userId required');
+  const response = await fetch(`${API_URL}/api/posts/${listingId}/like`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: String(userId) }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to like post');
+  return data;
+};
+
+/**
+ * Remove like from a post (separate from ad likes).
+ * @param {string} listingId - UUID of the post listing in ads table
+ * @param {string} userId - current user id
+ * @returns {Promise<{success: boolean}>}
+ */
+export const unlikePost = async (listingId, userId) => {
+  if (!listingId || !userId) throw new Error('listingId and userId required');
+  const response = await fetch(`${API_URL}/api/posts/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
+    method: 'DELETE',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to unlike post');
+  return data;
+};
+
+/**
+ * Get comments for a post listing.
+ * @param {string} listingId - UUID of post listing
+ * @param {string|null} userId - optional current user id for liked state
+ */
+export const getPostComments = async (listingId, userId = null) => {
+  if (!listingId) throw new Error('listingId required');
+  const params = new URLSearchParams();
+  if (userId != null && String(userId).trim() !== '') {
+    params.set('user_id', String(userId).trim());
+  }
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_URL}/api/posts/${listingId}/comments${qs ? `?${qs}` : ''}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to load comments');
+  return data;
+};
+
+/**
+ * Add a comment to a post listing.
+ * @param {string} listingId - UUID of post listing
+ * @param {string} userId - current user id
+ * @param {string} text - comment body
+ */
+export const addPostComment = async (listingId, userId, text) => {
+  if (!listingId || !userId) throw new Error('listingId and userId required');
+  const response = await fetch(`${API_URL}/api/posts/${listingId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: String(userId),
+      text: String(text || ''),
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to add comment');
+  return data;
+};
+
+/**
+ * React to a post comment with like/dislike.
+ * @param {string} listingId - UUID of post listing
+ * @param {string} commentId - UUID of comment
+ * @param {string} userId - current user id
+ * @param {'like'|'dislike'} reactionType
+ */
+export const reactToPostComment = async (listingId, commentId, userId, reactionType) => {
+  if (!listingId || !commentId || !userId) {
+    throw new Error('listingId, commentId and userId required');
+  }
+  if (reactionType !== 'like' && reactionType !== 'dislike') {
+    throw new Error('reactionType must be like or dislike');
+  }
+  const response = await fetch(
+    `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: String(userId),
+        reaction_type: reactionType,
+      }),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to react to comment');
+  return data;
+};
+
+/**
+ * Remove reaction from a post comment.
+ * @param {string} listingId - UUID of post listing
+ * @param {string} commentId - UUID of comment
+ * @param {string} userId - current user id
+ */
+export const clearPostCommentReaction = async (listingId, commentId, userId) => {
+  if (!listingId || !commentId || !userId) {
+    throw new Error('listingId, commentId and userId required');
+  }
+  const response = await fetch(
+    `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction?user_id=${encodeURIComponent(String(userId))}`,
+    { method: 'DELETE' },
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to clear comment reaction');
+  return data;
+};
+
+/**
  * Get unread message count (messages sent to this user, optionally after a timestamp) for the chat badge.
  * @param {string} userId - current user id
  * @param {string} [afterIso] - only count messages created after this ISO timestamp (e.g. last time user opened chat)
@@ -757,13 +948,17 @@ export const searchBrokers = async (q, excludeEmail = null) => {
   return { success: !!data.success, brokers };
 };
 
-/** 1:1 chat partners for customer group picker */
-export const getDirectContactsForGroup = async (userEmail, q = '') => {
+/** 1:1 chat partners for group picker. audience: 'all' | 'regular' | 'non_regular' */
+export const getDirectContactsForGroup = async (userEmail, q = '', audience = 'all') => {
   if (!userEmail) return { success: true, contacts: [] };
   const params = new URLSearchParams({
     user_email: String(userEmail).trim().toLowerCase(),
     q: String(q || '').trim(),
   });
+  const aud = String(audience || 'all').trim().toLowerCase();
+  if (aud === 'regular' || aud === 'non_regular' || aud === 'all') {
+    params.set('audience', aud);
+  }
   const response = await fetch(`${API_URL}/api/chat/direct-contacts?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load contacts');
@@ -779,6 +974,21 @@ export const getBrokersForGroupPicker = async (q, excludeEmail = null) => {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load brokers');
   return { success: !!data.success, brokers: data.brokers || [] };
+};
+
+/** Users list for group picker by audience: 'regular' | 'broker_only' | 'non_regular' | 'all' */
+export const getUsersForGroupPicker = async (q = '', excludeEmail = null, audience = 'all') => {
+  const params = new URLSearchParams();
+  if (q != null && String(q).trim()) params.set('q', String(q).trim());
+  if (excludeEmail) params.set('exclude_email', String(excludeEmail).trim().toLowerCase());
+  const aud = String(audience || 'all').trim().toLowerCase();
+  if (aud === 'regular' || aud === 'broker_only' || aud === 'non_regular' || aud === 'all') {
+    params.set('audience', aud);
+  }
+  const response = await fetch(`${API_URL}/api/users/group-picker?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to load users');
+  return { success: !!data.success, users: data.users || [] };
 };
 
 export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind, groupImageUrl = null }) => {
@@ -798,6 +1008,22 @@ export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind,
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to create group');
+  return data;
+};
+
+export const addMembersToChatGroup = async ({ userEmail, conversationId, memberEmails }) => {
+  const payload = {
+    user_email: String(userEmail || '').trim().toLowerCase(),
+    conversation_id: String(conversationId || '').trim(),
+    member_emails: (memberEmails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean),
+  };
+  const response = await fetch(`${API_URL}/api/chat/groups/add-members`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to add members');
   return data;
 };
 
@@ -849,14 +1075,14 @@ export const sendGroupChatMessage = async (conversationId, senderEmail, body, me
 };
 
 /**
- * Get display name and profile image for a chat participant by email.
- * @param {string} userEmail - participant email
+ * Get display name and profile image for a chat participant by email or user ref (UUID).
+ * @param {string} userRef - participant email or id
  * @returns {Promise<{ success: boolean, name?: string, profileImageUrl?: string }>}
  */
-export const getChatParticipantDisplay = async (userEmail) => {
-  if (!userEmail) return { success: true, name: null, profileImageUrl: null };
-  const email = String(userEmail).trim().toLowerCase();
-  const url = `${API_URL}/api/chat/participant-display?user_email=${encodeURIComponent(email)}`;
+export const getChatParticipantDisplay = async (userRef) => {
+  if (!userRef) return { success: true, name: null, profileImageUrl: null };
+  const ref = String(userRef).trim();
+  const url = `${API_URL}/api/chat/participant-display?user_ref=${encodeURIComponent(ref)}`;
   const response = await fetch(url);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load participant display');
@@ -959,6 +1185,24 @@ export const uploadChatMedia = async (file) => {
   return data;
 };
 
+/**
+ * Upload a group avatar image to Supabase Storage bucket "group-pics" (via backend).
+ * @param {{ uri: string, type?: string, name?: string }} file
+ */
+export const uploadGroupImage = async (file) => {
+  const formData = new FormData();
+  const toAppend = await toFormDataFile(file, 'file');
+  if (!toAppend) throw new Error('No file to upload');
+  formData.append('file', toAppend);
+  const response = await fetch(`${API_URL}/api/chat/upload-group-image`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || data.details || 'Failed to upload group image');
+  return data;
+};
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -979,7 +1223,7 @@ export const toSubscriptionId = id => {
  * @returns {Promise} API response with listing ID
  */
 /**
- * Active story rings (last 24h) for home row
+ * Home row: subscriptions with profile video (video_url), verified/active
  * @returns {Promise<{ success: boolean, rings?: Array }>}
  */
 export const getStoriesFeed = async () => {
@@ -990,6 +1234,21 @@ export const getStoriesFeed = async () => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     return {success: false, rings: [], error: data.error};
+  }
+  return data;
+};
+
+/**
+ * Company directory for home "חפשו עוד" (verified/active company subscriptions + ad counts)
+ */
+export const getCompaniesDirectory = async () => {
+  const response = await fetch(`${API_URL}/api/companies/directory`, {
+    method: 'GET',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to load companies');
   }
   return data;
 };

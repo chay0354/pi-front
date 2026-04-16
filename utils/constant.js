@@ -1,3 +1,5 @@
+const EXCLUSIVE_CATEGORY_IMAGE = require('../assets/tik12.png');
+
 export const categoryImages = {
   1: require('../assets/category1.png'),
   2: require('../assets/category2.png'),
@@ -8,7 +10,7 @@ export const categoryImages = {
   7: require('../assets/category7.png'),
   8: require('../assets/category8.png'),
   10: require('../assets/category10.png'),
-  12: require('../assets/category12.png'),
+  12: EXCLUSIVE_CATEGORY_IMAGE,
   // 1: require('../assets/tik1.png'),
   // 2: require('../assets/tik2.png'),
   // 3: require('../assets/tik3.png'),
@@ -30,27 +32,20 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
+/** Requires backend ALLOW_SKIP_EMAIL_VERIFICATION=1. Also enable via EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY=1 for non-__DEV__ builds. */
+export const showSkipEmailVerificationTest =
+  (typeof __DEV__ !== 'undefined' && __DEV__) ||
+  process.env.EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY === 'true' ||
+  process.env.EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY === '1';
+
 export const userCategories = [
-  // {
-  //   id: 1,
-  //   name: 'חדש מקבלן',
-  //   image: require('../assets/category1.png'),
-  //   imageLeft: require('../assets/category1Left.png'),
-  //   imageRight: require('../assets/category1Right.png'),
-  // },
+  // Figma order (node 682:90532): 10 categories, keep existing carousel animation/layout unchanged.
   {
-    id: 2,
-    name: 'משרדים',
-    image: require('../assets/category2.png'),
-    imageLeft: require('../assets/category2Left.png'),
-    imageRight: require('../assets/category2Right.png'),
-  },
-  {
-    id: 3,
-    name: 'שותפים',
-    image: require('../assets/category3.png'),
-    imageLeft: require('../assets/category3Left.png'),
-    imageRight: require('../assets/category3Right.png'),
+    id: 6,
+    name: 'מגזר דתי',
+    image: require('../assets/category6.png'),
+    imageLeft: require('../assets/category6Left.png'),
+    imageRight: require('../assets/category6Right.png'),
   },
   {
     id: 4,
@@ -67,11 +62,39 @@ export const userCategories = [
     imageRight: require('../assets/category5Right.png'),
   },
   {
-    id: 6,
-    name: 'מגזר דתי',
-    image: require('../assets/category6.png'),
-    imageLeft: require('../assets/category6Left.png'),
-    imageRight: require('../assets/category6Right.png'),
+    id: 3,
+    name: 'שותפים',
+    image: require('../assets/category3.png'),
+    imageLeft: require('../assets/category3Left.png'),
+    imageRight: require('../assets/category3Right.png'),
+  },
+  {
+    id: 1,
+    name: 'חדש מקבלן',
+    image: require('../assets/category1.png'),
+    imageLeft: require('../assets/category1Left.png'),
+    imageRight: require('../assets/category1Right.png'),
+  },
+  {
+    id: 10,
+    name: 'דירות',
+    image: require('../assets/category10.png'),
+    imageLeft: require('../assets/category10Left.png'),
+    imageRight: require('../assets/category10Right.png'),
+  },
+  {
+    id: 2,
+    name: 'משרדים',
+    image: require('../assets/category2.png'),
+    imageLeft: require('../assets/category2Left.png'),
+    imageRight: require('../assets/category2Right.png'),
+  },
+  {
+    id: 12,
+    name: 'יוקרה',
+    image: EXCLUSIVE_CATEGORY_IMAGE,
+    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
+    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
   },
   {
     id: 7,
@@ -86,22 +109,6 @@ export const userCategories = [
     image: require('../assets/category8.png'),
     imageLeft: require('../assets/category8Left.png'),
     imageRight: require('../assets/category8Right.png'),
-  },
-  // {id: 9, name: '', image: require('../assets/tik9.png')},
-  {
-    id: 10,
-    name: 'דירות',
-    image: require('../assets/category10.png'),
-    imageLeft: require('../assets/category10Left.png'),
-    imageRight: require('../assets/category10Right.png'),
-  },
-  // {id: 11, name: '', image: require('../assets/tik11.png')},
-  {
-    id: 12,
-    name: 'אקסלוסיב',
-    image: require('../assets/category12.png'),
-    imageLeft: require('../assets/category12Left.png'),
-    imageRight: require('../assets/category12Right.png'),
   },
 ];
 
@@ -225,9 +232,9 @@ export const brokerCategories = [
   {
     id: 12,
     name: 'אקסלוסיב',
-    image: require('../assets/category12.png'),
-    imageLeft: require('../assets/category12Left.png'),
-    imageRight: require('../assets/category12Right.png'),
+    image: EXCLUSIVE_CATEGORY_IMAGE,
+    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
+    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
   },
 ];
 
@@ -288,9 +295,9 @@ export const companyCategories = [
   {
     id: 12,
     name: 'אקסלוסיב',
-    image: require('../assets/category12.png'),
-    imageLeft: require('../assets/category12Left.png'),
-    imageRight: require('../assets/category12Right.png'),
+    image: EXCLUSIVE_CATEGORY_IMAGE,
+    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
+    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
   },
 ];
 

@@ -11,9 +11,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
-import {verifyEmail, resendVerificationCode} from '../utils/api';
-import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {verifyEmail, resendVerificationCode, verifyEmailSkipTest} from '../utils/api';
+import {
+  getHeaderTitle,
+  subscriptionTypes,
+  showSkipEmailVerificationTest,
+} from '../utils/constant';
 
 /**
  * VerificationCodeScreen Component
@@ -29,6 +34,7 @@ const VerificationCodeScreen = ({
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [isSkipTesting, setIsSkipTesting] = useState(false);
 
   return (
     <ImageBackground
@@ -43,10 +49,10 @@ const VerificationCodeScreen = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Image
-              source={require('../assets/back-arrow-icon.png')}
-              style={styles.backArrow}
-              resizeMode="contain"
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={24}
+              color={Colors.white100}
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
@@ -207,6 +213,40 @@ const VerificationCodeScreen = ({
               {isResending ? 'שולח...' : 'לא קיבלתי את הקוד'}
             </Text>
           </TouchableOpacity>
+
+          {showSkipEmailVerificationTest &&
+            subscriptionId &&
+            onNext && (
+              <TouchableOpacity
+                style={styles.skipTestLink}
+                disabled={isSkipTesting}
+                onPress={async () => {
+                  setIsSkipTesting(true);
+                  try {
+                    const response = await verifyEmailSkipTest(
+                      email || undefined,
+                      subscriptionId,
+                    );
+                    if (response?.success && response.subscription) {
+                      onNext(response.subscription);
+                    }
+                  } catch (err) {
+                    Alert.alert(
+                      'שגיאה',
+                      err.message ||
+                        'דילוג אימות זמין רק כשהשרת מוגדר (ALLOW_SKIP_EMAIL_VERIFICATION=1)',
+                    );
+                  } finally {
+                    setIsSkipTesting(false);
+                  }
+                }}>
+                <Text style={styles.skipTestLinkText}>
+                  {isSkipTesting
+                    ? 'מדלג...'
+                    : 'דלג על אימות מייל (בדיקה)'}
+                </Text>
+              </TouchableOpacity>
+            )}
         </View>
       </ScrollView>
     </ImageBackground>
@@ -253,10 +293,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'flex-start',
-  },
-  backArrow: {
-    width: 24,
-    height: 24,
   },
   headerTitle: {
     fontSize: FontSizes.fs18,
@@ -339,6 +375,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
     color: Colors.grey200,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
+  skipTestLink: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  skipTestLinkText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#f5a623',
     textAlign: 'center',
     textDecorationLine: 'underline',
   },

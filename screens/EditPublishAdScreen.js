@@ -33,6 +33,38 @@ const CATEGORY_ICON_CROP = 0.24; // crop from each edge (show center ~52%)
 const CATEGORY_ICON_INNER = 1 - 2 * CATEGORY_ICON_CROP;
 const categoryImageSize = Math.ceil(CATEGORY_ICON_SIZE / CATEGORY_ICON_INNER); // ~196
 const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
+// categoriesEditProfile uses UI ids (1..9) that differ from ads.category values in DB.
+const UI_TO_LISTING_CATEGORY_ID = {
+  1: 1, // חדש מקבלן
+  2: 5, // BNB
+  3: 4, // גלובל
+  4: 6, // מגזר דתי
+  5: 12, // יוקרה
+  6: 7, // קרקעות
+  7: 8, // מסחר
+  8: 2, // משרדים
+  9: 10, // דירות
+};
+
+const LISTING_TO_UI_CATEGORY_ID = Object.entries(UI_TO_LISTING_CATEGORY_ID).reduce(
+  (acc, [uiId, listingId]) => {
+    acc[listingId] = Number(uiId);
+    return acc;
+  },
+  {},
+);
+
+const toUiCategoryId = value => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 9;
+  return LISTING_TO_UI_CATEGORY_ID[n] ?? n;
+};
+
+const toListingCategoryId = value => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return UI_TO_LISTING_CATEGORY_ID[n] ?? n;
+};
 
 const EditPublishAdScreen = ({
   onClose,
@@ -61,8 +93,9 @@ const EditPublishAdScreen = ({
   //   return item;
   // });
   const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
-  const [selectedCategoryId, setSelectedCategoryId] =
-    useState(initialCategoryId);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(
+    toUiCategoryId(initialCategoryId),
+  );
   const [fetchedListings, setFetchedListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
   const [removeConfirmListing, setRemoveConfirmListing] = useState(null);
@@ -82,7 +115,7 @@ const EditPublishAdScreen = ({
 
   // Keep selected category in sync with the category we came from (e.g. from feed)
   useEffect(() => {
-    setSelectedCategoryId(initialCategoryId);
+    setSelectedCategoryId(toUiCategoryId(initialCategoryId));
   }, [initialCategoryId]);
 
   useEffect(() => {
@@ -193,11 +226,12 @@ const EditPublishAdScreen = ({
     return Array.from(byId.values());
   })();
 
+  const selectedListingCategoryId = toListingCategoryId(selectedCategoryId);
   const filteredListings = selectedCategoryId
     ? mergedListings.filter(
         l =>
           (l.category != null && parseInt(l.category, 10)) ===
-          selectedCategoryId,
+          selectedListingCategoryId,
       )
     : mergedListings;
 
@@ -581,7 +615,10 @@ const EditPublishAdScreen = ({
             <View style={styles.actionBar}>
               <TouchableOpacity
                 style={styles.createBtn}
-                onPress={() => onCreateAd && onCreateAd(selectedCategoryId)}
+                onPress={() =>
+                  onCreateAd &&
+                  onCreateAd(selectedListingCategoryId ?? selectedCategoryId)
+                }
                 activeOpacity={0.9}>
                 <Text style={styles.createBtnText}>צור מודעה</Text>
                 <MaterialCommunityIcons name="plus" size={24} color="#fff" />
@@ -630,7 +667,10 @@ const EditPublishAdScreen = ({
                 </Text>
                 <TouchableOpacity
                   style={[styles.createBtn, {marginTop: 30}]}
-                  onPress={() => onCreateAd && onCreateAd(selectedCategoryId)}
+                  onPress={() =>
+                    onCreateAd &&
+                    onCreateAd(selectedListingCategoryId ?? selectedCategoryId)
+                  }
                   activeOpacity={0.9}>
                   <Text style={styles.createBtnText}>צור מודעה</Text>
                   <MaterialCommunityIcons name="plus" size={24} color="#fff" />

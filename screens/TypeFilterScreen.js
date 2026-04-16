@@ -6,11 +6,22 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-const BG = '#1a1926';
-const BORDER = 'rgba(255,255,255,0.2)';
+const BG = '#2B2A39';
+const DIVIDER = '#373548';
+const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const RADIO_BORDER = '#CCA447';
+const RADIO_BG = '#27262F';
+
+const MENU_ICON =
+  'https://www.figma.com/api/mcp/asset/6acbcfee-410e-4065-953e-b296a61e1772';
+const RADIO_ACTIVE_ICON =
+  'https://www.figma.com/api/mcp/asset/93f89459-4a3e-4794-a5fd-f0c1f1edd8ec';
 
 // סוג (Type) options for global feed – maps to listing.category in applyFeedFilters
 const TYPE_OPTIONS_GLOBAL = [
@@ -51,6 +62,9 @@ const TYPE_OPTIONS_LAND = [
 ];
 
 const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+  const insets = useSafeAreaInsets();
+  const {height: screenHeight} = useWindowDimensions();
+  const compact = screenHeight < 760;
   const isCommerce =
     selectedCategory === 8 || selectedCategory === '8';
   const isLand = selectedCategory === 7 || selectedCategory === '7';
@@ -64,134 +78,230 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
     return TYPE_OPTIONS_GLOBAL;
   }, [isCommerce, isLand]);
 
-  const [selectedId, setSelectedId] = useState(initialFilter ?? null);
+  const [selectedIds, setSelectedIds] = useState(() =>
+    Array.isArray(initialFilter)
+      ? initialFilter.filter(Boolean)
+      : initialFilter
+        ? [initialFilter]
+        : [],
+  );
 
   useEffect(() => {
-    setSelectedId(initialFilter ?? null);
+    setSelectedIds(
+      Array.isArray(initialFilter)
+        ? initialFilter.filter(Boolean)
+        : initialFilter
+          ? [initialFilter]
+          : [],
+    );
   }, [initialFilter, isCommerce, isLand]);
+  const bottomInset = Math.max(insets.bottom, 8);
 
   const handleSave = () => {
     if (onSave) {
-      onSave({type: selectedId ?? null});
+      onSave({type: selectedIds.length > 0 ? selectedIds : null});
     }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
-    setSelectedId(null);
-    if (onSave) {
-      onSave({type: null});
-    }
-    if (onClose) onClose();
+    setSelectedIds([]);
+  };
+
+  const toggleOption = optionId => {
+    setSelectedIds(prev =>
+      prev.includes(optionId)
+        ? prev.filter(id => id !== optionId)
+        : [...prev, optionId],
+    );
   };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={12}>
-        <MaterialCommunityIcons name="chevron-right" size={28} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.topRail}>
+        <Pressable
+          onPress={onClose}
+          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+          style={styles.handlePressArea}>
+          <View style={styles.handle} />
+        </Pressable>
+      </View>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: compact ? 16 : 24,
+            paddingBottom: bottomInset + (compact ? 20 : 52),
+          },
+        ]}
+        scrollEnabled={false}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.handleBar} />
-        <View style={styles.header}>
+        <View style={[styles.header, compact && styles.headerCompact]}>
+          <Image source={{uri: MENU_ICON}} style={styles.headerIcon} resizeMode="contain" />
           <Text style={styles.title}>סוג</Text>
         </View>
 
-        <View style={styles.radioList}>
+        <View style={[styles.radioList, compact && styles.radioListCompact]}>
           {options.map((option) => (
             <TouchableOpacity
               key={option.id}
               style={styles.radioRow}
-              onPress={() => setSelectedId(option.id)}
+              onPress={() => toggleOption(option.id)}
               activeOpacity={0.8}>
               <Text style={styles.radioLabel}>{option.label}</Text>
-              <View style={[styles.radioOuter, selectedId === option.id && styles.radioOuterSelected]}>
-                {selectedId === option.id ? (
-                  <View style={styles.radioInner} />
+              <View style={styles.radioOuter}>
+                {selectedIds.includes(option.id) ? (
+                  <Image source={{uri: RADIO_ACTIVE_ICON}} style={styles.radioInnerImage} resizeMode="contain" />
                 ) : null}
               </View>
             </TouchableOpacity>
           ))}
         </View>
-      </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-          <Image
-            source={require('../assets/buy-rent/save.png')}
-            style={styles.saveBtnImage}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-          <Text style={styles.clearText}>נקה</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={[styles.footer, compact && styles.footerCompact]}>
+          <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
+            <LinearGradient
+              colors={GOLD_GRADIENT}
+              start={{x: 0.5, y: 0}}
+              end={{x: 0.5, y: 1}}
+              style={styles.saveBtnGradient}>
+              <Text style={styles.saveBtnText}>שמור</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+            <Text style={styles.clearText}>נקה</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  backBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
-  footer: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
+  container: {
+    flex: 1,
     backgroundColor: BG,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
   },
-  handleBar: {
-    alignSelf: 'center',
+  topRail: {
+    height: 37,
+    borderBottomWidth: 1,
+    borderBottomColor: DIVIDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handlePressArea: {
+    width: 42,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handle: {
     width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#464646',
+  },
+  scroll: {flex: 1},
+  scrollContent: {
+    paddingHorizontal: 24,
+    flexGrow: 1,
+  },
+  footer: {
+    marginTop: 'auto',
+    alignItems: 'center',
+  },
+  footerCompact: {
+    marginTop: 12,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerCompact: {
     marginBottom: 16,
   },
-  header: { alignItems: 'center', marginBottom: 24 },
-  title: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium' },
-  radioList: { marginBottom: 32 },
+  headerIcon: {
+    width: 24,
+    height: 24,
+    marginBottom: 10,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    fontFamily: 'Rubik-Regular',
+  },
+  radioList: {
+    width: '100%',
+    alignItems: 'flex-end',
+    gap: 28,
+    marginTop: 10,
+  },
+  radioListCompact: {
+    gap: 20,
+    marginTop: 4,
+  },
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    gap: 16,
-    marginLeft: 40,
+    gap: 8,
+    width: '100%',
+    minHeight: 24,
   },
   radioLabel: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
   },
   radioOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: RADIO_BORDER,
+    backgroundColor: RADIO_BG,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioOuterSelected: { borderColor: '#fff' },
-  radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
+  radioInnerImage: {
+    width: 10,
+    height: 10,
   },
-  saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
-  saveBtnImage: { width: '100%', height: 54 },
-  clearWrap: { alignItems: 'center' },
-  clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
+  saveBtnWrap: {
+    marginBottom: 12,
+    width: '100%',
+  },
+  saveBtnGradient: {
+    width: '100%',
+    height: 44,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: '#1E1D27',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
+  },
+  clearWrap: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  clearText: {
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    fontSize: 18,
+    textDecorationLine: 'underline',
+  },
 });
 
 export default TypeFilterScreen;

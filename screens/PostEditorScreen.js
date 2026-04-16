@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import {Video, ResizeMode} from 'expo-av';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {captureRef} from 'react-native-view-shot';
 import {
@@ -107,6 +108,25 @@ const createTextBlockId = () =>
   `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const VIDEO_EXT_REGEX = /\.(mp4|mov|m4v|webm|ogg|ogv)$/i;
+
+const isVideoAsset = asset => {
+  const kind = String(asset?.type || '').toLowerCase();
+  const mime = String(asset?.mimeType || '').toLowerCase();
+  const uri = String(asset?.uri || '');
+  return kind === 'video' || mime.startsWith('video/') || VIDEO_EXT_REGEX.test(uri);
+};
+
+const inferVideoExtension = asset => {
+  const uri = String(asset?.uri || '');
+  const match = uri.match(VIDEO_EXT_REGEX);
+  if (match?.[1]) return `.${String(match[1]).toLowerCase()}`;
+  const mime = String(asset?.mimeType || '').toLowerCase();
+  if (mime === 'video/webm') return '.webm';
+  if (mime === 'video/ogg') return '.ogg';
+  if (mime === 'video/quicktime') return '.mov';
+  return '.mp4';
+};
 
 const lightenColor = (hex, amount = 0.8) => {
   if (typeof hex !== 'string') return hex;
@@ -409,6 +429,7 @@ const PostEditorScreen = ({
   const [textContent, setTextContent] = useState('');
   const [mediaImages, setMediaImages] = useState([]);
   const [backgroundImageUri, setBackgroundImageUri] = useState(null);
+  const [backgroundVideoAsset, setBackgroundVideoAsset] = useState(null);
   const [selectedFormat, setSelectedFormat] = useState(null);
   const [textAlignMode, setTextAlignMode] = useState('left');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
@@ -445,6 +466,7 @@ const PostEditorScreen = ({
 
   const canPublish =
     Boolean(backgroundImageUri) ||
+    Boolean(backgroundVideoAsset?.uri) ||
     mediaImages.length > 0 ||
     hasTextBlockContent ||
     Boolean((textModeOverlayText || '').trim()) ||
@@ -464,37 +486,51 @@ const PostEditorScreen = ({
       setPublishing(true);
       setIsCapturing(true);
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
-      let captureUri;
-      if (Platform.OS === 'web') {
-        const el = resolvePostPreviewDomNode(
-          postPreviewRef,
-          'post-editor-preview-root',
-        );
-        if (!el) {
-          throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
-        }
-        captureUri = await capturePostPreviewToDataUrl(
-          el,
-          publishTarget === 'story'
-            ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
-            : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
-        );
+      const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
+      let payload;
+      let folder;
+
+      if (hasVideoBackground) {
+        payload = {
+          uri: backgroundVideoAsset.uri,
+          type: backgroundVideoAsset.mimeType || 'video/mp4',
+          name:
+            backgroundVideoAsset.fileName ||
+            `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
+        };
+        folder = publishTarget === 'story' ? 'stories/videos' : 'listings/videos';
       } else {
-        captureUri = await captureRef(postPreviewRef.current, {
-          format: 'jpg',
-          quality: publishTarget === 'story' ? 0.95 : 0.9,
-          result: 'tmpfile',
-        });
+        let captureUri;
+        if (Platform.OS === 'web') {
+          const el = resolvePostPreviewDomNode(
+            postPreviewRef,
+            'post-editor-preview-root',
+          );
+          if (!el) {
+            throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
+          }
+          captureUri = await capturePostPreviewToDataUrl(
+            el,
+            publishTarget === 'story'
+              ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
+              : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
+          );
+        } else {
+          captureUri = await captureRef(postPreviewRef.current, {
+            format: 'jpg',
+            quality: publishTarget === 'story' ? 0.95 : 0.9,
+            result: 'tmpfile',
+          });
+        }
+
+        payload = {
+          uri: captureUri,
+          type: 'image/jpeg',
+          name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+        };
+        folder = publishTarget === 'story' ? 'stories/images' : 'listings/images';
       }
 
-      const payload = {
-        uri: captureUri,
-        type: 'image/jpeg',
-        name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
-      };
-
-      const folder =
-        publishTarget === 'story' ? 'stories/images' : 'listings/images';
       const uploadResult = await uploadFile(payload, folder);
       const url = uploadResult?.url;
       if (!url) {
@@ -752,11 +788,24 @@ const PostEditorScreen = ({
 
   const applyBackgroundImage = uri => {
     if (!uri) return;
+    setBackgroundVideoAsset(null);
     setBackgroundImageUri(uri);
+  };
+
+  const applyBackgroundVideo = asset => {
+    if (!asset?.uri) return;
+    setBackgroundImageUri(null);
+    setMediaImages([]);
+    setBackgroundVideoAsset({
+      uri: asset.uri,
+      mimeType: asset?.mimeType || null,
+      fileName: asset?.fileName || null,
+    });
   };
 
   const clearAllEditorState = () => {
     setBackgroundImageUri(null);
+    setBackgroundVideoAsset(null);
     setMediaImages([]);
     setTextBlocks([]);
     setEditingTextBlockId(null);
@@ -781,7 +830,7 @@ const PostEditorScreen = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
         quality: 1,
       });
@@ -790,6 +839,10 @@ const PostEditorScreen = ({
       if (result?.canceled) return;
       const asset = result?.assets?.[0];
       if (!asset?.uri) return;
+      if (isVideoAsset(asset)) {
+        applyBackgroundVideo(asset);
+        return;
+      }
       setMediaImages(prev => [
         ...prev,
         {
@@ -899,7 +952,17 @@ const PostEditorScreen = ({
         nativeID="post-editor-preview-root"
         collapsable={false}
         style={styles.backgroundContainer}>
-        {activeTab === TAB_CAMERA && backgroundImageUri ? (
+        {activeTab === TAB_CAMERA && backgroundVideoAsset?.uri ? (
+          <Video
+            source={{uri: backgroundVideoAsset.uri}}
+            style={styles.backgroundVideo}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay
+            isLooping
+            isMuted
+            useNativeControls={Platform.OS === 'web'}
+          />
+        ) : activeTab === TAB_CAMERA && backgroundImageUri ? (
           <Image
             source={{uri: backgroundImageUri}}
             style={styles.backgroundImage}
@@ -1372,6 +1435,10 @@ const styles = StyleSheet.create({
   backgroundImage: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  backgroundVideo: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
   },
   backArrow: {
     color: '#fff',

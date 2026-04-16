@@ -27,6 +27,8 @@ export {default as ChatListScreen} from './ChatListScreen';
 export {default as UserProfileScreen} from './UserProfileScreen';
 export {default as UserListingsScreen} from './UserListingsScreen';
 export {default as Home} from './Home';
+export {default as SelectedProjectsScreen} from './SelectedProjectsScreen';
+export {default as CompanyProjectsScreen} from './CompanyProjectsScreen';
 export {default as SecretCodeRecoveryScreen} from './SecretCodeRecoveryScreen';
 export {default as SecretCodeRecoverySentScreen} from './SecretCodeRecoverySentScreen';
 export {default as FavoritesScreen} from './FavoritesScreen';

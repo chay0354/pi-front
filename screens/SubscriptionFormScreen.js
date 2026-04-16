@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef} from 'react';
 import {
   View,
   ScrollView,
@@ -13,6 +13,8 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {Video, ResizeMode} from 'expo-av';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {submitSubscription} from '../utils/api';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
@@ -62,6 +64,7 @@ const SubscriptionFormScreen = ({
   const [companyLogo, setCompanyLogo] = useState(null);
   const [video, setVideo] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const profileVideoPreviewRef = useRef(null);
 
   const types = [
     'תיווך',
@@ -454,10 +457,10 @@ const SubscriptionFormScreen = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Image
-              source={require('../assets/back-arrow-icon.png')}
-              style={styles.backArrow}
-              resizeMode="contain"
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={24}
+              color={Colors.white100}
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
@@ -497,9 +500,6 @@ const SubscriptionFormScreen = ({
               onPress={() => {
                 const newTab = activeTab === 'images' ? 'video' : 'images';
                 setActiveTab(newTab);
-                if (newTab === 'video' && !video) {
-                  pickVideo();
-                }
               }}>
               {activeTab === 'images' ? (
                 <Image
@@ -535,11 +535,13 @@ const SubscriptionFormScreen = ({
                         resizeMode="cover"
                       />
                     ) : (
-                      <Image
-                        source={require('../assets/image-insert.png')}
-                        style={styles.imageInsert}
-                        resizeMode="contain"
-                      />
+                      <View style={styles.profileAssetPlaceholder}>
+                        <MaterialCommunityIcons
+                          name="account-circle-outline"
+                          size={54}
+                          color="rgba(255,255,255,0.82)"
+                        />
+                      </View>
                     )}
                   </TouchableOpacity>
                   <Text style={styles.sectionTitle}>תמונות נוספות</Text>
@@ -565,23 +567,54 @@ const SubscriptionFormScreen = ({
               ) : (
                 <>
                   <Text style={styles.sectionTitle}>סרטון</Text>
-                  <TouchableOpacity
-                    onPress={pickVideo}
-                    style={styles.imageUploadContainer}>
-                    {video ? (
-                      <Image
-                        source={{uri: video.uri}}
-                        style={styles.imageInsert}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.videoPlaceholder}>
-                        <Text style={styles.videoPlaceholderText}>
-                          לחץ להעלאת סרטון
-                        </Text>
+                  {video ? (
+                    <View style={styles.videoPreviewContainer}>
+                      <TouchableOpacity
+                        activeOpacity={0.92}
+                        onPress={pickVideo}
+                        style={styles.videoPreviewFrame}>
+                        <Video
+                          ref={profileVideoPreviewRef}
+                          key={video.uri}
+                          source={{uri: video.uri}}
+                          style={styles.videoPreviewVideo}
+                          resizeMode={ResizeMode.COVER}
+                          useNativeControls={false}
+                          shouldPlay={false}
+                          isMuted
+                          isLooping={false}
+                          onLoad={() => {
+                            profileVideoPreviewRef.current
+                              ?.setPositionAsync(0)
+                              .catch(() => {});
+                          }}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.videoRemoveButton}
+                        onPress={() => setVideo(null)}
+                        accessibilityLabel="הסר סרטון"
+                        hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                        <MaterialCommunityIcons
+                          name="close-thick"
+                          size={20}
+                          color={Colors.white100}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={pickVideo}
+                      style={styles.imageUploadContainer}>
+                      <View style={styles.profileAssetPlaceholder}>
+                        <MaterialCommunityIcons
+                          name="video-outline"
+                          size={52}
+                          color="rgba(255,255,255,0.82)"
+                        />
                       </View>
-                    )}
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                  )}
                 </>
               )}
             </View>
@@ -1072,10 +1105,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
-  backArrow: {
-    width: 24,
-    height: 24,
-  },
   headerTitle: {
     fontSize: FontSizes.fs18,
     fontWeight: '600',
@@ -1129,6 +1158,42 @@ const styles = StyleSheet.create({
   imageInsert: {
     width: '100%',
     height: 200,
+  },
+  videoPreviewContainer: {
+    width: '100%',
+    position: 'relative',
+  },
+  videoPreviewFrame: {
+    width: '100%',
+    height: 200,
+    borderRadius: BorderRadius.roundCorner2XL,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a22',
+  },
+  videoPreviewVideo: {
+    width: '100%',
+    height: '100%',
+  },
+  videoRemoveButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  /** Full-bleed marketing PNGs (camera/button chrome); contain + room so nothing is cropped */
+  profileAssetPlaceholder: {
+    width: '100%',
+    height: 280,
+    backgroundColor: '#2a2933',
+    borderRadius: BorderRadius.roundCorner2XL,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   imageGrid: {
     flexDirection: 'row',
@@ -1282,22 +1347,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: Colors.grey200,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoPlaceholderText: {
-    fontSize: 16,
-    color: Colors.grey200,
-    textAlign: 'center',
   },
   errorNotice: {
     backgroundColor: '#ff4444',

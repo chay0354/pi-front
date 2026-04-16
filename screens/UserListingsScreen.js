@@ -189,8 +189,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 50,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomWidth: 0,
   },
   backBtn: {
     padding: 4,
@@ -225,7 +224,7 @@ const styles = StyleSheet.create({
   cardImageWrap: {
     position: 'relative',
     width: '100%',
-    height: 240,
+    height: 220,
   },
   cardImage: {
     width: '100%',

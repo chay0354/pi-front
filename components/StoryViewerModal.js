@@ -10,6 +10,8 @@ import {
   Platform,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {Video, ResizeMode} from 'expo-av';
+
 const STORY_DURATION_MS = 12000;
 
 /**
@@ -25,6 +27,8 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
 
   const slides = ring?.slides || [];
   const total = slides.length;
+  const currentSlide = total ? slides[slideIndex] : null;
+  const currentIsVideo = currentSlide?.media_type === 'video';
 
   useEffect(() => {
     if (!visible || !total) {
@@ -54,8 +58,13 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   }, [total, onClose]);
 
   useEffect(() => {
-    if (!visible || !total) return;
+    if (!visible || !ring || !total) return;
     clearTimers();
+    const slide = ring.slides[slideIndex];
+    if (slide?.media_type === 'video') {
+      setProgress(0);
+      return;
+    }
     setProgress(0);
     startRef.current = Date.now();
 
@@ -72,11 +81,12 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
     rafRef.current = requestAnimationFrame(tick);
 
     return clearTimers;
-  }, [visible, slideIndex, total, goNext, clearTimers]);
+  }, [visible, slideIndex, total, goNext, clearTimers, ring]);
 
   const onTapContent = useCallback(() => {
+    if (currentIsVideo) return;
     goNext();
-  }, [goNext]);
+  }, [goNext, currentIsVideo]);
 
   if (!ring || total === 0) return null;
 
@@ -93,20 +103,33 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}>
       <View style={styles.root}>
-        {/* Full-bleed story behind UI */}
-        <Pressable style={styles.mediaTap} onPress={onTapContent}>
-          {uri ? (
-            <Image
+        {/* Full-bleed media: video uses native controls (not wrapped in Pressable). Images: tap advances. */}
+        <View style={styles.mediaTap}>
+          {uri && currentIsVideo ? (
+            <Video
               source={{uri}}
               style={styles.mediaFullScreen}
-              resizeMode="cover"
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              useNativeControls
+              isLooping
             />
           ) : (
-            <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
-              <Text style={styles.placeholderText}>אין תמונה</Text>
-            </View>
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={onTapContent}>
+              {uri ? (
+                <Image
+                  source={{uri}}
+                  style={styles.mediaFullScreen}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
+                  <Text style={styles.placeholderText}>אין מדיה</Text>
+                </View>
+              )}
+            </Pressable>
           )}
-        </Pressable>
+        </View>
 
         {/* Progress + header on top */}
         <View
@@ -118,9 +141,13 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
                 <View
                   style={[
                     styles.progressFill,
-                    i < slideIndex && {width: '100%'},
-                    i === slideIndex && {width: `${progress * 100}%`},
-                    i > slideIndex && {width: '0%'},
+                    s.media_type === 'video'
+                      ? {width: '100%', opacity: 0.35}
+                      : i < slideIndex
+                        ? {width: '100%'}
+                        : i === slideIndex
+                          ? {width: `${progress * 100}%`}
+                          : {width: '0%'},
                   ]}
                 />
               </View>
@@ -130,12 +157,15 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
           <View style={styles.topBar}>
             <View style={styles.userRow}>
               {ring.profile_image_url ? (
-                <Image
-                  source={{uri: ring.profile_image_url}}
-                  style={styles.avatar}
-                />
+                <View style={styles.avatarClip}>
+                  <Image
+                    source={{uri: ring.profile_image_url}}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                </View>
               ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]} />
+                <View style={[styles.avatarClip, styles.avatarPlaceholder]} />
               )}
               <Text style={styles.userName} numberOfLines={1}>
                 {ring.display_name || 'משתמש'}
@@ -204,12 +234,21 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  avatar: {
+  avatarClip: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#FFC40A',
+    position: 'relative',
+  },
+  avatarImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   avatarPlaceholder: {
     backgroundColor: '#333',

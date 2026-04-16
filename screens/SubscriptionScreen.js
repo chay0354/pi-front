@@ -193,10 +193,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
-  backArrow: {
-    width: 24,
-    height: 24,
-  },
   headerTitle: {
     fontSize: FontSizes.fs18,
     fontWeight: '600',

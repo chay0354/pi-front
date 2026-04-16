@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ImageBackground,
 } from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
@@ -23,6 +24,8 @@ const SuccessScreen = ({
   subscriptionType = subscriptionTypes.broker,
   subscription,
 }) => {
+  const successProfilePicUrl = getUserProfileImageUrl(subscription);
+
   return (
     <ImageBackground
       source={require('../assets/subscription-background.png')}
@@ -36,10 +39,10 @@ const SuccessScreen = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Image
-              source={require('../assets/back-arrow-icon.png')}
-              style={styles.backArrow}
-              resizeMode="contain"
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={24}
+              color={Colors.white100}
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
@@ -176,10 +179,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'flex-start',
-  },
-  backArrow: {
-    width: 24,
-    height: 24,
   },
   headerTitle: {
     fontSize: FontSizes.fs18,

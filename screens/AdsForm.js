@@ -488,6 +488,10 @@ const AdsForm = ({
   // בלעדי (10): הסרת סוגי דירה מ"הפרויקט מציע" — מפתח `${fieldIndex}-${groupTitle}` → false = מוסתר
   const [projectOfferGroupsOn, setProjectOfferGroupsOn] = useState({});
 
+  const selectedAdditionalImagesCount = additionalImages.filter(Boolean).length;
+  const totalSelectedImages =
+    (mainImage ? 1 : 0) + selectedAdditionalImagesCount;
+
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
   // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
@@ -1360,6 +1364,10 @@ const AdsForm = ({
                     />
                   );
                 case 'displayoptions':
+                  // Show display mode choices only when there are 2+ images.
+                  if (totalSelectedImages < 2) {
+                    return null;
+                  }
                   return (
                     <DisplayOptions
                       key="displayoptions"

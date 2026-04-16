@@ -28,8 +28,11 @@ import {
   getGroupChatMessages,
   sendGroupChatMessage,
   updateGroupDescription,
+  getListings,
+  getUsersForGroupPicker,
+  addMembersToChatGroup,
 } from '../utils/api';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -46,6 +49,19 @@ const BUBBLE_ME = '#2DD4BF';
 const CHAT_CHROME_BG = '#1E1D27';
 const INPUT_PILL_BORDER = '#8a8ab0';
 const INPUT_PLACEHOLDER = 'rgba(255,255,255,0.45)';
+const CHAT_CATEGORY_LABELS = {
+  1: 'חדש מקבלן',
+  2: 'משרדים',
+  3: 'שותפים',
+  4: 'גלובל',
+  5: 'BnB',
+  6: 'מגזר דתי',
+  7: 'קרקעות',
+  8: 'מסחרי',
+  9: 'נכסים',
+  10: 'דירות',
+  12: 'יוקרה',
+};
 
 /** Whether this is the Pi welcome conversation (id=1, name=pi). */
 const isWelcomeConversation = (conv) =>
@@ -57,6 +73,7 @@ const isUserConversation = (conv) =>
 
 const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_CHAT_AVATAR = require('../assets/image-copy-10.png');
 
 /** Prefer API otherUserEmail; else id if it looks like an email, not a conversation UUID. */
 const resolveOtherPartyEmail = (conv) => {
@@ -70,16 +87,46 @@ const resolveOtherPartyEmail = (conv) => {
   };
   return pick(fromApi) || pick(fromId);
 };
+const resolveOtherPartyRef = conv => {
+  if (!conv) return null;
+  const fromApi =
+    conv.otherUserEmail != null ? String(conv.otherUserEmail).trim() : '';
+  const fromId = conv.id != null ? String(conv.id).trim() : '';
+  return fromApi || fromId || null;
+};
+
+const normalizeAvatarUrl = (value) => {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('/assets/assets/image-copy-10.png') ||
+    lower.endsWith('/image-copy-10.png') ||
+    lower === 'image-copy-10.png'
+  ) {
+    return null;
+  }
+  if (raw.startsWith('//')) return `https:${raw}`;
+  return raw;
+};
 
 const ChatScreen = ({onClose, sharedListing = null, conversation = null, currentUser = null, onMessageSent, onPiWelcomeOpened}) => {
   const msg = DEFAULT_WELCOME_MESSAGE;
   const isWelcome = isWelcomeConversation(conversation);
   const isUser = isUserConversation(conversation);
+  const otherUserRef = isUser ? resolveOtherPartyRef(conversation) : null;
   const otherUserEmail = isUser ? resolveOtherPartyEmail(conversation) : null;
   const isGroupThread = conversation?.isGroup === true;
   const groupConversationId =
     isGroupThread && conversation?.id != null ? String(conversation.id).trim() : null;
   const isDirectPeer = isUser && !isWelcome && !isGroupThread && !!otherUserEmail;
+  const isBrokerUser = useMemo(() => {
+    const t1 =
+      currentUser?.subscription_type != null ? String(currentUser.subscription_type).trim().toLowerCase() : '';
+    const t2 = currentUser?.type != null ? String(currentUser.type).trim().toLowerCase() : '';
+    return t1 === 'broker' || t2 === 'broker';
+  }, [currentUser?.subscription_type, currentUser?.type]);
   const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
   const contextListingId =
     sharedListing?.id != null && String(sharedListing.id).trim() !== ''
@@ -87,6 +134,17 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       : conversation?.listingId != null && String(conversation.listingId).trim() !== ''
         ? String(conversation.listingId).trim()
         : null;
+  const listingDisplayNumber =
+    conversation?.listingDisplayNumber != null
+      ? Number(conversation.listingDisplayNumber)
+      : sharedListing?.ad_number != null
+        ? Number(sharedListing.ad_number)
+        : null;
+  const listingCategoryLabel =
+    conversation?.listingCategoryLabel ||
+    (!Number.isNaN(Number(sharedListing?.category))
+      ? CHAT_CATEGORY_LABELS[Number(sharedListing.category)] || null
+      : null);
 
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -94,12 +152,28 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
+  const [headerAvatarFailed, setHeaderAvatarFailed] = useState(false);
+  const [senderAvatarFailed, setSenderAvatarFailed] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
+  const [groupMemberAvatarOverrides, setGroupMemberAvatarOverrides] = useState({});
   const [showGroupDescModal, setShowGroupDescModal] = useState(false);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [addMembersSearch, setAddMembersSearch] = useState('');
+  const [addMembersLoading, setAddMembersLoading] = useState(false);
+  const [addMembersSubmitting, setAddMembersSubmitting] = useState(false);
+  const [addMembersCandidates, setAddMembersCandidates] = useState([]);
+  const [addMembersSelected, setAddMembersSelected] = useState({});
+  const [showExclusiveOfferModal, setShowExclusiveOfferModal] = useState(false);
+  const [exclusiveMonths, setExclusiveMonths] = useState(1);
+  const [exclusiveListingData, setExclusiveListingData] = useState(null);
+  const [exclusiveLoadingListing, setExclusiveLoadingListing] = useState(false);
+  const [exclusiveMessage, setExclusiveMessage] = useState(
+    'היי, שמי דוד לוי ואני מתווך נדל"ן מנוסה. נתקלתי במודעה שלך עבור הדירה בתל אביב ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא קונה איכותי בתוך חודש, אשמח לשוחח.',
+  );
   const [groupDescDraft, setGroupDescDraft] = useState('');
   const [savingGroupDesc, setSavingGroupDesc] = useState(false);
   const scrollRef = useRef(null);
@@ -114,11 +188,20 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     : (resolvedDisplay?.name != null ? resolvedDisplay.name : conversation?.name) ?? DEFAULT_WELCOME_MESSAGE.senderName;
   const profileImageUrl =
     getUserProfileImageUrl(resolvedDisplay) || getUserProfileImageUrl(conversation);
+  const profileAvatarUrl = normalizeAvatarUrl(profileImageUrl);
+  const headerAvatarSource =
+    !headerAvatarFailed && profileAvatarUrl
+      ? {uri: profileAvatarUrl}
+      : DEFAULT_CHAT_AVATAR;
+  const senderAvatarSource =
+    !senderAvatarFailed && profileAvatarUrl
+      ? {uri: profileAvatarUrl}
+      : DEFAULT_CHAT_AVATAR;
 
   const groupTitleResolved =
     (groupDetail?.title != null && String(groupDetail.title).trim()) || displayName;
   const groupAvatarResolved =
-    (groupDetail?.profileImageUrl != null && String(groupDetail.profileImageUrl).trim()) ||
+    getUserProfileImageUrl(groupDetail) ||
     profileImageUrl;
 
   const senderNameByEmail = useMemo(() => {
@@ -128,6 +211,92 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     }
     return m;
   }, [groupMembersList]);
+  const groupMemberEmailsSet = useMemo(
+    () => new Set(groupMembersList.map((m) => String(m?.email || '').trim().toLowerCase()).filter(Boolean)),
+    [groupMembersList],
+  );
+  const groupAddAudience = useMemo(() => {
+    const isBrokerType = (st) => String(st || '').trim().toLowerCase() === 'broker';
+    const others = groupMembersList.filter((m) => {
+      const em = String(m?.email || '').trim().toLowerCase();
+      return em && em !== myEmail;
+    });
+    const hasNonBroker = others.some((m) => !isBrokerType(m?.subscriptionType));
+    return hasNonBroker ? 'regular' : 'broker_only';
+  }, [groupMembersList, myEmail]);
+
+  useEffect(() => {
+    if (!isGroupThread || groupMembersList.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      for (const member of groupMembersList) {
+        const refRaw =
+          member?.email != null && String(member.email).trim()
+            ? String(member.email).trim()
+            : member?.user_id != null && String(member.user_id).trim()
+              ? String(member.user_id).trim()
+              : member?.id != null && String(member.id).trim()
+                ? String(member.id).trim()
+                : null;
+        if (!refRaw) continue;
+        const ref = refRaw.toLowerCase();
+        const existing = normalizeAvatarUrl(getUserProfileImageUrl(member));
+        const overrideExisting = normalizeAvatarUrl(groupMemberAvatarOverrides[ref] || null);
+        if (existing || overrideExisting) continue;
+        try {
+          const res = await getChatParticipantDisplay(refRaw);
+          const resolved = normalizeAvatarUrl(
+            getUserProfileImageUrl(res) ||
+              res?.profileImageUrl ||
+              res?.profile_picture_url ||
+              null,
+          );
+          logProfilePic(`ChatScreen.groupMember.lookup.${ref}`, {
+            memberRef: refRaw,
+            success: !!res?.success,
+            apiProfileImageUrl: res?.profileImageUrl ?? null,
+            apiProfile_picture_url: res?.profile_picture_url ?? null,
+            resolved,
+          });
+          if (!cancelled && resolved) {
+            setGroupMemberAvatarOverrides((prev) =>
+              prev[ref] === resolved ? prev : {...prev, [ref]: resolved},
+            );
+          }
+        } catch (_) {
+          // best-effort avatar lookup
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isGroupThread, groupMembersList, groupMemberAvatarOverrides]);
+
+  useEffect(() => {
+    if (!showAddMembersModal || !isGroupThread || !groupConversationId || !myEmail) return;
+    let cancelled = false;
+    setAddMembersLoading(true);
+    getUsersForGroupPicker(addMembersSearch, myEmail, groupAddAudience)
+      .then((res) => {
+        if (cancelled) return;
+        const list = (res?.users || []).filter((u) => {
+          const em = String(u?.email || '').trim().toLowerCase();
+          return !!em && !groupMemberEmailsSet.has(em);
+        });
+        setAddMembersCandidates(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAddMembersCandidates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAddMembersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showAddMembersModal, isGroupThread, groupConversationId, myEmail, addMembersSearch, groupAddAudience, groupMemberEmailsSet]);
 
   const getChatDisplays = useCallback(() => {
     const receiverPic = getUserProfileImageUrl(conversation);
@@ -174,13 +343,22 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [isGroupThread, groupConversationId, isDirectPeer, myEmail, otherUserEmail]);
 
   useEffect(() => {
-    if (!isDirectPeer || !otherUserEmail) return;
-    const hasGoodDisplay =
-      (conversation?.name && conversation.name !== 'משתמש') || getUserProfileImageUrl(conversation);
-    if (hasGoodDisplay) return;
+    if (!isUser || !otherUserRef) return;
+    const hasName =
+      conversation?.name != null && String(conversation.name).trim() !== '';
+    const hasRealImage = !!normalizeAvatarUrl(getUserProfileImageUrl(conversation));
+    if (hasName && hasRealImage) return;
     let cancelled = false;
-    getChatParticipantDisplay(otherUserEmail)
+    getChatParticipantDisplay(otherUserRef)
       .then((res) => {
+        logProfilePic('ChatScreen.getChatParticipantDisplay', {
+          otherUserRef,
+          success: res?.success,
+          name: res?.name,
+          profile_picture_url: res?.profile_picture_url,
+          profileImageUrl: res?.profileImageUrl,
+          resolvedPic: getUserProfileImageUrl(res),
+        });
         if (!cancelled && res.success && (res.name || getUserProfileImageUrl(res)))
           setResolvedDisplay({
             name: res.name || null,
@@ -189,7 +367,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [isDirectPeer, otherUserEmail, conversation?.name, conversation?.profileImageUrl]);
+  }, [isUser, otherUserRef, conversation?.name, conversation?.profileImageUrl]);
+
+  useEffect(() => {
+    setHeaderAvatarFailed(false);
+    setSenderAvatarFailed(false);
+  }, [profileAvatarUrl]);
 
   useEffect(() => {
     if (!myEmail) return;
@@ -282,6 +465,40 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     groupConversationId,
     groupDescDraft,
   ]);
+
+  const openAddMembersModal = useCallback(() => {
+    if (!isGroupThread || !groupConversationId) return;
+    setAddMembersSearch('');
+    setAddMembersSelected({});
+    setShowAddMembersModal(true);
+  }, [isGroupThread, groupConversationId]);
+
+  const toggleAddMember = useCallback((email) => {
+    const key = String(email || '').trim().toLowerCase();
+    if (!key) return;
+    setAddMembersSelected((prev) => ({...prev, [key]: !prev[key]}));
+  }, []);
+
+  const submitAddMembers = useCallback(async () => {
+    const picked = Object.keys(addMembersSelected).filter((k) => addMembersSelected[k]);
+    if (!myEmail || !groupConversationId || picked.length === 0 || addMembersSubmitting) return;
+    try {
+      setAddMembersSubmitting(true);
+      await addMembersToChatGroup({
+        userEmail: myEmail,
+        conversationId: groupConversationId,
+        memberEmails: picked,
+      });
+      setShowAddMembersModal(false);
+      setAddMembersSelected({});
+      setAddMembersSearch('');
+      fetchMessages();
+    } catch (e) {
+      Alert.alert('', e?.message ? String(e.message) : 'הוספת חברים נכשלה');
+    } finally {
+      setAddMembersSubmitting(false);
+    }
+  }, [addMembersSelected, myEmail, groupConversationId, addMembersSubmitting, fetchMessages]);
 
   useEffect(() => {
     if (!conversationId || !myEmail || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
@@ -595,7 +812,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       const sid = m.senderId != null ? String(m.senderId).trim().toLowerCase() : '';
       const peerPic =
         isGroupThread && sid
-          ? groupMembersList.find((row) => String(row.email).trim().toLowerCase() === sid)?.profileImageUrl
+          ? getUserProfileImageUrl(
+              groupMembersList.find((row) => String(row.email).trim().toLowerCase() === sid),
+            )
           : null;
       return (
       <View
@@ -607,12 +826,15 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               peerPic ? (
                 <Image source={{uri: peerPic}} style={styles.senderLogo} resizeMode="cover" />
               ) : (
-                <Image source={require('../assets/image-copy-10.png')} style={styles.senderLogo} resizeMode="cover" />
+                <Image source={DEFAULT_CHAT_AVATAR} style={styles.senderLogo} resizeMode="cover" />
               )
-            ) : profileImageUrl ? (
-              <Image source={{ uri: profileImageUrl }} style={styles.senderLogo} resizeMode="cover" />
             ) : (
-              <Image source={require('../assets/image-copy-10.png')} style={styles.senderLogo} resizeMode="cover" />
+              <Image
+                source={senderAvatarSource}
+                style={styles.senderLogo}
+                resizeMode="cover"
+                onError={() => setSenderAvatarFailed(true)}
+              />
             )}
           </View>
         )}
@@ -657,6 +879,94 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const canSubmitMessage =
     !sending && (inputText || '').trim().length > 0 && (isWelcome || (isDirectPeer || (isGroupThread && groupConversationId)));
 
+  const offerLocationText = useMemo(() => {
+    const src = exclusiveListingData || sharedListing || {};
+    const city =
+      src.city != null
+        ? String(src.city).trim()
+        : src.city_name != null
+          ? String(src.city_name).trim()
+          : src.town != null
+            ? String(src.town).trim()
+            : '';
+    const street =
+      src.street != null
+        ? String(src.street).trim()
+        : src.street_name != null
+          ? String(src.street_name).trim()
+          : '';
+    const hn =
+      src.house_number != null
+        ? String(src.house_number).trim()
+        : src.houseNumber != null
+          ? String(src.houseNumber).trim()
+          : '';
+    const neighborhood =
+      src.neighborhood != null
+        ? String(src.neighborhood).trim()
+        : src.area != null
+          ? String(src.area).trim()
+          : '';
+    const fullAddress =
+      src.address != null
+        ? String(src.address).trim()
+        : src.full_address != null
+          ? String(src.full_address).trim()
+          : src.listing_address != null
+            ? String(src.listing_address).trim()
+            : src.location != null
+              ? String(src.location).trim()
+              : '';
+    const parts = [];
+    if (fullAddress) parts.push(fullAddress);
+    if (street) parts.push(street + (hn ? ` ${hn}` : ''));
+    if (neighborhood) parts.push(neighborhood);
+    if (city) parts.push(city);
+    const unique = [...new Set(parts.filter(Boolean))];
+    return unique.join(', ') || 'מיקום לא זמין';
+  }, [exclusiveListingData, sharedListing]);
+
+  const offerPriceText = useMemo(() => {
+    const src = exclusiveListingData || sharedListing || {};
+    const raw = src.price ?? src.listing_price ?? src.asking_price ?? src.rent_price ?? null;
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return '₪0';
+    return `₪${num.toLocaleString('en-US')}`;
+  }, [exclusiveListingData, sharedListing]);
+
+  const offerImageUri = useMemo(() => {
+    const src = exclusiveListingData || sharedListing || {};
+    return (
+      src.main_image_url ||
+      src.mainImageUrl ||
+      (Array.isArray(src.listing_images) && src.listing_images[0]?.image_url) ||
+      (Array.isArray(src.image_urls) && src.image_urls[0]) ||
+      null
+    );
+  }, [exclusiveListingData, sharedListing]);
+
+  useEffect(() => {
+    if (!showExclusiveOfferModal || !contextListingId) return;
+    let cancelled = false;
+    setExclusiveLoadingListing(true);
+    getListings({})
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.listings) ? res.listings : [];
+        const found = rows.find((r) => String(r?.id || '').trim() === String(contextListingId).trim()) || null;
+        setExclusiveListingData(found);
+      })
+      .catch(() => {
+        if (!cancelled) setExclusiveListingData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setExclusiveLoadingListing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showExclusiveOfferModal, contextListingId]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -695,11 +1005,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           <>
             <TouchableOpacity onPress={onClose} style={styles.headerLeft} activeOpacity={0.7} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
-              {profileImageUrl ? (
-                <Image source={{ uri: profileImageUrl }} style={styles.headerAvatarImage} resizeMode="cover" />
-              ) : (
-                <Image source={require('../assets/image-copy-10.png')} style={styles.headerAvatarImage} resizeMode="cover" />
-              )}
+              <Image
+                source={headerAvatarSource}
+                style={styles.headerAvatarImage}
+                resizeMode="cover"
+                onError={() => setHeaderAvatarFailed(true)}
+              />
               <View style={styles.headerTitleWrap}>
                 <Text style={styles.headerTitle}>{displayName}</Text>
                 <Text style={styles.headerSubtitle}>מחובר/ת</Text>
@@ -726,7 +1037,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           <Image
             source={require('../assets/pi-chat/background.png')}
             style={styles.chatBackgroundImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
           <ScrollView
             ref={scrollRef}
@@ -734,6 +1045,22 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
+            {isDirectPeer && isBrokerUser ? (
+              <View style={styles.exclusiveCtaWrap}>
+                <TouchableOpacity
+                  activeOpacity={0.82}
+                  onPress={() => setShowExclusiveOfferModal(true)}
+                  style={styles.exclusiveCtaBtnHit}
+                  accessibilityRole="button"
+                  accessibilityLabel="שלח הצעה לבלעדיות">
+                  <Image
+                    source={require('../assets/pi-chat/send-req.png')}
+                    style={styles.exclusiveCtaImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {isGroupThread && groupConversationId ? (
               <View style={styles.groupInfoCard}>
                 <View style={styles.groupInfoAvatarRing}>
@@ -756,19 +1083,36 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 ) : (
                   <View style={styles.groupMemberStack}>
                     {groupMembersList.slice(0, 12).map((member, i) => (
-                      <View
-                        key={member.email || `m-${i}`}
-                        style={[styles.groupMemberOverlap, i > 0 && styles.groupMemberOverlapShift]}>
-                        {member.profileImageUrl ? (
-                          <Image source={{uri: member.profileImageUrl}} style={styles.groupMemberAvatar} resizeMode="cover" />
-                        ) : (
-                          <Image
-                            source={require('../assets/image-copy-10.png')}
-                            style={styles.groupMemberAvatar}
-                            resizeMode="cover"
-                          />
-                        )}
-                      </View>
+                      (() => {
+                        const refRaw =
+                          member?.email != null && String(member.email).trim()
+                            ? String(member.email).trim()
+                            : member?.user_id != null && String(member.user_id).trim()
+                              ? String(member.user_id).trim()
+                              : member?.id != null && String(member.id).trim()
+                                ? String(member.id).trim()
+                                : '';
+                        const ref = refRaw.toLowerCase();
+                        const resolvedAvatar =
+                          normalizeAvatarUrl(getUserProfileImageUrl(member)) ||
+                          normalizeAvatarUrl(groupMemberAvatarOverrides[ref] || null) ||
+                          null;
+                        return (
+                          <View
+                            key={member.email || member.user_id || member.id || `m-${i}`}
+                            style={[styles.groupMemberOverlap, i > 0 && styles.groupMemberOverlapShift]}>
+                            {resolvedAvatar ? (
+                              <Image source={{uri: resolvedAvatar}} style={styles.groupMemberAvatar} resizeMode="cover" />
+                            ) : (
+                              <Image
+                                source={require('../assets/image-copy-10.png')}
+                                style={styles.groupMemberAvatar}
+                                resizeMode="cover"
+                              />
+                            )}
+                          </View>
+                        );
+                      })()
                     ))}
                   </View>
                 )}
@@ -787,7 +1131,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.88}
-                  onPress={() => Alert.alert('', 'הוספת חברים לקבוצה — בקרוב')}
+                  onPress={openAddMembersModal}
                   style={styles.groupAddMembersBtnWrap}
                   accessibilityRole="button"
                   accessibilityLabel="הוסף חברים נוספים">
@@ -829,7 +1173,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             onPress={composerActive && !isWelcome && !sending && !isRecording ? handleSendPhoto : undefined}
             disabled={!composerActive || isWelcome || sending || isRecording}>
             <Image
-              source={require('../assets/pi-chat/camera.png')}
+              source={require('../assets/pi-chat/chat-camera.png')}
               style={styles.inputBarAssetIcon}
               resizeMode="contain"
             />
@@ -874,6 +1218,192 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           )}
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showExclusiveOfferModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowExclusiveOfferModal(false)}>
+        <View style={styles.offerRoot}>
+          <View style={styles.offerHeader}>
+            <View style={styles.offerStatusSpacer} />
+            <View style={styles.offerHeaderRow}>
+              <TouchableOpacity
+                onPress={() => setShowExclusiveOfferModal(false)}
+                style={styles.offerNavAction}
+                activeOpacity={0.7}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
+                <MaterialCommunityIcons name="chevron-left" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.offerHeaderTitle}>הצעה לבלעדיות</Text>
+              <View style={styles.offerNavAction} />
+            </View>
+          </View>
+
+          <ScrollView style={styles.offerScroll} contentContainerStyle={styles.offerScrollContent}>
+            <View style={styles.offerListingCard}>
+              <View style={styles.offerListingTextCol}>
+                <View style={styles.offerTagsRow}>
+                  {listingDisplayNumber ? (
+                    <View style={styles.offerTagDark}>
+                      <Text style={styles.offerTagDarkText}>{`מודעה מס ${listingDisplayNumber}`}</Text>
+                    </View>
+                  ) : null}
+                  {listingCategoryLabel ? (
+                    <View style={styles.offerTagCategory}>
+                      <Text style={styles.offerTagCategoryText}>{listingCategoryLabel}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.offerPrice}>{offerPriceText}</Text>
+                <View style={styles.offerLocationRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={18} color="#D2D0DC" />
+                  <Text style={styles.offerLocation}>{offerLocationText}</Text>
+                </View>
+              </View>
+              <View style={styles.offerImageWrap}>
+                {offerImageUri ? (
+                  <Image source={{uri: offerImageUri}} style={styles.offerImage} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.offerImage, styles.offerImageFallback]}>
+                    <MaterialCommunityIcons name="image-outline" size={28} color="#BDBBD0" />
+                  </View>
+                )}
+                {exclusiveLoadingListing ? (
+                  <View style={styles.offerImageLoading}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.offerCard}>
+              <Text style={styles.offerCardTitle}>תקופת בלעדיות</Text>
+              <Text style={styles.offerCardSubtitle}>תוך כמה חודשים אתם מתחייבים למצוא שוכר?</Text>
+              <View style={styles.offerScaleNumbers}>
+                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
+                  <Text key={n} style={styles.offerScaleNumber}>{n}</Text>
+                ))}
+              </View>
+              <View style={styles.offerTimeline}>
+                <View style={styles.offerTimelineTrack} />
+                <View style={[styles.offerTimelineThumb, {left: `${(10 - exclusiveMonths) * (100 / 9)}%`}]} />
+              </View>
+              <View style={styles.offerScaleActions}>
+                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
+                  <Pressable key={`pick-${n}`} style={styles.offerPickHit} onPress={() => setExclusiveMonths(n)} />
+                ))}
+              </View>
+            </View>
+
+            <Text style={styles.offerSectionTitle}>הודעה לבעל הנכס</Text>
+            <TextInput
+              multiline
+              value={exclusiveMessage}
+              onChangeText={setExclusiveMessage}
+              style={styles.offerMessageInput}
+              textAlign="right"
+              placeholder="כתוב הודעה"
+              placeholderTextColor="rgba(255,255,255,0.55)"
+              {...(Platform.OS === 'web' ? {id: 'pi-chat-offer-message-textarea'} : {})}
+            />
+
+            <View style={styles.offerHowCard}>
+              <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
+              <Text style={styles.offerHowText}>
+                ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה.
+              </Text>
+            </View>
+          </ScrollView>
+
+          <View style={styles.offerFooter}>
+            <TouchableOpacity
+              style={styles.offerSubmitBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                Alert.alert('', 'הצעת בלעדיות נשלחה');
+                setShowExclusiveOfferModal(false);
+              }}>
+              <Text style={styles.offerSubmitText}>שלח הצעת בלעדיות</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAddMembersModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowAddMembersModal(false)}>
+        <View style={styles.addMembersRoot}>
+          <View style={styles.addMembersHeader}>
+            <TouchableOpacity onPress={() => setShowAddMembersModal(false)} style={styles.addMembersBackBtn} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.addMembersTitle}>הוסף חברים לקבוצה</Text>
+            <TouchableOpacity
+              onPress={submitAddMembers}
+              disabled={addMembersSubmitting || Object.keys(addMembersSelected).filter((k) => addMembersSelected[k]).length === 0}
+              style={styles.addMembersSaveBtn}
+              activeOpacity={0.7}>
+              {addMembersSubmitting ? (
+                <ActivityIndicator size="small" color={GOLD} />
+              ) : (
+                <Text style={styles.addMembersSaveText}>שמור</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          <View style={styles.addMembersSearchWrap}>
+            <TextInput
+              style={styles.addMembersSearchInput}
+              placeholder="חפש"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              value={addMembersSearch}
+              onChangeText={setAddMembersSearch}
+            />
+            <MaterialCommunityIcons name="magnify" size={22} color="rgba(255,255,255,0.55)" style={styles.addMembersSearchIcon} />
+          </View>
+          <ScrollView style={styles.addMembersScroll} contentContainerStyle={styles.addMembersScrollContent} keyboardShouldPersistTaps="handled">
+            {addMembersLoading ? (
+              <View style={styles.addMembersLoadingWrap}>
+                <ActivityIndicator size="small" color={GOLD} />
+              </View>
+            ) : addMembersCandidates.length === 0 ? (
+              <Text style={styles.addMembersEmpty}>לא נמצאו משתמשים מתאימים להוספה.</Text>
+            ) : (
+              addMembersCandidates.map((row, i) => {
+                const email = String(row?.email || '').trim().toLowerCase();
+                const checked = !!addMembersSelected[email];
+                const pic = normalizeAvatarUrl(getUserProfileImageUrl(row));
+                return (
+                  <Pressable
+                    key={email || row?.id || `cand-${i}`}
+                    style={[styles.addMemberRow, i > 0 && styles.addMemberRowBorder]}
+                    onPress={() => toggleAddMember(email)}
+                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                    <View style={styles.addMemberCheckCol}>
+                      <View style={[styles.addMemberCheckOuter, checked && styles.addMemberCheckOuterOn]}>
+                        {checked ? <View style={styles.addMemberCheckInner} /> : null}
+                      </View>
+                    </View>
+                    <View style={styles.addMemberTextCol}>
+                      <Text style={styles.addMemberName} numberOfLines={1}>{row?.title || email}</Text>
+                      <Text style={styles.addMemberSub} numberOfLines={1}>{row?.subtitle || email}</Text>
+                    </View>
+                    <View style={styles.addMemberAvatarRing}>
+                      <Image
+                        source={pic ? {uri: pic} : require('../assets/image-copy-10.png')}
+                        style={styles.addMemberAvatar}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <Modal
         visible={showGroupDescModal}
@@ -1004,36 +1534,38 @@ const styles = StyleSheet.create({
   },
   groupInfoCard: {
     backgroundColor: '#2B2A39',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 18,
+    borderRadius: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
     marginBottom: 20,
     alignItems: 'center',
     width: '100%',
   },
   groupInfoAvatarRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     overflow: 'hidden',
-    backgroundColor: 'transparent',
-    marginBottom: 14,
+    backgroundColor: '#4D4966',
+    marginBottom: 16,
   },
   groupInfoAvatarImg: {width: '100%', height: '100%'},
   groupInfoTitle: {
     color: '#fff',
-    fontSize: 22,
-    fontFamily: 'Rubik-Medium',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
     textAlign: 'center',
     marginBottom: 16,
   },
   groupInfoMembersLabel: {
-    color: TEXT_LIGHT,
-    fontSize: 14,
+    color: '#D2D0DC',
+    fontSize: 18,
+    lineHeight: 18,
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
     alignSelf: 'stretch',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   groupMemberStackLoading: {
     minHeight: 44,
@@ -1045,34 +1577,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
+    marginBottom: 24,
     paddingHorizontal: 8,
   },
   groupMemberOverlap: {
-    borderWidth: 2,
-    borderColor: CHAT_CHROME_BG,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderWidth: 1.5,
+    borderColor: '#FFE8A8',
+    borderRadius: 19,
     overflow: 'hidden',
   },
   groupMemberOverlapShift: {
-    marginLeft: -14,
+    marginLeft: -8,
   },
-  groupMemberAvatar: {width: 40, height: 40, borderRadius: 20},
+  groupMemberAvatar: {width: '100%', height: '100%', borderRadius: 19},
   groupDescPreview: {
-    color: TEXT_LIGHT,
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 20,
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
     alignSelf: 'stretch',
-    marginBottom: 10,
-    lineHeight: 20,
+    marginBottom: 20,
+    lineHeight: 26,
   },
-  groupAddDescHit: {marginBottom: 16},
+  groupAddDescHit: {marginBottom: 20},
   groupAddDesc: {
-    color: GOLD,
+    color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Rubik-Regular',
-    textDecorationLine: 'underline',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFFFFF',
+    paddingBottom: 3,
     textAlign: 'center',
   },
   groupDescModalRoot: {
@@ -1146,13 +1682,429 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   groupAddMembersBtnWrap: {
-    alignSelf: 'stretch',
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
   },
   groupAddMembersImage: {
+    width: 300,
+    height: 50,
+  },
+  addMembersRoot: {
+    flex: 1,
+    backgroundColor: '#1E1D27',
+    ...(isWeb && {minHeight: '100vh'}),
+  },
+  addMembersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 52,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  addMembersBackBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMembersTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  addMembersSaveBtn: {
+    minWidth: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  addMembersSaveText: {
+    color: GOLD,
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+  },
+  addMembersSearchWrap: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    minHeight: 48,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+  },
+  addMembersSearchInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    paddingLeft: 16,
+    paddingRight: 46,
+    paddingVertical: 8,
+    textAlign: 'right',
+  },
+  addMembersSearchIcon: {
+    position: 'absolute',
+    right: 14,
+  },
+  addMembersScroll: {
+    flex: 1,
+    marginTop: 12,
+  },
+  addMembersScrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  addMembersLoadingWrap: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMembersEmpty: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    paddingTop: 12,
+  },
+  addMemberRow: {
+    minHeight: 84,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addMemberRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  addMemberCheckCol: {
+    width: 38,
+    alignItems: 'flex-start',
+  },
+  addMemberCheckOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMemberCheckOuterOn: {
+    borderColor: GOLD,
+    backgroundColor: 'rgba(212,175,55,0.16)',
+  },
+  addMemberCheckInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: GOLD,
+  },
+  addMemberTextCol: {
+    flex: 1,
+    alignItems: 'flex-end',
+    minWidth: 0,
+  },
+  addMemberName: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+  },
+  addMemberSub: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  addMemberAvatarRing: {
+    marginLeft: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  addMemberAvatar: {
     width: '100%',
-    height: 52,
+    height: '100%',
+  },
+  exclusiveCtaWrap: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    backgroundColor: CHAT_CHROME_BG,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: -16,
+    marginTop: -16,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  exclusiveCtaBtnHit: {
+    borderRadius: 30,
+  },
+  exclusiveCtaBtn: {
+    minHeight: 56,
+    borderRadius: 28,
+    paddingHorizontal: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    ...(isWeb ? {boxShadow: '0px 6px 14px rgba(0,0,0,0.28)'} : null),
+  },
+  exclusiveCtaImage: {
+    width: 132,
+    height: 28,
+  },
+  offerRoot: {
+    flex: 1,
+    backgroundColor: '#1E1D27',
+    ...(isWeb && {minHeight: '100vh'}),
+  },
+  offerHeader: {
+    paddingBottom: 10,
+    backgroundColor: '#1E1D27',
+  },
+  offerStatusSpacer: {
+    height: 43,
+  },
+  offerHeaderRow: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+  },
+  offerNavAction: {
+    width: 24,
+    height: 24,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  offerHeaderTitle: {
+    flex: 1,
+    marginHorizontal: 12,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  offerScroll: {flex: 1},
+  offerScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 112,
+    gap: 16,
+  },
+  offerListingCard: {
+    backgroundColor: '#2B2A39',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  offerListingTextCol: {flex: 1, alignItems: 'flex-end'},
+  offerTagsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  offerTagDark: {
+    backgroundColor: '#3A3A4A',
+    borderRadius: 1000,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  offerTagDarkText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+  },
+  offerTagCategory: {
+    backgroundColor: '#5A5972',
+    borderRadius: 1000,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  offerTagCategoryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+  },
+  offerPrice: {
+    color: '#F7F3E6',
+    fontSize: 34 / 1.55,
+    fontFamily: 'Rubik-Medium',
+    marginBottom: 6,
+  },
+  offerLocationRow: {flexDirection: 'row-reverse', alignItems: 'center', gap: 4},
+  offerLocation: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+  },
+  offerImageWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#3A3A4A',
+    position: 'relative',
+  },
+  offerImage: {width: '100%', height: '100%'},
+  offerImageFallback: {alignItems: 'center', justifyContent: 'center'},
+  offerImageLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerCard: {
+    backgroundColor: '#2B2A39',
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+  },
+  offerCardTitle: {
+    color: '#D2D0DC',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  offerCardSubtitle: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  offerScaleNumbers: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  offerScaleNumber: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+  },
+  offerTimeline: {
+    height: 24,
+    justifyContent: 'center',
+    position: 'relative',
+    marginHorizontal: 4,
+  },
+  offerTimelineTrack: {
+    height: 4,
+    borderRadius: 1000,
+    backgroundColor: '#D2D0DC',
+  },
+  offerTimelineThumb: {
+    position: 'absolute',
+    top: 1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F9C74F',
+    marginLeft: -11,
+  },
+  offerScaleActions: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  offerPickHit: {width: 26, height: 30},
+  offerSectionTitle: {
+    color: '#D2D0DC',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  offerMessageInput: {
+    minHeight: 142,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#8C85B3',
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 28,
+    fontFamily: 'Rubik-Regular',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    textAlignVertical: 'top',
+    backgroundColor: 'transparent',
+  },
+  offerHowCard: {
+    backgroundColor: '#2B2A39',
+    borderRadius: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+  },
+  offerHowTitle: {
+    color: '#D2D0DC',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginBottom: 10,
+  },
+  offerHowText: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  offerFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: isWeb ? 12 : 20,
+    backgroundColor: 'rgba(30,29,39,0.95)',
+  },
+  offerSubmitBtn: {
+    height: 44,
+    borderRadius: 846.154,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    ...(isWeb
+      ? {backgroundImage: 'linear-gradient(182.012deg, rgb(254, 231, 135) 4.5575%, rgb(189, 153, 71) 50.763%, rgb(156, 101, 34) 88.314%)'}
+      : {backgroundColor: '#D4AF37'}),
+  },
+  offerSubmitText: {
+    color: '#1E1D27',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   chatArea: {
     flex: 1,
@@ -1243,7 +2195,6 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    direction: 'ltr',
     paddingHorizontal: 10,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 28 : 14,

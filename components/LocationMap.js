@@ -10,7 +10,17 @@ import {
   Image,
 } from 'react-native';
 import {WebView} from 'react-native-webview';
-import MapView, {Marker, Callout} from 'react-native-maps';
+
+// Avoid resolving react-native-maps on web bundle.
+let MapView = null;
+let Marker = null;
+let Callout = null;
+if (Platform.OS !== 'web') {
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Marker = Maps.Marker;
+  Callout = Maps.Callout;
+}
 
 const MAP_HEIGHT = 230;
 const DEFAULT_DELTA = 0.008;
@@ -117,7 +127,7 @@ export default function LocationMap({address, containerStyle}) {
       <View style={styles.loaderWrap}>
         <ActivityIndicator size="small" color="#f2c200" />
       </View>
-    ) : coords && region ? (
+    ) : coords && region && MapView && Marker && Callout ? (
       <View style={styles.nativeMapWrap}>
         <MapView
           style={styles.map}

@@ -102,6 +102,30 @@ const SMART_BUTTONS = [
   {label: 'מרכזי קניות', key: 'shopping'},
 ];
 
+function isPostListingRecord(item) {
+  if (!item) return false;
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  const description = String(item.description || item.desc || '').toLowerCase();
+  return (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    description === 'post' ||
+    description === 'פוסט' ||
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  );
+}
+
 // apr-details layout (assets/apr-details): (1)=מ"ר, (2)=קומה, (3)=מעלית, (4)=ממ"ד, (5)=כניסה מיידית,
 // (6)=חדרים, (7)=מרפסת, (8)=משופץ, (10)=חנייה. Web: public/apr-details/{n}.png
 const featureIconFileNumByKey = {
@@ -187,6 +211,8 @@ const UserProfileScreen = ({
 
   // When feed didn't return creator, fetch by subscription_id / owner_id
   const [resolvedCreator, setResolvedCreator] = useState(null);
+  const [userListings, setUserListings] = useState([]);
+  const [userListingsLoading, setUserListingsLoading] = useState(false);
   useEffect(() => {
     setResolvedCreator(null);
   }, [user?.id, creatorId]);
@@ -675,6 +701,50 @@ const UserProfileScreen = ({
       );
     return [];
   })();
+  const openedFromPost = isPostListingRecord(user);
+  const recentPostGridImages = (() => {
+    if (!openedFromPost) return [];
+    const rows = Array.isArray(userListings) ? [...userListings] : [];
+    if (user && isPostListingRecord(user)) {
+      rows.unshift(user);
+    }
+    const postRows = rows.filter(isPostListingRecord);
+    const seenIds = new Set();
+    const uniquePostRows = postRows.filter(row => {
+      const id = String(row?.id || '').trim();
+      if (!id) return true;
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+      return true;
+    });
+    uniquePostRows.sort((a, b) => {
+      const ta = new Date(a?.created_at || a?.createdAt || 0).getTime();
+      const tb = new Date(b?.created_at || b?.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    const firstImageFor = item => {
+      const listingImgs = Array.isArray(item?.listing_images) ? item.listing_images : [];
+      for (const img of listingImgs) {
+        const uri =
+          img && typeof img === 'object'
+            ? String(img.image_url || img.uri || '').trim()
+            : String(img || '').trim();
+        if (uri) return {uri};
+      }
+      const directImgs = Array.isArray(item?.images) ? item.images : [];
+      for (const img of directImgs) {
+        const uri =
+          img && typeof img === 'object'
+            ? String(img.uri || img.image_url || '').trim()
+            : String(img || '').trim();
+        if (uri) return {uri};
+      }
+      const directUri = String(item?.main_image_url || item?.image_url || '').trim();
+      if (directUri) return {uri: directUri};
+      return null;
+    };
+    return uniquePostRows.map(firstImageFor).filter(Boolean).slice(0, 6);
+  })();
 
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
@@ -682,8 +752,6 @@ const UserProfileScreen = ({
   const [smartInfoText, setSmartInfoText] = useState('');
   const [smartInfoLoading, setSmartInfoLoading] = useState(false);
   const adAddress = lastAd?.address || lastAd?.location || '';
-  const [userListings, setUserListings] = useState([]);
-  const [userListingsLoading, setUserListingsLoading] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviews, setReviews] = useState([]);
@@ -715,6 +783,12 @@ const UserProfileScreen = ({
   ).toLowerCase();
   const isCompany = profileSubscriptionType === 'company';
   const isBroker = profileSubscriptionType === 'broker';
+  const isProfessional = profileSubscriptionType === 'professional';
+  const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
+  const isRegularUserAdView =
+    isRegularUserAccount && isListingFromFeed && !openedFromPost;
+  const hideMyPropertiesSection = openedFromPost && isProfessional;
+  const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
   );
@@ -1004,6 +1078,7 @@ const UserProfileScreen = ({
   }, [lastAdImages.length, lastAdCardWidth]);
 
   const renderPiRating = () => {
+    if (isRegularUserAdView) return null;
     return (
       <View style={styles.lastAdPiBadge}>
         <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
@@ -1109,11 +1184,41 @@ const UserProfileScreen = ({
           <View style={styles.lastAdCard}>
             <View
               style={
-                lastAdImages.length > 0
-                  ? styles.lastAdImageWrapGridMode
-                  : styles.lastAdImageWrap
+                openedFromPost ? styles.lastAdImageWrapGridMode : styles.lastAdImageWrap
               }>
-              {lastAdImages.length > 0 && (isCompany || isBroker) ? (
+              {openedFromPost ? (
+                <View style={styles.lastAdGrid}>
+                  {Array.from({length: 6}, (_, i) => recentPostGridImages[i] || null).map(
+                    (item, i) =>
+                      item ? (
+                        <TouchableOpacity
+                          key={i}
+                          style={styles.lastAdGridItem}
+                          activeOpacity={0.85}
+                          onPress={() => {}}>
+                          <Image
+                            source={item}
+                            style={styles.lastAdGridImage}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      ) : (
+                        <View
+                          key={i}
+                          style={[
+                            styles.lastAdGridItem,
+                            styles.lastAdGridPlaceholderCell,
+                          ]}>
+                          <MaterialCommunityIcons
+                            name="camera-outline"
+                            size={24}
+                            color="rgba(255,255,255,0.45)"
+                          />
+                        </View>
+                      ),
+                  )}
+                </View>
+              ) : lastAdImages.length > 0 ? (
                 <>
                   <FlatList
                     ref={lastAdCarouselRef}
@@ -1163,26 +1268,6 @@ const UserProfileScreen = ({
                     />
                   </TouchableOpacity>
                 </>
-              ) : lastAdImages.length > 0 ? (
-                <View style={styles.lastAdGrid}>
-                  {lastAdImages.slice(0, 6).map((item, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={styles.lastAdGridItem}
-                      activeOpacity={0.85}
-                      onPress={() => {
-                        setLastAdImageIndex(i);
-                        setFullScreenImageIndex(i);
-                        setFullScreenImageModalVisible(true);
-                      }}>
-                      <Image
-                        source={item}
-                        style={styles.lastAdGridImage}
-                        resizeMode="cover"
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
               ) : (
                 <View
                   style={[styles.lastAdImage, styles.lastAdImagePlaceholder]}>
@@ -1195,6 +1280,7 @@ const UserProfileScreen = ({
               )}
             </View>
 
+            {!openedFromPost && (
             <View style={styles.lastAdBody}>
               <View style={styles.lastAdPiAndPurposeRow}>
                 {renderPiRating()}
@@ -1265,35 +1351,43 @@ const UserProfileScreen = ({
                 </View>
               )}
               {isCompany && <View style={styles.lastAdDivider} />}
-              <View style={styles.lastAdPostedBy}>
-                <Text style={styles.lastAdPostedByLabel}>פורסם ע"י</Text>
-                <View style={styles.brokerCardBottomLocation}>
-                  <Text style={styles.lastAdPostedByName}>{displayName}</Text>
-                  {lastAd.profileImageUrl || displayImage ? (
-                    <Image
-                      source={{uri: lastAd.profileImageUrl || displayImage}}
-                      style={styles.lastAdPostedByAvatar}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.lastAdPostedByAvatar,
-                        styles.lastAdPostedByAvatarPlaceholder,
-                      ]}>
-                      <MaterialCommunityIcons
-                        name="account"
-                        size={14}
-                        color="#fff"
-                      />
+              {isRegularUserAdView ? (
+                <Text style={styles.lastAdDescription} numberOfLines={6}>
+                  {String(lastAd.description || '').trim() || 'אין תיאור'}
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.lastAdPostedBy}>
+                    <Text style={styles.lastAdPostedByLabel}>פורסם ע"י</Text>
+                    <View style={styles.brokerCardBottomLocation}>
+                      <Text style={styles.lastAdPostedByName}>{displayName}</Text>
+                      {lastAd.profileImageUrl || displayImage ? (
+                        <Image
+                          source={{uri: lastAd.profileImageUrl || displayImage}}
+                          style={styles.lastAdPostedByAvatar}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.lastAdPostedByAvatar,
+                            styles.lastAdPostedByAvatarPlaceholder,
+                          ]}>
+                          <MaterialCommunityIcons
+                            name="account"
+                            size={14}
+                            color="#fff"
+                          />
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-              </View>
-              <Text style={styles.lastAdDescription} numberOfLines={6}>
-                {lastAd.description ||
-                  'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
-              </Text>
+                  </View>
+                  <Text style={styles.lastAdDescription} numberOfLines={6}>
+                    {lastAd.description ||
+                      'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
+                  </Text>
+                </>
+              )}
               <View style={styles.lastAdDivider} />
               {isBroker ? (
                 <>
@@ -1478,6 +1572,27 @@ const UserProfileScreen = ({
                       <View style={styles.lastAdDividerWhite} />
                     </>
                   ) : null}
+                  {isRegularUserAdView ? (
+                    <>
+                      <View style={styles.lastAdFeaturesGrid}>
+                        {adFeatures.map((item, index) => (
+                          <View
+                            key={`feat-regular-${item.iconKey}-${index}`}
+                            style={styles.lastAdFeatureChip}>
+                            <Text style={styles.smartInfoBtnLabel}>
+                              {item.label}
+                            </Text>
+                            <Image
+                              source={getFeatureIconSource(item.iconKey)}
+                              style={styles.smartInfoBtnIcon}
+                              resizeMode="contain"
+                            />
+                          </View>
+                        ))}
+                      </View>
+                      <View style={styles.lastAdDividerWhite} />
+                    </>
+                  ) : null}
                   {lastAd && (lastAd.address || lastAd.location) ? (
                     <LocationMap
                       address={lastAd.address || lastAd.location}
@@ -1503,73 +1618,81 @@ const UserProfileScreen = ({
                   </View> */}
                 </>
               )}
-              {!isBroker && !isCompany ? (
+              {!isBroker && !isCompany && !isRegularUserAdView ? (
                 <View style={styles.lastAdDividerWhite} />
               ) : null}
             </View>
+            )}
           </View>
         )}
 
-        <View style={styles.profileDivider} />
-        {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
-        <View style={styles.smartInfoBlock}>
-          <Image
-            source={logoPiAi}
-            style={styles.smartInfoLogo}
-            resizeMode="contain"
-          />
-          <Text style={styles.smartInfoIntro}>
-            קבל מידע חכם על סביבת הנכס בלחיצת כפתור
-          </Text>
-          <View style={styles.smartInfoGrid}>
-            {SMART_BUTTONS.map((item, index) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.smartInfoBtn,
-                  smartInfoLoading && styles.smartInfoBtnDisabled,
-                ]}
-                onPress={async () => {
-                  if (smartInfoLoading) return;
-                  setSmartInfoLoading(true);
-                  setSmartInfoText('');
-                  const result = await askSmartInfo(
-                    item.key,
-                    item.label,
-                    adAddress,
-                  );
-                  setSmartInfoLoading(false);
-                  if (result.success && result.text)
-                    setSmartInfoText(result.text);
-                  else if (result.text) setSmartInfoText(result.text);
-                }}
-                activeOpacity={0.8}
-                disabled={smartInfoLoading}>
-                <Text style={styles.smartInfoBtnLabel}>{item.label}</Text>
-                <Image
-                  source={buttonSources[index]}
-                  style={styles.smartInfoBtnIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            nativeID="smartInfoTextEntry"
-            style={styles.smartInfoTextEntry}
-            value={smartInfoText}
-            onChangeText={setSmartInfoText}
-            placeholder=""
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            multiline
-            // editable={false}
-          />
-        </View>
+        {!openedFromPost && (
+          <>
+            <View style={styles.profileDivider} />
+            {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
+            <View style={styles.smartInfoBlock}>
+              <Image
+                source={logoPiAi}
+                style={styles.smartInfoLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.smartInfoIntro}>
+                קבל מידע חכם על סביבת הנכס בלחיצת כפתור
+              </Text>
+              <View style={styles.smartInfoGrid}>
+                {SMART_BUTTONS.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.smartInfoBtn,
+                      smartInfoLoading && styles.smartInfoBtnDisabled,
+                    ]}
+                    onPress={async () => {
+                      if (smartInfoLoading) return;
+                      setSmartInfoLoading(true);
+                      setSmartInfoText('');
+                      const result = await askSmartInfo(
+                        item.key,
+                        item.label,
+                        adAddress,
+                      );
+                      setSmartInfoLoading(false);
+                      if (result.success && result.text)
+                        setSmartInfoText(result.text);
+                      else if (result.text) setSmartInfoText(result.text);
+                    }}
+                    activeOpacity={0.8}
+                    disabled={smartInfoLoading}>
+                    <Text style={styles.smartInfoBtnLabel}>{item.label}</Text>
+                    <Image
+                      source={buttonSources[index]}
+                      style={styles.smartInfoBtnIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                nativeID="smartInfoTextEntry"
+                style={styles.smartInfoTextEntry}
+                value={smartInfoText}
+                onChangeText={setSmartInfoText}
+                placeholder=""
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                multiline
+                // editable={false}
+              />
+            </View>
+          </>
+        )}
 
         {/* Broker block + My Properties – same scroll as whole screen */}
-        <View style={styles.brokerCardOverlayLine} />
+        {!isRegularUserAdView && !openedFromPost && (
+          <View style={styles.brokerCardOverlayLine} />
+        )}
+        {!isRegularUserAdView && (
         <View style={styles.brokerCardBottom}>
-          {!isCompany ? (
+          {!isCompany || showCompanyPostSpecialties ? (
             <>
               <View style={styles.brokerCardBottomHeader}>
                 <View style={styles.brokerCardBottomNameBlock}>
@@ -1587,6 +1710,7 @@ const UserProfileScreen = ({
                 </View>
                 {renderPiRating()}
               </View>
+              <View style={styles.brokerCardBottomSectionDivider} />
               <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
               <View style={styles.brokerCardBottomTags}>
                 {overlayActivityRegions.length > 0 ? (
@@ -1607,15 +1731,17 @@ const UserProfileScreen = ({
               </View>
             </>
           ) : null}
-          {isCompany ? (
+          {isCompany && !showCompanyPostSpecialties ? (
             <Text style={styles.brokerCardBottomSectionTitle}>אודות החברה</Text>
           ) : null}
           <Text style={styles.brokerCardBottomBio}>
             {brokerBio && String(brokerBio).trim() ? brokerBio : 'אין תיאור'}
           </Text>
-          <View style={styles.brokerCardBottomDivider} />
+          {!hideMyPropertiesSection && <View style={styles.brokerCardBottomDivider} />}
         </View>
+        )}
 
+        {!isRegularUserAdView && !hideMyPropertiesSection && (
         <View style={styles.myPropertiesSection}>
           <View style={styles.myPropertiesHeader}>
             <Text style={styles.myPropertiesTitle}>
@@ -1726,9 +1852,11 @@ const UserProfileScreen = ({
             />
           )}
         </View>
+        )}
 
         {/* Contact Details – פרטי התקשרות */}
-        <View style={styles.contactDetailsDivider} />
+        {!isRegularUserAdView && <View style={styles.contactDetailsDivider} />}
+        {!isRegularUserAdView && (
         <View style={styles.contactDetailsSection}>
           <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
           <View style={styles.contactDetailsContent}>
@@ -1805,9 +1933,11 @@ const UserProfileScreen = ({
             </TouchableOpacity>
           </View>
         </View>
-        <View style={styles.contactDetailsDivider} />
+        )}
+        {!isRegularUserAdView && <View style={styles.contactDetailsDivider} />}
 
         {/* Rating & Reviews – כמות כוכבי פאי / ביקורות */}
+        {!isRegularUserAdView ? (
         <View style={styles.reviewsSection}>
           <Text style={styles.reviewsPiTitle}>
             כמה כוכבי פאי היית נותן על השירות שקיבלת?
@@ -1964,6 +2094,21 @@ const UserProfileScreen = ({
             )}
           </View>
         </View>
+        ) : (
+          <View style={styles.profileCtaSection}>
+            <TouchableOpacity
+              style={styles.profileCtaWarningBtn}
+              onPress={handleReportPress}
+              activeOpacity={0.85}>
+              <Text style={styles.profileCtaWarningText}>דווח</Text>
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={22}
+                color="#F7F3E6"
+              />
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Full-screen image slider modal */}
@@ -2313,7 +2458,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 10,
+  },
+  brokerCardBottomSectionDivider: {
+    height: 1,
+    backgroundColor: '#373548',
+    alignSelf: 'stretch',
+    marginBottom: 12,
   },
   brokerCardBottomNameBlock: {
     flex: 1,
@@ -2569,9 +2720,14 @@ const styles = StyleSheet.create({
   reviewsStarBoxSelected: {backgroundColor: 'rgba(255,196,10,0.25)'},
   reviewsStarImageSmall: {width: 30, height: 30},
   reviewsStarImage: {width: 43, height: 43},
-  reviewsRateBtnWrap: {alignSelf: 'stretch'},
+  reviewsRateBtnWrap: {marginTop: 12, marginBottom: 24, alignSelf: 'stretch'},
   reviewsRateBtnPressed: {opacity: 0.85},
-  reviewsRateBtnImage: {width: '96%', borderRadius: 12, alignSelf: 'center'},
+  reviewsRateBtnImage: {
+    width: '86%',
+    height: 36,
+    borderRadius: 10,
+    alignSelf: 'center',
+  },
   reviewsListTitle: {
     color: '#D2D0DC',
     fontSize: 16,
@@ -2676,6 +2832,11 @@ const styles = StyleSheet.create({
     width: '33.3333%',
     aspectRatio: 1,
     padding: 1,
+  },
+  lastAdGridPlaceholderCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2B2A39',
   },
   lastAdGridImage: {
     width: '100%',

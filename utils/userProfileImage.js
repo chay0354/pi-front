@@ -1,3 +1,45 @@
+/** @type {Map<string, string>} */
+const profilePicLogLastSig = new Map();
+
+/**
+ * Dev-only: log profile-picture resolution. Filter the console by `[profile-pic]`.
+ * Skips logging when the same tag + payload was already logged (stops render/refetch spam).
+ * @param {string} tag - Short label (e.g. screen or action)
+ * @param {object} [payload] - Serializable fields only
+ */
+export function logProfilePic(tag, payload) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  const sig = payload !== undefined ? JSON.stringify(payload) : '';
+  if (profilePicLogLastSig.get(tag) === sig) return;
+  profilePicLogLastSig.set(tag, sig);
+  if (payload !== undefined) console.log('[profile-pic]', tag, payload);
+  else console.log('[profile-pic]', tag);
+}
+
+/**
+ * Keep `profile_picture_url` (API/DB) and `profileImageUrl` (camelCase) in sync on user objects.
+ * @param {object|null|undefined} user
+ * @returns {object|null|undefined}
+ */
+export function normalizeUserProfileAliases(user) {
+  if (user == null || typeof user !== 'object') return user;
+  const snake =
+    user.profile_picture_url != null && String(user.profile_picture_url).trim()
+      ? String(user.profile_picture_url).trim()
+      : '';
+  const camel =
+    user.profileImageUrl != null && String(user.profileImageUrl).trim()
+      ? String(user.profileImageUrl).trim()
+      : '';
+  const pic = snake || camel;
+  if (!pic) return user;
+  return {
+    ...user,
+    profile_picture_url: snake || camel,
+    profileImageUrl: camel || snake,
+  };
+}
+
 /**
  * Resolve the best avatar/profile image URL from user-like objects
  * (subscription, currentUser, listing, chat participant, review user).
@@ -8,11 +50,24 @@
  */
 export function getUserProfileImageUrl(entity) {
   if (!entity || typeof entity !== 'object') return null;
+  const isPlaceholder = value => {
+    const v = String(value || '').trim().toLowerCase();
+    if (!v) return true;
+    return (
+      v.includes('/assets/assets/image-copy-10.png') ||
+      v.endsWith('/image-copy-10.png') ||
+      v === 'image-copy-10.png'
+    );
+  };
   const candidates = [
     entity.profile_picture_url,
     entity.profilePictureUrl,
     entity.profile_photo_url,
     entity.profilePhotoUrl,
+    entity.group_image_url,
+    entity.groupImageUrl,
+    entity.group_avatar_url,
+    entity.groupAvatarUrl,
     entity.creator_profile_image_url,
     entity.creatorProfileImageUrl,
     entity.profile_image_url,
@@ -21,10 +76,14 @@ export function getUserProfileImageUrl(entity) {
     entity.companyLogoUrl,
     entity.logo_url,
     entity.logoUrl,
+    entity.subscription?.profile_picture_url,
+    entity.subscription?.profilePictureUrl,
+    entity.subscription?.profile_image_url,
+    entity.subscription?.profileImageUrl,
   ];
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
-    if (c != null && String(c).trim()) return String(c).trim();
+    if (c != null && String(c).trim() && !isPlaceholder(c)) return String(c).trim();
   }
   return null;
 }
