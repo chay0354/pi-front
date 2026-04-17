@@ -219,6 +219,11 @@ const ImageSwiper = ({
   if (displayOption === 'collage' && images.length > 0) {
     const imageCount = Math.min(images.length, 5); // Support up to 5 images
     const screenWidth = Dimensions.get('window').width;
+    /** When multiple images, inset from edges + gutters between cells (thicker than flush tiling). */
+    const COLLAGE_INSET = imageCount > 1 ? 3 : 0;
+    const COLLAGE_GUTTER = imageCount > 1 ? 6 : 0;
+    const iw = screenWidth - 2 * COLLAGE_INSET;
+    const ih = screenHeight - 2 * COLLAGE_INSET;
 
     // Define specific layouts for each image count
     const getImageLayout = index => {
@@ -232,74 +237,87 @@ const ImageSwiper = ({
             left: 0,
           };
 
-        case 2:
-          // Two images: Side by side
+        case 2: {
+          // Two images: Side by side with gutter
+          const cw = (iw - COLLAGE_GUTTER) / 2;
           return {
-            width: screenWidth / 2,
-            height: screenHeight,
-            top: 0,
-            left: index * (screenWidth / 2),
+            width: cw,
+            height: ih,
+            top: COLLAGE_INSET,
+            left: COLLAGE_INSET + index * (cw + COLLAGE_GUTTER),
           };
+        }
 
-        case 3:
+        case 3: {
           // Three images: One large on top, two small below
+          const hRow = (ih - COLLAGE_GUTTER) / 2;
+          const cw = (iw - COLLAGE_GUTTER) / 2;
           if (index === 0) {
             return {
-              width: screenWidth,
-              height: screenHeight / 2,
-              top: 0,
-              left: 0,
-            };
-          } else {
-            return {
-              width: screenWidth / 2,
-              height: screenHeight / 2,
-              top: screenHeight / 2,
-              left: (index - 1) * (screenWidth / 2),
+              width: iw,
+              height: hRow,
+              top: COLLAGE_INSET,
+              left: COLLAGE_INSET,
             };
           }
+          return {
+            width: cw,
+            height: hRow,
+            top: COLLAGE_INSET + hRow + COLLAGE_GUTTER,
+            left: COLLAGE_INSET + (index - 1) * (cw + COLLAGE_GUTTER),
+          };
+        }
 
-        case 4:
-          // Four images: 2x2 grid
+        case 4: {
+          // Four images: 2x2 grid with gutters
+          const cw = (iw - COLLAGE_GUTTER) / 2;
+          const ch = (ih - COLLAGE_GUTTER) / 2;
           const isTopRow = index < 2;
           return {
-            width: screenWidth / 2,
-            height: screenHeight / 2,
-            top: isTopRow ? 0 : screenHeight / 2,
-            left: (index % 2) * (screenWidth / 2),
+            width: cw,
+            height: ch,
+            top: COLLAGE_INSET + (isTopRow ? 0 : ch + COLLAGE_GUTTER),
+            left: COLLAGE_INSET + (index % 2) * (cw + COLLAGE_GUTTER),
           };
+        }
 
-        case 5:
+        case 5: {
           // Five images: 2 stacked on left + 3 stacked on right.
-          // Index map: [0,1] on left column, [2,3,4] on right column.
+          const leftColW = (iw - COLLAGE_GUTTER) / 2;
+          const leftCellH = (ih - COLLAGE_GUTTER) / 2;
+          const rightCellH = (ih - 2 * COLLAGE_GUTTER) / 3;
           if (index <= 1) {
-            const leftHeight = screenHeight / 2;
             return {
-              width: screenWidth / 2,
-              height: leftHeight,
-              top: index * leftHeight,
-              left: 0,
+              width: leftColW,
+              height: leftCellH,
+              top: COLLAGE_INSET + index * (leftCellH + COLLAGE_GUTTER),
+              left: COLLAGE_INSET,
             };
           }
-          const rightIndex = index - 2; // 0,1,2
-          const rightHeight = screenHeight / 3;
+          const rightIndex = index - 2;
           return {
-            width: screenWidth / 2,
-            height: rightHeight,
-            top: rightIndex * rightHeight,
-            left: screenWidth / 2,
+            width: leftColW,
+            height: rightCellH,
+            top: COLLAGE_INSET + rightIndex * (rightCellH + COLLAGE_GUTTER),
+            left: COLLAGE_INSET + leftColW + COLLAGE_GUTTER,
           };
+        }
 
-        default:
-          // Fallback: Equal grid
+        default: {
+          // Fallback: Equal grid with gutters
           const cols = Math.ceil(Math.sqrt(imageCount));
           const rows = Math.ceil(imageCount / cols);
+          const cw = (iw - COLLAGE_GUTTER * (cols - 1)) / cols;
+          const ch = (ih - COLLAGE_GUTTER * (rows - 1)) / rows;
+          const col = index % cols;
+          const row = Math.floor(index / cols);
           return {
-            width: screenWidth / cols,
-            height: screenHeight / rows,
-            top: Math.floor(index / cols) * (screenHeight / rows),
-            left: (index % cols) * (screenWidth / cols),
+            width: cw,
+            height: ch,
+            top: COLLAGE_INSET + row * (ch + COLLAGE_GUTTER),
+            left: COLLAGE_INSET + col * (cw + COLLAGE_GUTTER),
           };
+        }
       }
     };
 
@@ -331,8 +349,6 @@ const ImageSwiper = ({
                     justifyContent: 'center',
                     alignItems: 'center',
                     backgroundColor: '#000',
-                    borderWidth: imageCount > 1 ? 2 : 0,
-                    borderColor: '#1E1D27',
                   },
                 ]}>
                 <Image
@@ -2171,7 +2187,7 @@ const TikTokFeedScreen = ({
             }
             onClose?.();
           }}>
-          <MaterialCommunityIcons name="chevron-left" size={22} color="#fff" />
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
         </TouchableOpacity>
         {showUserSearchPanel ? (
           <View style={styles.userSearchInputWrap}>
@@ -2226,7 +2242,7 @@ const TikTokFeedScreen = ({
               loadAllUsersForSearch();
               preloadUserRatingsForSearch();
             }}>
-            <MaterialCommunityIcons name="magnify" size={22} color="#fff" />
+            <TopBarSearchIcon />
           </TouchableOpacity>
         )}
       </View>
@@ -2461,18 +2477,14 @@ const TikTokFeedScreen = ({
             </TouchableOpacity>
             {sidebarFiltersForFeed.map((filter, index) => {
               const isSelected = selectedSidebarFilter === filter.id;
-              const labelWords = String(filter.label || '')
-                .trim()
-                .split(/\s+/)
-                .filter(Boolean);
-              const labelText =
-                labelWords.length === 2
-                  ? `${labelWords[0]}\n${labelWords[1]}`
-                  : filter.label;
+              const labelText = String(filter.label || '');
               return (
                 <TouchableOpacity
                   key={filter.id}
-                  style={styles.sidebarFilterBtn}
+                  style={[
+                    styles.sidebarFilterBtn,
+                    index === sidebarFiltersForFeed.length - 1 && styles.sidebarFilterBtnLast,
+                  ]}
                   onPress={() => setSelectedSidebarFilter(prev => prev === filter.id ? null : filter.id)}
                   activeOpacity={0.7}
                   onLayout={event => {
@@ -2498,6 +2510,10 @@ const TikTokFeedScreen = ({
                     resizeMode="contain"
                   />
                   <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
                     style={[
                       styles.sidebarFilterLabel,
                       isSelected && styles.sidebarFilterLabelSelected,
@@ -3058,6 +3074,10 @@ const TikTokFeedScreen = ({
                     />
                   </View>
                   <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.78}
                     style={[
                       styles.bottomBarLabel,
                       item.isPost && styles.bottomBarLabelPost,
@@ -3375,6 +3395,13 @@ const TikTokFeedScreen = ({
   );
 };
 
+/** Absolute header (back, filters, search). Keep linked offsets (`userSearchPanel`, list `marginTop`) in sync. */
+const TOP_BAR_HEIGHT = 52;
+/** Right action column; preserves ~35px gap under the bar (was 115 when the bar was 80px). */
+const SIDEBAR_TOP = 35 + TOP_BAR_HEIGHT;
+
+const TOP_BAR_SEARCH_ASSET = require('../assets/tiktok/search.png');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -3389,12 +3416,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 80,
+    height: TOP_BAR_HEIGHT,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 26,
+    paddingTop: 2,
     backgroundColor: '#1E1D27',
     zIndex: 200,
   },
@@ -3402,7 +3429,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 6,
+  },
+  topBarSearchIcon: {
+    width: 26,
+    height: 26,
   },
   topBarCenter: {
     flex: 1,
@@ -3413,14 +3445,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   topBarFilterBtn: {
-    padding: 6,
+    padding: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   topBarFilterIcon: {
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
   },
   /** Selected feed filter: tint only the PNG strokes (#FFC40A), no extra background */
   filterIconSelectedTint: {
@@ -3455,7 +3487,7 @@ const styles = StyleSheet.create({
   },
   userSearchPanel: {
     position: 'absolute',
-    top: 80,
+    top: TOP_BAR_HEIGHT,
     left: 0,
     right: 0,
     bottom: 0,
@@ -3552,7 +3584,7 @@ const styles = StyleSheet.create({
   },
   listScrollView: {
     flex: 1,
-    marginTop: 80,
+    marginTop: TOP_BAR_HEIGHT,
     width: '100%',
     maxWidth: 414,
     backgroundColor: '#0d1117',
@@ -3930,56 +3962,69 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    height: 80,
+    height: 70,
     backgroundColor: '#1E1D27',
     zIndex: 200,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   bottomBarRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    width: '92%',
-    maxWidth: 380,
+    width: '100%',
+    maxWidth: 414,
+    paddingHorizontal: 24,
+    paddingBottom: 0,
   },
   bottomBarItem: {
+    width: 54,
+    minWidth: 54,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    minWidth: 48,
+    justifyContent: 'flex-end',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
   bottomBarItemPost: {
-    marginTop: -14,
+    width: 57,
+    minWidth: 57,
+    marginTop: 0,
   },
   bottomBarIconWrap: {
-    width: 32,
-    height: 32,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 3,
+    marginBottom: 10,
   },
   bottomBarIconWrapPost: {
-    width: 48,
-    height: 48,
-    marginTop: 5,
+    width: 49,
+    height: 36,
+    marginTop: 0,
+    marginBottom: 0,
   },
   bottomBarIcon: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
   },
   bottomBarIconGlobal: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
   bottomBarIconPost: {
-    width: 40,
-    height: 40,
+    width: 49,
+    height: 36,
   },
   bottomBarLabel: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
     textAlign: 'center',
+    width: 54,
+    flexShrink: 1,
   },
   bottomBarLabelActive: {
     color: ACTIVE_FILTER_COLOR,
@@ -3997,7 +4042,7 @@ const styles = StyleSheet.create({
   sidebar: {
     position: 'absolute',
     left: 10,
-    top: 115,
+    top: SIDEBAR_TOP,
     bottom: 80,
     flexDirection: 'column',
     alignItems: 'center',
@@ -4043,43 +4088,53 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    marginBottom: 4,
+    width: 60,
+    minWidth: 60,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    marginBottom: 20,
+  },
+  sidebarFilterBtnLast: {
+    marginBottom: 0,
   },
   sidebarFilterIcon: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     marginBottom: 4,
   },
   sidebarFilterLabel: {
     color: '#fff',
     fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    letterSpacing: 0.5447,
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 16,
     maxWidth: 72,
   },
   sidebarFilterLabelSelected: {
     color: '#FFC40A',
   },
   sidebarProfileWrap: {
-    marginBottom: 12,
+    height: 70,
+    paddingBottom: 14,
+    marginBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sidebarProfileRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     borderWidth: 2,
     borderColor: '#FFC40A',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sidebarProfilePic: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 51,
+    height: 51,
+    borderRadius: 25.5,
   },
   sidebarProfilePlaceholder: {
     backgroundColor: 'rgba(255,255,255,0.2)',
@@ -4098,7 +4153,7 @@ const styles = StyleSheet.create({
   },
   actionIconsContainer: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 94,
     right: 20,
     flexDirection: 'column',
     alignItems: 'flex-end',
@@ -4184,7 +4239,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 14,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   brokerActionIcon: {
     width: 32,
@@ -4217,7 +4272,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'right',
     width: '100%',
-    marginBottom: 8,
+    marginBottom: 5,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
@@ -4227,7 +4282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     width: '100%',
-    gap: 4,
+    gap: 3,
   },
   brokerLocationText: {
     color: '#FFFFFF',
@@ -4721,5 +4776,16 @@ const styles = StyleSheet.create({
     maxHeight: '100%',
   },
 });
+
+/** Search icon in top header. */
+function TopBarSearchIcon() {
+  return (
+    <Image
+      source={TOP_BAR_SEARCH_ASSET}
+      style={styles.topBarSearchIcon}
+      resizeMode="contain"
+    />
+  );
+}
 
 export default TikTokFeedScreen;

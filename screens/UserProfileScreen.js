@@ -2831,7 +2831,7 @@ const styles = StyleSheet.create({
   lastAdGridItem: {
     width: '33.3333%',
     aspectRatio: 1,
-    padding: 1,
+    padding: 4,
   },
   lastAdGridPlaceholderCell: {
     alignItems: 'center',
