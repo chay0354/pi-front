@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {Video, ResizeMode} from 'expo-av';
+import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {submitSubscription} from '../utils/api';
@@ -28,6 +29,7 @@ const SubscriptionFormScreen = ({
   onNext,
   subscriptionType = subscriptionTypes.broker,
 }) => {
+  const isCompanyFlow = subscriptionType === subscriptionTypes.company;
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState([]);
@@ -422,9 +424,20 @@ const SubscriptionFormScreen = ({
           verificationCode: response.verificationCode,
         });
 
-        // Store email and subscription ID for verification
+        // Store email and subscription ID for verification.
+        // Also pass the local profile/logo URI so later screens can show
+        // the user's image even before the server URL is fetched.
+        const localProfileImage =
+          (companyLogo && companyLogo.uri) ||
+          (profilePicture && profilePicture.uri) ||
+          null;
         if (onNext) {
-          onNext(response.subscriptionId, userEmail, response.verificationCode);
+          onNext(
+            response.subscriptionId,
+            userEmail,
+            response.verificationCode,
+            localProfileImage,
+          );
         } else {
           console.error('onNext callback is not defined!');
         }
@@ -444,29 +457,75 @@ const SubscriptionFormScreen = ({
     }
   };
 
+  const companyCanProceed =
+    companyName.trim() &&
+    contactPersonName.trim() &&
+    officePhone.trim() &&
+    companyEmail.trim() &&
+    companyWebsite.trim();
+  const brokerCanProceed =
+    brokerageLicenseNumber.trim() &&
+    brokerOfficeName.trim() &&
+    agentName.trim() &&
+    phone1.trim() &&
+    email.trim() &&
+    !!profilePicture;
+  const professionalCanProceed =
+    businessName.trim() &&
+    businessAddress.trim() &&
+    phone1.trim() &&
+    email.trim() &&
+    !!profilePicture;
+
+  const renderCompanyLabel = (label, required = false) => (
+    <View style={styles.companyLabelRow}>
+      {required && <Text style={styles.companyRequiredMark}>*</Text>}
+      <Text style={styles.companyInputLabel}>{label}</Text>
+    </View>
+  );
+
   return (
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
       resizeMode="cover">
-      <View style={styles.overlay} />
+      <View style={[styles.overlay, styles.companyOverlay]} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          styles.companyContentContainer,
+        ]}
         showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={24}
-              color={Colors.white100}
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {getHeaderTitle(subscriptionType)}
-          </Text>
-          <View style={styles.headerSpacer} />
+        {/* Top nav section (dark wrapper with header + wizard) */}
+        <View style={styles.topNavSection}>
+          <View style={styles.topNavHeader}>
+            <TouchableOpacity onPress={onClose} style={styles.backButton}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={24}
+                color={Colors.white100}
+              />
+            </TouchableOpacity>
+            <Text style={styles.topNavHeaderTitle}>
+              {getHeaderTitle(subscriptionType)}
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <View style={styles.companyWizard}>
+            <View style={styles.companyWizardStepInactive}>
+              <Text style={styles.companyWizardStepInactiveText}>3</Text>
+            </View>
+            <View style={styles.companyWizardLine} />
+            <View style={styles.companyWizardStepInactive}>
+              <Text style={styles.companyWizardStepInactiveText}>2</Text>
+            </View>
+            <View style={styles.companyWizardLine} />
+            <View style={styles.companyWizardStepActive}>
+              <Text style={styles.companyWizardStepActiveText}>1</Text>
+            </View>
+          </View>
         </View>
 
         {/* Error Notice */}
@@ -481,38 +540,43 @@ const SubscriptionFormScreen = ({
           </View>
         )}
 
-        {/* Progress Indicator - Only for non-company at top */}
-        {subscriptionType !== subscriptionTypes.company && (
-          <View style={styles.progressContainer}>
-            <Image
-              source={require('../assets/wizard-progress.png')}
-              style={styles.progressImage}
-              resizeMode="contain"
-            />
-          </View>
-        )}
-
         {/* Tab Selector - Only for non-company */}
         {subscriptionType !== subscriptionTypes.company && (
-          <View style={styles.tabContainer}>
+          <View style={styles.brokerTabContainer}>
             <TouchableOpacity
-              style={styles.tabFullWidth}
-              onPress={() => {
-                const newTab = activeTab === 'images' ? 'video' : 'images';
-                setActiveTab(newTab);
-              }}>
+              style={styles.brokerTabPill}
+              onPress={() => setActiveTab('images')}>
               {activeTab === 'images' ? (
-                <Image
-                  source={require('../assets/tab-images-selected.png')}
-                  style={styles.tabImageFullWidth}
-                  resizeMode="contain"
-                />
+                <LinearGradient
+                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  locations={[0.0456, 0.5076, 0.8831]}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                  style={styles.brokerTabPillActiveGradient}>
+                  <Text style={[styles.brokerTabPillText, styles.brokerTabPillTextActive]}>
+                    תמונות
+                  </Text>
+                </LinearGradient>
               ) : (
-                <Image
-                  source={require('../assets/tab-video-selected.png')}
-                  style={styles.tabImageFullWidth}
-                  resizeMode="contain"
-                />
+                <Text style={styles.brokerTabPillText}>תמונות</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.brokerTabPill}
+              onPress={() => setActiveTab('video')}>
+              {activeTab === 'video' ? (
+                <LinearGradient
+                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  locations={[0.0456, 0.5076, 0.8831]}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                  style={styles.brokerTabPillActiveGradient}>
+                  <Text style={[styles.brokerTabPillText, styles.brokerTabPillTextActive]}>
+                    סרטון
+                  </Text>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.brokerTabPillText}>סרטון</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -524,49 +588,104 @@ const SubscriptionFormScreen = ({
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
                 <>
-                  <Text style={styles.sectionTitle}>תמונת פרופיל (חובה)</Text>
-                  <TouchableOpacity
-                    onPress={pickProfilePicture}
-                    style={styles.imageUploadContainer}>
+                  <Text style={styles.brokerCardTitle}>תמונת פרופיל (חובה)</Text>
+                  <View style={styles.profileImageWrap}>
                     {profilePicture ? (
-                      <Image
-                        source={{uri: profilePicture.uri}}
-                        style={styles.imageInsert}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.profileAssetPlaceholder}>
-                        <MaterialCommunityIcons
-                          name="account-circle-outline"
-                          size={54}
-                          color="rgba(255,255,255,0.82)"
-                        />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                  <Text style={styles.sectionTitle}>תמונות נוספות</Text>
-                  <View style={styles.imageGrid}>
-                    {[0, 1, 2, 3].map(index => (
-                      <TouchableOpacity
-                        key={index}
-                        style={styles.imagePlaceholder}
-                        onPress={() => pickAdditionalImage(index)}>
-                        {additionalImages[index] ? (
+                      <>
+                        <TouchableOpacity
+                          onPress={pickProfilePicture}
+                          activeOpacity={0.92}
+                          style={styles.profileImageFrame}>
                           <Image
-                            source={{uri: additionalImages[index].uri}}
-                            style={styles.uploadedImage}
+                            source={{uri: profilePicture.uri}}
+                            style={styles.profileImageFilled}
                             resizeMode="cover"
                           />
-                        ) : (
-                          <Text style={styles.plusIcon}>+</Text>
-                        )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setProfilePicture(null)}
+                          style={styles.mediaRemoveButton}
+                          accessibilityLabel="הסר תמונה"
+                          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                          <MaterialCommunityIcons
+                            name="close"
+                            size={18}
+                            color={Colors.white100}
+                          />
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={pickProfilePicture}
+                        activeOpacity={0.92}
+                        style={styles.profileImageFrameEmpty}>
+                        <View style={styles.profileImageEmptyContent}>
+                          <MaterialCommunityIcons
+                            name="account-circle-outline"
+                            size={64}
+                            color="rgba(255,255,255,0.4)"
+                          />
+                          <Text style={styles.profileImagePlaceholderText}>תמונת פרופיל</Text>
+                          <View style={styles.brokerUploadButton}>
+                            <Text style={styles.brokerUploadButtonText}>העלאת תמונה</Text>
+                          </View>
+                        </View>
                       </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={styles.brokerCardTitle}>תמונות נוספות</Text>
+                  <View style={styles.additionalImagesRows}>
+                    {[
+                      [0, 1],
+                      [2, 3],
+                    ].map((row, rowIndex) => (
+                      <View key={rowIndex} style={styles.additionalImageRow}>
+                        {row.map(index => (
+                          <View key={index} style={styles.additionalImageWrap}>
+                            {additionalImages[index] ? (
+                              <>
+                                <TouchableOpacity
+                                  activeOpacity={0.92}
+                                  style={styles.additionalImageFrame}
+                                  onPress={() => pickAdditionalImage(index)}>
+                                  <Image
+                                    source={{uri: additionalImages[index].uri}}
+                                    style={styles.uploadedImage}
+                                    resizeMode="cover"
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    const next = [...additionalImages];
+                                    next[index] = null;
+                                    setAdditionalImages(next);
+                                  }}
+                                  style={styles.mediaRemoveButtonSmall}
+                                  accessibilityLabel="הסר תמונה"
+                                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                                  <MaterialCommunityIcons
+                                    name="close"
+                                    size={14}
+                                    color={Colors.white100}
+                                  />
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.additionalImagePlaceholder}
+                                onPress={() => pickAdditionalImage(index)}>
+                                <Text style={styles.additionalImagePlusIcon}>+</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
+                      </View>
                     ))}
                   </View>
                 </>
               ) : (
                 <>
-                  <Text style={styles.sectionTitle}>סרטון</Text>
+                  <Text style={styles.brokerCardTitle}>סרטון (חובה)</Text>
                   {video ? (
                     <View style={styles.videoPreviewContainer}>
                       <TouchableOpacity
@@ -606,12 +725,16 @@ const SubscriptionFormScreen = ({
                     <TouchableOpacity
                       onPress={pickVideo}
                       style={styles.imageUploadContainer}>
-                      <View style={styles.profileAssetPlaceholder}>
+                      <View style={styles.videoUploadPlaceholder}>
                         <MaterialCommunityIcons
                           name="video-outline"
-                          size={52}
-                          color="rgba(255,255,255,0.82)"
+                          size={64}
+                          color="rgba(255,255,255,0.4)"
                         />
+                        <Text style={styles.videoUploadPlaceholderText}>העלה סרטון</Text>
+                        <View style={styles.videoUploadButton}>
+                          <Text style={styles.videoUploadButtonText}>העלאת סרטון</Text>
+                        </View>
                       </View>
                     </TouchableOpacity>
                   )}
@@ -620,27 +743,31 @@ const SubscriptionFormScreen = ({
             </View>
 
             {/* Company Logo Section - No Container */}
-            <View style={styles.logoContainer}>
-              <TouchableOpacity onPress={pickCompanyLogo}>
-                {companyLogo ? (
-                  <Image
-                    source={{uri: companyLogo.uri}}
-                    style={styles.logoImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Image
-                    source={require('../assets/office-logo-upload.png')}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                )}
+            <View style={styles.companyLogoWrap}>
+              <TouchableOpacity onPress={pickCompanyLogo} style={styles.companyLogoTouch}>
+                <View style={styles.companyLogoCircle}>
+                  <View style={styles.companyLogoInnerFrame}>
+                    {companyLogo ? (
+                      <Image
+                        source={{uri: companyLogo.uri}}
+                        style={styles.companyLogoImageFilled}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.companyLogoPlaceholderText}>לוגו{'\n'}חברה</Text>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.companyLogoAddBadge}>
+                  <Text style={styles.companyLogoAddBadgeText}>+</Text>
+                </View>
               </TouchableOpacity>
             </View>
+            <View style={styles.companyDivider} />
 
             {/* Type Section - Only for professional */}
             {subscriptionType === subscriptionTypes.professional && (
-              <View style={styles.section}>
+              <View style={styles.professionalTagSection}>
                 <Text style={styles.sectionTitle}>סוג</Text>
                 <View style={styles.optionsContainer}>
                   {types.map((type, index) => (
@@ -668,7 +795,7 @@ const SubscriptionFormScreen = ({
 
             {/* Specialization Section - Only for professional */}
             {subscriptionType === subscriptionTypes.professional && (
-              <View style={styles.section}>
+              <View style={styles.professionalTagSection}>
                 <Text style={styles.sectionTitle}>התמחות</Text>
                 <View style={styles.optionsContainer}>
                   {specializations.map((specialization, index) => (
@@ -696,67 +823,89 @@ const SubscriptionFormScreen = ({
           </>
         )}
 
-        {/* Progress Indicator - For company flow, above form */}
-        {subscriptionType === subscriptionTypes.company && (
-          <View style={styles.progressContainer}>
-            <Image
-              source={require('../assets/wizard-progress.png')}
-              style={styles.progressImage}
-              resizeMode="contain"
-            />
-          </View>
+        {isCompanyFlow && (
+          <>
+            <View style={styles.companyLogoWrap}>
+              <TouchableOpacity onPress={pickCompanyLogo} style={styles.companyLogoTouch}>
+                <View style={styles.companyLogoCircle}>
+                  <View style={styles.companyLogoInnerFrame}>
+                    {companyLogo ? (
+                      <Image
+                        source={{uri: companyLogo.uri}}
+                        style={styles.companyLogoImageFilled}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.companyLogoPlaceholderText}>לוגו{'\n'}חברה</Text>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.companyLogoAddBadge}>
+                  <Text style={styles.companyLogoAddBadgeText}>+</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.companyDivider} />
+          </>
         )}
 
         {/* General Details Form Section */}
-        <View style={styles.formSection}>
+        <View
+          style={[
+            styles.formSection,
+            isCompanyFlow && styles.companyFormSection,
+            subscriptionType === subscriptionTypes.broker && styles.brokerFormSection,
+            subscriptionType === subscriptionTypes.professional &&
+              styles.professionalFormSection,
+          ]}>
           {subscriptionType === subscriptionTypes.company && (
-            <Text style={styles.sectionTitle}>פרטים כלליים</Text>
+            <Text style={[styles.sectionTitle, styles.companySectionTitle]}>פרטים כלליים</Text>
           )}
 
           {subscriptionType === subscriptionTypes.company ? (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>שם החברה*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('שם החברה', true)}
                 <TextInput
-                  style={styles.input}
-                  placeholder="הזן שם חברה"
-                  placeholderTextColor={Colors.grey200}
+                  style={[styles.input, styles.companyInput]}
+                  placeholder="הזן שם מלא"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyName}
                   onChangeText={setCompanyName}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>שם איש קשר*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('שם איש קשר', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן שם איש קשר"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={contactPersonName}
                   onChangeText={setContactPersonName}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר עוסק / ח.פ</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר עוסק / ח.פ')}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר עוסק / ח.פ"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyId}
                   onChangeText={setCompanyId}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר טלפון משרד*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר טלפון משרד', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={officePhone}
                   onChangeText={setOfficePhone}
                   keyboardType="phone-pad"
@@ -764,12 +913,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר נייד</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר נייד')}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר נייד"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={mobilePhone}
                   onChangeText={setMobilePhone}
                   keyboardType="phone-pad"
@@ -777,12 +926,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>כתובת מייל*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת מייל', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת מייל"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyEmail}
                   onChangeText={setCompanyEmail}
                   keyboardType="email-address"
@@ -791,12 +940,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>כתובת אתר החברה*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת אתר החברה', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת אתר"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyWebsite}
                   onChangeText={setCompanyWebsite}
                   keyboardType="url"
@@ -805,12 +954,17 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.descriptionOption}>
-                <Text style={styles.descriptionLabel}>הוסף תיאור</Text>
+              <View style={styles.companyDescriptionOption}>
+                <Text style={styles.companyDescriptionLabel}>הוסף תיאור</Text>
                 <TouchableOpacity
                   onPress={() => setAddDescription(!addDescription)}
-                  style={styles.checkboxCircle}>
-                  {addDescription && <View style={styles.checkboxFilled} />}
+                  style={[
+                    styles.companyDescriptionCheckbox,
+                    addDescription && styles.companyDescriptionCheckboxChecked,
+                  ]}>
+                  {addDescription && (
+                    <MaterialCommunityIcons name="check" size={14} color={Colors.yellowIcons} />
+                  )}
                 </TouchableOpacity>
               </View>
 
@@ -832,23 +986,23 @@ const SubscriptionFormScreen = ({
           ) : subscriptionType === subscriptionTypes.broker ? (
             <>
               {/* Activity Area Section - Only for broker */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>אזור פעילות</Text>
-                <View style={styles.optionsContainer}>
+              <View style={styles.brokerSection}>
+                <Text style={styles.brokerSectionTitle}>אזור פעילות</Text>
+                <View style={styles.brokerChipsContainer}>
                   {activityRegions.map((region, index) => (
                     <TouchableOpacity
                       key={index}
                       style={[
-                        styles.optionButton,
+                        styles.brokerChip,
                         selectedRegions.includes(region) &&
-                          styles.optionButtonSelected,
+                          styles.brokerChipSelected,
                       ]}
                       onPress={() => toggleRegion(region)}>
                       <Text
                         style={[
-                          styles.optionText,
+                          styles.brokerChipText,
                           selectedRegions.includes(region) &&
-                            styles.optionTextSelected,
+                            styles.brokerChipTextSelected,
                         ]}>
                         {region}
                       </Text>
@@ -856,65 +1010,67 @@ const SubscriptionFormScreen = ({
                   ))}
                 </View>
               </View>
+              <View style={styles.companyDivider} />
 
               {/* General Details Title for Broker */}
-              <Text style={styles.sectionTitle}>פרטים כלליים</Text>
+              <Text style={[styles.sectionTitle, styles.companySectionTitle]}>
+                פרטים כלליים
+              </Text>
 
-              {/* General Details for Broker */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר רשיון תיווך*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר רשיון תיווך', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר רישיון"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerageLicenseNumber}
                   onChangeText={setBrokerageLicenseNumber}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>שם משרד המתווך*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('שם משרד המתווך', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן שם משרד"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerOfficeName}
                   onChangeText={setBrokerOfficeName}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>שם הסוכן *</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('שם הסוכן', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן שם מלא"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={agentName}
                   onChangeText={setAgentName}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר עוסק פטור</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר עוסק פטור')}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר עוסק פטור (אופציונאלי)"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר טלפון*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר טלפון', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
@@ -922,12 +1078,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>כתובת מייל*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת מייל', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת מייל"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -936,12 +1092,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>תיאור</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('תיאור')}
                 <TextInput
-                  style={styles.textArea}
+                  style={[styles.companyTextArea]}
                   placeholder="כתוב תיאור כללי על השירות שלך"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -952,49 +1108,53 @@ const SubscriptionFormScreen = ({
             </>
           ) : (
             <>
-              {/* Professional subscription - keep existing fields */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>שם העסק*</Text>
+              <View style={styles.companyDivider} />
+              <Text style={[styles.sectionTitle, styles.companySectionTitle]}>
+                פרטים כלליים
+              </Text>
+
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('שם העסק', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן שם"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessName}
                   onChangeText={setBusinessName}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>כתובת בית העסק*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת בית העסק', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessAddress}
                   onChangeText={setBusinessAddress}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר עוסק / ח.פ</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר עוסק / ח.פ')}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר עוסק פטור (אופציונאלי)"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
                   textAlign="right"
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר טלפון 1*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר טלפון 1', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
@@ -1002,12 +1162,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>מספר טלפון 2</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר טלפון 2')}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון (אופציונאלי)"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={phone2}
                   onChangeText={setPhone2}
                   keyboardType="phone-pad"
@@ -1015,12 +1175,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>כתובת מייל*</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת מייל', true)}
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת מייל"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -1029,12 +1189,12 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>תיאור</Text>
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('תיאור')}
                 <TextInput
-                  style={styles.textArea}
+                  style={[styles.companyTextArea]}
                   placeholder="כתוב תיאור כללי על השירות שלך"
-                  placeholderTextColor={Colors.grey200}
+                  placeholderTextColor="rgba(255,255,255,0.35)"
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -1048,14 +1208,35 @@ const SubscriptionFormScreen = ({
           <TouchableOpacity
             style={[
               styles.nextButton,
+              styles.companyNextButton,
+              isCompanyFlow && !companyCanProceed && styles.companyNextButtonDisabled,
+              subscriptionType === subscriptionTypes.broker &&
+                !brokerCanProceed &&
+                styles.companyNextButtonDisabled,
+              subscriptionType === subscriptionTypes.professional &&
+                !professionalCanProceed &&
+                styles.companyNextButtonDisabled,
               isSubmitting && styles.nextButtonDisabled,
             ]}
             onPress={handleSubmit}
-            disabled={isSubmitting}>
+            disabled={
+              isSubmitting ||
+              (isCompanyFlow && !companyCanProceed) ||
+              (subscriptionType === subscriptionTypes.broker && !brokerCanProceed) ||
+              (subscriptionType === subscriptionTypes.professional &&
+                !professionalCanProceed)
+            }>
             {isSubmitting ? (
               <ActivityIndicator color={Colors.white100} />
             ) : (
-              <Text style={styles.nextButtonText}>הבא</Text>
+              <Text
+                style={[
+                  styles.nextButtonText,
+                  styles.companyNextButtonText,
+                  isCompanyFlow && !companyCanProceed && styles.companyNextButtonTextDisabled,
+                ]}>
+                הבא
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1081,6 +1262,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     zIndex: 1,
   },
+  companyOverlay: {
+    backgroundColor: '#1e1d27',
+  },
   scrollView: {
     flex: 1,
     zIndex: 2,
@@ -1092,12 +1276,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 24,
   },
+  companyContentContainer: {
+    paddingTop: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 24,
+    gap: 16,
+    alignItems: 'center',
+  },
+  topNavSection: {
+    width: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: '#1e1d27',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
+    gap: 16,
+  },
+  topNavHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    height: 40,
+  },
+  topNavHeaderTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: Colors.white100,
+    textAlign: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: 20,
+  },
+  companyHeader: {
+    marginBottom: 0,
+    minHeight: 93,
+    paddingTop: 43,
+    paddingBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
+    backgroundColor: '#1e1d27',
   },
   backButton: {
     width: 40,
@@ -1112,6 +1342,10 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
+  companyHeaderTitle: {
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+  },
   headerSpacer: {
     width: 40,
   },
@@ -1123,6 +1357,50 @@ const styles = StyleSheet.create({
   progressImage: {
     width: 366,
     height: 32,
+  },
+  companyWizard: {
+    width: '100%',
+    maxWidth: 366,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  companyWizardLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#4d4966',
+  },
+  companyWizardStepInactive: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4d4966',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  companyWizardStepInactiveText: {
+    color: 'rgba(210,208,220,0.6)',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-Medium',
+  },
+  companyWizardStepActive: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#F4AD39',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  companyWizardStepActiveText: {
+    color: '#F4AD39',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-Medium',
   },
   tabContainer: {
     width: '100%',
@@ -1143,17 +1421,27 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     width: '100%',
-    gap: 12,
-    marginBottom: 20,
+    maxWidth: 366,
+    alignSelf: 'center',
+    gap: 24,
+    marginBottom: 4,
     backgroundColor: '#2B2A39',
     borderRadius: BorderRadius.roundCorner2XL,
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    marginHorizontal: 24,
   },
   sectionTitle: {
     fontSize: FontSizes.fs18,
     fontWeight: '600',
     color: Colors.white100,
     textAlign: 'right',
+  },
+  companySectionTitle: {
+    width: '100%',
+    color: Colors.textSecondary,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
   imageInsert: {
     width: '100%',
@@ -1187,18 +1475,38 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   /** Full-bleed marketing PNGs (camera/button chrome); contain + room so nothing is cropped */
-  profileAssetPlaceholder: {
+  videoUploadPlaceholder: {
     width: '100%',
-    height: 280,
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL,
+    height: 234,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 28,
   },
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+  videoUploadPlaceholderText: {
+    fontSize: 20,
+    fontFamily: 'Rubik-Regular',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  videoUploadButton: {
+    backgroundColor: '#4D4966',
+    paddingHorizontal: 20.308,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 846.154,
+  },
+  videoUploadButtonText: {
+    color: Colors.white100,
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
   },
   imagePlaceholder: {
     width: '47%',
@@ -1211,45 +1519,113 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#2a2933',
   },
-  plusIcon: {
-    fontSize: 32,
-    color: Colors.grey200,
-    fontWeight: '300',
+  companyLogoWrap: {
+    width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+    paddingHorizontal: 24,
   },
-  logoContainer: {
-    alignItems: 'flex-end',
-    marginBottom: 20,
-    paddingRight: 24,
+  companyLogoTouch: {
+    width: 104,
+    height: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoImage: {
-    width: 100,
-    height: 100,
+  companyLogoCircle: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 2,
+    borderColor: '#F4AD39',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  companyLogoInnerFrame: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#2f2d43',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  companyLogoImageFilled: {
+    width: '100%',
+    height: '100%',
+  },
+  companyLogoPlaceholderText: {
+    fontSize: 18,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
+  },
+  companyLogoAddBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    backgroundColor: '#1e1d27',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  companyLogoAddBadgeText: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontFamily: 'Rubik-Regular',
+    lineHeight: 24,
+    marginTop: -1,
+  },
+  companyDivider: {
+    height: 1,
+    width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
+    backgroundColor: '#2e2c44',
+    opacity: 0.9,
+    marginBottom: 6,
   },
   optionsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     justifyContent: 'flex-end',
+    paddingRight: 6,
+  },
+  professionalTagSection: {
+    width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
+    gap: 24,
+    marginBottom: 16,
   },
   optionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: BorderRadius.br50,
-    backgroundColor: '#2a2933',
-    borderWidth: 1,
-    borderColor: Colors.grey200,
+    paddingHorizontal: 9.286,
+    height: 27.143,
+    borderRadius: 35.714,
+    backgroundColor: 'transparent',
+    borderWidth: 0.714,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   optionButtonSelected: {
-    backgroundColor: Colors.yellowIcons,
-    borderColor: Colors.yellowIcons,
+    backgroundColor: 'transparent',
+    borderColor: '#ffc40a',
   },
   optionText: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: Colors.white100,
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    color: '#ffffff',
   },
   optionTextSelected: {
-    color: Colors.blue100,
+    color: '#ffc40a',
     fontWeight: '600',
   },
   inputGroup: {
@@ -1265,8 +1641,49 @@ const styles = StyleSheet.create({
   },
   formSection: {
     width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
     gap: 12,
     marginBottom: 20,
+    paddingHorizontal: 24,
+  },
+  brokerFormSection: {
+    gap: 28,
+  },
+  professionalFormSection: {
+    gap: 24,
+  },
+  companyFormSection: {
+    width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
+    gap: 10,
+    paddingHorizontal: 0,
+  },
+  companyInputGroup: {
+    width: '100%',
+    gap: 10,
+  },
+  companyLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 2,
+    paddingRight: 16,
+  },
+  companyRequiredMark: {
+    color: '#ffc40a',
+    fontSize: 14,
+    letterSpacing: 0.14,
+    fontFamily: 'Rubik-Regular',
+    lineHeight: 14,
+  },
+  companyInputLabel: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    letterSpacing: 0.14,
+    fontFamily: 'Rubik-Regular',
+    lineHeight: 14,
   },
   input: {
     width: '100%',
@@ -1279,6 +1696,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white100,
     textAlign: 'right',
+  },
+  companyInput: {
+    height: 52,
+    borderRadius: 1000,
+    borderColor: '#8c85b3',
+    backgroundColor: 'transparent',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    color: '#ffffff',
+    fontFamily: 'Rubik-Regular',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   textArea: {
     width: '100%',
@@ -1302,6 +1731,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  companyNextButton: {
+    height: 52,
+    borderRadius: 1000,
+    backgroundColor: '#4d4966',
+    marginTop: 4,
+  },
+  companyNextButtonDisabled: {
+    opacity: 0.4,
+  },
   nextButtonDisabled: {
     opacity: 0.6,
   },
@@ -1309,6 +1747,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: Colors.white100,
+  },
+  companyNextButtonText: {
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  companyNextButtonTextDisabled: {
+    color: 'rgba(255,255,255,0.6)',
   },
   imageUploadContainer: {
     width: '100%',
@@ -1331,6 +1779,245 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 8,
+  },
+  companyDescriptionOption: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 2,
+  },
+  companyDescriptionLabel: {
+    fontSize: 18,
+    color: '#ffffff',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+  },
+  companyDescriptionCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  companyDescriptionCheckboxChecked: {
+    borderColor: '#F4AD39',
+  },
+  companyTextArea: {
+    width: '100%',
+    minHeight: 248,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#8c85b3',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    color: '#ffffff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    textAlignVertical: 'top',
+  },
+  brokerTabContainer: {
+    width: '100%',
+    maxWidth: 366,
+    alignSelf: 'center',
+    flexDirection: 'row-reverse',
+    backgroundColor: '#2b2a39',
+    borderRadius: 1000,
+    padding: 10,
+    marginTop: 4,
+    marginHorizontal: 24,
+  },
+  brokerTabPill: {
+    flex: 1,
+    height: 44,
+    borderRadius: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brokerTabPillActiveGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brokerTabPillText: {
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 0.2,
+  },
+  brokerTabPillTextActive: {
+    color: '#1e1d27',
+    fontFamily: 'Rubik-Medium',
+  },
+  brokerCardTitle: {
+    width: '100%',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: Colors.textSecondary,
+    textAlign: 'right',
+  },
+  profileImageWrap: {
+    width: '100%',
+    position: 'relative',
+  },
+  profileImageFrame: {
+    width: '100%',
+    height: 234,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#1f1e2b',
+  },
+  profileImageFrameEmpty: {
+    width: '100%',
+    height: 234,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImageEmptyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    width: '100%',
+  },
+  profileImagePlaceholderText: {
+    fontSize: 20,
+    fontFamily: 'Rubik-Regular',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  brokerUploadButton: {
+    backgroundColor: '#4D4966',
+    paddingHorizontal: 20.308,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 846.154,
+  },
+  brokerUploadButtonText: {
+    color: Colors.white100,
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+  },
+  profileImageFilled: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaRemoveButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30,29,39,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaRemoveButtonSmall: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(30,29,39,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  additionalImagesRows: {
+    width: '100%',
+    gap: 24,
+  },
+  additionalImageRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 24,
+  },
+  additionalImageWrap: {
+    flex: 1,
+    height: 147,
+    position: 'relative',
+  },
+  additionalImageFrame: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#1f1e2b',
+  },
+  additionalImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  additionalImagePlusIcon: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
+  },
+  brokerSection: {
+    width: '100%',
+    gap: 24,
+    marginBottom: 0,
+  },
+  brokerSectionTitle: {
+    width: '100%',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: Colors.textSecondary,
+    textAlign: 'right',
+  },
+  brokerChipsContainer: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  brokerChip: {
+    paddingHorizontal: 9,
+    height: 28,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brokerChipSelected: {
+    backgroundColor: 'transparent',
+    borderColor: '#ffc40a',
+  },
+  brokerChipText: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    color: '#ffffff',
+  },
+  brokerChipTextSelected: {
+    color: '#ffc40a',
+    fontFamily: 'Rubik-Medium',
   },
   descriptionLabel: {
     fontSize: 16,

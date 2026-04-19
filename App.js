@@ -29,6 +29,7 @@ import {
   UserListingsScreen,
   SubscriptionScreen,
   SubscriptionFormScreen,
+  SubscriptionRatingIntroScreen,
   VerificationScreen,
   VerificationCodeScreen,
   LoginScreen,
@@ -69,6 +70,9 @@ const screenName = {
   verificationCode: 'verificationCode',
   verificationCodeCompany: 'verificationCodeCompany',
   verificationCodeProfessional: 'verificationCodeProfessional',
+  ratingIntro: 'ratingIntro',
+  ratingIntroCompany: 'ratingIntroCompany',
+  ratingIntroProfessional: 'ratingIntroProfessional',
   success: 'success',
   successCompany: 'successCompany',
   successProfessional: 'successProfessional',
@@ -846,6 +850,7 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.settings)}
             onStart={() => setCurrentScreen(screenName.subscriptionForm)}
             subscriptionType={subscriptionTypes.broker}
+            currentUser={currentUser}
           />
         )}
         {currentScreen === screenName.subscriptionCompany && (
@@ -853,6 +858,7 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.settings)}
             onStart={() => setCurrentScreen(screenName.subscriptionFormCompany)}
             subscriptionType={subscriptionTypes.company}
+            currentUser={currentUser}
           />
         )}
         {currentScreen === screenName.subscriptionProfessional && (
@@ -860,13 +866,14 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.settings)}
             onStart={() => setCurrentScreen(screenName.subscriptionFormProfessional)}
             subscriptionType={subscriptionTypes.professional}
+            currentUser={currentUser}
           />
         )}
         {currentScreen === screenName.subscriptionForm && (
           <SubscriptionFormScreen
             onClose={() => setCurrentScreen(screenName.subscription)}
-            onNext={(subscriptionId, email, verificationCode) => {
-              setSubscriptionData({subscriptionId, email, verificationCode});
+            onNext={(subscriptionId, email, verificationCode, localProfileImage) => {
+              setSubscriptionData({subscriptionId, email, verificationCode, localProfileImage});
               setCurrentScreen(screenName.verification);
             }}
             subscriptionType={subscriptionTypes.broker}
@@ -875,8 +882,8 @@ export default function App() {
         {currentScreen === screenName.subscriptionFormCompany && (
           <SubscriptionFormScreen
             onClose={() => setCurrentScreen(screenName.subscriptionCompany)}
-            onNext={(subscriptionId, email, verificationCode) => {
-              setSubscriptionData({subscriptionId, email, verificationCode});
+            onNext={(subscriptionId, email, verificationCode, localProfileImage) => {
+              setSubscriptionData({subscriptionId, email, verificationCode, localProfileImage});
               setCurrentScreen(screenName.verificationCompany);
             }}
             subscriptionType={subscriptionTypes.company}
@@ -885,8 +892,8 @@ export default function App() {
         {currentScreen === screenName.subscriptionFormProfessional && (
           <SubscriptionFormScreen
             onClose={() => setCurrentScreen(screenName.subscriptionProfessional)}
-            onNext={(subscriptionId, email, verificationCode) => {
-              setSubscriptionData({subscriptionId, email, verificationCode});
+            onNext={(subscriptionId, email, verificationCode, localProfileImage) => {
+              setSubscriptionData({subscriptionId, email, verificationCode, localProfileImage});
               setCurrentScreen(screenName.verificationProfessional);
             }}
             subscriptionType={subscriptionTypes.professional}
@@ -898,7 +905,7 @@ export default function App() {
             onNext={() => setCurrentScreen(screenName.verificationCode)}
             onSkipVerifiedTest={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.success);
+              setCurrentScreen(screenName.ratingIntro);
             }}
             subscriptionType={subscriptionTypes.broker}
             email={subscriptionData?.email}
@@ -911,7 +918,7 @@ export default function App() {
             onNext={() => setCurrentScreen(screenName.verificationCodeCompany)}
             onSkipVerifiedTest={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.successCompany);
+              setCurrentScreen(screenName.ratingIntroCompany);
             }}
             subscriptionType={subscriptionTypes.company}
             email={subscriptionData?.email}
@@ -928,7 +935,7 @@ export default function App() {
             }
             onSkipVerifiedTest={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.successProfessional);
+              setCurrentScreen(screenName.ratingIntroProfessional);
             }}
             subscriptionType={subscriptionTypes.professional}
             email={subscriptionData?.email}
@@ -940,7 +947,7 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.verification)}
             onNext={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.success);
+              setCurrentScreen(screenName.ratingIntro);
             }}
             subscriptionType={subscriptionTypes.broker}
             email={subscriptionData?.email}
@@ -952,7 +959,7 @@ export default function App() {
             onClose={() => setCurrentScreen(screenName.verificationCompany)}
             onNext={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.successCompany);
+              setCurrentScreen(screenName.ratingIntroCompany);
             }}
             subscriptionType={subscriptionTypes.company}
             email={subscriptionData?.email}
@@ -966,18 +973,40 @@ export default function App() {
             }
             onNext={subscription => {
               setSubscriptionData(prev => ({ ...prev, subscription }));
-              setCurrentScreen(screenName.successProfessional);
+              setCurrentScreen(screenName.ratingIntroProfessional);
             }}
             subscriptionType={subscriptionTypes.professional}
             email={subscriptionData?.email}
             subscriptionId={subscriptionData?.subscriptionId}
           />
         )}
+        {currentScreen === screenName.ratingIntro && (
+          <SubscriptionRatingIntroScreen
+            onClose={() => setCurrentScreen(screenName.verificationCode)}
+            onContinue={() => setCurrentScreen(screenName.success)}
+            subscriptionType={subscriptionTypes.broker}
+          />
+        )}
+        {currentScreen === screenName.ratingIntroCompany && (
+          <SubscriptionRatingIntroScreen
+            onClose={() => setCurrentScreen(screenName.verificationCodeCompany)}
+            onContinue={() => setCurrentScreen(screenName.successCompany)}
+            subscriptionType={subscriptionTypes.company}
+          />
+        )}
+        {currentScreen === screenName.ratingIntroProfessional && (
+          <SubscriptionRatingIntroScreen
+            onClose={() =>
+              setCurrentScreen(screenName.verificationCodeProfessional)
+            }
+            onContinue={() => setCurrentScreen(screenName.successProfessional)}
+            subscriptionType={subscriptionTypes.professional}
+          />
+        )}
         {currentScreen === screenName.success && (
           <SuccessScreen
             onClose={() => setCurrentScreen(screenName.verificationCode)}
             onGoHome={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -985,7 +1014,6 @@ export default function App() {
               setCurrentScreen(screenName.home);
             }}
             onStartPublishing={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -994,13 +1022,13 @@ export default function App() {
             }}
             subscriptionType={subscriptionTypes.broker}
             subscription={subscriptionData?.subscription}
+            localProfileImage={subscriptionData?.localProfileImage}
           />
         )}
         {currentScreen === screenName.successCompany && (
           <SuccessScreen
             onClose={() => setCurrentScreen(screenName.verificationCodeCompany)}
             onGoHome={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -1008,7 +1036,6 @@ export default function App() {
               setCurrentScreen(screenName.home);
             }}
             onStartPublishing={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -1017,6 +1044,7 @@ export default function App() {
             }}
             subscriptionType={subscriptionTypes.company}
             subscription={subscriptionData?.subscription}
+            localProfileImage={subscriptionData?.localProfileImage}
           />
         )}
         {currentScreen === screenName.successProfessional && (
@@ -1025,7 +1053,6 @@ export default function App() {
               setCurrentScreen(screenName.verificationCodeProfessional)
             }
             onGoHome={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -1033,7 +1060,6 @@ export default function App() {
               setCurrentScreen(screenName.home);
             }}
             onStartPublishing={() => {
-              // Store user data after successful verification
               if (subscriptionData?.subscription) {
                 setCurrentUser(subscriptionData.subscription);
               }
@@ -1042,6 +1068,7 @@ export default function App() {
             }}
             subscriptionType={subscriptionTypes.professional}
             subscription={subscriptionData?.subscription}
+            localProfileImage={subscriptionData?.localProfileImage}
           />
         )}
       </View>

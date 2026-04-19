@@ -5,6 +5,7 @@ export {default as OfficeListingScreen} from './OfficeListingScreen';
 export {default as SettingsScreen} from './SettingsScreen';
 export {default as SubscriptionFormScreen} from './SubscriptionFormScreen';
 export {default as SubscriptionScreen} from './SubscriptionScreen';
+export {default as SubscriptionRatingIntroScreen} from './SubscriptionRatingIntroScreen';
 export {default as SuccessScreen} from './SuccessScreen';
 export {default as TikTokFeedScreen} from './TikTokFeedScreen';
 export {default as UserRegistrationScreen} from './UserRegistrationScreen';

@@ -10,36 +10,11 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {getCurrentUser} from '../utils/api';
-
-const isWeb = Platform.OS === 'web';
-
-/** Native: require bundled assets. Web: files in public/more-icons/ (avoids /assets/assets/ 404). */
-const MORE_ICONS_NATIVE = {
-  terms: require('../assets/more-icons/icons-1.png'), // icons (1).png — תנאי שימוש
-  accessibility: require('../assets/more-icons/icons-2.png'), // icons (2).png — הצהרת נגישות
-  contact: require('../assets/more-icons/icons-3.png'), // icons (3).png — צור קשר
-  transactionCancel: require('../assets/more-icons/icons-4.png'), // icons (4).png — ביטול עסקה
-};
-
-const MORE_ICONS_WEB_FILE = {
-  terms: 'icons-1.png',
-  accessibility: 'icons-2.png',
-  contact: 'icons-3.png',
-  transactionCancel: 'icons-4.png',
-};
-
-function getMoreIconSource(key) {
-  if (isWeb && typeof window !== 'undefined') {
-    const file = MORE_ICONS_WEB_FILE[key];
-    return {uri: `${window.location.origin}/more-icons/${file}`};
-  }
-  return MORE_ICONS_NATIVE[key];
-}
 
 /** Set URLs when pages are ready; empty string shows a short “בקרוב” alert */
 const LEGAL_DEFAULTS = {
@@ -47,6 +22,26 @@ const LEGAL_DEFAULTS = {
   accessibilityStatementUrl: '',
   supportEmail: 'support@pi.co.il',
   transactionCancellationUrl: '',
+};
+
+// Figma node 74:6022 assets (messages pill / PiChat badge)
+const PI_CHAT_BAR = require('../assets/menu/pichat.png');
+const FIGMA_NAV_CHEVRON_ICON =
+  'https://www.figma.com/api/mcp/asset/de89ae2d-1d73-4568-9437-ba7ce08b581d';
+const MENU_ICONS = {
+  edit: require('../assets/pencil-icon.png'),
+  updates: require('../assets/menu/updates.png'),
+  favorites: require('../assets/favorites-icon.png'),
+  company: require('../assets/subscription-company-icon.png'),
+  broker: require('../assets/subscription-broker-icon.png'),
+  professional: require('../assets/subscription-professional-icon.png'),
+  secret: require('../assets/lock-icon.png'),
+  feedback: require('../assets/suggestions-icon.png'),
+  terms: require('../assets/more-icons/icons-1.png'),
+  accessibility: require('../assets/more-icons/icons-2.png'),
+  contact: require('../assets/more-icons/icons-3.png'),
+  cancel: require('../assets/more-icons/icons-4.png'),
+  logout: require('../assets/logout-icon.png'),
 };
 
 /**
@@ -73,6 +68,10 @@ const SettingsScreen = ({
   transactionCancellationUrl = LEGAL_DEFAULTS.transactionCancellationUrl,
 }) => {
   const {currentUser, setCurrentUser} = useContext(ContextHook);
+  const isLoggedBroker = currentUser?.subscription_type === subscriptionTypes.broker;
+  const isLoggedProfessional =
+    currentUser?.subscription_type === subscriptionTypes.professional;
+  const isLoggedCompany = currentUser?.subscription_type === subscriptionTypes.company;
 
   const openUrlOrPlaceholder = async (url, titleHebrew) => {
     const u = url && String(url).trim();
@@ -172,6 +171,23 @@ const SettingsScreen = ({
   const settingsProfilePicUrl = currentUser
     ? getUserProfileImageUrl(currentUser)
     : null;
+  const renderChevron = () => (
+    <View style={styles.chevron}>
+      <Image
+        source={{uri: FIGMA_NAV_CHEVRON_ICON}}
+        style={styles.chevronIcon}
+        resizeMode="contain"
+      />
+    </View>
+  );
+  const renderMenuIcon = type => (
+    <View style={styles.menuIconBase}>
+      <Image source={MENU_ICONS[type]} style={styles.menuIconSingle} resizeMode="contain" />
+    </View>
+  );
+  const openBrokerUpdates = () => {
+    Alert.alert('עדכון נכסים חדשים שעולים', 'התוכן יהיה זמין בקרוב.');
+  };
 
   return (
     <ScrollView
@@ -199,50 +215,57 @@ const SettingsScreen = ({
 
       {currentUser ? (
         <View style={styles.profileCard}>
-          <TouchableOpacity
-            style={styles.editIconButton}
-            onPress={() => onEditProfile && onEditProfile()}
-            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-            activeOpacity={0.7}>
-            <Image
-              source={require('../assets/pencil-icon.png')}
-              style={styles.profileEditIcon}
-              resizeMode="contain"
-              tintColor={Colors.white100}
-            />
-          </TouchableOpacity>
           <View style={styles.profileContentRow}>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{settingsProfileDisplayName}</Text>
-              {currentUser.email ? (
-                <Text style={styles.profileEmail}>{currentUser.email}</Text>
-              ) : null}
-            </View>
-            <View style={styles.profilePictureContainer}>
-              {settingsProfilePicUrl ? (
-                <Image
-                  source={{uri: String(settingsProfilePicUrl)}}
-                  style={styles.profilePicture}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.profilePicturePlaceholder}>
-                  <Text style={styles.profilePicturePlaceholderText}>
-                    {String(settingsProfileDisplayName).trim().charAt(0).toUpperCase() ||
-                      '?'}
+            <TouchableOpacity
+              style={styles.editIconButton}
+              onPress={() => onEditProfile && onEditProfile()}
+              hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+              activeOpacity={0.7}>
+              <Image
+                source={require('../assets/pencil-icon.png')}
+                style={styles.profileEditIcon}
+                resizeMode="contain"
+                tintColor={Colors.white100}
+              />
+            </TouchableOpacity>
+            <View style={styles.profileMainInfoWrap}>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName} numberOfLines={1}>
+                  {settingsProfileDisplayName}
+                </Text>
+                {currentUser.email ? (
+                  <Text style={styles.profileEmail} numberOfLines={1}>
+                    {currentUser.email}
                   </Text>
-                </View>
-              )}
+                ) : null}
+              </View>
+              <View style={styles.profilePictureContainer}>
+                {settingsProfilePicUrl ? (
+                  <Image
+                    source={{uri: String(settingsProfilePicUrl)}}
+                    style={styles.profilePicture}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.profilePicture, styles.profilePicturePlaceholder]}>
+                    <Text style={styles.profilePicturePlaceholderText}>
+                      {String(settingsProfileDisplayName).trim().charAt(0).toUpperCase() ||
+                        '?'}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
+          <View style={styles.profileDivider} />
           {currentUser.subscription_type !== subscriptionTypes.user &&
           currentUser.subscriber_number != null &&
           String(currentUser.subscriber_number).trim() !== '' ? (
             <View style={styles.profileBottom}>
-              <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
               <Text style={styles.subscriberNumber}>
                 {String(currentUser.subscriber_number)}
               </Text>
+              <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
             </View>
           ) : null}
         </View>
@@ -254,11 +277,7 @@ const SettingsScreen = ({
           activeOpacity={0.8}
           onPress={onOpenChat}
           style={styles.buttonsImageWrap}>
-          <Image
-            source={require('../assets/buttons.png')}
-            style={styles.buttonsImage}
-            resizeMode="contain"
-          />
+          <Image source={PI_CHAT_BAR} style={styles.buttonsImage} resizeMode="contain" />
           {unreadChatCount > 0 && (
             <View style={styles.chatBadge}>
               <Text style={styles.chatBadgeText}>
@@ -269,98 +288,77 @@ const SettingsScreen = ({
         </TouchableOpacity>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>ניהול המודעות</Text>
-          <TouchableOpacity style={styles.cardItem} onPress={onOpenEditPublishAd}>
-            <Text style={styles.chevron}>›</Text>
-            <Text style={styles.cardItemText}>ערוך / פרסם</Text>
-            <Image
-              source={require('../assets/pencil-icon.png')}
-              style={styles.pencilIcon}
-              resizeMode="contain"
-            />
+          <TouchableOpacity style={[styles.cardItem, styles.cardItemDivider]} onPress={onOpenEditPublishAd}>
+            {renderChevron()}
+            <Text style={styles.cardItemText}>ערוך / פרסם פוסט</Text>
+            {renderMenuIcon('edit')}
+          </TouchableOpacity>
+          {isLoggedBroker ? (
+            <TouchableOpacity style={[styles.cardItem, styles.cardItemDivider]} onPress={openBrokerUpdates}>
+              {renderChevron()}
+              <Text style={styles.cardItemText}>עדכון נכסים חדשים שעולים</Text>
+              {renderMenuIcon('updates')}
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.cardItem} onPress={() => onOpenFavorites && onOpenFavorites()}>
+            {renderChevron()}
+            <Text style={styles.cardItemText}>מועדפים</Text>
+            {renderMenuIcon('favorites')}
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Subscriptions Section */}
-      <View style={styles.section}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>מנויים</Text>
-          <TouchableOpacity
-            style={styles.cardItem}
-            onPress={() => handleSubscriptionPress(subscriptionTypes.company)}>
-            <Text style={styles.chevron}>›</Text>
-            <Text style={styles.cardItemText}>מנוי לחברות</Text>
-            <Image
-              source={require('../assets/subscription-company-icon.png')}
-              style={styles.subscriptionIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cardItem}
-            onPress={() => handleSubscriptionPress(subscriptionTypes.broker)}>
-            <Text style={styles.chevron}>›</Text>
-            <Text style={styles.cardItemText}>מנוי למתווכים</Text>
-            <Image
-              source={require('../assets/subscription-broker-icon.png')}
-              style={styles.subscriptionIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cardItem}
-            onPress={() => handleSubscriptionPress(subscriptionTypes.professional)}>
-            <Text style={styles.chevron}>›</Text>
-            <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
-            <Image
-              source={require('../assets/subscription-professional-icon.png')}
-              style={styles.subscriptionIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
+      {!isLoggedBroker && !isLoggedProfessional && !isLoggedCompany ? (
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>מנויים</Text>
+            <TouchableOpacity
+              style={[styles.cardItem, styles.cardItemDivider]}
+              onPress={() => handleSubscriptionPress(subscriptionTypes.company)}>
+              {renderChevron()}
+              <Text style={styles.cardItemText}>מנוי לחברות</Text>
+              {renderMenuIcon('company')}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cardItem, styles.cardItemDivider]}
+              onPress={() => handleSubscriptionPress(subscriptionTypes.broker)}>
+              {renderChevron()}
+              <Text style={styles.cardItemText}>מנוי למתווכים</Text>
+              {renderMenuIcon('broker')}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cardItem}
+              onPress={() => handleSubscriptionPress(subscriptionTypes.professional)}>
+              {renderChevron()}
+              <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
+              {renderMenuIcon('professional')}
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      ) : null}
 
       {/* General Settings Section */}
       <View style={styles.section}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>כללי</Text>
           <TouchableOpacity
-            style={styles.cardItem}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>שחזור קוד סודי</Text>
-            <Image
-              source={require('../assets/lock-icon.png')}
-              style={styles.generalIcon}
-              resizeMode="contain"
-            />
+            {renderMenuIcon('secret')}
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.cardItem}
-            onPress={() => onOpenFavorites && onOpenFavorites()}>
-            <Text style={styles.chevron}>›</Text>
-            <Text style={styles.cardItemText}>מועדפים</Text>
-            <Image
-              source={require('../assets/favorites-icon.png')}
-              style={styles.generalIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cardItem}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => onOpenFeedback && onOpenFeedback()}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>הצעות לשיפור</Text>
-            <Image
-              source={require('../assets/suggestions-icon.png')}
-              style={styles.generalIcon}
-              resizeMode="contain"
-            />
+            {renderMenuIcon('feedback')}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.cardItem, styles.legalRowTop, styles.legalRowDivider]}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => {
               const u = termsOfUseUrl && String(termsOfUseUrl).trim();
               if (u) {
@@ -372,18 +370,12 @@ const SettingsScreen = ({
               }
             }}
             activeOpacity={0.8}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>תנאי שימוש</Text>
-            <View style={styles.legalIconWrap}>
-              <Image
-                source={getMoreIconSource('terms')}
-                style={styles.legalIconImage}
-                resizeMode="contain"
-              />
-            </View>
+            {renderMenuIcon('terms')}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.cardItem, styles.legalRowDivider]}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => {
               const u =
                 accessibilityStatementUrl &&
@@ -400,32 +392,20 @@ const SettingsScreen = ({
               }
             }}
             activeOpacity={0.8}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>הצהרת נגישות</Text>
-            <View style={styles.legalIconWrap}>
-              <Image
-                source={getMoreIconSource('accessibility')}
-                style={styles.legalIconImage}
-                resizeMode="contain"
-              />
-            </View>
+            {renderMenuIcon('accessibility')}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.cardItem, styles.legalRowDivider]}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={openContact}
             activeOpacity={0.8}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>צור קשר</Text>
-            <View style={styles.legalIconWrap}>
-              <Image
-                source={getMoreIconSource('contact')}
-                style={styles.legalIconImage}
-                resizeMode="contain"
-              />
-            </View>
+            {renderMenuIcon('contact')}
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.cardItem}
+            style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() =>
               openUrlOrPlaceholder(
                 transactionCancellationUrl,
@@ -433,36 +413,22 @@ const SettingsScreen = ({
               )
             }
             activeOpacity={0.8}>
-            <Text style={styles.chevron}>›</Text>
+            {renderChevron()}
             <Text style={styles.cardItemText}>ביטול עסקה</Text>
-            <View style={styles.legalIconWrap}>
-              <Image
-                source={getMoreIconSource('transactionCancel')}
-                style={styles.legalIconImage}
-                resizeMode="contain"
-              />
-            </View>
+            {renderMenuIcon('cancel')}
           </TouchableOpacity>
 
           {currentUser ? (
             <TouchableOpacity style={styles.cardItem} onPress={handleLogout}>
-              <Text style={styles.chevron}>›</Text>
+              {renderChevron()}
               <Text style={styles.cardItemText}>התנתק</Text>
-              <Image
-                source={require('../assets/logout-icon.png')}
-                style={styles.generalIcon}
-                resizeMode="contain"
-              />
+              {renderMenuIcon('logout')}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.cardItem} onPress={onOpenLogin}>
-              <Text style={styles.chevron}>›</Text>
+              {renderChevron()}
               <Text style={styles.cardItemText}>התחבר</Text>
-              <Image
-                source={require('../assets/lock-icon.png')}
-                style={styles.generalIcon}
-                resizeMode="contain"
-              />
+              {renderMenuIcon('secret')}
             </TouchableOpacity>
           )}
         </View>
@@ -526,17 +492,18 @@ const styles = StyleSheet.create({
   },
   buttonsImageWrap: {
     width: '100%',
-    height: 40,
+    height: 44,
     position: 'relative',
-    maxWidth: 366,
+    maxWidth: 313,
     alignSelf: 'center',
     overflow: 'visible',
   },
   buttonsImage: {
     width: '100%',
-    height: 40,
-    maxWidth: 366,
+    height: 44,
+    maxWidth: 313,
     alignSelf: 'center',
+    overflow: 'visible',
   },
   chatBadge: {
     position: 'absolute',
@@ -562,160 +529,178 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   card: {
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL,
-    padding: 16,
-    gap: 12,
+    backgroundColor: '#2b2a39',
+    borderRadius: 12,
+    padding: 18,
+    gap: 24,
   },
   cardTitle: {
     fontSize: FontSizes.fs18,
-    color: Colors.white100,
-    fontWeight: '600',
-    marginBottom: 4,
+    color: Colors.textSecondary,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    marginBottom: -8,
   },
   cardItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    minHeight: 28,
+    paddingVertical: 0,
+    gap: 10,
     justifyContent: 'space-between',
   },
+  cardItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#222132',
+    paddingBottom: 16,
+  },
   chevron: {
-    fontSize: 24,
-    color: Colors.white100,
-    fontWeight: '300',
-    width: 20,
+    width: 11,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  chevronIcon: {
+    width: 6,
+    height: 11,
   },
   cardItemText: {
     flex: 1,
     fontSize: 16,
     color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
     fontWeight: '400',
+    lineHeight: 32,
     textAlign: 'right',
   },
-  pencilIcon: {
-    width: 20,
-    height: 20,
-  },
-  subscriptionIcon: {
-    width: 20,
-    height: 20,
-  },
-  generalIcon: {
-    width: 20,
-    height: 20,
-  },
-  legalRowTop: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#3a3943',
-    marginTop: 4,
-    paddingTop: 14,
-  },
-  legalRowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#3a3943',
-  },
-  legalIconWrap: {
-    width: 20,
-    height: 20,
+  menuIconBase: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  legalIconImage: {
-    width: 20,
-    height: 20,
-  },
-  profileCard: {
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.yellowIcons,
-    position: 'relative',
-    minHeight: 120,
-  },
-  editIconButton: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    zIndex: 10,
+  menuIconSingle: {
     width: 24,
     height: 24,
+  },
+  profileCard: {
+    backgroundColor: '#2b2a39',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FEE787',
+    position: 'relative',
+    minHeight: 153,
+    shadowColor: '#595132',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 6,
+  },
+  editIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#2b2a39',
+    marginTop: 2,
   },
   profileEditIcon: {
-    width: 20,
-    height: 20,
+    width: 26.667,
+    height: 26.667,
   },
   profileContentRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  profileMainInfoWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 12,
-    gap: 16,
+    justifyContent: 'flex-end',
+    gap: 10,
   },
   profilePictureContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     borderWidth: 2,
     borderColor: Colors.yellowIcons,
-    overflow: 'hidden',
-    backgroundColor: '#1e1d27',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2b2a39',
   },
   profileInfo: {
-    flex: 1,
-    alignItems: 'flex-end', // Right align for Hebrew
+    width: 200,
+    maxWidth: 200,
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    marginRight: 12, // Space between text and picture
+    gap: 2,
   },
   profileName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    color: Colors.textSecondary,
     textAlign: 'right',
-    marginBottom: 4,
+    width: '100%',
   },
   profileEmail: {
     fontSize: 14,
-    color: Colors.grey200,
+    color: 'rgba(210,208,220,0.5)',
     textAlign: 'right',
+    letterSpacing: 0.5447,
+    lineHeight: 16,
+    width: '100%',
   },
   profilePicture: {
-    width: '100%',
-    height: '100%',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
   },
   profilePicturePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: Colors.yellowIcons,
+    backgroundColor: '#1e1d27',
     justifyContent: 'center',
     alignItems: 'center',
   },
   profilePicturePlaceholderText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.blue100,
+    fontSize: 22,
+    fontWeight: '500',
+    color: Colors.white100,
+  },
+  profileDivider: {
+    height: 1,
+    backgroundColor: '#3A394A',
+    marginTop: 10,
+    marginBottom: 10,
   },
   profileBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#3a3943',
   },
   subscriberNumber: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
     color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
   subscriberNumberLabel: {
     fontSize: 14,
-    color: Colors.grey200,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
 });
 

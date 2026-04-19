@@ -8,23 +8,55 @@ import {
   StyleSheet,
   ImageBackground,
 } from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
+import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 
-/**
- * SuccessScreen Component
- * Registration success/completion screen
- */
+const BG = '#1e1d27';
+
 const SuccessScreen = ({
   onClose,
   onGoHome,
   onStartPublishing,
   subscriptionType = subscriptionTypes.broker,
   subscription,
+  localProfileImage = null,
 }) => {
-  const successProfilePicUrl = getUserProfileImageUrl(subscription);
+  const isCompany =
+    subscriptionType === subscriptionTypes.company ||
+    String(subscription?.subscription_type || '').toLowerCase() === 'company';
+  const companyLogoUrl =
+    subscription?.company_logo_url || subscription?.companyLogoUrl || null;
+  const serverImageUrl = isCompany
+    ? companyLogoUrl || getUserProfileImageUrl(subscription)
+    : getUserProfileImageUrl(subscription);
+  const successProfilePicUrl = serverImageUrl || localProfileImage || null;
+  const displayName =
+    subscription?.business_name ||
+    subscription?.broker_office_name ||
+    subscription?.name ||
+    subscription?.contact_person_name ||
+    'קבוצת אביב';
+  const displayEmail = subscription?.email || 'amirlevi@gmail.com';
+  const subscriberNumber = subscription?.subscriber_number || '112345235';
+
+  const renderStep = (label, active) => (
+    <View
+      style={[
+        styles.wizardStep,
+        active ? styles.wizardStepActive : styles.wizardStepInactive,
+      ]}>
+      <Text
+        style={[
+          styles.wizardStepText,
+          active ? styles.wizardStepTextActive : styles.wizardStepTextInactive,
+        ]}>
+        {label}
+      </Text>
+    </View>
+  );
 
   return (
     <ImageBackground
@@ -36,103 +68,93 @@ const SuccessScreen = ({
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={24}
-              color={Colors.white100}
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
-          <View style={styles.headerSpacer} />
+        <View style={styles.topSection}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.backButton}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={24}
+                color={Colors.white100}
+              />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <View style={styles.wizardRow}>
+            {renderStep('3', true)}
+            <View style={styles.wizardLine} />
+            {renderStep('2', false)}
+            <View style={styles.wizardLine} />
+            {renderStep('1', false)}
+          </View>
         </View>
 
-        {/* Progress Indicator */}
-        <View style={styles.progressContainer}>
-          <Image
-            source={require('../assets/wizard-progress-step3.png')}
-            style={styles.progressImage}
-            resizeMode="contain"
-          />
-        </View>
+        <View style={styles.mainSection}>
+          <View style={styles.profileSection}>
+            <View style={styles.profilePictureContainer}>
+              <View style={styles.profilePictureFrame}>
+                {successProfilePicUrl ? (
+                  <Image
+                    source={{uri: successProfilePicUrl}}
+                    style={styles.profilePicture}
+                    resizeMode="cover"
+                    key={successProfilePicUrl}
+                  />
+                ) : (
+                  <Image
+                    source={require('../assets/profile-pic-success.png')}
+                    style={styles.profilePicture}
+                    resizeMode="cover"
+                  />
+                )}
+              </View>
+              <View style={styles.checkmarkOverlay}>
+                <MaterialCommunityIcons name="check" size={16} color="#15e3ff" />
+              </View>
+            </View>
+            <Text style={styles.userName}>{displayName}</Text>
+            <Text style={styles.userEmail}>{displayEmail}</Text>
+          </View>
 
-        {/* User Profile Section - show the profile pic the user uploaded at registration */}
-        <View style={styles.profileSection}>
-          <View style={styles.profilePictureContainer}>
-            {successProfilePicUrl ? (
-              <Image
-                source={{ uri: successProfilePicUrl }}
-                style={styles.profilePicture}
-                resizeMode="cover"
-                key={successProfilePicUrl}
-              />
-            ) : (
-              <Image
-                source={require('../assets/profile-pic-success.png')}
-                style={styles.profilePicture}
-                resizeMode="cover"
-              />
-            )}
-            <View style={styles.checkmarkOverlay}>
-              <Image
-                source={require('../assets/success-checkmark.png')}
-                style={styles.checkmarkSmall}
-                resizeMode="contain"
-              />
+          <View style={styles.successTitleBlock}>
+            <Text style={styles.successTitle}>הרישום בוצע בהצלחה!</Text>
+            <Text style={styles.successSubtitle}>
+              ניתן לפרסם עד 65 מודעות בכל הקטגוריות
+            </Text>
+          </View>
+
+          <View style={styles.subscriberCardWrap}>
+            <View style={styles.subscriberContainer}>
+              <Text style={styles.subscriberLabel}>מספר מנוי</Text>
+              <Text style={styles.subscriberNumber}>{subscriberNumber}</Text>
             </View>
           </View>
-          <Text style={styles.userName}>
-            {subscription?.business_name ||
-              subscription?.broker_office_name ||
-              subscription?.name ||
-              subscription?.contact_person_name ||
-              'משתמש'}
-          </Text>
-          <Text style={styles.userEmail}>{subscription?.email || ''}</Text>
-        </View>
 
-        {/* Success Message */}
-        <View style={styles.messageSection}>
-          <Text style={styles.successTitle}>הרישום בוצע בהצלחה!</Text>
-          <Text style={styles.successSubtext}>
-            ניתן לפרסם עד 65 מודעות בכל הקטגוריות
-          </Text>
-        </View>
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={styles.publishButton}
+              onPress={() => {
+                if (onStartPublishing) onStartPublishing();
+              }}>
+              <LinearGradient
+                colors={['#FEE787', '#BD9947', '#9C6522']}
+                locations={[0.0456, 0.5076, 0.8831]}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}
+                style={styles.publishButtonGradient}>
+                <Text style={styles.publishButtonText}>התחל לפרסם מודעות</Text>
+              </LinearGradient>
+            </TouchableOpacity>
 
-        {/* Subscriber Number Section */}
-        <View style={styles.subscriberContainer}>
-          <Text style={styles.subscriberLabel}>מספר מנוי</Text>
-          <Text style={styles.subscriberNumber}>
-            {subscription?.subscriber_number || 'טוען...'}
-          </Text>
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.publishButtonWrapper}
-            onPress={() => {
-              if (onStartPublishing) {
-                onStartPublishing();
-              }
-            }}>
-            <Image
-              source={require('../assets/start-publishing-button.png')}
-              style={styles.publishButtonImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.homeLink}
-            onPress={() => {
-              if (onGoHome) {
-                onGoHome();
-              }
-            }}>
-            <Text style={styles.homeLinkText}>קח אותי לעמוד הבית</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.homeLink}
+              onPress={() => {
+                if (onGoHome) onGoHome();
+              }}>
+              <Text style={styles.homeLinkText}>קח אותי לעמוד הבית</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </ImageBackground>
@@ -153,7 +175,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: BG,
     zIndex: 1,
   },
   scrollView: {
@@ -162,10 +184,20 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    paddingTop: 50,
     paddingBottom: 40,
+    gap: 20,
+  },
+  topSection: {
+    width: '100%',
     paddingHorizontal: 24,
-    gap: 24,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: BG,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 10},
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
   },
   header: {
     flexDirection: 'row',
@@ -181,37 +213,76 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   headerTitle: {
-    fontSize: FontSizes.fs18,
-    fontWeight: '600',
+    fontSize: 18,
     color: Colors.white100,
+    fontFamily: 'Rubik-Regular',
     flex: 1,
     textAlign: 'center',
   },
   headerSpacer: {
     width: 40,
   },
-  progressContainer: {
+  wizardRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  wizardLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#4d4966',
+  },
+  wizardStep: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 40,
   },
-  progressImage: {
-    width: 366,
-    height: 32,
+  wizardStepInactive: {
+    backgroundColor: '#4d4966',
+  },
+  wizardStepActive: {
+    borderWidth: 2,
+    borderColor: '#F4AD39',
+    backgroundColor: 'transparent',
+  },
+  wizardStepText: {
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-Medium',
+  },
+  wizardStepTextInactive: {
+    color: 'rgba(210,208,220,0.6)',
+  },
+  wizardStepTextActive: {
+    color: '#F4AD39',
+  },
+  mainSection: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 28,
   },
   profileSection: {
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
+    gap: 8,
   },
   profilePictureContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    overflow: 'hidden',
-    borderWidth: 3,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 2,
     borderColor: Colors.yellowIcons,
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profilePictureFrame: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: 'hidden',
   },
   profilePicture: {
     width: '100%',
@@ -219,90 +290,123 @@ const styles = StyleSheet.create({
   },
   checkmarkOverlay: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#4ECDC4',
-    justifyContent: 'center',
+    bottom: -2,
+    right: -2,
+    width: 27,
+    height: 27,
+    borderRadius: 13.5,
+    backgroundColor: BG,
+    borderWidth: 1.5,
+    borderColor: '#15e3ff',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.white100,
-  },
-  checkmarkSmall: {
-    width: 18,
-    height: 18,
+    justifyContent: 'center',
   },
   userName: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.14,
     color: Colors.white100,
     textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
   },
   userEmail: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: Colors.grey200,
+    marginTop: -2,
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.14,
+    color: Colors.textSecondary,
     textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
   },
-  messageSection: {
+  successTitleBlock: {
+    width: '100%',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
+    gap: 12,
   },
   successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.white100,
+    fontSize: 28,
+    lineHeight: 31,
+    color: '#f7f3e6',
     textAlign: 'center',
+    fontFamily: 'Rubik-SemiBold',
+    width: 326,
   },
-  successSubtext: {
-    fontSize: 16,
-    fontWeight: '400',
+  successSubtitle: {
+    fontSize: 18,
+    lineHeight: 32,
     color: Colors.white100,
     textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
+    width: 326,
+  },
+  subscriberCardWrap: {
+    width: '100%',
+    paddingHorizontal: 24,
   },
   subscriberContainer: {
+    width: '100%',
     backgroundColor: '#2B2A39',
-    borderRadius: BorderRadius.roundCorner2XL,
-    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fee787',
+    paddingVertical: 24,
+    paddingHorizontal: 24,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
+    gap: 24,
+    shadowColor: 'rgba(89,81,50,0.4)',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 1,
+    shadowRadius: 15,
+    elevation: 6,
   },
   subscriberLabel: {
-    fontSize: 16,
-    fontWeight: '400',
+    fontSize: 20,
     color: Colors.white100,
     textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
   },
   subscriberNumber: {
     fontSize: 28,
-    fontWeight: '700',
+    lineHeight: 34,
     color: Colors.white100,
     textAlign: 'center',
+    fontFamily: 'Rubik-SemiBold',
+    letterSpacing: 0.5,
   },
   actionsContainer: {
-    gap: 16,
+    width: '100%',
     alignItems: 'center',
+    gap: 20,
   },
-  publishButtonWrapper: {
-    width: '100%',
+  publishButton: {
+    width: 372,
+    maxWidth: '100%',
+    height: 52,
+    borderRadius: 1000,
+    overflow: 'hidden',
   },
-  publishButtonImage: {
+  publishButtonGradient: {
     width: '100%',
-    height: 56,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publishButtonText: {
+    fontSize: 20,
+    letterSpacing: 0.2,
+    color: BG,
+    fontFamily: 'Rubik-Medium',
   },
   homeLink: {
-    paddingVertical: 12,
+    paddingVertical: 4,
   },
   homeLinkText: {
-    fontSize: 16,
-    fontWeight: '400',
+    fontSize: 18,
+    lineHeight: 22,
     color: Colors.white100,
     textAlign: 'center',
     textDecorationLine: 'underline',
+    fontFamily: 'Rubik-Regular',
   },
 });
 

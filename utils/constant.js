@@ -90,13 +90,6 @@ export const userCategories = [
     imageRight: require('../assets/category2Right.png'),
   },
   {
-    id: 12,
-    name: 'יוקרה',
-    image: EXCLUSIVE_CATEGORY_IMAGE,
-    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
-    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
-  },
-  {
     id: 7,
     name: 'קרקעות',
     image: require('../assets/category7.png'),
@@ -229,13 +222,6 @@ export const brokerCategories = [
     imageRight: require('../assets/category10Right.png'),
   },
   // {id: 11, name: '', image: require('../assets/tik11.png')},
-  {
-    id: 12,
-    name: 'אקסלוסיב',
-    image: EXCLUSIVE_CATEGORY_IMAGE,
-    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
-    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
-  },
 ];
 
 export const companyCategories = [
@@ -292,13 +278,6 @@ export const companyCategories = [
     imageRight: require('../assets/category10Right.png'),
   },
   // {id: 11, name: '', image: require('../assets/tik11.png')},
-  {
-    id: 12,
-    name: 'אקסלוסיב',
-    image: EXCLUSIVE_CATEGORY_IMAGE,
-    imageLeft: EXCLUSIVE_CATEGORY_IMAGE,
-    imageRight: EXCLUSIVE_CATEGORY_IMAGE,
-  },
 ];
 
 export const getHeaderTitle = subscriptionType => {

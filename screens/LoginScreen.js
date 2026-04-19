@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ImageBackground,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -64,209 +63,219 @@ const LoginScreen = ({onClose, onLoginSuccess}) => {
   };
 
   return (
-    <ImageBackground
-      source={require('../assets/subscription-background.png')}
-      style={styles.container}
-      resizeMode="cover">
-      <View style={styles.overlay} />
+    <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Text style={styles.backText}>חזור</Text>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+            <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.brandWrap}>
+          <Image source={require('../assets/logo.png')} style={styles.logoIcon} resizeMode="contain" />
+          <Image
+            source={require('../assets/its-just-simple.png')}
+            style={styles.sloganImage}
+            resizeMode="contain"
+          />
+        </View>
+
+        <View style={styles.formCard}>
           <Text style={styles.headerTitle}>התחברות</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+          <Text style={styles.instructionText}>הזן את כתובת המייל או מספר המנוי שלך</Text>
 
-        {/* Instruction Section */}
-        <View style={styles.instructionContainer}>
-          <Text style={styles.instructionText}>
-            הזן את כתובת המייל או מספר המנוי שלך
-          </Text>
-        </View>
-
-        {/* Error Message */}
-        {errorMessage && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errorMessage}</Text>
-          </View>
-        )}
-
-        {/* Email Input Field */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>כתובת מייל</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="הזן כתובת מייל"
-            placeholderTextColor={Colors.grey200}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Or Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>או</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Subscriber Number Input Field */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>מספר מנוי</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="הזן מספר מנוי"
-            placeholderTextColor={Colors.grey200}
-            value={subscriberNumber}
-            onChangeText={setSubscriberNumber}
-            keyboardType="numeric"
-            textAlign="right"
-          />
-        </View>
-
-        {/* Login Button */}
-        <TouchableOpacity
-          disabled={(!email.trim() && !subscriberNumber.trim()) || isLoggingIn}
-          style={[
-            styles.loginButton,
-            (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
-              ? styles.loginButtonDisabled
-              : null,
-          ]}
-          onPress={handleLogin}>
-          {isLoggingIn ? (
-            <ActivityIndicator color={Colors.white100} />
-          ) : (
-            <Text style={styles.loginButtonText}>התחבר</Text>
+          {errorMessage && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            </View>
           )}
-        </TouchableOpacity>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>כתובת מייל</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="הזן כתובת מייל"
+              placeholderTextColor={Colors.grey200}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              textAlign="right"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>מספר מנוי</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="הזן מספר מנוי"
+              placeholderTextColor={Colors.grey200}
+              value={subscriberNumber}
+              onChangeText={setSubscriberNumber}
+              keyboardType="numeric"
+              textAlign="right"
+            />
+          </View>
+
+          <TouchableOpacity
+            disabled={(!email.trim() && !subscriberNumber.trim()) || isLoggingIn}
+            style={[
+              styles.loginButton,
+              (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
+                ? styles.loginButtonDisabled
+                : null,
+            ]}
+            onPress={handleLogin}
+            activeOpacity={0.85}>
+            {isLoggingIn ? (
+              <ActivityIndicator color={Colors.white100} />
+            ) : (
+              <Text style={styles.loginButtonText}>התחבר</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-    </ImageBackground>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.blue100,
     width: '100%',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
-    padding: Spacing.lg,
-    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 40,
   },
-  header: {
+  topBar: {
     flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginBottom: 10,
+  },
+  closeBtn: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.xl,
+    justifyContent: 'center',
   },
-  backButton: {
-    padding: 8,
-  },
-  backText: {
-    fontSize: FontSizes.md,
+  closeBtnText: {
+    fontSize: 24,
     color: Colors.white100,
-    fontWeight: '500',
+    fontWeight: '300',
+  },
+  brandWrap: {
+    alignItems: 'center',
+    marginBottom: 22,
+  },
+  logoIcon: {
+    width: 94,
+    height: 86,
+  },
+  sloganImage: {
+    width: 112,
+    height: 23,
+    marginTop: 2,
+  },
+  formCard: {
+    backgroundColor: '#2B2A39',
+    borderRadius: BorderRadius.roundCorner2XL,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,196,10,0.38)',
   },
   headerTitle: {
-    fontSize: FontSizes.xl,
-    fontWeight: '700',
+    fontSize: 22,
+    fontFamily: 'Rubik-Medium',
     color: Colors.white100,
-    textAlign: 'center',
-    flex: 1,
-  },
-  headerSpacer: {
-    width: 60,
-  },
-  instructionContainer: {
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
+    textAlign: 'right',
+    marginBottom: 10,
   },
   instructionText: {
-    fontSize: FontSizes.lg,
-    color: Colors.white100,
-    textAlign: 'center',
-    fontWeight: '500',
+    fontSize: 16,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
+    marginBottom: 16,
   },
   errorContainer: {
-    backgroundColor: 'rgba(255, 0, 0, 0.2)',
+    backgroundColor: 'rgba(255, 68, 68, 0.14)',
     borderColor: '#ff4444',
     borderWidth: 1,
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
+    padding: 12,
+    marginBottom: 14,
   },
   errorText: {
     color: '#ffcccc',
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.sm,
     textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
   },
   inputContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: 14,
   },
   label: {
-    fontSize: FontSizes.md,
+    fontSize: 14,
     color: Colors.white100,
-    marginBottom: Spacing.sm,
+    marginBottom: 8,
     textAlign: 'right',
-    fontWeight: '500',
+    fontFamily: 'Rubik-Regular',
   },
   input: {
-    backgroundColor: Colors.grey800,
-    borderColor: Colors.grey700,
+    backgroundColor: '#1F1E2A',
+    borderColor: '#3B3A4C',
     borderWidth: 1,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    fontSize: FontSizes.md,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 16,
     color: Colors.white100,
     textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: Spacing.lg,
+    marginVertical: 8,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.grey700,
+    backgroundColor: '#3A394A',
   },
   dividerText: {
-    fontSize: FontSizes.sm,
-    color: Colors.grey400,
-    marginHorizontal: Spacing.md,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginHorizontal: 10,
+    fontFamily: 'Rubik-Regular',
   },
   loginButton: {
     backgroundColor: Colors.yellowIcons,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.xl,
-    minHeight: 56,
+    marginTop: 12,
+    minHeight: 54,
   },
   loginButtonDisabled: {
-    backgroundColor: Colors.grey700,
-    opacity: 0.5,
+    backgroundColor: '#6D687B',
+    opacity: 0.55,
   },
   loginButtonText: {
-    fontSize: FontSizes.lg,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
     color: Colors.darkBackground,
   },
 });

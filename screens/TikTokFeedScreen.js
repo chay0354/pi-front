@@ -4132,9 +4132,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sidebarProfilePic: {
-    width: 51,
-    height: 51,
-    borderRadius: 25.5,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   sidebarProfilePlaceholder: {
     backgroundColor: 'rgba(255,255,255,0.2)',

@@ -45,6 +45,8 @@ const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 const CHAT_BG = '#373548';
 const BUBBLE_GOLD = '#d4a84b';
 const BUBBLE_ME = '#2DD4BF';
+const FIGMA_WELCOME_BUBBLE_BG = '#ffbb32';
+const FIGMA_MAIN_DEEP_BLUE = '#1e1d27';
 /** Header + bottom composer bar */
 const CHAT_CHROME_BG = '#1E1D27';
 const INPUT_PILL_BORDER = '#8a8ab0';
@@ -74,6 +76,7 @@ const isUserConversation = (conv) =>
 const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_CHAT_AVATAR = require('../assets/image-copy-10.png');
+const WELCOME_PI_AVATAR = require('../assets/chat/welcome-pi-avatar.png');
 
 /** Prefer API otherUserEmail; else id if it looks like an email, not a conversation UUID. */
 const resolveOtherPartyEmail = (conv) => {
@@ -774,10 +777,15 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     if (isWelcome) {
       return (
         <View style={[styles.messageRow, styles.messageRowWelcome]}>
+          <View style={styles.senderLogoWrap}>
+            <Image source={WELCOME_PI_AVATAR} style={styles.senderLogo} resizeMode="cover" />
+          </View>
           <View style={[styles.bubbleWrap, styles.bubbleWrapWelcome]}>
-            <View style={[styles.bubble, styles.bubbleThem]}>
-              <Text style={styles.bubbleText}>{msg.fullText}</Text>
-              <Text style={styles.bubbleTime}>{msg.time}</Text>
+            <View style={styles.welcomeBubble}>
+              <Text style={styles.welcomeBubbleText}>{msg.fullText}</Text>
+              <View style={styles.welcomeTimeRow}>
+                <Text style={styles.welcomeBubbleTime}>{msg.time}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -2132,7 +2140,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'web' ? 100 : 24,
     flexGrow: 1,
   },
-  dateLabel: { textAlign: 'center', color: '#fff', fontSize: 14, marginBottom: 16 },
+  dateLabel: { textAlign: 'center', color: '#fff', fontSize: 14, lineHeight: 18, marginBottom: 16 },
   loadingWrap: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   loadingText: { color: TEXT_LIGHT, fontSize: 14 },
   emptyChatText: { textAlign: 'center', color: TEXT_LIGHT, fontSize: 15, marginTop: 24 },
@@ -2143,13 +2151,19 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
-  messageRowWelcome: { gap: 0 },
+  messageRowWelcome: { gap: 6, alignItems: 'flex-end' },
   messageRowMe: { justifyContent: 'flex-end' },
   senderLogoWrap: { marginBottom: 4, width: 32, height: 32 },
   senderLogo: { width: 32, height: 32, borderRadius: 16 },
   senderLogoPlaceholder: { backgroundColor: CARD_BG, alignItems: 'center', justifyContent: 'center' },
   bubbleWrap: { flex: 1, maxWidth: '85%', alignSelf: 'flex-start' },
-  bubbleWrapWelcome: { flex: 0, maxWidth: '72%' },
+  bubbleWrapWelcome: {
+    flex: 0,
+    width: 268,
+    maxWidth: 268,
+    minWidth: 268,
+    alignSelf: 'flex-start',
+  },
   bubbleWrapMe: { alignSelf: 'flex-end' },
   bubble: {
     paddingVertical: 14,
@@ -2161,6 +2175,43 @@ const styles = StyleSheet.create({
   bubbleThem: { backgroundColor: BUBBLE_GOLD, alignSelf: 'flex-start' },
   bubbleMe: { backgroundColor: BUBBLE_ME, borderTopLeftRadius: 16, borderTopRightRadius: 4, alignSelf: 'flex-end' },
   bubbleText: { color: CHAT_BG, fontSize: 15, textAlign: 'right', lineHeight: 22 },
+  welcomeBubble: {
+    width: 268,
+    backgroundColor: FIGMA_WELCOME_BUBBLE_BG,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 7},
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 6,
+    alignItems: 'flex-end',
+  },
+  welcomeBubbleText: {
+    width: '100%',
+    color: FIGMA_MAIN_DEEP_BLUE,
+    fontSize: 17,
+    lineHeight: 21,
+    textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    writingDirection: 'rtl',
+  },
+  welcomeTimeRow: {
+    width: '100%',
+    marginTop: 6,
+    alignItems: 'flex-end',
+  },
+  welcomeBubbleTime: {
+    color: FIGMA_MAIN_DEEP_BLUE,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+  },
   bubbleSenderLabel: {
     color: 'rgba(55,53,72,0.65)',
     fontSize: 11,
