@@ -56,7 +56,7 @@ export const userCategories = [
   },
   {
     id: 5,
-    categoryName: 'BNB',
+    name: 'BNB',
     image: require('../assets/category5.png'),
     imageLeft: require('../assets/category5Left.png'),
     imageRight: require('../assets/category5Right.png'),
@@ -88,6 +88,13 @@ export const userCategories = [
     image: require('../assets/category2.png'),
     imageLeft: require('../assets/category2Left.png'),
     imageRight: require('../assets/category2Right.png'),
+  },
+  {
+    id: 12,
+    name: 'יוקרה',
+    image: require('../assets/category12.png'),
+    imageLeft: require('../assets/category12Left.png'),
+    imageRight: require('../assets/category12Right.png'),
   },
   {
     id: 7,
@@ -164,6 +171,27 @@ export const categoriesEditProfile = [
 
 export const brokerCategories = [
   {
+    id: 6,
+    name: 'מגזר דתי',
+    image: require('../assets/category6.png'),
+    imageLeft: require('../assets/category6Left.png'),
+    imageRight: require('../assets/category6Right.png'),
+  },
+  {
+    id: 4,
+    name: 'גלובל',
+    image: require('../assets/category4.png'),
+    imageLeft: require('../assets/category4Left.png'),
+    imageRight: require('../assets/category4Right.png'),
+  },
+  {
+    id: 5,
+    name: 'BNB',
+    image: require('../assets/category5.png'),
+    imageLeft: require('../assets/category5Left.png'),
+    imageRight: require('../assets/category5Right.png'),
+  },
+  {
     id: 1,
     name: 'חדש מקבלן',
     image: require('../assets/category1.png'),
@@ -171,33 +199,25 @@ export const brokerCategories = [
     imageRight: require('../assets/category1Right.png'),
   },
   {
+    id: 10,
+    name: 'דירות',
+    image: require('../assets/category10.png'),
+    imageLeft: require('../assets/category10Left.png'),
+    imageRight: require('../assets/category10Right.png'),
+  },
+  {
     id: 2,
     name: 'משרדים',
     image: require('../assets/category2.png'),
     imageLeft: require('../assets/category2Left.png'),
     imageRight: require('../assets/category2Right.png'),
   },
-  // {id: 3, name: 'שותפים', image: require('../assets/category3.png')},
   {
-    id: 4,
-    name: 'גלובל',
-    image: require('../assets/category4.png'),
-    imageLeft: require('../assets/category4Left.png'),
-    imageRight: require('../assets/category4Right.png'),
-  },
-  {
-    id: 5,
-    name: 'BNB',
-    image: require('../assets/category5.png'),
-    imageLeft: require('../assets/category5Left.png'),
-    imageRight: require('../assets/category5Right.png'),
-  },
-  {
-    id: 6,
-    name: 'מגזר דתי',
-    image: require('../assets/category6.png'),
-    imageLeft: require('../assets/category6Left.png'),
-    imageRight: require('../assets/category6Right.png'),
+    id: 12,
+    name: 'יוקרה',
+    image: require('../assets/category12.png'),
+    imageLeft: require('../assets/category12Left.png'),
+    imageRight: require('../assets/category12Right.png'),
   },
   {
     id: 7,
@@ -213,27 +233,17 @@ export const brokerCategories = [
     imageLeft: require('../assets/category8Left.png'),
     imageRight: require('../assets/category8Right.png'),
   },
-  // {id: 9, name: '', image: require('../assets/tik9.png')},
-  {
-    id: 10,
-    name: 'דירות',
-    image: require('../assets/category10.png'),
-    imageLeft: require('../assets/category10Left.png'),
-    imageRight: require('../assets/category10Right.png'),
-  },
-  // {id: 11, name: '', image: require('../assets/tik11.png')},
 ];
 
 export const companyCategories = [
   // {id: 1, name: 'חדש מקבלן', image: require('../assets/category1.png')},
   {
-    id: 2,
-    name: 'משרדים',
-    image: require('../assets/category2.png'),
-    imageLeft: require('../assets/category2Left.png'),
-    imageRight: require('../assets/category2Right.png'),
+    id: 6,
+    name: 'מגזר דתי',
+    image: require('../assets/category6.png'),
+    imageLeft: require('../assets/category6Left.png'),
+    imageRight: require('../assets/category6Right.png'),
   },
-  // {id: 3, name: 'שותפים', image: require('../assets/category3.png')},
   {
     id: 4,
     name: 'גלובל',
@@ -249,11 +259,25 @@ export const companyCategories = [
     imageRight: require('../assets/category5Right.png'),
   },
   {
-    id: 6,
-    name: 'מגזר דתי',
-    image: require('../assets/category6.png'),
-    imageLeft: require('../assets/category6Left.png'),
-    imageRight: require('../assets/category6Right.png'),
+    id: 10,
+    name: 'דירות',
+    image: require('../assets/category10.png'),
+    imageLeft: require('../assets/category10Left.png'),
+    imageRight: require('../assets/category10Right.png'),
+  },
+  {
+    id: 2,
+    name: 'משרדים',
+    image: require('../assets/category2.png'),
+    imageLeft: require('../assets/category2Left.png'),
+    imageRight: require('../assets/category2Right.png'),
+  },
+  {
+    id: 12,
+    name: 'יוקרה',
+    image: require('../assets/category12.png'),
+    imageLeft: require('../assets/category12Left.png'),
+    imageRight: require('../assets/category12Right.png'),
   },
   {
     id: 7,
@@ -269,15 +293,6 @@ export const companyCategories = [
     imageLeft: require('../assets/category8Left.png'),
     imageRight: require('../assets/category8Right.png'),
   },
-  // {id: 9, name: '', image: require('../assets/tik9.png')},
-  {
-    id: 10,
-    name: 'דירות',
-    image: require('../assets/category10.png'),
-    imageLeft: require('../assets/category10Left.png'),
-    imageRight: require('../assets/category10Right.png'),
-  },
-  // {id: 11, name: '', image: require('../assets/tik11.png')},
 ];
 
 export const getHeaderTitle = subscriptionType => {
