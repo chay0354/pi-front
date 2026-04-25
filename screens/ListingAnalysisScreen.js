@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -8,52 +8,62 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { brokerCategories } from '../utils/constant';
-import { getListings } from '../utils/api';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {LinearGradient} from 'expo-linear-gradient';
+import {brokerCategories} from '../utils/constant';
+import {getListings} from '../utils/api';
 
-const BG = '#1a1926';
-const CARD_BG = '#252436';
-const GOLD = '#ffc40a';
-const TEXT_MUTED = 'rgba(255,255,255,0.55)';
+// Figma palette (node 35:547303 — ניתוח מודעות)
+const BG = '#27262F';
+const CARD_BG = '#2B2A39';
+const DIVIDER = '#373548';
+const GOLD_ACCENT = '#E8B34D';
+const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
+const TEXT_SECONDARY = '#D2D0DC';
 
-// Same crop math as EditPublishAdScreen; smaller display size for analysis rows
 const EDIT_PUBLISH_CATEGORY_ICON_SIZE = 110;
-const CATEGORY_ICON_SIZE = 70;
+const CATEGORY_ICON_SIZE = 56;
 const CATEGORY_ICON_CROP = 0.24;
-const ANALYSIS_ICON_BORDER_RADIUS = Math.round((14 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE);
+const ANALYSIS_ICON_BORDER_RADIUS = Math.round(
+  (14 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE,
+);
 
-/** Rows matching product design (category id → display label). */
+// Rows match Figma display order (id → label).
 const ANALYSIS_ROWS = [
-  { id: 1, label: 'חדש מקבלן' },
-  { id: 10, label: 'דירות' },
-  { id: 8, label: 'מסחרי' },
-  { id: 2, label: 'משרדים' },
-  { id: 12, label: 'יוקרה' },
-  { id: 4, label: 'גלובל' },
-  { id: 6, label: 'מגזר דתי' },
+  {id: 1, label: 'חדש מקבלן'},
+  {id: 10, label: 'דירות'},
+  {id: 8, label: 'מסחר'},
+  {id: 2, label: 'משרדים'},
+  {id: 12, label: 'יוקרה'},
+  {id: 4, label: 'גלובל'},
+  {id: 6, label: 'מגזר דתי'},
 ];
 
 const DEFAULT_LISTING_QUOTA = 65;
 
-function categoryMeta(categoryId) {
-  return brokerCategories.find(c => c.id === categoryId) || null;
-}
+const categoryMeta = id => brokerCategories.find(c => c.id === id) || null;
 
-/** Identical crop/layout logic as EditPublishAdScreen category chips */
-function renderCroppedCategoryImage(source, categoryId) {
-  const crop = CATEGORY_ICON_CROP;
-  const inner = 1 - 2 * crop;
+const isListingFrozen = l =>
+  l?.is_frozen === true || l?.is_frozen === 'true';
+
+/** Crops the category asset the same way EditPublishAdScreen does. */
+const CroppedCategoryImage = ({source, categoryId}) => {
+  const inner = 1 - 2 * CATEGORY_ICON_CROP;
   const imageSize = Math.ceil(CATEGORY_ICON_SIZE / inner);
   const offset = (imageSize - CATEGORY_ICON_SIZE) / 2;
   const imageAdjust =
     categoryId === 8
-      ? { marginLeft: 0, marginTop: Math.round((4 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE) }
-      : { marginLeft: 0, marginTop: 0 };
+      ? {
+          marginTop: Math.round(
+            (4 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE,
+          ),
+        }
+      : {};
   return (
     <View
       style={[
-        styles.analysisCategoryImageWrap,
+        styles.categoryImageWrap,
         {
           width: CATEGORY_ICON_SIZE,
           height: CATEGORY_ICON_SIZE,
@@ -62,26 +72,19 @@ function renderCroppedCategoryImage(source, categoryId) {
       ]}>
       <Image
         source={source}
-        style={[
-          styles.analysisCategoryImage,
-          {
-            width: imageSize,
-            height: imageSize,
-            marginLeft: -offset + (imageAdjust.marginLeft ?? 0),
-            marginTop: -offset + (imageAdjust.marginTop ?? 0),
-          },
-        ]}
+        style={{
+          width: imageSize,
+          height: imageSize,
+          marginLeft: -offset,
+          marginTop: -offset + (imageAdjust.marginTop ?? 0),
+        }}
         resizeMode="contain"
       />
     </View>
   );
-}
+};
 
-function isListingFrozen(listing) {
-  return listing?.is_frozen === true || listing?.is_frozen === 'true';
-}
-
-const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
+const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -98,13 +101,11 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
       try {
         const result = await getListings({
           status: 'published',
-          ...(currentUser?.id && { subscription_id: currentUser.id }),
+          ...(currentUser?.id && {subscription_id: currentUser.id}),
         });
         if (cancelled) return;
         if (result?.success && Array.isArray(result.listings)) {
-          const list =
-            currentUser?.id == null ? [] : result.listings;
-          setListings(list);
+          setListings(currentUser?.id == null ? [] : result.listings);
         } else {
           setListings([]);
         }
@@ -114,24 +115,27 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser?.id]);
 
-  const { activeListings, countsByCategory, activeTotal } = useMemo(() => {
+  const {countsByCategory, activeTotal} = useMemo(() => {
     const active = listings.filter(l => !isListingFrozen(l));
     const byCat = {};
-    ANALYSIS_ROWS.forEach(r => { byCat[r.id] = 0; });
+    ANALYSIS_ROWS.forEach(r => {
+      byCat[r.id] = 0;
+    });
     active.forEach(l => {
       const cid = l.category != null ? parseInt(String(l.category), 10) : NaN;
-      if (!Number.isNaN(cid) && Object.prototype.hasOwnProperty.call(byCat, cid)) {
+      if (
+        !Number.isNaN(cid) &&
+        Object.prototype.hasOwnProperty.call(byCat, cid)
+      ) {
         byCat[cid] += 1;
       }
     });
-    return {
-      activeListings: active,
-      countsByCategory: byCat,
-      activeTotal: active.length,
-    };
+    return {countsByCategory: byCat, activeTotal: active.length};
   }, [listings]);
 
   const remaining = Math.max(0, quota - activeTotal);
@@ -140,7 +144,10 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.headerBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.headerBtn}
+          hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
           <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>ניתוח מודעות</Text>
@@ -149,7 +156,7 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={GOLD} />
+          <ActivityIndicator size="large" color={GOLD_ACCENT} />
         </View>
       ) : (
         <ScrollView
@@ -157,14 +164,25 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>מודעות פעילות</Text>
-            <Text style={styles.summaryCount}>
-              <Text style={styles.summaryCountCurrent}>{activeTotal}</Text>
-              <Text style={styles.summaryCountSlash}>/</Text>
-              <Text style={styles.summaryCountQuota}>{quota}</Text>
-            </Text>
+            <View style={styles.summaryTopRow}>
+              <Text style={styles.summaryCountWrap}>
+                <Text style={styles.summaryCountCurrent}>{activeTotal}</Text>
+                <Text style={styles.summaryCountSlash}>/</Text>
+                <Text style={styles.summaryCountQuota}>{quota}</Text>
+              </Text>
+              <Text style={styles.summaryLabel}>מודעות פעילות</Text>
+            </View>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+              <LinearGradient
+                colors={GOLD_GRADIENT}
+                locations={GOLD_GRADIENT_LOCATIONS}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={[
+                  styles.progressFill,
+                  {width: `${progress * 100}%`},
+                ]}
+              />
             </View>
             <Text style={styles.summaryFooter}>
               ניתן לפרסם עוד {remaining} מודעות
@@ -176,28 +194,53 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
             <Text style={styles.tableHeaderRight}>קטגוריה</Text>
           </View>
 
-          {ANALYSIS_ROWS.map(row => {
+          {ANALYSIS_ROWS.map((row, idx) => {
             const meta = categoryMeta(row.id);
             const count = countsByCategory[row.id] ?? 0;
             return (
-              <View key={row.id} style={styles.tableRow}>
-                <View style={styles.rowLeft}>
-                  <Text style={styles.rowCount}>{count}</Text>
-                  <View style={styles.rowSubtextCol}>
-                    <Text style={styles.rowSubtextTitle}>מספר נכסים מפורסמים</Text>
-                    <Text style={styles.rowSubtextNote}>לא כולל בית פתוח ופוסטים</Text>
+              <View key={row.id}>
+                <View style={styles.tableRow}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowCount}>{count}</Text>
+                    <View style={styles.rowSubtextCol}>
+                      <Text style={styles.rowSubtextTitle}>
+                        מספר נכסים מפורסמים
+                      </Text>
+                      <Text style={styles.rowSubtextNote}>
+                        לא כולל בית פתוח ופוסטים
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.rowRight}>
-                  <Text style={styles.rowCategoryName}>{row.label}</Text>
-                  {meta?.image
-                    ? renderCroppedCategoryImage(meta.image, row.id)
-                    : (
-                      <View style={[styles.analysisCategoryImageWrap, styles.rowIconPlaceholder, { width: CATEGORY_ICON_SIZE, height: CATEGORY_ICON_SIZE, borderRadius: ANALYSIS_ICON_BORDER_RADIUS }]}>
-                        <MaterialCommunityIcons name="image-outline" size={Math.round((32 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE)} color={TEXT_MUTED} />
+                  <View style={styles.rowRight}>
+                    <Text style={styles.rowCategoryName}>{row.label}</Text>
+                    {meta?.image ? (
+                      <CroppedCategoryImage
+                        source={meta.image}
+                        categoryId={row.id}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.categoryImageWrap,
+                          styles.categoryImagePlaceholder,
+                          {
+                            width: CATEGORY_ICON_SIZE,
+                            height: CATEGORY_ICON_SIZE,
+                            borderRadius: ANALYSIS_ICON_BORDER_RADIUS,
+                          },
+                        ]}>
+                        <MaterialCommunityIcons
+                          name="image-outline"
+                          size={22}
+                          color={TEXT_SECONDARY}
+                        />
                       </View>
                     )}
+                  </View>
                 </View>
+                {idx < ANALYSIS_ROWS.length - 1 ? (
+                  <View style={styles.divider} />
+                ) : null}
               </View>
             );
           })}
@@ -208,7 +251,7 @@ const ListingAnalysisScreen = ({ onClose, currentUser = null }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
+  container: {flex: 1, backgroundColor: BG},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,90 +260,194 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: BG,
+    borderBottomColor: DIVIDER,
+    backgroundColor: CARD_BG,
   },
-  headerBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 20 },
+  headerBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+  },
+  loadingWrap: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  scroll: {flex: 1},
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+
+  // Summary card
   summaryCard: {
     backgroundColor: CARD_BG,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+    marginBottom: 20,
   },
-  summaryLabel: { color: TEXT_MUTED, fontSize: 15, textAlign: 'right', marginBottom: 8 },
-  summaryCount: { textAlign: 'right', marginBottom: 14 },
-  summaryCountCurrent: { color: GOLD, fontSize: 32, fontWeight: '700' },
-  summaryCountSlash: { color: '#fff', fontSize: 28, fontWeight: '600' },
-  summaryCountQuota: { color: '#fff', fontSize: 28, fontWeight: '600' },
+  summaryTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 31,
+  },
+  summaryLabel: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textAlign: 'right',
+    lineHeight: 22,
+  },
+  summaryCountWrap: {
+    textAlign: 'left',
+  },
+  summaryCountCurrent: {
+    color: GOLD_ACCENT,
+    fontSize: 32,
+    lineHeight: 37,
+    fontFamily: 'Rubik-SemiBold',
+    fontWeight: '600',
+    letterSpacing: 0.54,
+  },
+  summaryCountSlash: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    letterSpacing: 0.54,
+  },
+  summaryCountQuota: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    letterSpacing: 0.54,
+  },
   progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    height: 4,
+    backgroundColor: DIVIDER,
+    borderRadius: 855,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 15,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
-    backgroundColor: GOLD,
+    borderRadius: 17,
   },
-  summaryFooter: { color: TEXT_MUTED, fontSize: 14, textAlign: 'right' },
+  summaryFooter: {
+    color: TEXT_SECONDARY,
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+
+  // Table headers
   tableHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 19,
+    paddingHorizontal: 0,
   },
-  tableHeaderLeft: { color: TEXT_MUTED, fontSize: 13, fontWeight: '600' },
-  tableHeaderRight: { color: TEXT_MUTED, fontSize: 13, fontWeight: '600' },
+  tableHeaderLeft: {
+    color: TEXT_SECONDARY,
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+  },
+  tableHeaderRight: {
+    color: TEXT_SECONDARY,
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+  },
+
+  // Rows
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.12)',
+    height: 66,
   },
-  rowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 8 },
-  rowCount: { color: '#fff', fontSize: 22, fontWeight: '700', minWidth: 28, textAlign: 'left' },
+  rowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  rowCount: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    lineHeight: 28,
+    fontFamily: 'Rubik-SemiBold',
+    fontWeight: '600',
+    minWidth: 28,
+    textAlign: 'left',
+  },
   rowSubtextCol: {
     flexShrink: 1,
-    maxWidth: 148,
-    alignItems: 'flex-start',
-    marginStart: -14,
+    alignItems: 'flex-end',
   },
   rowSubtextTitle: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 13,
     lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
     textAlign: 'right',
-    alignSelf: 'stretch',
   },
   rowSubtextNote: {
-    color: TEXT_MUTED,
+    color: TEXT_SECONDARY,
     fontSize: 10,
-    fontWeight: '400',
     lineHeight: 14,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
     textAlign: 'right',
-    alignSelf: 'stretch',
-    marginTop: 3,
+    marginTop: 2,
   },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rowCategoryName: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'right', maxWidth: 140 },
-  analysisCategoryImageWrap: {
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rowCategoryName: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'right',
+    maxWidth: 110,
+  },
+  categoryImageWrap: {
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#2C2A3A',
   },
-  analysisCategoryImage: {},
-  rowIconPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  categoryImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Divider between rows
+  divider: {
+    height: 1,
+    backgroundColor: DIVIDER,
+  },
 });
 
 export default ListingAnalysisScreen;

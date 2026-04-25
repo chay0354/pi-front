@@ -12,11 +12,16 @@ import {
   PanResponder,
   Animated,
   TextInput,
+  FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {ProfileAvatar} from '../components';
+import {SvgXml} from 'react-native-svg';
 import {Colors} from '../constants/styles';
+import {officeSidebarSvgs} from '../assets/office-filters/svgIcons';
+import {bnbSidebarSvgs} from '../assets/bnb-filters/svgIcons';
 import {
   getListings,
   recordListingView,
@@ -29,9 +34,128 @@ import {
   reactToPostComment,
   clearPostCommentReaction,
   getReviews,
+  getFollowStatus,
+  sendFollowRequest,
+  getCurrentUser,
+  registerRegularUser,
+  toSubscriptionId,
+  getRecentUserSearches,
+  recordUserSearch,
+  clearRecentUserSearches,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {categoryImages, subscriptionTypes} from '../utils/constant';
+
+/** Swipeable images carousel used in the list-view card. Falls back to a placeholder when empty. */
+const ListCardImages = ({images, width, height = 252}) => {
+  const [index, setIndex] = useState(0);
+  const scrollRef = useRef(null);
+  const items = Array.isArray(images)
+    ? images.filter(
+        img =>
+          img &&
+          (typeof img === 'number' ||
+            (typeof img === 'object' && img.uri && img.uri !== 'text-post-placeholder')),
+      )
+    : [];
+  if (items.length === 0) {
+    return (
+      <View style={{width, height, alignItems: 'center', justifyContent: 'center'}}>
+        <MaterialCommunityIcons
+          name="image-off"
+          size={48}
+          color="rgba(255,255,255,0.3)"
+        />
+      </View>
+    );
+  }
+  if (items.length === 1) {
+    return (
+      <View style={{width, height}}>
+        <Image
+          source={typeof items[0] === 'number' ? items[0] : items[0]}
+          style={{width, height}}
+          resizeMode="cover"
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={{width, height, position: 'relative'}}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={{width, height}}
+        onMomentumScrollEnd={e => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / width);
+          setIndex(i);
+        }}>
+        {items.map((item, i) => (
+          <View key={i} style={{width, height}}>
+            <Image
+              source={typeof item === 'number' ? item : item}
+              style={{width, height}}
+              resizeMode="cover"
+            />
+          </View>
+        ))}
+      </ScrollView>
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          left: 0,
+          right: 0,
+          flexDirection: 'row',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 6,
+        }}
+        pointerEvents="box-none">
+        {items.map((_, i) => (
+          <TouchableOpacity
+            key={i}
+            activeOpacity={0.7}
+            hitSlop={6}
+            onPress={e => {
+              e?.stopPropagation?.();
+              setIndex(i);
+              scrollRef.current?.scrollTo({x: i * width, y: 0, animated: true});
+            }}>
+            <View
+              style={{
+                width: i === index ? 10 : 8,
+                height: i === index ? 10 : 8,
+                borderRadius: 5,
+                backgroundColor:
+                  i === index ? '#FFC40A' : 'rgba(255,255,255,0.55)',
+              }}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+/** True when the listing row is a feed post (not a regular ad). */
+const isFeedPost = item => {
+  if (!item) return false;
+  const type = String(
+    item.property_type ||
+      item.propertyType ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  if (type.includes('post')) return true;
+  if (item.feed_post === true || item.feed_post === 'true' || item.feed_post === 't') return true;
+  const description = String(item.description || item.desc || '').trim().toLowerCase();
+  if (description === 'post' || description === 'פוסט') return true;
+  return item.isPostEntry === true;
+};
 
 // Sidebar filter buttons: each filters ads by type (maps to API subscription_type / has_video)
 // Top bar center filters - icons from assets/top-filters
@@ -65,9 +189,7 @@ const TIKTOK_OVERLAY_ICONS = {
 
 const COMMENT_REACTIONS = ['😂', '😅', '😁', '🥰', '🥹', '😊'];
 const ACTIVE_FILTER_COLOR = '#FFC40A';
-const FIGMA_TYPE_ICON = {
-  uri: 'https://www.figma.com/api/mcp/asset/0e00760a-32a6-4ead-ad3e-78a69ca1de80',
-};
+const FIGMA_TYPE_ICON = require('../assets/tiktok/kind.png');
 
 // Bottom bar: 5 icons with labels (assets from buttom-bar). On global category, apartment item shows "סוג" + menu icon.
 const BOTTOM_BAR_ITEMS = [
@@ -97,6 +219,120 @@ const SIDEBAR_FILTERS = [
   {id: 'new', label: 'חדשות', icon: require('../assets/side-filters/new.png')},
   {id: 'posts', label: 'פוסטים', icon: require('../assets/side-filters/posts.png')},
   {id: 'service', label: 'נותני שירות', subscription_type: 'professional', icon: require('../assets/side-filters/services.png')},
+];
+
+// משרדים (category 2): dedicated sidebar — פרטי, תיווך, חדשים, הדמיות, פוסטים, נותני שירות
+// Icons come from Figma (officeSidebarSvgs) — each entry exposes an `svg(color)` builder.
+const OFFICE_SIDEBAR_FILTERS = [
+  {
+    id: 'personal',
+    label: 'פרטי',
+    subscription_type: 'user',
+    svg: officeSidebarSvgs.personal,
+  },
+  {
+    id: 'broker',
+    label: 'תיווך',
+    subscription_type: 'broker',
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'new',
+    label: 'חדשים',
+    svg: officeSidebarSvgs.new,
+  },
+  {
+    id: 'renderings',
+    label: 'הדמיות',
+    has_video: true,
+    svg: officeSidebarSvgs.renderings,
+  },
+  {
+    id: 'posts',
+    label: 'פוסטים',
+    feed_post: true,
+    svg: officeSidebarSvgs.posts,
+  },
+  {
+    id: 'service',
+    label: 'נותני שירות',
+    subscription_type: 'professional',
+    svg: officeSidebarSvgs.service,
+  },
+];
+
+// קרקעות (category 7): dedicated sidebar — פרטי, מושע, היתר, פוסטים, נותני שירות
+// Figma node 25:171816 uses the same icon glyph for all entries.
+const LAND_SIDEBAR_FILTERS = [
+  {
+    id: 'land_personal',
+    label: 'פרטי',
+    subscription_type: 'user',
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'land_mushaa',
+    label: 'מושע',
+    land_in_mortgage: 'yes',
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'land_permit',
+    label: 'היתר',
+    permit: 'there_is',
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'land_posts',
+    label: 'פוסטים',
+    feed_post: true,
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'land_service',
+    label: 'נותני שירות',
+    subscription_type: 'professional',
+    svg: officeSidebarSvgs.broker,
+  },
+];
+
+// מסחר (category 8): dedicated sidebar — same exact Figma icon set as the design node 25:143924
+const COMMERCIAL_SIDEBAR_FILTERS = [
+  {
+    id: 'personal',
+    label: 'פרטי',
+    subscription_type: 'user',
+    svg: officeSidebarSvgs.personal,
+  },
+  {
+    id: 'broker',
+    label: 'תיווך',
+    subscription_type: 'broker',
+    svg: officeSidebarSvgs.broker,
+  },
+  {
+    id: 'renderings',
+    label: 'הדמיות',
+    has_video: true,
+    svg: officeSidebarSvgs.renderings,
+  },
+  {
+    id: 'new',
+    label: 'חדשים',
+    svg: officeSidebarSvgs.new,
+  },
+  {
+    id: 'posts',
+    label: 'פוסטים',
+    feed_post: true,
+    svg: officeSidebarSvgs.posts,
+  },
+  {
+    id: 'service',
+    label: 'נותני שירות',
+    subscription_type: 'professional',
+    svg: officeSidebarSvgs.service,
+  },
 ];
 
 // שותפים (category 3): dedicated sidebar — icons from assets/partners-filters
@@ -133,57 +369,68 @@ const PARTNERS_SIDEBAR_FILTERS = [
   },
 ];
 
-// BnB (category 5): אופי האירוח + פוסטים — icons from assets/bnb-filters
+// BnB (category 5): אופי האירוח + פוסטים — exact Figma icons (node 25:189715)
 const BNB_SIDEBAR_FILTERS = [
   {
     id: 'bnb_landscapes',
     label: 'נופים',
     hospitality_nature: 'landscapes',
-    icon: require('../assets/bnb-filters/view.png'),
+    svg: bnbSidebarSvgs.landscapes,
   },
   {
     id: 'bnb_beach',
     label: 'על הים',
     hospitality_nature: 'on_the_beach',
-    icon: require('../assets/bnb-filters/on-the-sea.png'),
+    svg: bnbSidebarSvgs.beach,
   },
   {
     id: 'bnb_pool',
     label: 'עם בריכה',
     hospitality_nature: 'with_pool',
-    icon: require('../assets/bnb-filters/pool.png'),
+    svg: bnbSidebarSvgs.pool,
   },
   {
     id: 'bnb_nature',
     label: 'טבע',
     hospitality_nature: 'nature',
-    icon: require('../assets/bnb-filters/neture.png'),
+    svg: bnbSidebarSvgs.nature,
   },
   {
     id: 'bnb_experiences',
     label: 'חוויות',
     hospitality_nature: 'experiences',
-    icon: require('../assets/bnb-filters/expiriance.png'),
+    svg: bnbSidebarSvgs.experiences,
   },
   {
     id: 'bnb_rural',
     label: 'כפרי',
     hospitality_nature: 'rural',
-    icon: require('../assets/bnb-filters/vilage.png'),
+    svg: bnbSidebarSvgs.rural,
   },
   {
     id: 'bnb_desert',
     label: 'מדבר',
     hospitality_nature: 'desert',
-    icon: require('../assets/bnb-filters/desert.png'),
+    svg: bnbSidebarSvgs.desert,
   },
   {
     id: 'bnb_posts',
     label: 'פוסטים',
     feed_post: true,
-    icon: require('../assets/bnb-filters/posts.png'),
+    svg: bnbSidebarSvgs.posts,
   },
 ];
+
+const resolveFollowUuid = (...candidates) => {
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    const raw = String(candidate).trim();
+    if (!raw) continue;
+    const uuid = toSubscriptionId(raw);
+    if (uuid) return uuid;
+  }
+  return null;
+};
 
 // Image Swiper Component for multiple photos - supports slideshow and collage
 const ImageSwiper = ({
@@ -453,6 +700,7 @@ const TikTokFeedScreen = ({
   onOpenPreferencesFilter,
   onOpenPriceFilter,
   onOpenUserProfile,
+  onOpenFavorites,
   uploadedListings = [],
   selectedCategory = null,
   feedFilters = {},
@@ -493,10 +741,16 @@ const TikTokFeedScreen = ({
   const [selectedTopBarFilter, setSelectedTopBarFilter] = useState(null); // 'pics' | 'video' | 'liked' | null; list does nothing
   const [likedListingIds, setLikedListingIds] = useState(new Set()); // persisted to AsyncStorage
   const [likedPostIds, setLikedPostIds] = useState(new Set()); // persisted to AsyncStorage
+  /** Unseen likes counter shown as a badge on the heart filter in the top bar. Resets when favorites screen opens. */
+  const [unseenLikedCount, setUnseenLikedCount] = useState(0);
   const postLikePendingIdsRef = useRef(new Set()); // prevent duplicate taps/race requests per post
   const [showUserSearchPanel, setShowUserSearchPanel] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [failedSearchAvatarKeys, setFailedSearchAvatarKeys] = useState(new Set());
+  /** Recently-dismissed (per row "X") user keys — cleared by the "נקה" header button. */
+  const [hiddenSearchKeys, setHiddenSearchKeys] = useState(new Set());
+  /** Recent user searches loaded from the DB for the "אחרונים" list when no query is entered. */
+  const [recentSearches, setRecentSearches] = useState([]);
   const [userRatingByProfileId, setUserRatingByProfileId] = useState({});
   const [allUsersSearchListings, setAllUsersSearchListings] = useState([]);
   const [showCommentsSheet, setShowCommentsSheet] = useState(false);
@@ -504,6 +758,11 @@ const TikTokFeedScreen = ({
   const [commentsByPost, setCommentsByPost] = useState({});
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
+  const [sidebarFollowStatus, setSidebarFollowStatus] = useState({
+    isFollowing: false,
+    hasPendingRequest: false,
+  });
+  const [sidebarSendingFollow, setSidebarSendingFollow] = useState(false);
   const lastViewedListingIdRef = useRef(null); // avoid recording same view twice
   const [dimensions, setDimensions] = useState({
     height: Dimensions.get('window').height,
@@ -544,12 +803,20 @@ const TikTokFeedScreen = ({
   const isLandCategory = categoryId === 7; // קרקעות
   const isBnbCategory = categoryId === 5; // BnB
   const isPartnersCategory = categoryId === 3; // שותפים
+  const isOfficeCategory = categoryId === 2; // משרדים
+  const isCommercialCategory = categoryId === 8; // מסחר
   const sidebarFiltersForFeed =
     isPartnersCategory && !isAggregateCategoryFeed
       ? PARTNERS_SIDEBAR_FILTERS
       : isBnbCategory && !isAggregateCategoryFeed
         ? BNB_SIDEBAR_FILTERS
-        : SIDEBAR_FILTERS;
+        : isOfficeCategory && !isAggregateCategoryFeed
+          ? OFFICE_SIDEBAR_FILTERS
+          : isLandCategory && !isAggregateCategoryFeed
+            ? LAND_SIDEBAR_FILTERS
+          : isCommercialCategory && !isAggregateCategoryFeed
+            ? COMMERCIAL_SIDEBAR_FILTERS
+            : SIDEBAR_FILTERS;
   const sidebarFilterCount = sidebarFiltersForFeed.length;
   const firstFilterTop = sidebarFilterLayouts[0]?.y;
   const sidebarIntroMaxDown = useMemo(() => {
@@ -618,14 +885,17 @@ const TikTokFeedScreen = ({
   useEffect(() => {
     const load = async () => {
       try {
-        const [rawAds, rawPosts] = await Promise.all([
+        const [rawAds, rawPosts, rawUnseen] = await Promise.all([
           AsyncStorage.getItem('tikTokFeedLikedIds'),
           AsyncStorage.getItem('tikTokFeedLikedPostIds'),
+          AsyncStorage.getItem('tikTokFeedUnseenLikedCount'),
         ]);
         const ids = rawAds ? JSON.parse(rawAds) : [];
         const postIds = rawPosts ? JSON.parse(rawPosts) : [];
         setLikedListingIds(new Set(Array.isArray(ids) ? ids : []));
         setLikedPostIds(new Set(Array.isArray(postIds) ? postIds : []));
+        const count = rawUnseen != null ? Number(rawUnseen) : 0;
+        setUnseenLikedCount(Number.isFinite(count) && count > 0 ? count : 0);
       } catch (e) {
         console.warn('Failed to load liked ids', e);
       }
@@ -723,17 +993,40 @@ const TikTokFeedScreen = ({
           categoryToFetch === 5
             ? BNB_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
+        const officeFilter =
+          categoryToFetch === 2
+            ? OFFICE_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
+        const landFilter =
+          categoryToFetch === 7
+            ? LAND_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
+        const commercialFilter =
+          categoryToFetch === 8
+            ? COMMERCIAL_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
+            : null;
         const legacySidebarFilter =
-          categoryToFetch !== 3 && categoryToFetch !== 5
+          categoryToFetch !== 3 &&
+          categoryToFetch !== 5 &&
+          categoryToFetch !== 2 &&
+          categoryToFetch !== 7 &&
+          categoryToFetch !== 8
             ? SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
         const subscriptionType =
           partnersFilter?.subscription_type ??
           bnbFilter?.subscription_type ??
+          officeFilter?.subscription_type ??
+          landFilter?.subscription_type ??
+          commercialFilter?.subscription_type ??
           legacySidebarFilter?.subscription_type;
         const sidebarCondition = legacySidebarFilter?.condition;
         const hasVideo =
-          legacySidebarFilter?.has_video === true || selectedTopBarFilter === 'video';
+          officeFilter?.has_video === true ||
+          landFilter?.has_video === true ||
+          commercialFilter?.has_video === true ||
+          legacySidebarFilter?.has_video === true ||
+          selectedTopBarFilter === 'video';
 
         const result = await getListings({
           status: 'published',
@@ -752,6 +1045,13 @@ const TikTokFeedScreen = ({
             hospitality_nature: bnbFilter.hospitality_nature,
           }),
           ...(bnbFilter?.feed_post === true && {feed_post: true}),
+          ...(officeFilter?.feed_post === true && {feed_post: true}),
+          ...(landFilter?.land_in_mortgage && {
+            land_in_mortgage: landFilter.land_in_mortgage,
+          }),
+          ...(landFilter?.permit && {permit: landFilter.permit}),
+          ...(landFilter?.feed_post === true && {feed_post: true}),
+          ...(commercialFilter?.feed_post === true && {feed_post: true}),
           // Keep user_id only for liked-state and personalized ordering.
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         });
@@ -831,6 +1131,16 @@ const TikTokFeedScreen = ({
               }
 
               const listingCategory = parseInt(listing.category) || 1;
+              const numericBasePrice =
+                listingCategory === 5
+                  ? parseFloat(
+                      listing.price_per_night ??
+                        listing.pricePerNight ??
+                        listing.price ??
+                        listing.budget ??
+                        0,
+                    ) || 0
+                  : parseFloat(listing.price || listing.budget || 0) || 0;
 
               // Category 3 specific fields
               const searchPurposeLabels = {
@@ -893,10 +1203,12 @@ const TikTokFeedScreen = ({
                       : imagesArray,
                 isTextOnlyPost: !!isTextOnly,
                 displayOption: listing.display_option || 'slideshow', // 'collage' or 'slideshow'
-                location: listing.address || 'תל אביב',
-                address: listing.address || '', // for city/location filter
-                rawPrice: parseFloat(listing.price || listing.budget || 0) || 0,
-                price: `₪${parseFloat(listing.price || listing.budget || 0).toLocaleString()}`,
+                location:
+                  String(listing.location || listing.address || '').trim() ||
+                  'מיקום לא זמין',
+                address: String(listing.address || '').trim(), // for city/location filter
+                rawPrice: numericBasePrice,
+                price: `₪${numericBasePrice.toLocaleString()}`,
                 purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
                 listingPurpose: listing.purpose === 'rent' ? 'rent' : 'sale',
                 planApproval: listing.plan_approval ?? null,
@@ -914,6 +1226,24 @@ const TikTokFeedScreen = ({
                 propertyTypeRaw: rawPropertyType,
                 isPostEntry: isPostListing,
                 apartmentTypeId: listing.property_type || listing.apartment_type || listing.preferred_apartment_type || null,
+                hotDeal:
+                  listing.hot_deal === true ||
+                  listing.hot_deal === 'true' ||
+                  listing.hot_deal === 't' ||
+                  listing.hot_deal === 1,
+                checkInDate:
+                  listing.check_in_date ||
+                  listing?.accommodation_offers?.check_in_date ||
+                  null,
+                checkOutDate:
+                  listing.check_out_date ||
+                  listing?.accommodation_offers?.check_out_date ||
+                  null,
+                cancellationPolicy:
+                  listing.cancellation_policy ||
+                  listing.cancellationPolicy ||
+                  listing?.general_details?.cancellation_policy ||
+                  null,
                 area: listing.area,
                 rooms: listing.rooms,
                 floor: listing.floor,
@@ -1125,6 +1455,13 @@ const TikTokFeedScreen = ({
       AsyncStorage.setItem('tikTokFeedLikedIds', JSON.stringify([...next])).catch(() => {});
       return next;
     });
+    if (willBeLiked) {
+      setUnseenLikedCount(prev => {
+        const next = (Number(prev) || 0) + 1;
+        AsyncStorage.setItem('tikTokFeedUnseenLikedCount', String(next)).catch(() => {});
+        return next;
+      });
+    }
     // Optimistically update like_count in dbListings so UI updates immediately
     setDbListings(prev =>
       prev.map(l =>
@@ -1366,11 +1703,71 @@ const TikTokFeedScreen = ({
   // When a category is selected, show ONLY database listings (no mock data)
   // Top bar "liked" filter applied at display time so liking/unliking updates without refetch
   // Apply feed filters (price, rooms, city, apartment type) when set
+  const parseIsoDate = value => {
+    if (!value) return null;
+    const text = String(value).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+    const date = new Date(`${text}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const isFreeCancellationValue = value => {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized === 'free' ||
+      normalized === 'no_penalty' ||
+      normalized === 'no-penalty' ||
+      normalized === 'free_cancellation' ||
+      normalized.includes('ללא קנס')
+    );
+  };
+
   const applyFeedFilters = (list) => {
     let out = list;
     if (feedFilters.price != null) {
-      const {minPrice = 0, maxPrice = 10000000} = feedFilters.price;
+      const {
+        minPrice = 0,
+        maxPrice = 10000000,
+        checkInDate = null,
+        checkOutDate = null,
+        freeCancellation = false,
+        hotDealOnly = false,
+      } = feedFilters.price;
       out = out.filter(l => (l.rawPrice != null && l.rawPrice >= minPrice && l.rawPrice <= maxPrice));
+      const bnbFeed = selectedCategory === 5 || selectedCategory === '5';
+      if (bnbFeed) {
+        const selectedCheckIn = parseIsoDate(checkInDate);
+        const selectedCheckOut = parseIsoDate(checkOutDate);
+        if (selectedCheckIn || selectedCheckOut) {
+          out = out.filter(l => {
+            const listingCheckIn = parseIsoDate(l.checkInDate);
+            const listingCheckOut = parseIsoDate(l.checkOutDate);
+            if (!listingCheckIn && !listingCheckOut) return false;
+            if (selectedCheckIn && listingCheckIn && selectedCheckIn < listingCheckIn) {
+              return false;
+            }
+            if (selectedCheckOut && listingCheckOut && selectedCheckOut > listingCheckOut) {
+              return false;
+            }
+            return true;
+          });
+        }
+        if (freeCancellation === true) {
+          out = out.filter(l => isFreeCancellationValue(l.cancellationPolicy));
+        }
+        if (hotDealOnly === true) {
+          out = out.filter(
+            l =>
+              l.hotDeal === true ||
+              l.hotDeal === 'true' ||
+              l.hotDeal === 't' ||
+              l.hotDeal === 1,
+          );
+        }
+      }
     }
     if (feedFilters.rooms != null) {
       const {rooms, area, floor} = feedFilters.rooms;
@@ -1479,6 +1876,7 @@ const TikTokFeedScreen = ({
     if (selectedTypes.length > 0) {
       const landFeed =
         selectedCategory === 7 || selectedCategory === '7';
+      const bnbFeed = selectedCategory === 5 || selectedCategory === '5';
       if (landFeed) {
         const landPredicates = {
           own_private: l => l.landOwnership === 'private',
@@ -1499,6 +1897,25 @@ const TikTokFeedScreen = ({
             return typeof pred === 'function' ? pred(l) : false;
           }),
         );
+      } else if (bnbFeed) {
+        out = out.filter(l => {
+          const rawType = String(
+            l.apartmentTypeId ||
+              l.propertyTypeRaw ||
+              l.propertyType ||
+              '',
+          )
+            .trim()
+            .toLowerCase();
+          return selectedTypes.some(typeId => {
+            const normalized = String(typeId || '').trim().toLowerCase();
+            if (!normalized) return false;
+            if (normalized === 'b&b' || normalized === 'bnb') {
+              return rawType === 'b&b' || rawType === 'bnb';
+            }
+            return rawType === normalized;
+          });
+        });
       } else {
         const commercePropertyTypes = new Set([
           'store',
@@ -1840,6 +2257,123 @@ const TikTokFeedScreen = ({
     [sidebarDragY],
   );
 
+  const currentVideo = videos[currentIndex] || null;
+  const sidebarProfileUrl = getUserProfileImageUrl(currentVideo);
+  const sidebarViewerSubId = resolveFollowUuid(
+    currentUser?.subscription_id,
+    currentUser?.owner_id,
+    currentUser?.id,
+  );
+  const sidebarTargetSubId = resolveFollowUuid(
+    currentVideo?.subscription_id,
+    currentVideo?.owner_id,
+    currentVideo?.creator_subscription_id,
+    currentVideo?.id,
+  );
+  const sidebarViewerEmail = currentUser?.email
+    ? String(currentUser.email).trim().toLowerCase()
+    : '';
+  const sidebarTargetEmail = currentVideo?.creator_email
+    ? String(currentVideo.creator_email).trim().toLowerCase()
+    : '';
+  const sidebarIsSelf =
+    (!!sidebarViewerSubId &&
+      !!sidebarTargetSubId &&
+      String(sidebarViewerSubId) === String(sidebarTargetSubId)) ||
+    (!!sidebarViewerEmail &&
+      !!sidebarTargetEmail &&
+      sidebarViewerEmail === sidebarTargetEmail);
+  const sidebarShowFollowPlus =
+    (!!sidebarViewerSubId || !!sidebarViewerEmail) &&
+    (!!sidebarTargetSubId || !!sidebarTargetEmail) &&
+    !sidebarIsSelf &&
+    !sidebarFollowStatus.isFollowing &&
+    !sidebarFollowStatus.hasPendingRequest;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      !sidebarViewerSubId ||
+      !sidebarTargetSubId ||
+      sidebarViewerSubId === sidebarTargetSubId
+    ) {
+      setSidebarFollowStatus({isFollowing: false, hasPendingRequest: false});
+      return undefined;
+    }
+    getFollowStatus(sidebarViewerSubId, sidebarTargetSubId)
+      .then(data => {
+        if (cancelled) return;
+        setSidebarFollowStatus({
+          isFollowing: !!data?.is_following,
+          hasPendingRequest: !!data?.has_pending_request,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSidebarFollowStatus({isFollowing: false, hasPendingRequest: false});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sidebarViewerSubId, sidebarTargetSubId, currentIndex]);
+
+  const resolveFollowUuidFromEmail = async email => {
+    const normalized = email ? String(email).trim().toLowerCase() : '';
+    if (!normalized) return null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return null;
+    try {
+      const data = await getCurrentUser(normalized, null);
+      return toSubscriptionId(
+        data?.subscription?.id ||
+          data?.subscription?.subscription_id ||
+          data?.subscription?.owner_id ||
+          null,
+      );
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const handleSidebarFollowRequest = async () => {
+    if (sidebarSendingFollow) return;
+    setSidebarSendingFollow(true);
+    try {
+      let requesterId = sidebarViewerSubId;
+      let targetId = sidebarTargetSubId;
+
+      if (!requesterId) {
+        requesterId = await resolveFollowUuidFromEmail(sidebarViewerEmail);
+      }
+      // Auto-create a backend record for regular users that registered locally
+      // (their currentUser.id is a fake `user-<ts>` value, so no UUID exists yet).
+      if (!requesterId && sidebarViewerEmail) {
+        const reg = await registerRegularUser({
+          email: sidebarViewerEmail,
+          name: currentUser?.name || null,
+          phone: currentUser?.phone || null,
+          profilePictureUrl:
+            currentUser?.profile_picture_url || currentUser?.company_logo_url || null,
+        });
+        const newId = reg?.subscription?.id || null;
+        if (newId) {
+          requesterId = toSubscriptionId(newId) || null;
+        }
+      }
+
+      if (!targetId) {
+        targetId = await resolveFollowUuidFromEmail(sidebarTargetEmail);
+      }
+      if (!requesterId || !targetId || requesterId === targetId) return;
+
+      await sendFollowRequest(requesterId, targetId);
+      setSidebarFollowStatus(prev => ({...prev, hasPendingRequest: true}));
+    } catch (_) {
+      // keep sidebar interaction silent to match feed behavior
+    } finally {
+      setSidebarSendingFollow(false);
+    }
+  };
+
   // Show loading indicator while fetching (only on initial load)
   if (loadingListings && dbListings.length === 0 && videos.length === 0) {
     return (
@@ -1962,8 +2496,6 @@ const TikTokFeedScreen = ({
       hasPostMediaMarker
     );
   }
-  const sidebarProfileUrl = getUserProfileImageUrl(videos[currentIndex]);
-  const currentVideo = videos[currentIndex] || null;
   const isPostListing = isPostVideo(currentVideo);
   const currentComments = commentsByPost[activeCommentsPostId] || [];
   const activeCommentsVideo = videos.find(v => v.id === activeCommentsPostId) || null;
@@ -1985,11 +2517,26 @@ const TikTokFeedScreen = ({
     !isPostVideo(currentVideo) &&
     String(currentVideo.subscription_type || '').toLowerCase() ===
       subscriptionTypes.broker;
+  const isBnbListing =
+    currentVideo &&
+    !isPostVideo(currentVideo) &&
+    Number(currentVideo?.category) === 5;
+  const isPartnersListing =
+    currentVideo &&
+    !isPostVideo(currentVideo) &&
+    Number(currentVideo?.category) === 3;
+  const isBnbHotDeal =
+    currentVideo?.hotDeal === true ||
+    currentVideo?.hotDeal === 'true' ||
+    currentVideo?.hot_deal === true ||
+    currentVideo?.hot_deal === 'true' ||
+    currentVideo?.hot_deal === 't' ||
+    currentVideo?.hot_deal === 1;
   const brokerPurposeText = String(
     currentVideo?.purpose || currentVideo?.searchPurpose || 'למכירה',
   ).trim();
   const brokerLocationText = String(
-    currentVideo?.location || currentVideo?.address || 'מיקום לא זמין',
+    currentVideo?.address || 'מיקום לא זמין',
   ).trim();
   const brokerPriceText = (() => {
     const explicit = String(currentVideo?.price || '').trim();
@@ -2004,6 +2551,57 @@ const TikTokFeedScreen = ({
     if (Number.isFinite(raw) && raw > 0) return `₪${raw.toLocaleString()}`;
     return '₪0';
   })();
+  const partnersPurposeText = String(
+    currentVideo?.searchPurpose || 'מחפש שותף',
+  ).trim();
+  const partnersDisplayName = String(
+    currentVideo?.creator_name ||
+      currentVideo?.creatorName ||
+      currentVideo?.creator_full_name ||
+      currentVideo?.full_name ||
+      currentVideo?.name ||
+      'משתמש',
+  ).trim();
+  const bnbTypeTagText = (() => {
+    const map = {
+      room: 'חדר',
+      housing_unit: 'יחידת דיור',
+      house: 'בית',
+      'b&b': 'צימר',
+      bnb: 'צימר',
+      holiday_apartment: 'דירת נופש',
+      villa: 'וילה',
+      special: 'מיוחדים',
+      rural: 'כפרי',
+      experiences: 'חוויות',
+      landscapes: 'נופים',
+      nature: 'טבע',
+      desert: 'מדבר',
+      on_the_beach: 'על הים',
+      with_pool: 'עם בריכה',
+      apartment: 'דירה',
+      private: 'בית פרטי',
+      penthouse: 'פנטהאוז',
+    };
+    const candidates = [
+      currentVideo?.property_type,
+      currentVideo?.apartmentTypeId,
+      currentVideo?.apartment_type,
+      currentVideo?.preferred_apartment_type,
+      currentVideo?.bnbType,
+      currentVideo?.apartmentType,
+    ];
+    for (const candidate of candidates) {
+      const raw = String(candidate || '')
+        .trim()
+        .toLowerCase();
+      if (map[raw]) return map[raw];
+    }
+    return 'וילה';
+  })();
+  const bnbTitleText = String(
+    currentVideo?.description || 'ללא תיאור',
+  ).trim();
   const companyAddressLines = isCompanyListing
     ? String(currentVideo?.location || currentVideo?.address || '')
         .split(',')
@@ -2115,6 +2713,29 @@ const TikTokFeedScreen = ({
     return items;
   })();
 
+  const loadRecentUserSearches = async () => {
+    const email = currentUser?.email;
+    if (!email) return;
+    try {
+      const res = await getRecentUserSearches(email);
+      const list = Array.isArray(res?.recent) ? res.recent : [];
+      setRecentSearches(list);
+    } catch (e) {
+      console.warn('loadRecentUserSearches failed:', e?.message);
+    }
+  };
+
+  const handleClearRecentSearches = async () => {
+    const email = currentUser?.email;
+    if (!email) return;
+    setRecentSearches([]);
+    try {
+      await clearRecentUserSearches(email);
+    } catch (e) {
+      console.warn('clearRecentUserSearches failed:', e?.message);
+    }
+  };
+
   const loadAllUsersForSearch = async () => {
     try {
       const userId = currentUser?.id != null ? String(currentUser.id) : null;
@@ -2202,9 +2823,10 @@ const TikTokFeedScreen = ({
               style={styles.userSearchInput}
               value={userSearchQuery}
               onChangeText={setUserSearchQuery}
-              placeholder="חיפוש משתמש"
+              placeholder="הינט לפני הקלדה"
               placeholderTextColor="rgba(255,255,255,0.75)"
               textAlign="right"
+              writingDirection="rtl"
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -2218,19 +2840,38 @@ const TikTokFeedScreen = ({
                   key={f.id}
                   style={styles.topBarFilterBtn}
                   hitSlop={8}
-                  onPress={() => setSelectedTopBarFilter(prev => (prev === f.id ? null : f.id))}>
+                  onPress={() => {
+                    if (f.id === 'liked') {
+                      setUnseenLikedCount(0);
+                      AsyncStorage.setItem('tikTokFeedUnseenLikedCount', '0').catch(() => {});
+                      if (typeof onOpenFavorites === 'function') {
+                        onOpenFavorites();
+                      } else {
+                        setSelectedTopBarFilter(prev => (prev === 'liked' ? null : 'liked'));
+                      }
+                      return;
+                    }
+                    setSelectedTopBarFilter(prev => (prev === f.id ? null : f.id));
+                  }}>
                   <Image
                     source={f.icon}
                     style={[styles.topBarFilterIcon, topSelected && styles.filterIconSelectedTint]}
                     resizeMode="contain"
                   />
+                  {f.id === 'liked' && unseenLikedCount > 0 ? (
+                    <View style={styles.likedBadge} pointerEvents="none">
+                      <Text style={styles.likedBadgeText}>
+                        {unseenLikedCount > 99 ? '99+' : String(unseenLikedCount)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
         {showUserSearchPanel ? (
-          <View style={styles.topBarSideBtn} />
+          <View style={styles.topBarRightSpacerSmall} />
         ) : (
           <TouchableOpacity
             style={styles.topBarSideBtn}
@@ -2241,6 +2882,7 @@ const TikTokFeedScreen = ({
               setShowUserSearchPanel(true);
               loadAllUsersForSearch();
               preloadUserRatingsForSearch();
+              loadRecentUserSearches();
             }}>
             <TopBarSearchIcon />
           </TouchableOpacity>
@@ -2249,87 +2891,167 @@ const TikTokFeedScreen = ({
 
       {showUserSearchPanel && (
         <View style={styles.userSearchPanel}>
-          <ScrollView
-            style={styles.userSearchList}
-            contentContainerStyle={styles.userSearchListContent}
-            showsVerticalScrollIndicator={false}>
-            {userSearchItems.length === 0 ? (
-              <View style={styles.userSearchEmptyWrap}>
-                <Text style={styles.userSearchEmptyText}>לא נמצאו משתמשים</Text>
-              </View>
-            ) : (
-              userSearchItems.map(item => (
-                <TouchableOpacity
-                  key={item.key}
-                  style={styles.userSearchRow}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setShowUserSearchPanel(false);
-                    setUserSearchQuery('');
-                    onOpenUserProfile?.(item.listing || null);
-                  }}>
-                  <View style={styles.userSearchTextWrap}>
-                    <Text style={styles.userSearchName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.userSearchMetaRow}>
-                      <Text style={styles.userSearchMetaText} numberOfLines={1}>
-                        {item.subtitle}
+          {(() => {
+            const hasQuery = String(userSearchQuery || '').trim().length > 0;
+            const visibleSearchResults = userSearchItems.filter(
+              it => !hiddenSearchKeys.has(it.key),
+            );
+            const visibleRecent = (recentSearches || []).filter(
+              r => !hiddenSearchKeys.has(`recent:${r.target_subscription_id}`),
+            );
+            const showRecent = !hasQuery;
+            const currentList = showRecent
+              ? visibleRecent.map(r => ({
+                  key: `recent:${r.target_subscription_id}`,
+                  name: r.name,
+                  subtitle: r.subscription_type === 'broker'
+                    ? 'תיווך'
+                    : r.subscription_type === 'company'
+                      ? 'חברה'
+                      : r.subscription_type === 'professional'
+                        ? 'בעל מקצוע'
+                        : '',
+                  avatar: r.profileImageUrl || null,
+                  ratingTargetId: r.target_subscription_id,
+                  listing: null,
+                  recentTargetId: r.target_subscription_id,
+                  recentEmail: r.email || null,
+                  recentSubscriptionType: r.subscription_type || null,
+                }))
+              : visibleSearchResults;
+            return (
+              <>
+                <View style={styles.userSearchSectionHeader}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    hitSlop={8}
+                    onPress={() => {
+                      setHiddenSearchKeys(new Set());
+                      if (showRecent) handleClearRecentSearches();
+                    }}>
+                    <Text style={styles.userSearchClearText}>נקה</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.userSearchSectionTitle}>
+                    {showRecent ? 'אחרונים' : 'תוצאות חיפוש'}
+                  </Text>
+                </View>
+                <ScrollView
+                  style={styles.userSearchList}
+                  contentContainerStyle={styles.userSearchListContent}
+                  showsVerticalScrollIndicator={false}>
+                  {currentList.length === 0 ? (
+                    <View style={styles.userSearchEmptyWrap}>
+                      <Text style={styles.userSearchEmptyText}>
+                        {showRecent
+                          ? 'אין חיפושים אחרונים'
+                          : 'מצטערים, אבל הפרופיל לא קיים'}
                       </Text>
-                      {(() => {
-                        const ratingValue = item.ratingTargetId
-                          ? Number(userRatingByProfileId[item.ratingTargetId])
-                          : NaN;
-                        if (!Number.isFinite(ratingValue) || ratingValue <= 0) return null;
-                        const isFiveStars = ratingValue >= 5;
-                        return (
-                          <>
-                            {isFiveStars ? (
-                              <View style={styles.userSearchRatingGlowWrap}>
-                                <Image
-                                  source={TIKTOK_OVERLAY_ICONS.ratingFiveStars}
-                                  style={styles.userSearchRatingIcon}
-                                  resizeMode="contain"
-                                />
-                              </View>
-                            ) : ratingValue <= 4 ? (
-                              <Image
-                                source={TIKTOK_OVERLAY_ICONS.ratingOneToFour}
-                                style={styles.userSearchRatingIcon}
-                                resizeMode="contain"
-                              />
-                            ) : (
-                              <MaterialCommunityIcons name="star" size={14} color="#FFC40A" />
-                            )}
-                            <Text style={styles.userSearchMetaCount}>
-                              {String(Math.round(ratingValue))}
-                            </Text>
-                          </>
-                        );
-                      })()}
                     </View>
-                  </View>
-                  {item.avatar && !failedSearchAvatarKeys.has(item.key) ? (
-                    <Image
-                      source={{uri: item.avatar}}
-                      style={styles.userSearchAvatar}
-                      onError={() =>
-                        setFailedSearchAvatarKeys(prev => {
-                          const next = new Set(prev);
-                          next.add(item.key);
-                          return next;
-                        })
-                      }
-                    />
                   ) : (
-                    <View style={[styles.userSearchAvatar, styles.userSearchAvatarPlaceholder]}>
-                      <MaterialCommunityIcons name="account" size={20} color="#fff" />
-                    </View>
+                    currentList.map(item => (
+                      <View key={item.key} style={styles.userSearchRow}>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          hitSlop={8}
+                          style={styles.userSearchDismissBtn}
+                          onPress={e => {
+                            e?.stopPropagation?.();
+                            setHiddenSearchKeys(prev => {
+                              const next = new Set(prev);
+                              next.add(item.key);
+                              return next;
+                            });
+                          }}>
+                          <MaterialCommunityIcons
+                            name="close"
+                            size={22}
+                            color="#FFFFFF"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          style={styles.userSearchRowContent}
+                          onPress={() => {
+                            const targetId =
+                              item.recentTargetId ||
+                              item.ratingTargetId ||
+                              item.listing?.subscription_id ||
+                              item.listing?.owner_id ||
+                              null;
+                            if (targetId && currentUser?.email) {
+                              recordUserSearch(currentUser.email, targetId);
+                            }
+                            setShowUserSearchPanel(false);
+                            setUserSearchQuery('');
+                            onOpenUserProfile?.(
+                              item.listing || {
+                                subscription_id: item.recentTargetId || null,
+                                owner_id: item.recentTargetId || null,
+                                creator_name: item.name || null,
+                                creator_email: item.recentEmail || null,
+                                creator_profile_image_url: item.avatar || null,
+                                profile_picture_url: item.avatar || null,
+                                subscription_type:
+                                  item.recentSubscriptionType || null,
+                              },
+                            );
+                          }}>
+                          <View style={styles.userSearchTextWrap}>
+                            <Text style={styles.userSearchName} numberOfLines={1}>
+                              {item.name}
+                            </Text>
+                            <View style={styles.userSearchMetaRow}>
+                              {(() => {
+                                const ratingValue = item.ratingTargetId
+                                  ? Number(userRatingByProfileId[item.ratingTargetId])
+                                  : NaN;
+                                if (!Number.isFinite(ratingValue) || ratingValue <= 0) return null;
+                                const isFive = ratingValue >= 5;
+                                return (
+                                  <>
+                                    <Text style={styles.userSearchMetaCount}>
+                                      {String(Math.round(ratingValue))}
+                                    </Text>
+                                    {isFive ? (
+                                      <View style={styles.userSearchFiveStarWrap}>
+                                        <Image
+                                          source={TIKTOK_OVERLAY_ICONS.ratingFiveStars}
+                                          style={styles.userSearchFiveStarIcon}
+                                          resizeMode="contain"
+                                        />
+                                      </View>
+                                    ) : (
+                                      <Image
+                                        source={TIKTOK_OVERLAY_ICONS.ratingOneToFour}
+                                        style={styles.userSearchStarIcon}
+                                        resizeMode="contain"
+                                      />
+                                    )}
+                                  </>
+                                );
+                              })()}
+                              <Text style={styles.userSearchMetaText} numberOfLines={1}>
+                                {item.subtitle}
+                              </Text>
+                            </View>
+                          </View>
+                          <ProfileAvatar
+                            uri={
+                              item.avatar && !failedSearchAvatarKeys.has(item.key)
+                                ? item.avatar
+                                : null
+                            }
+                            name={item.name}
+                            size={66}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))
                   )}
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
+                </ScrollView>
+              </>
+            );
+          })()}
         </View>
       )}
 
@@ -2339,87 +3061,170 @@ const TikTokFeedScreen = ({
           style={styles.listScrollView}
           contentContainerStyle={styles.listScrollContent}
           showsVerticalScrollIndicator={false}>
-          {videos.map((listing, index) => {
-            // images array is already [{uri: url}, ...] from transformed listings
-            const firstImg = listing.images && listing.images.length > 0 ? listing.images[0] : null;
-            const isPlaceholderUri = firstImg && (firstImg.uri === 'text-post-placeholder' || !firstImg.uri);
-            const imgSrc =
-              firstImg && !isPlaceholderUri
-                ? firstImg
-                : listing.image
-                  ? typeof listing.image === 'number'
-                    ? listing.image
-                    : {uri: listing.image}
+          {videos
+            .filter(l => !isFeedPost(l))
+            .map((listing, index) => {
+            const isCompanyListing =
+              String(listing?.subscription_type || '').toLowerCase() === 'company';
+            const gd =
+              listing?.general_details && typeof listing.general_details === 'object'
+                ? listing.general_details
                 : null;
-            const hasMultipleImages = listing.images && listing.images.length > 1;
+            const companyBuildingCount =
+              listing?.companyBuildingCount != null
+                ? Number(listing.companyBuildingCount)
+                : gd?.building_count != null
+                  ? Number(gd.building_count)
+                  : null;
+            const companyFloorCount =
+              listing?.companyFloorCount != null
+                ? Number(listing.companyFloorCount)
+                : gd?.floor_count != null
+                  ? Number(gd.floor_count)
+                  : null;
+            const companyApartmentCount =
+              listing?.companyApartmentCount != null
+                ? Number(listing.companyApartmentCount)
+                : gd?.apartment_count != null
+                  ? Number(gd.apartment_count)
+                  : null;
+            // Build a clean images array for the swipeable carousel. Prefer `images` from the transformed listing;
+            // fallback to single `image` field if that's all we have.
+            const cardImages =
+              Array.isArray(listing.images) && listing.images.length > 0
+                ? listing.images
+                : listing.image
+                  ? [typeof listing.image === 'number' ? listing.image : {uri: listing.image}]
+                  : [];
             const listCardProfileUrl = getUserProfileImageUrl(listing);
             return (
               <TouchableOpacity
                 key={listing.id}
                 style={styles.listCard}
                 onPress={() => {
-                  setSelectedTopBarFilter(null);
-                  setCurrentIndex(index);
+                  // Open the creator's profile with this listing highlighted
+                  if (typeof onOpenUserProfile === 'function') {
+                    onOpenUserProfile(listing);
+                  } else {
+                    setSelectedTopBarFilter(null);
+                    setCurrentIndex(index);
+                  }
                 }}
                 activeOpacity={0.9}>
-                <View style={styles.listCardImageWrap}>
-                  {imgSrc ? (
-                    <Image source={imgSrc} style={styles.listCardImage} resizeMode="contain" />
-                  ) : (
-                    <View style={[styles.listCardImage, styles.listCardImagePlaceholder]}>
-                      <MaterialCommunityIcons name="image-off" size={48} color="rgba(255,255,255,0.3)" />
-                    </View>
-                  )}
-                  {hasMultipleImages && (
-                    <View style={styles.listCardDots}>
-                      {listing.images.slice(0, 5).map((_, i) => (
-                        <View
-                          key={i}
-                          style={[styles.listCardDot, i === 0 && styles.listCardDotActive]}
-                        />
-                      ))}
-                    </View>
-                  )}
+                <TouchableOpacity
+                  activeOpacity={0.95}
+                  onPress={e => {
+                    e?.stopPropagation?.();
+                    if (typeof onOpenUserProfile === 'function') {
+                      onOpenUserProfile(listing);
+                    }
+                  }}
+                  style={styles.listCardImageWrap}>
+                  <ListCardImages
+                    images={cardImages}
+                    width={Math.min(Dimensions.get('window').width, 414)}
+                    height={252}
+                  />
                   <TouchableOpacity
-                    style={styles.listCardProfile}
-                    onPress={() => onOpenUserProfile?.(listing)}
+                    style={styles.listCardProfileBtn}
+                    onPress={e => {
+                      e?.stopPropagation?.();
+                      onOpenUserProfile?.(listing);
+                    }}
                     activeOpacity={0.8}>
-                    {listCardProfileUrl ? (
-                      <Image
-                        source={{uri: listCardProfileUrl}}
-                        style={styles.listCardProfileImg}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={[styles.listCardProfileImg, styles.listCardProfilePlaceholder]}>
-                        <MaterialCommunityIcons name="account" size={20} color="#fff" />
-                      </View>
-                    )}
+                    <ProfileAvatar
+                      uri={listCardProfileUrl}
+                      name={listing.creator_name || 'משתמש'}
+                      size={60}
+                    />
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
                 <View style={styles.listCardBody}>
                   <View style={styles.listCardPurposeRow}>
-                    <Text style={styles.listCardPurposeText}>{listing.purpose || 'להשכרה'}</Text>
                     <TouchableOpacity
                       onPress={() => toggleLiked(listing)}
                       hitSlop={12}
                       style={styles.listCardHeart}>
-                      <MaterialCommunityIcons
-                        name={isItemLiked(listing) ? 'heart' : 'heart-outline'}
-                        size={22}
-                        color={isItemLiked(listing) ? '#ff4757' : '#fff'}
-                      />
+                      {isItemLiked(listing) ? (
+                        <MaterialCommunityIcons
+                          name="heart"
+                          size={26}
+                          color="#FFC40A"
+                        />
+                      ) : (
+                        <Image
+                          source={require('../assets/liked-ads/like.png')}
+                          style={styles.listCardHeartIcon}
+                          resizeMode="contain"
+                        />
+                      )}
                     </TouchableOpacity>
+                    {isCompanyListing ? (
+                      listing.saleAtPresale ? (
+                        <Image
+                          source={require('../assets/pre-sale.png')}
+                          style={styles.listCardPreSaleBadge}
+                          resizeMode="contain"
+                        />
+                      ) : null
+                    ) : (
+                      <View style={styles.listCardPurposeBadge}>
+                        <Text style={styles.listCardPurposeBadgeText}>
+                          {listing.purpose || 'להשכרה'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={styles.listCardAddress} numberOfLines={2}>
-                    {listing.location || listing.address || 'תל אביב'}
+                    {listing.address || listing.location || 'תל אביב, שד׳ חן 90'}
                   </Text>
-                  <View style={styles.listCardLocationRow}>
-                    <MaterialCommunityIcons name="map-marker" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.listCardLocationText} numberOfLines={1}>
-                      {listing.location || 'תל אביב, רוטשילד 54'}
-                    </Text>
-                  </View>
+                  {isCompanyListing ? (
+                    <View style={styles.listCardStatsRow}>
+                      <View style={styles.listCardStatItem}>
+                        <Text style={styles.listCardStatText}>
+                          {companyBuildingCount === 1 || companyBuildingCount == null
+                            ? 'בניין 1'
+                            : `${companyBuildingCount} בניינים`}
+                        </Text>
+                        <Image
+                          source={require('../assets/building_icon.png')}
+                          style={styles.listCardStatIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.listCardStatItem}>
+                        <Text style={styles.listCardStatText}>
+                          {companyFloorCount != null ? companyFloorCount : 0} קומות
+                        </Text>
+                        <Image
+                          source={require('../assets/floor_icon.png')}
+                          style={styles.listCardStatIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.listCardStatItem}>
+                        <Text style={styles.listCardStatText}>
+                          {companyApartmentCount != null ? companyApartmentCount : 0} דירות
+                        </Text>
+                        <Image
+                          source={require('../assets/apartment_icon.png')}
+                          style={styles.listCardStatIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.listCardLocationRow}>
+                      <Text style={styles.listCardLocationText} numberOfLines={1}>
+                        {listing.location || listing.address || 'תל אביב, רוטשילד 54'}
+                      </Text>
+                      <Image
+                        source={require('../assets/liked-ads/location.png')}
+                        style={styles.listCardLocationIcon}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -2461,23 +3266,25 @@ const TikTokFeedScreen = ({
                 const h = event?.nativeEvent?.layout?.height;
                 if (h > 0) setSidebarProfileHeight(h);
               }}>
-              <View style={styles.sidebarProfileRing}>
-                {sidebarProfileUrl ? (
-                  <Image
-                    source={{uri: sidebarProfileUrl}}
-                    style={styles.sidebarProfilePic}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={[styles.sidebarProfilePic, styles.sidebarProfilePlaceholder]}>
-                    <MaterialCommunityIcons name="account" size={28} color="#fff" />
-                  </View>
-                )}
-              </View>
+              <ProfileAvatar uri={sidebarProfileUrl} size={60} />
+              {sidebarShowFollowPlus ? (
+                <TouchableOpacity
+                  style={styles.sidebarFollowBadge}
+                  onPress={handleSidebarFollowRequest}
+                  disabled={sidebarSendingFollow}
+                  activeOpacity={0.8}>
+                  {sidebarSendingFollow ? (
+                    <Text style={styles.sidebarFollowBadgeText}>...</Text>
+                  ) : (
+                    <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              ) : null}
             </TouchableOpacity>
             {sidebarFiltersForFeed.map((filter, index) => {
               const isSelected = selectedSidebarFilter === filter.id;
               const labelText = String(filter.label || '');
+              const allowSidebarLabelWrap = isPartnersCategory;
               return (
                 <TouchableOpacity
                   key={filter.id}
@@ -2504,18 +3311,28 @@ const TikTokFeedScreen = ({
                       };
                     });
                   }}>
-                  <Image
-                    source={filter.icon}
-                    style={[styles.sidebarFilterIcon, isSelected && styles.filterIconSelectedTint]}
-                    resizeMode="contain"
-                  />
+                  {filter.svg ? (
+                    <SvgXml
+                      xml={filter.svg(isSelected ? '#FFC40A' : '#FFFFFF')}
+                      width={32}
+                      height={32}
+                      style={styles.sidebarFilterIcon}
+                    />
+                  ) : (
+                    <Image
+                      source={filter.icon}
+                      style={[styles.sidebarFilterIcon, isSelected && styles.filterIconSelectedTint]}
+                      resizeMode="contain"
+                    />
+                  )}
                   <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}
+                    numberOfLines={allowSidebarLabelWrap ? 2 : 1}
+                    ellipsizeMode={allowSidebarLabelWrap ? 'clip' : 'tail'}
+                    adjustsFontSizeToFit={!allowSidebarLabelWrap}
+                    minimumFontScale={allowSidebarLabelWrap ? 1 : 0.72}
                     style={[
                       styles.sidebarFilterLabel,
+                      allowSidebarLabelWrap && styles.sidebarFilterLabelWrap,
                       isSelected && styles.sidebarFilterLabelSelected,
                     ]}>
                     {labelText}
@@ -2724,7 +3541,7 @@ const TikTokFeedScreen = ({
                     styles.actionIcon,
                     isItemLiked(currentVideo) && styles.actionIconLiked,
                   ]}
-                  tintColor={isItemLiked(currentVideo) ? '#ff3b5c' : undefined}
+                  tintColor={isItemLiked(currentVideo) ? 'rgba(255, 196, 10, 1)' : undefined}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -2807,6 +3624,83 @@ const TikTokFeedScreen = ({
               </View>
             </View>
           </View>
+        ) : isBnbListing ? (
+          <View style={styles.bnbOverlayInfo}>
+            <View style={styles.bnbTopRow}>
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(videos[currentIndex])}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.heart}
+                  style={[
+                    styles.actionIcon,
+                    styles.brokerActionIcon,
+                    isItemLiked(videos[currentIndex]) && styles.actionIconLiked,
+                  ]}
+                  tintColor={isItemLiked(videos[currentIndex]) ? 'rgba(255, 196, 10, 1)' : undefined}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <View style={styles.bnbTagsRow}>
+                <View style={styles.bnbPrimaryTag}>
+                  <Text style={styles.bnbPrimaryTagText}>
+                    {isBnbHotDeal ? 'Hot deal' : 'לינה'}
+                  </Text>
+                </View>
+                <View style={styles.bnbSecondaryTag}>
+                  <Text style={styles.bnbSecondaryTagText} numberOfLines={1}>
+                    {bnbTypeTagText}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.bnbPriceRow}>
+              <Text style={styles.bnbPriceLabel}>מחיר</Text>
+              <View style={styles.bnbPriceDivider} />
+              <Text style={styles.bnbPriceMainText} numberOfLines={1}>
+                {brokerPriceText}
+              </Text>
+              <Text style={styles.bnbPriceSuffixText}>ללילה</Text>
+            </View>
+            <Text style={styles.bnbTitleText} numberOfLines={1}>
+              {bnbTitleText}
+            </Text>
+            <View style={styles.brokerLocationRow}>
+              <Text style={styles.brokerLocationText} numberOfLines={1}>
+                {brokerLocationText}
+              </Text>
+              <Image
+                source={TIKTOK_OVERLAY_ICONS.location}
+                style={styles.brokerLocationIcon}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
+        ) : isPartnersListing ? (
+          <View style={styles.partnersOverlayInfo}>
+            <View style={styles.partnersTopRow}>
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(videos[currentIndex])}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.heart}
+                  style={[
+                    styles.actionIcon,
+                    styles.brokerActionIcon,
+                    isItemLiked(videos[currentIndex]) && styles.actionIconLiked,
+                  ]}
+                  tintColor={isItemLiked(videos[currentIndex]) ? 'rgba(255, 196, 10, 1)' : undefined}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <View style={styles.partnersPurposePill}>
+                <Text style={styles.partnersPurposeText}>{partnersPurposeText}</Text>
+              </View>
+            </View>
+            <Text style={styles.partnersNameText} numberOfLines={1}>
+              {partnersDisplayName}
+            </Text>
+          </View>
         ) : isBrokerListing ? (
           <View style={styles.brokerOverlayInfo}>
             <View style={styles.brokerTopRow}>
@@ -2820,7 +3714,7 @@ const TikTokFeedScreen = ({
                     styles.brokerActionIcon,
                     isItemLiked(videos[currentIndex]) && styles.actionIconLiked,
                   ]}
-                  tintColor={isItemLiked(videos[currentIndex]) ? '#ff3b5c' : undefined}
+                  tintColor={isItemLiked(videos[currentIndex]) ? 'rgba(255, 196, 10, 1)' : undefined}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -2854,7 +3748,7 @@ const TikTokFeedScreen = ({
                     styles.actionIcon,
                     isItemLiked(videos[currentIndex]) && styles.actionIconLiked,
                   ]}
-                  tintColor={isItemLiked(videos[currentIndex]) ? '#ff3b5c' : undefined}
+                  tintColor={isItemLiked(videos[currentIndex]) ? 'rgba(255, 196, 10, 1)' : undefined}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -3035,7 +3929,12 @@ const TikTokFeedScreen = ({
                   key={item.id}
                   style={[styles.bottomBarItem, item.isPost && styles.bottomBarItemPost]}
                   onPress={() => {
-                    if (item.isPost) setShowBottomSheet(true);
+                    if (item.isPost) {
+                      if (onOpenEditPublishAdWithCategory) {
+                        onOpenEditPublishAdWithCategory(selectedCategory);
+                      }
+                      return;
+                    }
                     if (item.id === 'city' && onOpenCityFilter) onOpenCityFilter();
                     if (item.id === 'apartment') {
                       if (useLandDonamStyle && onOpenDonamFilter) onOpenDonamFilter();
@@ -3266,9 +4165,12 @@ const TikTokFeedScreen = ({
             onPress={() => setShowCommentsSheet(false)}
           />
           <View style={[styles.commentsSheet, {height: screenHeight * 0.8}]}>
-            <View style={styles.commentsTopHeader}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setShowCommentsSheet(false)}
+              style={styles.commentsTopHeader}>
               <View style={styles.commentsHandle} />
-            </View>
+            </TouchableOpacity>
             <View style={styles.commentsCountBar}>
               <Text style={styles.commentsTitle}>
                 {formatCount(getDisplayedCommentCount(activeCommentsVideo))} תגובות
@@ -3336,15 +4238,33 @@ const TikTokFeedScreen = ({
                             style={styles.commentLikeWrap}
                             onPress={() => toggleCommentReaction(comment.id, 'dislike')}
                             activeOpacity={0.85}>
-                          <Image
-                            source={TIKTOK_OVERLAY_ICONS.commentsDislike}
-                            style={[
-                              styles.commentActionIcon,
-                              styles.commentDislikeIcon,
-                              comment.my_reaction === 'dislike' && styles.commentActionIconActive,
-                            ]}
-                            resizeMode="contain"
+                            <Image
+                              source={TIKTOK_OVERLAY_ICONS.commentsDislike}
+                              style={[
+                                styles.commentActionIcon,
+                                styles.commentDislikeIcon,
+                                comment.my_reaction === 'dislike' &&
+                                  styles.commentActionIconActive,
+                              ]}
+                              tintColor={
+                                comment.my_reaction === 'dislike'
+                                  ? '#FFC40A'
+                                  : undefined
+                              }
+                              resizeMode="contain"
                             />
+                            {(() => {
+                              const isAuthor =
+                                currentUser?.id != null &&
+                                comment?.user_id != null &&
+                                String(currentUser.id) === String(comment.user_id);
+                              if (!isAuthor) return null;
+                              return (
+                                <Text style={styles.commentLikeCountText}>
+                                  {formatCount(comment.dislikes_count ?? 0)}
+                                </Text>
+                              );
+                            })()}
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -3383,9 +4303,6 @@ const TikTokFeedScreen = ({
                   returnKeyType="send"
                   onSubmitEditing={submitPostComment}
                 />
-              </View>
-              <View style={styles.commentsHomeIndicatorWrap}>
-                <View style={styles.commentsHomeIndicator} />
               </View>
             </View>
           </View>
@@ -3432,6 +4349,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 6,
   },
+  /** Smaller right-side spacer used when the search input is open, giving the input more width. */
+  topBarRightSpacerSmall: {
+    width: 0,
+    height: 44,
+  },
   topBarSearchIcon: {
     width: 26,
     height: 26,
@@ -3454,6 +4376,26 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
   },
+  /** Unseen-likes count badge on the heart icon in the top bar (matches Figma 8:95127). */
+  likedBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 10,
+    backgroundColor: '#34F3E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  likedBadgeText: {
+    color: '#1E1D27',
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'center',
+  },
   /** Selected feed filter: tint only the PNG strokes (#FFC40A), no extra background */
   filterIconSelectedTint: {
     tintColor: '#FFC40A',
@@ -3468,7 +4410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    marginHorizontal: 8,
+    marginHorizontal: 0,
   },
   userSearchClearBtn: {
     width: 24,
@@ -3484,6 +4426,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
     paddingVertical: 0,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   userSearchPanel: {
     position: 'absolute',
@@ -3491,61 +4435,108 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#1E1D27',
+    backgroundColor: '#2B2A39',
     zIndex: 190,
+  },
+  userSearchSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 30,
+    paddingVertical: 16,
+  },
+  userSearchSectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+  },
+  userSearchClearText: {
+    color: '#FFC40A',
+    fontSize: 20,
+    fontFamily: 'Rubik-Regular',
   },
   userSearchList: {
     flex: 1,
   },
   userSearchListContent: {
-    paddingTop: 8,
     paddingBottom: 20,
   },
   userSearchRow: {
-    minHeight: 58,
+    height: 83,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
+    gap: 18,
     paddingHorizontal: 16,
-    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: '#373548',
+    backgroundColor: '#2B2A39',
+  },
+  userSearchDismissBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userSearchRowContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
   },
   userSearchTextWrap: {
     flex: 1,
-    marginRight: 12,
     alignItems: 'flex-end',
+    gap: 8,
   },
   userSearchName: {
-    color: '#FFFFFF',
-    fontSize: 25,
-    lineHeight: 25,
+    color: '#F7F3E6',
+    fontSize: 18,
+    lineHeight: 24,
     fontFamily: 'Rubik-Medium',
     textAlign: 'right',
   },
   userSearchMetaRow: {
-    marginTop: 2,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   userSearchMetaText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 17,
-    lineHeight: 17,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
-    maxWidth: 220,
   },
   userSearchMetaCount: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    lineHeight: 17,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
   },
   userSearchRatingIcon: {
     width: 14,
     height: 14,
+  },
+  /** Figma-styled star icon next to a user's rating number in the recent-search list. */
+  userSearchStarIcon: {
+    width: 16,
+    height: 16,
+  },
+  /** 5-star wrap: keeps the row height small while letting the glow-style icon overflow bigger (like Figma). */
+  userSearchFiveStarWrap: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  userSearchFiveStarIcon: {
+    width: 40,
+    height: 40,
   },
   userSearchRatingGlowWrap: {
     width: 18,
@@ -3561,11 +4552,27 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   userSearchAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
     borderColor: '#FFC40A',
+  },
+  /** Gold ring wrapper with inner padding so there is visible breathing room between the ring and the avatar image. */
+  userSearchAvatarRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 3,
+    borderColor: '#FFC40A',
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userSearchAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
   },
   userSearchAvatarPlaceholder: {
     backgroundColor: '#343347',
@@ -3599,13 +4606,13 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 414,
     marginBottom: 16,
-    backgroundColor: '#161b22',
+    backgroundColor: '#2B2A39',
     borderRadius: 16,
     overflow: 'hidden',
   },
   listCardImageWrap: {
     width: '100%',
-    height: 220,
+    height: 252,
     backgroundColor: '#000',
     position: 'relative',
     alignItems: 'center',
@@ -3637,15 +4644,20 @@ const styles = StyleSheet.create({
   listCardDotActive: {
     backgroundColor: Colors.yellowIcons || '#FFD700',
   },
+  listCardProfileBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
   listCardProfile: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(212, 175, 55, 0.9)',
+    top: 10,
+    right: 10,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: '#FFC40A',
     overflow: 'hidden',
     backgroundColor: '#333',
   },
@@ -3658,40 +4670,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listCardBody: {
-    backgroundColor: '#161b22',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    backgroundColor: '#2B2A39',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 12,
   },
   listCardPurposeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    justifyContent: 'flex-end',
+    gap: 4,
   },
-  listCardPurposeText: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Regular',
+  listCardPurposeBadge: {
+    height: 22,
+    borderRadius: 1000,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listCardPreSaleBadge: {
+    width: 93,
+    height: 30,
+  },
+  listCardPurposeBadgeText: {
+    color: '#1E1D27',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    fontFamily: 'Rubik-Medium',
   },
   listCardHeart: {
-    padding: 4,
+    padding: 2,
+  },
+  listCardHeartIcon: {
+    width: 26,
+    height: 26,
+  },
+  listCardLocationIcon: {
+    width: 18,
+    height: 18,
+  },
+  listCardStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  listCardStatItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  listCardStatIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#FFFFFF',
+  },
+  listCardStatText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
   },
   listCardAddress: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#F7F3E6',
+    fontSize: 20,
+    lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    marginBottom: 6,
     textAlign: 'right',
   },
   listCardLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 6,
+    gap: 4,
   },
   listCardLocationText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
   },
   header: {
     flexDirection: 'row',
@@ -4112,6 +5174,10 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     maxWidth: 72,
   },
+  sidebarFilterLabelWrap: {
+    maxWidth: 72,
+    minHeight: 32,
+  },
   sidebarFilterLabelSelected: {
     color: '#FFC40A',
   },
@@ -4121,6 +5187,23 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sidebarFollowBadge: {
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#1E1D27',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  sidebarFollowBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Rubik-Medium',
   },
   sidebarProfileRing: {
     width: 60,
@@ -4234,6 +5317,41 @@ const styles = StyleSheet.create({
     width: 334,
     alignItems: 'flex-end',
   },
+  partnersOverlayInfo: {
+    width: 334,
+    alignItems: 'flex-end',
+    gap: 16,
+  },
+  partnersTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 14,
+  },
+  partnersPurposePill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1000,
+    paddingHorizontal: 6,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  partnersPurposeText: {
+    color: '#1E1D27',
+    fontSize: 14,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.5447,
+    textAlign: 'right',
+  },
+  partnersNameText: {
+    width: '100%',
+    color: '#F7F3E6',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'right',
+  },
   brokerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4298,6 +5416,117 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     tintColor: '#FFFFFF',
+  },
+  bnbOverlayInfo: {
+    width: 334,
+    alignItems: 'flex-end',
+  },
+  bnbTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginBottom: 18,
+    width: '100%',
+  },
+  bnbTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  bnbHotDealTag: {
+    backgroundColor: '#B13A46',
+    borderRadius: 1000,
+    height: 22,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bnbHotDealText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 14,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.4,
+  },
+  bnbPrimaryTag: {
+    backgroundColor: '#FFC40A',
+    borderRadius: 1000,
+    height: 22,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bnbPrimaryTagText: {
+    color: '#1E1D27',
+    fontSize: 14,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.5447,
+  },
+  bnbSecondaryTag: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1000,
+    height: 22,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 140,
+  },
+  bnbSecondaryTagText: {
+    color: '#1E1D27',
+    fontSize: 14,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.5447,
+    textAlign: 'right',
+  },
+  bnbPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    width: '100%',
+    gap: 7,
+  },
+  bnbPriceLabel: {
+    color: '#F7F3E6',
+    fontSize: 14,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.5447,
+  },
+  bnbPriceDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: '#F7F3E6',
+    opacity: 0.8,
+    marginBottom: 2,
+  },
+  bnbPriceMainText: {
+    color: '#F7F3E6',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'right',
+    maxWidth: 165,
+  },
+  bnbPriceSuffixText: {
+    color: '#F7F3E6',
+    fontSize: 14,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.5447,
+    marginBottom: 4,
+  },
+  bnbTitleText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    width: '100%',
+    marginTop: 2,
   },
   postActionsInfo: {
     width: 334,

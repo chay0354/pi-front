@@ -323,7 +323,12 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
 /**
  * Chat list: Pi welcome + real conversations from API (layout matches PiChat design).
  */
-const ChatListScreen = ({onClose, onOpenChat, currentUser = null, refreshKey = 0}) => {
+const ChatListScreen = ({
+  onClose,
+  onOpenChat,
+  currentUser = null,
+  refreshKey = 0,
+}) => {
   const [search, setSearch] = useState('');
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -819,16 +824,20 @@ const ChatListScreen = ({onClose, onOpenChat, currentUser = null, refreshKey = 0
           <View style={styles.logoWrap}>
             <Image source={require('../assets/image-copy-9.png')} style={styles.logoImage} resizeMode="contain" />
           </View>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            activeOpacity={0.7}
-            onPress={() => setShowNewChat(true)}
-            accessibilityRole="button"
-            accessibilityLabel="צ'אט חדש">
-            <View style={styles.plusCircle}>
-              <MaterialCommunityIcons name="plus" size={22} color="#fff" />
-            </View>
-          </TouchableOpacity>
+          {currentUserType === 'broker' ? (
+            <TouchableOpacity
+              style={styles.headerBtn}
+              activeOpacity={0.7}
+              onPress={() => setShowNewChat(true)}
+              accessibilityRole="button"
+              accessibilityLabel="צ'אט חדש">
+              <View style={styles.plusCircle}>
+                <MaterialCommunityIcons name="plus" size={22} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.headerBtn} />
+          )}
         </View>
         <View style={styles.searchWrap}>
           <TextInput

@@ -455,6 +455,192 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
 };
 
 /**
+ * Ensure a regular (subscription_type='user') backend record exists for this email,
+ * returning the full subscription (with a real UUID `id`).
+ * Idempotent: returns existing record if one is found by email.
+ */
+export const registerRegularUser = async ({email, name = null, phone = null, profilePictureUrl = null} = {}) => {
+  const normalizedEmail = email && String(email).trim() ? String(email).trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return { success: false, error: 'Invalid email', subscription: null };
+  }
+  try {
+    const response = await fetch(`${API_URL}/api/users/register-regular`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        name,
+        phone,
+        profile_picture_url: profilePictureUrl,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { success: false, error: data?.error || 'Failed to register user', subscription: null };
+    }
+    return data;
+  } catch (error) {
+    console.error('registerRegularUser error:', error);
+    return { success: false, error: error.message, subscription: null };
+  }
+};
+
+/**
+ * Send a follow request from one subscription user to another.
+ */
+export const sendFollowRequest = async (requesterSubscriptionId, targetSubscriptionId) => {
+  const response = await fetch(`${API_URL}/api/follows/request`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      requester_subscription_id: requesterSubscriptionId,
+      target_subscription_id: targetSubscriptionId,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to send follow request');
+  return data;
+};
+
+/**
+ * Unfollow a user.
+ */
+export const unfollowUser = async (followerSubscriptionId, followingSubscriptionId) => {
+  const response = await fetch(`${API_URL}/api/follows/unfollow`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      follower_subscription_id: followerSubscriptionId,
+      following_subscription_id: followingSubscriptionId,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to unfollow');
+  return data;
+};
+
+/**
+ * Accept or reject an incoming follow request.
+ */
+export const respondToFollowRequest = async (requestId, actorSubscriptionId, action) => {
+  const response = await fetch(`${API_URL}/api/follows/requests/respond`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      request_id: requestId,
+      actor_subscription_id: actorSubscriptionId,
+      action,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to respond follow request');
+  return data;
+};
+
+/**
+ * Get follow status between viewer and target.
+ */
+export const getFollowStatus = async (viewerId, targetId) => {
+  const params = new URLSearchParams({
+    viewer_id: String(viewerId || '').trim(),
+    target_id: String(targetId || '').trim(),
+  });
+  const response = await fetch(`${API_URL}/api/follows/status?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch follow status');
+  return data;
+};
+
+/**
+ * Get likes/followers/following/pending requests counts for a profile.
+ */
+export const getFollowStats = async userId => {
+  const response = await fetch(
+    `${API_URL}/api/follows/stats?user_id=${encodeURIComponent(String(userId || '').trim())}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch follow stats');
+  return data;
+};
+
+/**
+ * Follow hub data for tabs: requests | followers | following
+ */
+export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q = ''}) => {
+  const params = new URLSearchParams({
+    user_id: String(userId || '').trim(),
+    tab: String(tab || 'followers').trim(),
+  });
+  if (viewerId) params.set('viewer_id', String(viewerId).trim());
+  if (q && String(q).trim()) params.set('q', String(q).trim());
+  const response = await fetch(`${API_URL}/api/follows/hub?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch follow hub');
+  return data;
+};
+
+/**
+ * Save improvement feedback (from suggestions screen) in DB.
+ * @param {{
+ *   rating: number,
+ *   improvementText: string,
+ *   creatorSubscriptionId?: string | null,
+ *   creatorEmail?: string | null,
+ *   creatorName?: string | null,
+ *   creatorSubscriptionType?: string | null,
+ *   creatorSubscriberNumber?: string | null,
+ *   sourceScreen?: string | null,
+ * }} payload
+ * @returns {Promise<{ success: boolean, feedback?: object, error?: string }>}
+ */
+export const submitImprovementFeedback = async (payload) => {
+  try {
+    const response = await fetch(`${API_URL}/api/improvements-feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rating: Number(payload?.rating),
+        improvement_text:
+          payload?.improvementText != null ? String(payload.improvementText).trim() : '',
+        created_by_subscription_id:
+          payload?.creatorSubscriptionId && String(payload.creatorSubscriptionId).trim()
+            ? String(payload.creatorSubscriptionId).trim()
+            : null,
+        created_by_email:
+          payload?.creatorEmail && String(payload.creatorEmail).trim()
+            ? String(payload.creatorEmail).trim().toLowerCase()
+            : null,
+        created_by_name:
+          payload?.creatorName && String(payload.creatorName).trim()
+            ? String(payload.creatorName).trim()
+            : null,
+        created_by_subscription_type:
+          payload?.creatorSubscriptionType &&
+          String(payload.creatorSubscriptionType).trim()
+            ? String(payload.creatorSubscriptionType).trim().toLowerCase()
+            : null,
+        created_by_subscriber_number:
+          payload?.creatorSubscriberNumber &&
+          String(payload.creatorSubscriberNumber).trim()
+            ? String(payload.creatorSubscriberNumber).trim()
+            : null,
+        source_screen:
+          payload?.sourceScreen && String(payload.sourceScreen).trim()
+            ? String(payload.sourceScreen).trim()
+            : 'feedbackSuggestion',
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to submit improvement feedback');
+    return { success: true, feedback: data.feedback };
+  } catch (error) {
+    console.error('submitImprovementFeedback error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Get current user subscription by email or subscriber number
  * @param {string} email - User email (optional)
  * @param {string} subscriberNumber - Subscriber number (optional)
@@ -463,8 +649,31 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
 export const getCurrentUser = async (email = null, subscriberNumber = null) => {
   try {
     const params = new URLSearchParams();
-    if (email) params.append('email', email);
-    if (subscriberNumber) params.append('subscriberNumber', subscriberNumber);
+    const normalizedEmail =
+      email && String(email).trim() ? String(email).trim().toLowerCase() : '';
+    const normalizedSubscriberNumber =
+      subscriberNumber && String(subscriberNumber).trim()
+        ? String(subscriberNumber).trim()
+        : '';
+
+    // Skip lookup when the supplied email is obviously not an email
+    // (avoids 404 noise like getCurrentUser('h')).
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    const usableEmail = looksLikeEmail ? normalizedEmail : '';
+
+    if (usableEmail) params.append('email', usableEmail);
+    if (normalizedSubscriberNumber) {
+      params.append('subscriberNumber', normalizedSubscriberNumber);
+    }
+
+    // Avoid unnecessary request if nothing usable was provided.
+    if (!usableEmail && !normalizedSubscriberNumber) {
+      return {
+        success: false,
+        subscription: null,
+        error: normalizedEmail && !looksLikeEmail ? 'Invalid email' : 'Missing user identifier',
+      };
+    }
 
     const response = await fetch(
       `${API_URL}/api/user/current?${params.toString()}`,
@@ -477,6 +686,15 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
     );
 
     const data = await response.json();
+
+    // "User not found" is a valid lookup result, not a transport failure.
+    if (response.status === 404) {
+      return {
+        success: false,
+        subscription: null,
+        error: data?.error || 'User not found',
+      };
+    }
 
     if (!response.ok) {
       throw new Error(data.error || 'Failed to fetch user');
@@ -655,7 +873,109 @@ export const updateListingFreeze = async (listingId, isFrozen) => {
     }
     return data;
   } catch (error) {
-    console.error('Error updating listing freeze:', error);
+    console.error('Error updating listing:', error);
+    throw error;
+  }
+};
+
+/** Fetch the current user's recent user-searches for the TikTok feed "אחרונים" list. */
+export const getRecentUserSearches = async userEmail => {
+  const email = userEmail ? String(userEmail).trim() : '';
+  if (!email) return {success: true, recent: []};
+  const response = await fetch(
+    `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || 'Failed to load recent searches');
+  return data;
+};
+
+/** Record (upsert) a user-profile search so it appears in the "אחרונים" list. */
+export const recordUserSearch = async (userEmail, targetSubscriptionId) => {
+  const email = userEmail ? String(userEmail).trim() : '';
+  const target =
+    targetSubscriptionId != null ? String(targetSubscriptionId).trim() : '';
+  if (!email || !target) return {success: false};
+  try {
+    const response = await fetch(`${API_URL}/api/search/users/recent`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_email: email, target_subscription_id: target}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn('recordUserSearch failed:', data?.error);
+      return {success: false};
+    }
+    return data;
+  } catch (e) {
+    console.warn('recordUserSearch error:', e?.message);
+    return {success: false};
+  }
+};
+
+/** Clear all recent user-searches for the current user (bound to the "נקה" button). */
+export const clearRecentUserSearches = async userEmail => {
+  const email = userEmail ? String(userEmail).trim() : '';
+  if (!email) return {success: false};
+  try {
+    const response = await fetch(
+      `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
+      {method: 'DELETE'},
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn('clearRecentUserSearches failed:', data?.error);
+      return {success: false};
+    }
+    return data;
+  } catch (e) {
+    console.warn('clearRecentUserSearches error:', e?.message);
+    return {success: false};
+  }
+};
+
+/** Get the monthly boost quota usage for a user (by email). */
+export const getBoostQuota = async userEmail => {
+  const email = userEmail ? String(userEmail).trim() : '';
+  if (!email) throw new Error('user_email required');
+  const response = await fetch(
+    `${API_URL}/api/listings/boost-quota?user_email=${encodeURIComponent(email)}`,
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || 'Failed to load boost quota');
+  return data;
+};
+
+/**
+ * Boost a listing to HIGH exposure for 24 hours. Enforces the monthly quota.
+ * @param {string} listingId - ad UUID
+ * @param {string} userEmail - current user email
+ * @returns {Promise<{success: boolean, boost_expires_at: string, quota: number, used: number, remaining: number, listing: object}>}
+ */
+export const boostListing = async (listingId, userEmail) => {
+  const id = listingId ? String(listingId).trim() : '';
+  const email = userEmail ? String(userEmail).trim() : '';
+  if (!id) throw new Error('listingId required');
+  if (!email) throw new Error('user_email required');
+  try {
+    const response = await fetch(`${API_URL}/api/listings/${id}/boost`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: email }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(data?.error || 'Failed to boost listing');
+      err.code = data?.code || null;
+      err.quota = data?.quota ?? null;
+      err.used = data?.used ?? null;
+      err.remaining = data?.remaining ?? null;
+      throw err;
+    }
+    return data;
+  } catch (error) {
+    console.error('Error boosting listing:', error);
     throw error;
   }
 };
@@ -1249,6 +1569,21 @@ export const getCompaniesDirectory = async () => {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.error || 'Failed to load companies');
+  }
+  return data;
+};
+
+/**
+ * Professionals directory for home "חפשו עוד" (verified/active professional subscriptions)
+ */
+export const getProfessionalsDirectory = async () => {
+  const response = await fetch(`${API_URL}/api/professionals/directory`, {
+    method: 'GET',
+    headers: {'Content-Type': 'application/json'},
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to load professionals');
   }
   return data;
 };

@@ -8,55 +8,102 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  Modal,
+  Pressable,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
 
-const BG = '#1c1c26';
-const CARD = '#25252f';
-const PRICE_BG = '#3d3a52';
+/** Figma palette for מסך מועדפים (Favorites screen). */
+const BG = '#1E1D27';
+const CARD_BG = '#2B2A39';
+const CARD_BORDER = '#373548';
+const BUTTON_BG = '#4D4966';
+const GOLD = '#FFC40A';
 
-const formatPrice = (item) => {
-  const n = item.price != null ? Number(item.price) : item.budget != null ? Number(item.budget) : null;
-  if (n == null || isNaN(n)) return '—';
-  return `₪${Math.round(n).toLocaleString('he-IL')}`;
+/** Same icons used in the TikTok feed top bar (kept visually identical on this screen). */
+const TOP_BAR_FILTERS = [
+  {id: 'pics', icon: require('../assets/top-filters/pics.png')},
+  {id: 'list', icon: require('../assets/top-filters/list.png')},
+  {id: 'video', icon: require('../assets/top-filters/video.png')},
+  {id: 'liked', icon: require('../assets/top-filters/liked.png')},
+];
+
+/** Detect feed-post rows so we can exclude them from the favorites list. */
+const isFeedPost = item => {
+  if (!item) return false;
+  const type = String(
+    item.property_type || item.propertyType || item.propertyTypeRaw || '',
+  ).toLowerCase();
+  if (type.includes('post')) return true;
+  if (
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't'
+  )
+    return true;
+  const description = String(item.description || '').trim();
+  if (description.toLowerCase() === 'post' || description === 'פוסט') {
+    return true;
+  }
+  const urls = [
+    item.main_image_url,
+    item.image_url,
+    item.image,
+    ...(Array.isArray(item.images)
+      ? item.images.map(i =>
+          i && typeof i === 'object' ? i.uri || i.image_url : i,
+        )
+      : []),
+    ...(Array.isArray(item.listing_images)
+      ? item.listing_images.map(i =>
+          i && typeof i === 'object' ? i.image_url || i.uri : i,
+        )
+      : []),
+  ].filter(Boolean);
+  return urls.some(u => /post_\d/i.test(String(u)));
 };
 
-const listingTitle = (item) => {
+const formatPrice = item => {
+  const n =
+    item.price != null
+      ? Number(item.price)
+      : item.budget != null
+        ? Number(item.budget)
+        : null;
+  if (n == null || Number.isNaN(n)) return '—';
+  return `₪${Math.round(n).toLocaleString('en-US')}`;
+};
+
+const listingTitle = item => {
   const pn = item.project_name && String(item.project_name).trim();
   if (pn) return pn;
   const addr = (item.address || '').trim();
   if (addr) {
-    const parts = addr.split(',').map((s) => s.trim()).filter(Boolean);
+    const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
     if (parts.length > 1) return parts[parts.length - 1];
     return parts[0] || 'מודעה';
   }
   return 'מודעה';
 };
 
-const listingAddress = (item) => {
+const listingAddress = item => {
   const locBase = (item.address || item.land_address || '').trim();
-  const parcel =
-    item.land_parcel != null && String(item.land_parcel).trim()
-      ? `חלקה ${String(item.land_parcel).trim()}`
-      : '';
-  const block =
-    item.land_block != null && String(item.land_block).trim()
-      ? `גוש ${String(item.land_block).trim()}`
-      : '';
-  return [locBase, parcel, block].filter(Boolean).join(' · ') || '—';
+  return locBase || 'מיקום לא זמין';
 };
 
-/**
- * מועדפים – all ads the user liked (server ad_likes + favorites_only)
- */
-const FavoritesScreen = ({onClose}) => {
-  const {currentUser} = useContext(ContextHook);
+/** מסך מועדפים – matches Figma 8:95135. Shows only ads (no feed posts). */
+const FavoritesScreen = ({onClose, onOpenListing}) => {
+  const ctx = useContext(ContextHook) || {};
+  const currentUser = ctx.currentUser || null;
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState(null);
+  /** When set, shows the "הסרת מודעה מהמועדפים" confirmation modal for this listing. */
+  const [confirmUnlikeListing, setConfirmUnlikeListing] = useState(null);
 
   const userId = currentUser?.id != null ? String(currentUser.id) : null;
 
@@ -74,7 +121,7 @@ const FavoritesScreen = ({onClose}) => {
         favorites_only: true,
       });
       if (res.success && Array.isArray(res.listings)) {
-        setListings(res.listings);
+        setListings(res.listings.filter(l => !isFeedPost(l)));
       } else {
         setListings([]);
       }
@@ -90,12 +137,12 @@ const FavoritesScreen = ({onClose}) => {
     load();
   }, [load]);
 
-  const handleUnlike = async (listingId) => {
+  const handleUnlike = async listingId => {
     if (!userId || !listingId || removingId) return;
     setRemovingId(listingId);
     try {
       await unlikeListing(listingId, userId);
-      setListings((prev) => prev.filter((l) => l.id !== listingId));
+      setListings(prev => prev.filter(l => l.id !== listingId));
     } catch (e) {
       console.warn('Unlike failed', e);
     } finally {
@@ -104,22 +151,61 @@ const FavoritesScreen = ({onClose}) => {
   };
 
   const renderItem = ({item}) => {
-    const imgs = item.listing_images || [];
-    const uri = imgs[0]?.image_url;
+    const imgs = Array.isArray(item.listing_images) ? item.listing_images : [];
+    const uri =
+      imgs[0]?.image_url ||
+      item.main_image_url ||
+      (Array.isArray(item.image_urls) && item.image_urls[0]) ||
+      null;
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={styles.card}
+        onPress={() => onOpenListing?.(item)}>
         <View style={styles.row}>
+          <View style={styles.textCol}>
+            <Text style={styles.title} numberOfLines={1}>
+              {String(item?.subscription_type || '').toLowerCase() === 'company'
+                ? item?.project_name && String(item.project_name).trim()
+                  ? String(item.project_name).trim()
+                  : listingTitle(item)
+                : formatPrice(item)}
+            </Text>
+            <View style={styles.addrRow}>
+              <Text style={styles.address} numberOfLines={1}>
+                {listingAddress(item)}
+              </Text>
+              <MaterialCommunityIcons
+                name="map-marker-outline"
+                size={18}
+                color="#FFFFFF"
+              />
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.ctaBtn}
+              onPress={() => onOpenListing?.(item)}>
+              <Text style={styles.ctaText}>צפה במודעה</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.imageWrap}>
             {uri ? (
               <Image source={{uri}} style={styles.thumb} resizeMode="cover" />
             ) : (
               <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                <MaterialCommunityIcons name="image-outline" size={36} color="rgba(255,255,255,0.35)" />
+                <MaterialCommunityIcons
+                  name="image-outline"
+                  size={36}
+                  color="rgba(255,255,255,0.35)"
+                />
               </View>
             )}
             <TouchableOpacity
               style={styles.heartBtn}
-              onPress={() => handleUnlike(item.id)}
+              onPress={e => {
+                e?.stopPropagation?.();
+                setConfirmUnlikeListing(item);
+              }}
               hitSlop={10}
               disabled={removingId === item.id}>
               <View style={styles.heartCircle}>
@@ -131,33 +217,50 @@ const FavoritesScreen = ({onClose}) => {
               </View>
             </TouchableOpacity>
           </View>
-          <View style={styles.textCol}>
-            <Text style={styles.title} numberOfLines={1}>
-              {listingTitle(item)}
-            </Text>
-            <View style={styles.addrRow}>
-              <MaterialCommunityIcons name="map-marker-outline" size={16} color={Colors.white100} />
-              <Text style={styles.address} numberOfLines={2}>
-                {listingAddress(item)}
-              </Text>
-            </View>
-            <View style={styles.pricePill}>
-              <Text style={styles.priceText}>{formatPrice(item)}</Text>
-            </View>
-          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
-          <MaterialCommunityIcons name="chevron-left" size={32} color={Colors.white100} />
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.topBarSideBtn}
+          hitSlop={12}>
+          <MaterialCommunityIcons
+            name="chevron-left"
+            size={26}
+            color="#FFFFFF"
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>מועדפים</Text>
-        <View style={styles.headerSpacer} />
+        <View style={styles.topBarCenter}>
+          {TOP_BAR_FILTERS.map(f => {
+            const isActive = f.id === 'liked';
+            return (
+              <TouchableOpacity
+                key={f.id}
+                style={styles.topBarFilterBtn}
+                hitSlop={8}
+                onPress={() => {
+                  if (f.id !== 'liked') onClose?.();
+                }}>
+                <Image
+                  source={f.icon}
+                  style={[
+                    styles.topBarFilterIcon,
+                    isActive && styles.filterIconSelectedTint,
+                  ]}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <TouchableOpacity style={styles.topBarSideBtn} hitSlop={12}>
+          <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       {!userId ? (
@@ -166,7 +269,7 @@ const FavoritesScreen = ({onClose}) => {
         </View>
       ) : loading ? (
         <View style={styles.centerMsg}>
-          <ActivityIndicator size="large" color={Colors.yellowIcons} />
+          <ActivityIndicator size="large" color={GOLD} />
         </View>
       ) : listings.length === 0 ? (
         <View style={styles.centerMsg}>
@@ -176,13 +279,55 @@ const FavoritesScreen = ({onClose}) => {
       ) : (
         <FlatList
           data={listings}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={item => String(item.id)}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.sep} />}
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <Modal
+        visible={confirmUnlikeListing != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmUnlikeListing(null)}>
+        <Pressable
+          style={styles.confirmOverlay}
+          onPress={() => setConfirmUnlikeListing(null)}>
+          <View
+            style={styles.confirmCard}
+            onStartShouldSetResponder={() => true}>
+            <Text style={styles.confirmTitle}>הסרת מודעה מהמועדפים</Text>
+            <Text style={styles.confirmBody}>
+              לאחר הסרה, לא ניתן יהיה להוסיף את המודעה מחדש למועדפים.
+            </Text>
+            <View style={styles.confirmBtnRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setConfirmUnlikeListing(null)}
+                activeOpacity={0.85}>
+                <Text style={styles.confirmCancelText}>ביטול</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  const id = confirmUnlikeListing?.id;
+                  setConfirmUnlikeListing(null);
+                  if (id != null) handleUnlike(id);
+                }}>
+                <LinearGradient
+                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  locations={[0.0456, 0.5076, 0.8831]}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                  style={styles.confirmRemoveBtn}>
+                  <Text style={styles.confirmRemoveText}>הסר מהרשימה</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -195,54 +340,66 @@ const styles = StyleSheet.create({
     maxWidth: 414,
     alignSelf: 'center',
   },
-  header: {
+  topBar: {
+    height: 52,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'web' ? 48 : 52,
-    paddingBottom: 16,
-    paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#333',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'web' ? 8 : 2,
+    backgroundColor: BG,
   },
-  backBtn: {
+  topBarSideBtn: {
     width: 44,
     height: 44,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 6,
   },
-  headerTitle: {
+  topBarCenter: {
     flex: 1,
-    textAlign: 'center',
-    color: Colors.white100,
-    fontSize: 18,
-    fontFamily: 'Rubik-Medium',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginHorizontal: 8,
   },
-  headerSpacer: {width: 44},
+  topBarFilterBtn: {
+    padding: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  topBarFilterIcon: {
+    width: 24,
+    height: 24,
+  },
+  filterIconSelectedTint: {
+    tintColor: GOLD,
+  },
   listContent: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
     paddingBottom: 40,
   },
-  sep: {
-    height: 12,
-  },
   card: {
-    backgroundColor: CARD,
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: CARD_BG,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: CARD_BORDER,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
   row: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 12,
+    gap: 16,
+    minHeight: 105,
   },
   imageWrap: {
-    width: 100,
-    height: 100,
+    width: 105,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+    alignSelf: 'stretch',
   },
   thumb: {
     width: '100%',
@@ -271,41 +428,54 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'flex-end',
+    gap: 6,
   },
   title: {
-    color: Colors.white100,
-    fontSize: 17,
-    fontFamily: 'Rubik-Bold',
+    color: '#F7F3E6',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
     textAlign: 'right',
-    marginBottom: 6,
     width: '100%',
   },
   addrRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
     width: '100%',
   },
   address: {
-    flex: 1,
-    color: Colors.grey200,
+    color: '#FFFFFF',
     fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'right',
-    lineHeight: 20,
   },
   pricePill: {
-    backgroundColor: PRICE_BG,
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignSelf: 'stretch',
-    alignItems: 'center',
+    alignSelf: 'flex-end',
   },
   priceText: {
-    color: Colors.white100,
+    color: '#F7F3E6',
     fontSize: 16,
-    fontFamily: 'Rubik-Bold',
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+  },
+  ctaBtn: {
+    alignSelf: 'stretch',
+    height: 40,
+    borderRadius: 1000,
+    backgroundColor: BUTTON_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
   },
   centerMsg: {
     flex: 1,
@@ -314,15 +484,79 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   msgText: {
-    color: Colors.white100,
+    color: '#FFFFFF',
     fontSize: 16,
     textAlign: 'center',
   },
   msgSub: {
-    color: Colors.grey200,
+    color: '#D2D0DC',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 366,
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 33,
+  },
+  confirmTitle: {
+    color: '#F7F3E6',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'center',
+  },
+  confirmBody: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  confirmBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    height: 40,
+    minWidth: 150,
+    paddingHorizontal: 20,
+    borderRadius: 1000,
+    backgroundColor: BUTTON_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+  },
+  confirmRemoveBtn: {
+    height: 44,
+    minWidth: 150,
+    paddingHorizontal: 16,
+    borderRadius: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmRemoveText: {
+    color: '#1E1D27',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
   },
 });
 

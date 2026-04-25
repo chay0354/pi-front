@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Octicons} from '@expo/vector-icons';
 import {brokerCategories, categoriesEditProfile} from '../utils/constant';
-import {getListings} from '../utils/api';
+import {getListings, getBoostQuota, boostListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
@@ -26,6 +26,53 @@ const BG = '#1a1926';
 const CARD_BG = '#2B2A39';
 const BORDER_GOLD = '#D4AF37';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
+
+// Detect feed-post rows so this screen shows only real ads (not free-form posts).
+const isPostListingRecord = (item) => {
+  if (!item) return false;
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  const description = String(item.description || item.desc || '').trim();
+  const descLower = description.toLowerCase();
+  if (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    descLower === 'post' ||
+    descLower.includes('פוסט') ||
+    descLower.includes('post') ||
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  ) {
+    return true;
+  }
+  // Fallback: inspect image URLs. Posts are uploaded with a `post_<timestamp>`
+  // filename segment even when `feed_post` / `description` aren't set on the row.
+  const urls = [
+    item.main_image_url,
+    item.image_url,
+    item.image,
+    ...(Array.isArray(item.images)
+      ? item.images.map(i =>
+          i && typeof i === 'object' ? i.uri || i.image_url : i,
+        )
+      : []),
+    ...(Array.isArray(item.listing_images)
+      ? item.listing_images.map(i =>
+          i && typeof i === 'object' ? i.image_url || i.uri : i,
+        )
+      : []),
+  ].filter(Boolean);
+  return urls.some(u => /post_\d/i.test(String(u)));
+};
 
 // Category icon: crop outer background (dark card) so only center content shows
 const CATEGORY_ICON_SIZE = 110;
@@ -66,6 +113,15 @@ const toListingCategoryId = value => {
   return UI_TO_LISTING_CATEGORY_ID[n] ?? n;
 };
 
+const resolveListingCategoryId = (uiCategoryId, initialCategoryId) => {
+  const initial = Number(initialCategoryId);
+  const ui = Number(uiCategoryId);
+  // Partners (listing category 3) currently doesn't exist in categoriesEditProfile UI IDs.
+  // When opened from partners feed, keep the partners category instead of remapping to global.
+  if (initial === 3 && ui === 3) return 3;
+  return toListingCategoryId(uiCategoryId);
+};
+
 const EditPublishAdScreen = ({
   onClose,
   uploadedListings = [],
@@ -79,6 +135,7 @@ const EditPublishAdScreen = ({
   onUnfreeze,
   onRemove,
   onOpenListingAnalysis,
+  onCreatePost,
 }) => {
   console.log('currentUser', currentUser);
   const insets = useSafeAreaInsets();
@@ -101,7 +158,13 @@ const EditPublishAdScreen = ({
   const [removeConfirmListing, setRemoveConfirmListing] = useState(null);
   const [freezeConfirmListing, setFreezeConfirmListing] = useState(null);
   const [unfreezeConfirmListing, setUnfreezeConfirmListing] = useState(null);
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [frozenListingIds, setFrozenListingIds] = useState([]);
+  const [boostConfirmListing, setBoostConfirmListing] = useState(null);
+  const [boostQuota, setBoostQuota] = useState({quota: 2, used: 0, remaining: 2});
+  const [boostSubmitting, setBoostSubmitting] = useState(false);
+  /** Local overrides so the UI reflects a successful boost before re-fetch. */
+  const [boostedOverrides, setBoostedOverrides] = useState({});
   const categoryScrollRef = useRef(null);
   const didInitialCategoryScrollRef = useRef(false);
 
@@ -162,7 +225,10 @@ const EditPublishAdScreen = ({
         });
         if (cancelled) return;
         if (result?.success && result?.listings?.length) {
-          const list = currentUser?.id == null ? [] : result.listings;
+          const list =
+            currentUser?.id == null
+              ? []
+              : result.listings.filter(l => !isPostListingRecord(l));
           const transformed = list.map(l => {
             const imgs = l.listing_images || [];
             const main = imgs.find(i => i.image_type === 'main');
@@ -186,6 +252,8 @@ const EditPublishAdScreen = ({
               comments: l.comment_count,
               is_frozen: l.is_frozen === true || l.is_frozen === 'true',
               exposure_level: l.exposure_level || 'medium',
+              created_at: l.created_at || l.inserted_at || null,
+              boost_expires_at: l.boost_expires_at || null,
               bnb_business_logo_url: l.bnb_business_logo_url ?? null,
               general_details: l.general_details,
               cancellation_policy: l.cancellation_policy ?? null,
@@ -223,17 +291,24 @@ const EditPublishAdScreen = ({
       const id = l.id ?? l.ad_number;
       if (id != null && !byId.has(id)) byId.set(id, l);
     });
-    return Array.from(byId.values());
+    // Exclude free-form posts; this screen shows only ads.
+    return Array.from(byId.values()).filter(l => !isPostListingRecord(l));
   })();
 
-  const selectedListingCategoryId = toListingCategoryId(selectedCategoryId);
-  const filteredListings = selectedCategoryId
+  const selectedListingCategoryId = resolveListingCategoryId(
+    selectedCategoryId,
+    initialCategoryId,
+  );
+  const isBnbCategory = Number(selectedListingCategoryId) === 5;
+  const isPartnersCategory = Number(selectedListingCategoryId) === 3;
+  const filteredListings = (selectedCategoryId
     ? mergedListings.filter(
         l =>
           (l.category != null && parseInt(l.category, 10)) ===
           selectedListingCategoryId,
       )
-    : mergedListings;
+    : mergedListings
+  ).filter(l => !isPostListingRecord(l));
 
   const getFirstImage = listing => {
     if (listing.images && listing.images.length > 0) {
@@ -258,6 +333,113 @@ const EditPublishAdScreen = ({
     return require('../assets/exposure-low.png');
   };
 
+  /**
+   * Derive exposure level from the listing's real activity.
+   * Priority:
+   *   1. Boost active (boost_expires_at in the future) → 'high'
+   *   2. Frozen → 'low'
+   *   3. Freshly uploaded:
+   *        - age < 24h  → 'high'
+   *        - age < 48h  → 'medium'
+   *        - age ≥ 48h  → 'low'
+   */
+  const computeExposureLevel = listing => {
+    if (!listing) return 'low';
+    const listingId = listing?.id ?? listing?.ad_number;
+    const overrideExpiry = listingId != null ? boostedOverrides[String(listingId)] : null;
+    const expiryRaw = overrideExpiry || listing.boost_expires_at || listing.boostExpiresAt;
+    if (expiryRaw) {
+      const expiryTs = new Date(expiryRaw).getTime();
+      if (Number.isFinite(expiryTs) && expiryTs > Date.now()) return 'high';
+    }
+    const frozen =
+      listing.is_frozen === true || listing.is_frozen === 'true';
+    if (frozen) return 'low';
+    const createdRaw =
+      listing.created_at ||
+      listing.createdAt ||
+      listing.uploaded_at ||
+      listing.uploadedAt ||
+      listing.inserted_at ||
+      null;
+    if (createdRaw) {
+      const createdTs = new Date(createdRaw).getTime();
+      if (Number.isFinite(createdTs)) {
+        const ageHours = (Date.now() - createdTs) / (1000 * 60 * 60);
+        if (ageHours < 24) return 'high';
+        if (ageHours < 48) return 'medium';
+        return 'low';
+      }
+    }
+    return 'low';
+  };
+
+  // Fetch current user's boost quota for the month so we can show it in the confirmation modal.
+  useEffect(() => {
+    const email = currentUser?.email;
+    if (!email) return;
+    let cancelled = false;
+    getBoostQuota(email)
+      .then(res => {
+        if (cancelled) return;
+        setBoostQuota({
+          quota: Number(res?.quota ?? 2),
+          used: Number(res?.used ?? 0),
+          remaining: Number(res?.remaining ?? 2),
+        });
+      })
+      .catch(err => {
+        console.warn('getBoostQuota failed:', err?.message || err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.email]);
+
+  const handleConfirmBoost = async () => {
+    const listing = boostConfirmListing;
+    if (!listing || boostSubmitting) return;
+    const listingId = listing.id ?? listing.ad_number;
+    const email = currentUser?.email;
+    if (!listingId || !email) {
+      setBoostConfirmListing(null);
+      if (typeof alert !== 'undefined') alert('לא ניתן להקפיץ כרגע');
+      return;
+    }
+    setBoostSubmitting(true);
+    try {
+      const res = await boostListing(listingId, email);
+      setBoostQuota({
+        quota: Number(res?.quota ?? boostQuota.quota),
+        used: Number(res?.used ?? boostQuota.used + 1),
+        remaining: Number(res?.remaining ?? Math.max(0, boostQuota.remaining - 1)),
+      });
+      if (res?.boost_expires_at) {
+        setBoostedOverrides(prev => ({
+          ...prev,
+          [String(listingId)]: res.boost_expires_at,
+        }));
+      }
+      setBoostConfirmListing(null);
+      if (typeof alert !== 'undefined') {
+        alert('ההקפצה הופעלה! הדירוג הוא "גבוהה" למשך 24 שעות.');
+      }
+    } catch (e) {
+      if (e?.code === 'QUOTA_EXCEEDED') {
+        setBoostQuota({
+          quota: Number(e?.quota ?? boostQuota.quota),
+          used: Number(e?.used ?? boostQuota.used),
+          remaining: 0,
+        });
+      }
+      if (typeof alert !== 'undefined') {
+        alert(e?.message || 'הקפצה נכשלה');
+      }
+    } finally {
+      setBoostSubmitting(false);
+    }
+  };
+
   const isFrozen = listing => {
     const id = listing?.id ?? listing?.ad_number;
     if (id == null) return false;
@@ -274,10 +456,11 @@ const EditPublishAdScreen = ({
   };
 
   const renderListAdCard = ({item: listing}) => {
+    if (isPostListingRecord(listing)) return null;
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const exposure = listing.exposure_level || 'high';
+    const exposure = computeExposureLevel(listing);
 
     return (
       <View style={styles.adCardList}>
@@ -320,9 +503,7 @@ const EditPublishAdScreen = ({
           <View style={[styles.actionRow, {marginTop: 16}]}>
             <TouchableOpacity
               style={[styles.actionBtn]}
-              onPress={() =>
-                onShare ? onShare(listing) : onBoost && onBoost(listing)
-              }
+              onPress={() => setBoostConfirmListing(listing)}
               activeOpacity={0.8}>
               <Image
                 source={require('../assets/arrow_up.png')}
@@ -393,11 +574,11 @@ const EditPublishAdScreen = ({
   };
 
   const renderGridAdCard = ({item: listing, index}) => {
+    if (isPostListingRecord(listing)) return null;
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
-    console.log('listing', listing);
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const exposure = listing.exposure_level || 'high';
+    const exposure = computeExposureLevel(listing);
 
     return (
       <View style={styles.adCard}>
@@ -472,9 +653,7 @@ const EditPublishAdScreen = ({
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={styles.actionBtn}
-              onPress={() =>
-                onShare ? onShare(listing) : onBoost && onBoost(listing)
-              }
+              onPress={() => setBoostConfirmListing(listing)}
               activeOpacity={0.8}>
               <Text style={styles.actionBtnText}>הקפצה</Text>
               <Image
@@ -523,6 +702,22 @@ const EditPublishAdScreen = ({
   const listingKeyExtractor = (listing, index) => {
     const id = listing?.id ?? listing?.ad_number;
     return id != null ? `${String(id)}-${index}` : `listing-${index}`;
+  };
+
+  const openCreateSheet = () => {
+    setShowCreateSheet(true);
+  };
+
+  const openCreateListing = (opts = {}) => {
+    setShowCreateSheet(false);
+    onCreateAd &&
+      onCreateAd(selectedListingCategoryId ?? selectedCategoryId, opts);
+  };
+
+  const openCreatePost = () => {
+    setShowCreateSheet(false);
+    onCreatePost &&
+      onCreatePost(selectedListingCategoryId ?? selectedCategoryId);
   };
 
   return (
@@ -615,10 +810,7 @@ const EditPublishAdScreen = ({
             <View style={styles.actionBar}>
               <TouchableOpacity
                 style={styles.createBtn}
-                onPress={() =>
-                  onCreateAd &&
-                  onCreateAd(selectedListingCategoryId ?? selectedCategoryId)
-                }
+                onPress={openCreateSheet}
                 activeOpacity={0.9}>
                 <Text style={styles.createBtnText}>צור מודעה</Text>
                 <MaterialCommunityIcons name="plus" size={24} color="#fff" />
@@ -667,10 +859,7 @@ const EditPublishAdScreen = ({
                 </Text>
                 <TouchableOpacity
                   style={[styles.createBtn, {marginTop: 30}]}
-                  onPress={() =>
-                    onCreateAd &&
-                    onCreateAd(selectedListingCategoryId ?? selectedCategoryId)
-                  }
+                  onPress={openCreateSheet}
                   activeOpacity={0.9}>
                   <Text style={styles.createBtnText}>צור מודעה</Text>
                   <MaterialCommunityIcons name="plus" size={24} color="#fff" />
@@ -687,6 +876,126 @@ const EditPublishAdScreen = ({
           />
         )}
       </ScrollView>
+
+      <Modal
+        visible={showCreateSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCreateSheet(false)}>
+        <Pressable
+          style={styles.createSheetOverlay}
+          onPress={() => setShowCreateSheet(false)}>
+          <View
+            style={styles.createSheet}
+            onStartShouldSetResponder={() => true}>
+            {isBnbCategory ? (
+              <>
+                <TouchableOpacity
+                  style={styles.createSheetOption}
+                  onPress={() => openCreateListing({bnbHostType: 'private'})}
+                  activeOpacity={0.85}>
+                  <Text style={styles.createSheetArrow}>‹</Text>
+                  <View style={styles.createSheetOptionContent}>
+                    <View style={styles.createSheetTextContainer}>
+                      <Text style={styles.createSheetTitle}>פרסם כפרטי</Text>
+                      <Text style={styles.createSheetSubtitle}>
+                        פרסם חדר או אתר נופש פרטי
+                      </Text>
+                    </View>
+                    <Image
+                      source={require('../assets/ad-uplaud/bnb-private.png')}
+                      style={styles.createSheetIcon}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.createSheetDivider} />
+                <TouchableOpacity
+                  style={styles.createSheetOption}
+                  onPress={() => openCreateListing({bnbHostType: 'business'})}
+                  activeOpacity={0.85}>
+                  <Text style={styles.createSheetArrow}>‹</Text>
+                  <View style={styles.createSheetOptionContent}>
+                    <View style={styles.createSheetTextContainer}>
+                      <Text style={styles.createSheetTitle}>פרסם כעסק</Text>
+                      <Text style={styles.createSheetSubtitle}>
+                        פרסם חדר או אתר נופש עסקי
+                      </Text>
+                    </View>
+                    <Image
+                      source={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                      style={styles.createSheetIcon}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={styles.createSheetOption}
+                onPress={() => openCreateListing()}
+                activeOpacity={0.85}>
+                <Text style={styles.createSheetArrow}>‹</Text>
+                <View style={styles.createSheetOptionContent}>
+                  <View style={styles.createSheetTextContainer}>
+                    <Text style={styles.createSheetTitle}>פרסם מודעה</Text>
+                    <Text
+                      style={[
+                        styles.createSheetSubtitle,
+                        isPartnersCategory && styles.createSheetSubtitleSecondary,
+                      ]}>
+                      {isPartnersCategory
+                        ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
+                        : 'צור מודעה חדשה בקטגוריה שנבחרה'}
+                    </Text>
+                  </View>
+                  <Image
+                    source={
+                      isPartnersCategory
+                        ? require('../assets/image22221.png')
+                        : require('../assets/post-office-icon.png')
+                    }
+                    style={[
+                      styles.createSheetIcon,
+                      isPartnersCategory && styles.createSheetIconPartners,
+                    ]}
+                    resizeMode="contain"
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
+            <View style={styles.createSheetDivider} />
+            <TouchableOpacity
+              style={styles.createSheetOption}
+              onPress={openCreatePost}
+              activeOpacity={0.85}>
+              <Text style={styles.createSheetArrow}>‹</Text>
+              <View style={styles.createSheetOptionContent}>
+                <View style={styles.createSheetTextContainer}>
+                  <Text style={styles.createSheetTitle}>פוסט</Text>
+                  <Text
+                    style={[
+                      styles.createSheetSubtitle,
+                      isPartnersCategory && styles.createSheetSubtitleSecondary,
+                    ]}>
+                    {isPartnersCategory
+                      ? 'שתף פוסט חופשי למציאת שותף או דירה'
+                      : 'שתף מידע או עדכון עם הקהילה'}
+                  </Text>
+                </View>
+                <Image
+                  source={require('../assets/ad-uplaud/posts.png')}
+                  style={[
+                    styles.createSheetIcon,
+                    isPartnersCategory && styles.createSheetIconPartners,
+                  ]}
+                  resizeMode="contain"
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={removeConfirmListing != null}
@@ -788,6 +1097,56 @@ const EditPublishAdScreen = ({
       </Modal>
 
       <Modal
+        visible={boostConfirmListing != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !boostSubmitting && setBoostConfirmListing(null)}>
+        <Pressable
+          style={styles.removeModalOverlay}
+          onPress={() => !boostSubmitting && setBoostConfirmListing(null)}>
+          <View
+            style={styles.removeModalContent}
+            onStartShouldSetResponder={() => true}>
+            <View style={styles.removeModalIconWrap}>
+              <MaterialCommunityIcons
+                name="rocket-launch"
+                size={48}
+                color={BORDER_GOLD}
+              />
+            </View>
+            <Text style={styles.removeModalTitle}>להקפיץ את המודעה?</Text>
+            <Text style={styles.removeModalMessage}>
+              המודעה תקבל חשיפה גבוהה למשך 24 שעות.{'\n'}
+              נותרו לך {boostQuota.remaining} הקפצות מתוך {boostQuota.quota} החודש.
+            </Text>
+            <View style={styles.removeModalButtons}>
+              <TouchableOpacity
+                style={styles.removeModalCancelBtn}
+                disabled={boostSubmitting}
+                onPress={() => setBoostConfirmListing(null)}
+                activeOpacity={0.8}>
+                <Text style={styles.removeModalCancelText}>ביטול</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.freezeModalConfirmBtn,
+                  (boostSubmitting || boostQuota.remaining <= 0) && {opacity: 0.5},
+                ]}
+                disabled={boostSubmitting || boostQuota.remaining <= 0}
+                onPress={handleConfirmBoost}
+                activeOpacity={0.8}>
+                {boostSubmitting ? (
+                  <ActivityIndicator size="small" color="#1a1926" />
+                ) : (
+                  <Text style={styles.freezeModalConfirmText}>הקפץ</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={unfreezeConfirmListing != null}
         transparent
         animationType="fade"
@@ -861,11 +1220,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionImage: {width: 24, height: 24},
-  headerTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Regular',
-  },
+  headerTitle: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 20, paddingBottom: 40},
   topPanel: {
@@ -881,9 +1236,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   sectionLabel: {
-    color: '#D2D0DC',
-    fontSize: 16,
-    fontFamily: 'Rubik-Regular',
+    color: '#fff',
+    fontSize: 15,
     marginTop: 5,
     marginBottom: 12,
     textAlign: 'right',
@@ -894,7 +1248,7 @@ const styles = StyleSheet.create({
   },
   categoryScrollContent: {
     // flexDirection: 'row-reverse',
-    gap: 22,
+    gap: 16,
     paddingHorizontal: 20,
   },
   categoryItem: {
@@ -934,7 +1288,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#4D4966',
+    backgroundColor: '#3d3b52',
     // paddingVertical: 6,
     // paddingHorizontal: 20,
     borderRadius: 26,
@@ -1088,7 +1442,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#4D4966',
+    backgroundColor: '#3d3b52',
     paddingVertical: 10,
     borderRadius: 18,
   },
@@ -1165,6 +1519,74 @@ const styles = StyleSheet.create({
     color: '#1a1926',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
+  },
+  createSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  createSheet: {
+    backgroundColor: '#2B2A39',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 28,
+  },
+  createSheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  createSheetArrow: {
+    color: '#fff',
+    fontSize: 28,
+    lineHeight: 28,
+    marginLeft: 8,
+  },
+  createSheetOptionContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  createSheetTextContainer: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 12,
+  },
+  createSheetTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+  },
+  createSheetSubtitle: {
+    color: '#FFFFFF',
+    opacity: 0.85,
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  createSheetIcon: {
+    width: 60,
+    height: 60,
+  },
+  createSheetIconPartners: {
+    width: 40,
+    height: 40,
+  },
+  createSheetSubtitleSecondary: {
+    color: '#D2D0DC',
+    opacity: 1,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+  },
+  createSheetDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
 });
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import {StyleSheet, Text, View, TouchableOpacity} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {StyleSheet, Text, View, TouchableOpacity, TextInput} from 'react-native';
 import {Title} from './Title';
 import {Divider} from './Divider';
 
@@ -17,6 +17,25 @@ export const CountUpdate = ({
 }) => {
   const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
   const minVal = typeof min === 'number' ? min : 0;
+  const [draft, setDraft] = useState(String(Math.max(minVal, Number(count ?? 0))));
+  const inputWidth = Math.max(20, String(draft || '').length * 11);
+
+  useEffect(() => {
+    setDraft(String(Math.max(minVal, Number(count ?? 0))));
+  }, [count, minVal]);
+
+  const commitDraft = () => {
+    const digitsOnly = String(draft || '').replace(/[^\d]/g, '');
+    const nextVal = Number.parseInt(digitsOnly || String(minVal), 10);
+    if (Number.isNaN(nextVal)) {
+      setDraft(String(Math.max(minVal, Number(count ?? 0))));
+      return;
+    }
+    const clamped = Math.max(minVal, nextVal);
+    safeSetCount(clamped);
+    setDraft(String(clamped));
+  };
+
   return (
     <View style={[{marginBottom: isLast ? 0 : 20}, containerStyle]}>
       {title && <Title text={title} required textStyle={{marginBottom: 15}} />}
@@ -28,9 +47,19 @@ export const CountUpdate = ({
         </TouchableOpacity>
         <View style={styles.counterDivider} />
         <View style={styles.counterValueContainer}>
-          <Text style={styles.counterValue}>
-            {count ?? 0} {isArea ? 'מ"ר' : ''}
-          </Text>
+          <View style={styles.counterValueRow}>
+            {isArea ? <Text style={styles.counterValueSuffix}>מ"ר</Text> : null}
+            <TextInput
+              style={[styles.counterValueInput, {width: inputWidth}]}
+              value={draft}
+              onChangeText={setDraft}
+              onBlur={commitDraft}
+              onSubmitEditing={commitDraft}
+              keyboardType="numeric"
+              returnKeyType="done"
+              textAlign="center"
+            />
+          </View>
         </View>
         <View style={styles.counterDivider} />
         <TouchableOpacity
@@ -102,5 +131,24 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  counterValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterValueInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    minWidth: 0,
+    textAlign: 'center',
+    paddingVertical: 0,
+  },
+  counterValueSuffix: {
+    color: '#fff',
+    fontSize: 16,
+    marginRight: 6,
+    fontWeight: '500',
   },
 });

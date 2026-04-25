@@ -1,7 +1,9 @@
 import React from 'react';
 import {View, ScrollView, Text, TouchableOpacity, StyleSheet, Platform, Image} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
-import {Colors, BorderRadius, Spacing} from '../constants/styles';
+import {Colors} from '../constants/styles';
+
+const KEY_ICON = require('../assets/menu/key.png');
 
 /**
  * Confirmation after requesting מספר מנוי by email
@@ -21,23 +23,19 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
         </View>
 
         <View style={styles.card}>
-          <View style={styles.keyImageWrap}>
-            <Image
-              source={require('../assets/key.png')}
-              style={styles.keyImage}
-              resizeMode="contain"
-            />
+          <View style={styles.keyIconWrap}>
+            <Image source={KEY_ICON} style={styles.keyImage} resizeMode="contain" />
           </View>
           <Text style={styles.cardTitle}>הקוד בדרך אליך!</Text>
           <Text style={styles.subLine}>שלחנו את קוד המנוי שלך לכתובת</Text>
           <Text style={styles.emailBold}>{email || ''}</Text>
           <Text style={styles.hint}>
-            אנא בדוק את תיבת הדואר הנכנס שלך (וגם את תיקיית הספאם).
+            אנא בדוק את תיבת הדואר הנכנס שלך{'\n'}(וגם את תיקיית הספאם).
           </Text>
 
           <TouchableOpacity activeOpacity={0.85} onPress={onBack} style={styles.btnWrap}>
             <LinearGradient
-              colors={['#c9a227', '#8b6914']}
+              colors={['#FEE787', '#BD9947', '#9C6522']}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.btnGradient}>
@@ -59,15 +57,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scroll: {
-    paddingTop: Platform.OS === 'web' ? 48 : 56,
-    paddingHorizontal: Spacing.lg,
+    paddingTop: Platform.OS === 'web' ? 44 : 52,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 28,
+    marginBottom: 10,
   },
   backBtn: {
     width: 44,
@@ -77,7 +75,7 @@ const styles = StyleSheet.create({
   },
   backChevron: {
     color: Colors.white100,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '300',
     marginTop: -4,
   },
@@ -86,67 +84,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.white100,
     fontSize: 18,
-    fontFamily: 'Rubik-Medium',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
   headerSpacer: {width: 44},
   card: {
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL || 20,
+    backgroundColor: '#2b2a39',
+    borderRadius: 12,
     padding: 24,
     alignItems: 'stretch',
+    minHeight: 373,
+    justifyContent: 'center',
   },
-  keyImageWrap: {
+  keyIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    height: 72,
+    marginBottom: 36,
+    height: 40,
+    width: 40,
+    alignSelf: 'center',
   },
   keyImage: {
-    width: 72,
-    height: 72,
+    width: 40,
+    height: 40,
   },
   cardTitle: {
-    color: Colors.white100,
-    fontSize: 22,
-    fontFamily: 'Rubik-Bold',
+    color: '#F7F3E6',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   subLine: {
-    color: Colors.white100,
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 0,
   },
   emailBold: {
-    color: Colors.white100,
+    color: '#FFFFFF',
     fontSize: 18,
-    fontFamily: 'Rubik-Bold',
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'center',
     marginBottom: 20,
   },
   hint: {
-    color: Colors.grey200,
-    fontSize: 14,
+    color: '#9E9DA4',
+    fontSize: 15,
     lineHeight: 20,
+    letterSpacing: 0.15,
     textAlign: 'center',
-    marginBottom: 28,
-    paddingHorizontal: 8,
+    marginBottom: 26,
   },
   btnWrap: {
-    borderRadius: 28,
+    borderRadius: 1000,
     overflow: 'hidden',
   },
   btnGradient: {
-    paddingVertical: 16,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 28,
+    borderRadius: 1000,
   },
   btnText: {
     color: '#1e1d27',
-    fontSize: 18,
-    fontFamily: 'Rubik-Bold',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
   },
 });
 

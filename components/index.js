@@ -1,3 +1,4 @@
+export {default as ProfileAvatar} from './ProfileAvatar';
 export {Title} from './FormsElement/Title';
 export {MultiPicturesUpload} from './FormsElement/MultiPicturesUpload';
 export {ProfilePictureUpload} from './FormsElement/ProfilePictureUpload';

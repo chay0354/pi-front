@@ -13,12 +13,13 @@ import {Title} from './Title';
 import {Colors} from '../../constants/styles';
 
 export const SalesImage = ({
-  mainImage,
-  handleMainImageUpload,
-  handleMainImageChange,
-  mainImageInputRef,
+  salesImage,
+  handleSalesImageUpload,
+  handleSalesImageChange,
+  salesImageInputRef,
   uploadProgress,
 }) => {
+  const uploading = !!(uploadProgress && uploadProgress.salesImage);
   return (
     <FormContainer>
       <Title text={'תמונה מכירתית'} />
@@ -27,10 +28,10 @@ export const SalesImage = ({
       </Text>
       <TouchableOpacity
         style={styles.fixedImageContainer}
-        onPress={handleMainImageUpload}>
-        {mainImage ? (
+        onPress={handleSalesImageUpload}>
+        {salesImage ? (
           <Image
-            source={{uri: mainImage.uri}}
+            source={{uri: salesImage.uri}}
             style={styles.fixedImage}
             resizeMode="contain"
           />
@@ -41,7 +42,7 @@ export const SalesImage = ({
               style={styles.cameraIcon}
               resizeMode="contain"
             />
-            <Text style={styles.cameraImageText}>תמונת פרופיל</Text>
+            <Text style={styles.cameraImageText}>תמונה מכירתית</Text>
             <View style={styles.uploadButtonContainer}>
               <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
             </View>
@@ -49,19 +50,17 @@ export const SalesImage = ({
         )}
         <TouchableOpacity
           style={styles.uploadButtonOverlay}
-          onPress={handleMainImageUpload}
-          disabled={uploadProgress.mainImage}>
-          {uploadProgress.mainImage && (
-            <ActivityIndicator size="small" color="#fff" />
-          )}
+          onPress={handleSalesImageUpload}
+          disabled={uploading}>
+          {uploading && <ActivityIndicator size="small" color="#fff" />}
         </TouchableOpacity>
         {Platform.OS === 'web' && (
           <input
-            ref={mainImageInputRef}
+            ref={salesImageInputRef}
             type="file"
             accept="image/*"
             style={{display: 'none'}}
-            onChange={handleMainImageChange}
+            onChange={handleSalesImageChange}
           />
         )}
       </TouchableOpacity>
@@ -119,9 +118,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
-  or: {
-    textAlign: 'center',
-  },
   createImageContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -132,5 +128,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     textDecorationLine: 'underline',
+  },
+  uploadButtonOverlay: {
+    position: 'absolute',
+    inset: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

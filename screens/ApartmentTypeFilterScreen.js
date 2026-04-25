@@ -11,13 +11,12 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
-const RADIO_BORDER = '#A5A5A5';
-const MENU_ICON =
-  'https://www.figma.com/api/mcp/asset/58414622-21a1-4975-b28d-8ec0405f5152';
+const MENU_ICON = require('../assets/buttom-bar/appartment_type.png');
 
 const APARTMENT_TYPES = [
   {id: 'apartment', label: 'דירה'},
@@ -25,7 +24,7 @@ const APARTMENT_TYPES = [
   {id: 'garden', label: 'דירת גן'},
   {id: 'private_house', label: 'בית פרטי'},
   {id: 'duplex', label: 'דופלקס'},
-  {id: 'penthouse', label: 'נטהאוז'},
+  {id: 'penthouse', label: 'פנטהאוז'},
 ];
 
 const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
@@ -49,12 +48,12 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
   return (
     <View style={styles.container}>
       <View style={styles.topRail}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={onClose}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           style={styles.handlePressArea}>
           <View style={styles.handle} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -68,26 +67,27 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
         ]}
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={{uri: MENU_ICON}} style={styles.headerIcon} resizeMode="contain" />
-          <Text style={styles.title}>סוג דירה</Text>
-        </View>
+        <View style={styles.topGroup}>
+          <View style={[styles.header, compact && styles.headerCompact]}>
+            <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
+            <Text style={styles.title}>סוג דירה</Text>
+          </View>
 
-        <View style={[styles.radioList, compact && styles.radioListCompact]}>
-          {APARTMENT_TYPES.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={styles.radioRow}
-              onPress={() => setSelectedId(option.id)}
-              activeOpacity={0.8}>
-              <Text style={styles.radioLabel}>{option.label}</Text>
-              <View style={styles.radioOuter}>
-                {selectedId === option.id ? (
-                  <View style={styles.radioInner} />
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          ))}
+          <View style={[styles.radioList, compact && styles.radioListCompact]}>
+            {APARTMENT_TYPES.map((option) => {
+              const checked = selectedId === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={styles.radioRow}
+                  onPress={() => setSelectedId(option.id)}
+                  activeOpacity={0.8}>
+                  <Text style={styles.radioLabel}>{option.label}</Text>
+                  <FigmaCheckbox checked={checked} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <View style={[styles.footer, compact && styles.footerCompact]}>
@@ -146,12 +146,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
   },
+  topGroup: {
+    width: '100%',
+  },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 0,
   },
   headerCompact: {
-    marginBottom: 16,
+    marginBottom: 0,
   },
   headerIcon: {
     width: 24,
@@ -169,11 +172,11 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'flex-end',
     gap: 28,
-    marginTop: 10,
+    marginTop: 0,
   },
   radioListCompact: {
     gap: 20,
-    marginTop: 4,
+    marginTop: 0,
   },
   radioRow: {
     flexDirection: 'row',
@@ -187,28 +190,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
   },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: RADIO_BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#fff',
-  },
   footer: {
-    marginTop: 'auto',
+    width: '100%',
     alignItems: 'center',
   },
-  footerCompact: {
-    marginTop: 12,
-  },
+  footerCompact: {},
   saveBtnWrap: {
     marginBottom: 12,
     width: '100%',

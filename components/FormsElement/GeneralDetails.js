@@ -28,6 +28,9 @@ export const GeneralDetails = ({
   setOptionSecondValue,
   counterData,
 }) => {
+  const safeSetOptionSecondValue =
+    typeof setOptionSecondValue === 'function' ? setOptionSecondValue : () => {};
+
   return (
     <FormContainer>
       <Title text={'פרטים כלליים'} />
@@ -46,15 +49,16 @@ export const GeneralDetails = ({
 
       {/* Amenities */}
       {amenitiesData.map((amenity, index) => {
+        const amenityKey = amenity?.title || amenity;
         const isSelected = !!amenities[amenity?.title || amenity];
         const hasOption = amenity?.option?.length > 0;
         const hasDistance = amenity?.distance;
         const hasOptionSecond = amenity?.optionSecond?.option?.length > 0;
+        const optionSecondKey = amenity?.optionSecond?.title || amenityKey;
         const quantity = hasOption
           ? amenities[amenity?.title || amenity] || 0
           : null;
         const isNotLastIndex = index !== amenitiesData.length - 1;
-        const amenityKey = amenity?.title || amenity;
         return (
           <View key={amenityKey}>
             {/* Amenity label and checkbox */}
@@ -114,10 +118,8 @@ export const GeneralDetails = ({
                       name: opt,
                       title: opt,
                     }))}
-                    condition={optionSecondValues?.[amenityKey] || ''}
-                    setCondition={value =>
-                      setOptionSecondValue(amenityKey, value)
-                    }
+                    condition={optionSecondValues?.[optionSecondKey] || ''}
+                    setCondition={value => safeSetOptionSecondValue(optionSecondKey, value)}
                   />
                 </View>
               )}

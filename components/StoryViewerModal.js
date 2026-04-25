@@ -11,8 +11,12 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
+import {LinearGradient} from 'expo-linear-gradient';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {ProfileAvatar} from './index';
 
 const STORY_DURATION_MS = 12000;
+const STORY_ACCENT_COLORS = ['#FFE073', '#FFBA30'];
 
 /**
  * Full-screen story viewer: tap advances slide; progress segments at top.
@@ -21,9 +25,11 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   const insets = useSafeAreaInsets();
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
   const timerRef = useRef(null);
   const startRef = useRef(0);
   const rafRef = useRef(null);
+  const videoRef = useRef(null);
 
   const slides = ring?.slides || [];
   const total = slides.length;
@@ -107,10 +113,12 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
         <View style={styles.mediaTap}>
           {uri && currentIsVideo ? (
             <Video
+              ref={videoRef}
               source={{uri}}
               style={styles.mediaFullScreen}
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay
+              isMuted={isMuted}
               useNativeControls
               isLooping
             />
@@ -131,54 +139,80 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
           )}
         </View>
 
-        {/* Progress + header on top */}
-        <View
+        {/* Progress + header on top (Figma node 98:92) */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.4)', 'rgba(0,0,0,0)']}
+          locations={[0, 1]}
           style={[styles.overlayTop, {paddingTop: overlayPadTop}]}
           pointerEvents="box-none">
           <View style={styles.progressRow}>
-            {slides.map((s, i) => (
-              <View key={s.id || i} style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    s.media_type === 'video'
-                      ? {width: '100%', opacity: 0.35}
-                      : i < slideIndex
-                        ? {width: '100%'}
-                        : i === slideIndex
-                          ? {width: `${progress * 100}%`}
-                          : {width: '0%'},
-                  ]}
-                />
-              </View>
-            ))}
+            {slides.map((s, i) => {
+              let fillWidth = '0%';
+              if (i < slideIndex) {
+                fillWidth = '100%';
+              } else if (i === slideIndex) {
+                fillWidth =
+                  s.media_type === 'video' ? '100%' : `${progress * 100}%`;
+              }
+              const dimVideoCurrent =
+                s.media_type === 'video' && i === slideIndex;
+              return (
+                <View key={s.id || i} style={styles.progressTrack}>
+                  <LinearGradient
+                    colors={STORY_ACCENT_COLORS}
+                    locations={[0.1113, 0.8662]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 0}}
+                    style={[
+                      styles.progressFill,
+                      {width: fillWidth},
+                      dimVideoCurrent && {opacity: 0.45},
+                    ]}
+                  />
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.topBar}>
             <View style={styles.userRow}>
-              {ring.profile_image_url ? (
-                <View style={styles.avatarClip}>
-                  <Image
-                    source={{uri: ring.profile_image_url}}
-                    style={styles.avatarImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              ) : (
-                <View style={[styles.avatarClip, styles.avatarPlaceholder]} />
-              )}
+              <ProfileAvatar
+                uri={ring.profile_image_url}
+                name={ring.display_name}
+                size={52}
+                ringColors={STORY_ACCENT_COLORS}
+                ringLocations={[0, 1]}
+              />
               <Text style={styles.userName} numberOfLines={1}>
                 {ring.display_name || 'משתמש'}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeBtn}
-              hitSlop={12}>
-              <Text style={styles.closeText}>✕</Text>
-            </TouchableOpacity>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                onPress={() => setIsMuted(m => !m)}
+                style={styles.actionBtn}
+                hitSlop={8}
+                activeOpacity={0.7}>
+                <MaterialCommunityIcons
+                  name={isMuted ? 'volume-off' : 'volume-high'}
+                  size={24}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.actionBtn}
+                hitSlop={8}
+                activeOpacity={0.7}>
+                <MaterialCommunityIcons
+                  name="close"
+                  size={28}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </LinearGradient>
 
       </View>
     </Modal>
@@ -203,74 +237,59 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   progressRow: {
     flexDirection: 'row',
     gap: 4,
-    marginBottom: 10,
+    marginBottom: 13,
+    marginTop: 4,
   },
   progressTrack: {
     flex: 1,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderRadius: 20,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#FFC40A',
-    borderRadius: 2,
+    borderRadius: 20,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    gap: 12,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  avatarClip: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#FFC40A',
-    position: 'relative',
-  },
-  avatarImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#333',
+    gap: 13,
+    flexShrink: 1,
   },
   userName: {
-    color: '#fff',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 18,
+    fontFamily: 'Rubik-SemiBold',
     fontWeight: '600',
-    flex: 1,
-    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowColor: 'rgba(0,0,0,0.55)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
+    flexShrink: 1,
   },
-  closeBtn: {
-    padding: 8,
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  closeText: {
-    color: '#fff',
-    fontSize: 22,
-    textShadowColor: 'rgba(0,0,0,0.75)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 3,
+  actionBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mediaPlaceholder: {
     justifyContent: 'center',

@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
 import {Colors} from '../constants/styles';
-import LocationMap from '../components/LocationMap';
 import {
   getSubscription,
   getListings,
@@ -23,6 +22,10 @@ import {
   clearSubscription404Cache,
   getReviews,
   submitReview,
+  getFollowStatus,
+  getFollowStats,
+  sendFollowRequest,
+  toSubscriptionId,
 } from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Divider} from '../components';
@@ -111,19 +114,37 @@ function isPostListingRecord(item) {
       item.apartmentTypeId ||
       '',
   ).toLowerCase();
-  const description = String(item.description || item.desc || '').toLowerCase();
-  return (
+  const description = String(item.description || item.desc || '').trim();
+  if (
     type === 'post' ||
     type === 'posts' ||
     type === 'feed_post' ||
     type.includes('post') ||
-    description === 'post' ||
+    description.toLowerCase() === 'post' ||
     description === 'פוסט' ||
     item.feed_post === true ||
     item.feed_post === 'true' ||
     item.feed_post === 't' ||
     item.isPostEntry === true
-  );
+  ) {
+    return true;
+  }
+  const urls = [
+    item.main_image_url,
+    item.image_url,
+    item.image,
+    ...(Array.isArray(item.images)
+      ? item.images.map(i =>
+          i && typeof i === 'object' ? i.uri || i.image_url : i,
+        )
+      : []),
+    ...(Array.isArray(item.listing_images)
+      ? item.listing_images.map(i =>
+          i && typeof i === 'object' ? i.image_url || i.uri : i,
+        )
+      : []),
+  ].filter(Boolean);
+  return urls.some(u => /post_\d/i.test(String(u)));
 }
 
 // apr-details layout (assets/apr-details): (1)=מ"ר, (2)=קומה, (3)=מעלית, (4)=ממ"ד, (5)=כניסה מיידית,
@@ -175,6 +196,7 @@ const UserProfileScreen = ({
   onOpenLogin = null,
   onOpenUserRegistration = null,
   onOpenAllListings = null,
+  onOpenFollowHub = null,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
@@ -599,12 +621,26 @@ const UserProfileScreen = ({
       : isListingFromFeed
         ? null
         : profile.email;
-  const displayImage =
+  const displayImageRaw =
     user?.profileImageUrl ||
     user?.profile_image_url ||
+    user?.profile_picture_url ||
     user?.creator_profile_image_url ||
+    user?.creator_image_url ||
     resolvedCreator?.profilePictureUrl ||
     profile.profileImageUrl;
+  const displayImage =
+    typeof displayImageRaw === 'string' ? displayImageRaw.trim() : '';
+  const displayImageSource = displayImage ? {uri: displayImage} : null;
+  const contactLogoRaw =
+    user?.company_logo_url ||
+    user?.companyLogoUrl ||
+    resolvedCreator?.company_logo_url ||
+    resolvedCreator?.companyLogoUrl ||
+    profile?.company_logo_url;
+  const contactLogo =
+    typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
+  const contactLogoSource = contactLogo ? {uri: contactLogo} : null;
   const contactPhones =
     resolvedCreator?.phones && resolvedCreator.phones.length > 0
       ? resolvedCreator.phones
@@ -654,8 +690,9 @@ const UserProfileScreen = ({
   // Last ad: when opened from feed, the current listing is the "last ad"; else prefer first full listing from userListings (has project_offers), then profile.properties[0]
   const lastAd = (() => {
     if (isListingFromFeed) return user;
-    if (userListings.length > 0) {
-      const L = userListings[0];
+    const adsOnly = userListings.filter(l => !isPostListingRecord(l));
+    if (adsOnly.length > 0) {
+      const L = adsOnly[0];
       const images =
         L.listing_images && L.listing_images.length > 0
           ? L.listing_images.map(img =>
@@ -762,9 +799,112 @@ const UserProfileScreen = ({
   const [fullScreenImageIndex, setFullScreenImageIndex] = useState(0);
   const fullScreenCarouselRef = useRef(null);
 
-  const likesCount = user?.like_count ?? profile.likes ?? 0;
-  const followersCount = profile.followers ?? 257;
-  const followingCount = profile.following ?? 626;
+  const viewedSubscriptionId = toSubscriptionId(
+    resolvedCreator?.id || user?.subscription_id || user?.owner_id || profile?.id,
+  );
+  const currentSubscriptionId = toSubscriptionId(currentUser?.id);
+  const isOwnProfile =
+    !!viewedSubscriptionId &&
+    !!currentSubscriptionId &&
+    viewedSubscriptionId === currentSubscriptionId;
+  const [followStatus, setFollowStatus] = useState({
+    isFollowing: false,
+    hasPendingRequest: false,
+  });
+  const [followStats, setFollowStats] = useState({
+    likes: null,
+    followers: null,
+    following: null,
+    pendingRequests: 0,
+  });
+  const [followStatsLoading, setFollowStatsLoading] = useState(true);
+  const [sendingFollowRequest, setSendingFollowRequest] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!viewedSubscriptionId) {
+      setFollowStatsLoading(false);
+      return undefined;
+    }
+    setFollowStatsLoading(true);
+    getFollowStats(viewedSubscriptionId)
+      .then(data => {
+        if (cancelled) return;
+        const stats = data?.stats || {};
+        setFollowStats({
+          likes: Number(stats.likes || 0),
+          followers: Number(stats.followers || 0),
+          following: Number(stats.following || 0),
+          pendingRequests: Number(stats.pending_requests || 0),
+        });
+        setFollowStatsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFollowStats({
+          likes: 0,
+          followers: 0,
+          following: 0,
+          pendingRequests: 0,
+        });
+        setFollowStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewedSubscriptionId, reviews.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!viewedSubscriptionId || !currentSubscriptionId || viewedSubscriptionId === currentSubscriptionId) {
+      setFollowStatus({isFollowing: false, hasPendingRequest: false});
+      return undefined;
+    }
+    getFollowStatus(currentSubscriptionId, viewedSubscriptionId)
+      .then(data => {
+        if (cancelled) return;
+        setFollowStatus({
+          isFollowing: !!data?.is_following,
+          hasPendingRequest: !!data?.has_pending_request,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFollowStatus({isFollowing: false, hasPendingRequest: false});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSubscriptionId, viewedSubscriptionId]);
+
+  const likesCount = followStats.likes;
+  const followersCount = followStats.followers;
+  const followingCount = followStats.following;
+  const formatStatCount = value =>
+    followStatsLoading || value == null ? '—' : String(value);
+  const shouldShowFollowPlus =
+    !!currentSubscriptionId &&
+    !!viewedSubscriptionId &&
+    !isOwnProfile &&
+    !followStatus.isFollowing &&
+    !followStatus.hasPendingRequest;
+
+  const handleSendFollowRequest = async () => {
+    if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest) return;
+    setSendingFollowRequest(true);
+    try {
+      await sendFollowRequest(currentSubscriptionId, viewedSubscriptionId);
+      setFollowStatus(prev => ({...prev, hasPendingRequest: true}));
+      setFollowStats(prev => ({
+        ...prev,
+        pendingRequests: isOwnProfile ? prev.pendingRequests : prev.pendingRequests + 1,
+      }));
+    } catch (e) {
+      Alert.alert('', e?.message || 'לא הצלחנו לשלוח בקשת מעקב');
+    } finally {
+      setSendingFollowRequest(false);
+    }
+  };
 
   // Broker profile card data (real user details with fallbacks)
   const brokerProfession =
@@ -787,7 +927,8 @@ const UserProfileScreen = ({
   const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
   const isRegularUserAdView =
     isRegularUserAccount && isListingFromFeed && !openedFromPost;
-  const hideMyPropertiesSection = openedFromPost && isProfessional;
+  // Professionals should use broker profile structure but without listings section.
+  const hideMyPropertiesSection = isProfessional || (openedFromPost && isProfessional);
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -1097,19 +1238,22 @@ const UserProfileScreen = ({
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <TouchableOpacity
-          onPress={onClose}
-          style={styles.backBtn}
-          hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-          <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
-        </TouchableOpacity>
+        {!isProfessional && (
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+            <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
 
+        {!isProfessional && (
         <View style={styles.profileBlock}>
           <View style={styles.avatarWrap}>
-            {displayImage ? (
+            {displayImageSource ? (
               <View style={styles.avatarImageWrap}>
                 <Image
-                  source={{uri: displayImage}}
+                  source={displayImageSource}
                   style={styles.avatar}
                   resizeMode="cover"
                 />
@@ -1123,30 +1267,60 @@ const UserProfileScreen = ({
                 />
               </View>
             )}
-            <View style={styles.avatarBadge}>
-              <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-            </View>
+            {shouldShowFollowPlus ? (
+              <TouchableOpacity
+                onPress={handleSendFollowRequest}
+                style={styles.avatarBadge}
+                disabled={sendingFollowRequest}
+                activeOpacity={0.8}>
+                {sendingFollowRequest ? (
+                  <Text style={styles.avatarBadgeSending}>...</Text>
+                ) : (
+                  <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            ) : null}
           </View>
           <Text style={styles.userName}>{displayName}</Text>
           {displayEmail != null && displayEmail !== '' ? (
             <Text style={styles.userEmail}>{displayEmail}</Text>
           ) : null}
           <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statNumber}>{String(likesCount)}</Text>
+            <TouchableOpacity
+              style={styles.stat}
+              activeOpacity={0.8}
+              onPress={() =>
+                typeof onOpenFollowHub === 'function' &&
+                onOpenFollowHub('requests')
+              }>
+              <Text style={styles.statNumber}>{formatStatCount(likesCount)}</Text>
               <Text style={styles.statLabel}>לייקים</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statNumber}>{String(followersCount)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.stat}
+              activeOpacity={0.8}
+              onPress={() =>
+                typeof onOpenFollowHub === 'function' &&
+                onOpenFollowHub('followers')
+              }>
+              <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
               <Text style={styles.statLabel}>עוקבים</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statNumber}>{String(followingCount)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.stat}
+              activeOpacity={0.8}
+              onPress={() =>
+                typeof onOpenFollowHub === 'function' &&
+                onOpenFollowHub('following')
+              }>
+              <Text style={styles.statNumber}>{formatStatCount(followingCount)}</Text>
               <Text style={styles.statLabel}>עוקב</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
+        )}
 
+        {!isProfessional && (
         <View style={styles.actionRow}>
           <TouchableOpacity
             onPress={() => typeof onCall === 'function' && onCall()}
@@ -1178,6 +1352,7 @@ const UserProfileScreen = ({
             />
           </TouchableOpacity>
         </View>
+        )}
 
         {/* Last ad card - full width, no bubble */}
         {lastAd && (
@@ -1186,6 +1361,36 @@ const UserProfileScreen = ({
               style={
                 openedFromPost ? styles.lastAdImageWrapGridMode : styles.lastAdImageWrap
               }>
+              {isProfessional && (
+                <View style={styles.heroTopBarOverlay} pointerEvents="box-none">
+                  <TouchableOpacity
+                    onPress={onClose}
+                    activeOpacity={0.8}
+                    style={styles.heroCircleBtn}
+                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <MaterialCommunityIcons
+                      name="chevron-left"
+                      size={22}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+                        navigator.share({title: displayName || '', url: typeof window !== 'undefined' ? window.location.href : ''}).catch(() => {});
+                      }
+                    }}
+                    activeOpacity={0.8}
+                    style={styles.heroCircleBtn}
+                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <MaterialCommunityIcons
+                      name="share-variant"
+                      size={20}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+                </View>
+              )}
               {openedFromPost ? (
                 <View style={styles.lastAdGrid}>
                   {Array.from({length: 6}, (_, i) => recentPostGridImages[i] || null).map(
@@ -1271,16 +1476,24 @@ const UserProfileScreen = ({
               ) : (
                 <View
                   style={[styles.lastAdImage, styles.lastAdImagePlaceholder]}>
-                  <MaterialCommunityIcons
-                    name="image-outline"
-                    size={64}
-                    color="rgba(255,255,255,0.3)"
-                  />
+                  {displayImageSource ? (
+                    <Image
+                      source={displayImageSource}
+                      style={[styles.lastAdImage, {width: lastAdCardWidth}]}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="image-outline"
+                      size={64}
+                      color="rgba(255,255,255,0.3)"
+                    />
+                  )}
                 </View>
               )}
             </View>
 
-            {!openedFromPost && (
+            {!openedFromPost && !isProfessional && (
             <View style={styles.lastAdBody}>
               <View style={styles.lastAdPiAndPurposeRow}>
                 {renderPiRating()}
@@ -1290,6 +1503,10 @@ const UserProfileScreen = ({
                     style={styles.preSaleBadgeImage}
                     resizeMode="contain"
                   />
+                ) : isProfessional ? (
+                  <Text style={styles.lastAdProfessionalName} numberOfLines={1}>
+                    {displayName}
+                  </Text>
                 ) : (
                   <View style={styles.lastAdPurposeTag}>
                     <Text style={styles.lastAdPurposeText}>
@@ -1298,11 +1515,13 @@ const UserProfileScreen = ({
                   </View>
                 )}
               </View>
-              <View style={styles.lastAdPriceRow}>
-                <Text style={styles.lastAdPrice}>
-                  {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
-                </Text>
-              </View>
+              {!isProfessional && (
+                <View style={styles.lastAdPriceRow}>
+                  <Text style={styles.lastAdPrice}>
+                    {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
+                  </Text>
+                </View>
+              )}
               <View style={styles.lastAdLocationRow}>
                 <Text style={styles.lastAdLocationText}>
                   {lastAd.address ||
@@ -1408,12 +1627,6 @@ const UserProfileScreen = ({
                     ))}
                   </View>
                   <View style={styles.lastAdDividerWhite} />
-                  {lastAd && (lastAd.address || lastAd.location) ? (
-                    <LocationMap
-                      address={lastAd.address || lastAd.location}
-                      containerStyle={styles.locationMapContainer}
-                    />
-                  ) : null}
                 </>
               ) : isCompany && projectOffersCards.length > 0 ? (
                 <>
@@ -1509,12 +1722,6 @@ const UserProfileScreen = ({
                     </View>
                     <View style={styles.lastAdDivider} />
                   </View>
-                  {lastAd && (lastAd.address || lastAd.location) ? (
-                    <LocationMap
-                      address={lastAd.address || lastAd.location}
-                      containerStyle={styles.locationMapContainer}
-                    />
-                  ) : null}
                 </>
               ) : (
                 <>
@@ -1593,12 +1800,6 @@ const UserProfileScreen = ({
                       <View style={styles.lastAdDividerWhite} />
                     </>
                   ) : null}
-                  {lastAd && (lastAd.address || lastAd.location) ? (
-                    <LocationMap
-                      address={lastAd.address || lastAd.location}
-                      containerStyle={styles.locationMapContainer}
-                    />
-                  ) : null}
                   {/* <View style={styles.lastAdDividerWhite} /> */}
                   {/* <View style={styles.lastAdFeaturesGrid}>
                     {adFeatures.map((item, index) => (
@@ -1626,7 +1827,7 @@ const UserProfileScreen = ({
           </View>
         )}
 
-        {!openedFromPost && (
+        {!openedFromPost && !isProfessional && (
           <>
             <View style={styles.profileDivider} />
             {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
@@ -1687,7 +1888,7 @@ const UserProfileScreen = ({
         )}
 
         {/* Broker block + My Properties – same scroll as whole screen */}
-        {!isRegularUserAdView && !openedFromPost && (
+        {!isRegularUserAdView && !openedFromPost && !isProfessional && (
           <View style={styles.brokerCardOverlayLine} />
         )}
         {!isRegularUserAdView && (
@@ -1695,20 +1896,20 @@ const UserProfileScreen = ({
           {!isCompany || showCompanyPostSpecialties ? (
             <>
               <View style={styles.brokerCardBottomHeader}>
+                {renderPiRating()}
                 <View style={styles.brokerCardBottomNameBlock}>
                   <Text style={styles.brokerCardBottomName}>{displayName}</Text>
-                  <View style={styles.brokerCardBottomLocation}>
-                    <Text style={styles.brokerCardBottomAddress}>
-                      {brokerAddress}
-                    </Text>
-                    <SimpleLineIcons
-                      name="location-pin"
-                      size={16}
-                      color="#FFFFFF"
-                    />
-                  </View>
                 </View>
-                {renderPiRating()}
+              </View>
+              <View style={styles.brokerCardBottomLocationRow}>
+                <Text style={styles.brokerCardBottomAddress}>
+                  {brokerAddress}
+                </Text>
+                <SimpleLineIcons
+                  name="location-pin"
+                  size={16}
+                  color="#FFFFFF"
+                />
               </View>
               <View style={styles.brokerCardBottomSectionDivider} />
               <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
@@ -1729,6 +1930,7 @@ const UserProfileScreen = ({
                   </Text>
                 )}
               </View>
+              <View style={styles.brokerCardBottomContentDivider} />
             </>
           ) : null}
           {isCompany && !showCompanyPostSpecialties ? (
@@ -1771,7 +1973,7 @@ const UserProfileScreen = ({
             </View>
           ) : (
             <FlatList
-              data={userListings}
+              data={userListings.filter(l => !isPostListingRecord(l))}
               horizontal
               inverted
               showsHorizontalScrollIndicator={false}
@@ -1782,12 +1984,15 @@ const UserProfileScreen = ({
                 const imgs = item.listing_images || [];
                 const firstImg = imgs[0]?.image_url;
                 const purposeRaw = item.purpose || item.search_purpose || '';
+                const listingCategory = Number(item.category);
                 const purposeLabel =
-                  purposeRaw === 'sale' ||
-                  String(purposeRaw).toLowerCase() === 'sale' ||
-                  purposeRaw === 'מכירה'
-                    ? 'למכירה'
-                    : 'להשכרה';
+                  listingCategory === 5
+                    ? 'BNB'
+                    : purposeRaw === 'sale' ||
+                        String(purposeRaw).toLowerCase() === 'sale' ||
+                        purposeRaw === 'מכירה'
+                      ? 'למכירה'
+                      : 'להשכרה';
                 const priceNum = item.price != null ? Number(item.price) : null;
                 const priceStr =
                   priceNum != null && !isNaN(priceNum)
@@ -1862,9 +2067,9 @@ const UserProfileScreen = ({
           <View style={styles.contactDetailsContent}>
             <View style={styles.contactDetailsRight}>
               <View style={styles.contactDetailsLogoWrap}>
-                {displayImage ? (
+                {contactLogoSource ? (
                   <Image
-                    source={{uri: displayImage}}
+                    source={contactLogoSource}
                     style={styles.contactDetailsLogo}
                     resizeMode="cover"
                   />
@@ -2063,17 +2268,16 @@ const UserProfileScreen = ({
                 color="#F7F3E6"
               />
             </TouchableOpacity>
-            {isCompany && (
+            {(isCompany || isProfessional) && (
               <>
                 <TouchableOpacity
-                  style={styles.profileCtaGoldBtn}
+                  style={styles.profileCtaChatImageOnlyBtn}
                   onPress={handleChatPress}
                   activeOpacity={0.85}>
-                  <Text style={styles.profileCtaGoldText}>פנייה למפרסם</Text>
                   <Image
-                    source={require('../assets/image-copy-9.png')}
-                    style={styles.profileCtaChatBadgeLogo}
-                    resizeMode="contain"
+                    source={require('../assets/menu/pichat.png')}
+                    style={styles.profileCtaChatImageOnlyAsset}
+                    resizeMode="stretch"
                   />
                 </TouchableOpacity>
 
@@ -2248,6 +2452,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1D27',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarBadgeSending: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   userName: {
     color: '#F7F3E6',
@@ -2454,11 +2663,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   brokerCardBottomHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    gap: 24,
     width: '100%',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   brokerCardBottomSectionDivider: {
     height: 1,
@@ -2472,10 +2682,18 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomName: {
     color: '#F7F3E6',
-    fontSize: 25,
+    fontSize: 28,
+    lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'right',
-    marginBottom: 4,
+  },
+  brokerCardBottomLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    width: '100%',
+    marginBottom: 8,
   },
   brokerCardBottomLocation: {
     flexDirection: 'row',
@@ -2485,7 +2703,8 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomAddress: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
+    lineHeight: 32,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
   },
@@ -2542,6 +2761,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
+  },
+  brokerCardBottomContentDivider: {
+    height: 1,
+    backgroundColor: '#373548',
+    alignSelf: 'stretch',
+    marginBottom: 12,
   },
   brokerCardBottomDivider: {
     height: 1,
@@ -2682,7 +2907,17 @@ const styles = StyleSheet.create({
   profileCtaChatBadgeLogo: {
     width: 85,
     height: 38,
-    marginTop: 5,
+  },
+  profileCtaChatImageOnlyBtn: {
+    width: '100%',
+    height: 52,
+    alignSelf: 'stretch',
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  profileCtaChatImageOnlyAsset: {
+    width: '100%',
+    height: '100%',
   },
   profileCtaPhoneBtn: {
     height: 52,
@@ -2818,6 +3053,25 @@ const styles = StyleSheet.create({
     height: LAST_AD_IMAGE_HEIGHT,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  heroTopBarOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 20,
+  },
+  heroCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 1000,
+    backgroundColor: 'rgba(39,38,47,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   lastAdImageWrapGridMode: {
     width: SCREEN_WIDTH,
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -2924,6 +3178,14 @@ const styles = StyleSheet.create({
     color: '#1E1D27',
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
+  },
+  lastAdProfessionalName: {
+    color: '#F7F3E6',
+    fontSize: 28,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'right',
+    flexShrink: 1,
+    marginLeft: 12,
   },
   lastAdPriceRow: {
     justifyContent: 'flex-end',

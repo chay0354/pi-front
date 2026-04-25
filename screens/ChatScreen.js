@@ -174,9 +174,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const [exclusiveMonths, setExclusiveMonths] = useState(1);
   const [exclusiveListingData, setExclusiveListingData] = useState(null);
   const [exclusiveLoadingListing, setExclusiveLoadingListing] = useState(false);
-  const [exclusiveMessage, setExclusiveMessage] = useState(
-    'היי, שמי דוד לוי ואני מתווך נדל"ן מנוסה. נתקלתי במודעה שלך עבור הדירה בתל אביב ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא קונה איכותי בתוך חודש, אשמח לשוחח.',
-  );
+  const [exclusiveMessage, setExclusiveMessage] = useState('');
   const [groupDescDraft, setGroupDescDraft] = useState('');
   const [savingGroupDesc, setSavingGroupDesc] = useState(false);
   const scrollRef = useRef(null);
@@ -320,29 +318,54 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [conversation, currentUser]);
 
   const fetchMessages = useCallback(() => {
-    if (!myEmail) return;
+    console.log('[ChatScreen.fetchMessages] attempt', {
+      myEmail,
+      otherUserEmail,
+      otherUserRef,
+      isUser,
+      isDirectPeer,
+      isGroupThread,
+      groupConversationId,
+      conversationIdOnConv: conversation?.id,
+    });
+    if (!myEmail) {
+      console.warn('[ChatScreen.fetchMessages] aborting: no myEmail');
+      return;
+    }
     if (isGroupThread && groupConversationId) {
       getGroupChatMessages(myEmail, groupConversationId)
         .then((res) => {
+          console.log('[ChatScreen.fetchMessages] group res', { count: res?.messages?.length || 0 });
           if (res.messages) setMessages(res.messages);
           if (res.conversation_id) setConversationId(res.conversation_id);
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
         })
-        .catch(() => {
+        .catch((e) => {
+          console.error('[ChatScreen.fetchMessages] group fetch failed', e);
           setMessages([]);
           setGroupDetail(null);
           setGroupMembersList([]);
         });
       return;
     }
-    if (!isDirectPeer || !otherUserEmail) return;
+    if (!isDirectPeer || !otherUserEmail) {
+      console.warn('[ChatScreen.fetchMessages] aborting: not directPeer or missing otherUserEmail', {
+        isDirectPeer,
+        otherUserEmail,
+      });
+      return;
+    }
     getChatMessages(myEmail, otherUserEmail)
       .then((res) => {
+        console.log('[ChatScreen.fetchMessages] direct res', { count: res?.messages?.length || 0 });
         if (res.messages) setMessages(res.messages);
         if (res.conversation_id) setConversationId(res.conversation_id);
       })
-      .catch(() => setMessages([]));
+      .catch((e) => {
+        console.error('[ChatScreen.fetchMessages] direct fetch failed', e);
+        setMessages([]);
+      });
   }, [isGroupThread, groupConversationId, isDirectPeer, myEmail, otherUserEmail]);
 
   useEffect(() => {
@@ -378,8 +401,22 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [profileAvatarUrl]);
 
   useEffect(() => {
-    if (!myEmail) return;
-    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    console.log('[ChatScreen.initialLoad] deps', {
+      myEmail,
+      otherUserEmail,
+      isDirectPeer,
+      isGroupThread,
+      groupConversationId,
+      conversationProp: conversation,
+    });
+    if (!myEmail) {
+      console.warn('[ChatScreen.initialLoad] aborting: no myEmail');
+      return;
+    }
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) {
+      console.warn('[ChatScreen.initialLoad] aborting: not direct and not group');
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     const load = () => {
@@ -390,6 +427,10 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     };
     load()
       .then((res) => {
+        console.log('[ChatScreen.initialLoad] res', {
+          count: res?.messages?.length || 0,
+          conversation_id: res?.conversation_id,
+        });
         if (!cancelled && res.messages) setMessages(res.messages);
         if (!cancelled && res.conversation_id) setConversationId(res.conversation_id);
         if (!cancelled && isGroupThread) {
@@ -397,7 +438,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.error('[ChatScreen.initialLoad] fetch failed', e);
         if (!cancelled) setMessages([]);
         if (!cancelled && isGroupThread) {
           setGroupDetail(null);
@@ -570,6 +612,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const handleSend = async () => {
     const text = (inputText || '').trim();
     if (!text) return;
+    if (isAwaitingExclusiveResponse) return;
     if (isWelcome) {
       setInputText('');
       return;
@@ -606,6 +649,59 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     } catch (e) {
       setInputText(text);
       if (typeof alert !== 'undefined') alert(e?.message || 'שליחת ההודעה נכשלה');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSubmitExclusiveOffer = async () => {
+    const text = String(exclusiveMessage || '').trim();
+    if (!text) {
+      Alert.alert('', 'כתוב הודעה לפני השליחה');
+      return;
+    }
+    console.log('[ExclusiveOffer] submit', {
+      myEmail,
+      otherUserEmail,
+      contextListingId,
+      hasText: !!text,
+    });
+    if (!myEmail || !otherUserEmail) {
+      Alert.alert(
+        '',
+        `לא ניתן לשלוח את ההצעה. (myEmail=${myEmail ? 'ok' : 'חסר'}, receiver=${otherUserEmail ? 'ok' : 'חסר'})`,
+      );
+      return;
+    }
+    if (sending) return;
+
+    setSending(true);
+    try {
+      const {receiverDisplay, senderDisplay} = getChatDisplays();
+      const res = await sendChatMessage(
+        myEmail,
+        otherUserEmail,
+        text,
+        receiverDisplay,
+        senderDisplay,
+        null,
+        contextListingId,
+      );
+      console.log('[ExclusiveOffer] server response', res);
+      if (!res || res.success === false || !res.message) {
+        throw new Error(res?.error || 'שליחת ההצעה נכשלה');
+      }
+      setMessages(prev => [
+        ...prev,
+        {...res.message, id: res.message.id || Date.now()},
+      ]);
+      if (onMessageSent) onMessageSent();
+      setShowExclusiveOfferModal(false);
+      Alert.alert('', 'הצעת בלעדיות נשלחה');
+      fetchMessages();
+    } catch (e) {
+      console.error('[ExclusiveOffer] send failed', e);
+      Alert.alert('', e?.message || 'שליחת ההצעה נכשלה');
     } finally {
       setSending(false);
     }
@@ -824,9 +920,11 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               groupMembersList.find((row) => String(row.email).trim().toLowerCase() === sid),
             )
           : null;
+      const isExclusiveOffer =
+        typeof m.body === 'string' && m.body.includes('להציע בלעדיות על הנכס');
       return (
+      <React.Fragment key={m.id}>
       <View
-        key={m.id}
         style={[styles.messageRow, m.isMe && styles.messageRowMe]}>
         {!m.isMe && (
           <View style={styles.senderLogoWrap}>
@@ -878,14 +976,41 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           </View>
         </View>
       </View>
+      {isExclusiveOffer ? (
+        <View style={styles.exclusiveStatusBanner}>
+          <Text style={styles.exclusiveStatusText}>
+            הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה
+          </Text>
+        </View>
+      ) : null}
+      </React.Fragment>
     );
     });
   };
 
+  const isAwaitingExclusiveResponse = useMemo(() => {
+    if (!messages || messages.length === 0) return false;
+    let pending = false;
+    for (const m of messages) {
+      const body = typeof m?.body === 'string' ? m.body : '';
+      const isExclusive = body.includes('להציע בלעדיות על הנכס');
+      if (isExclusive && m?.isMe) {
+        pending = true;
+      } else if (!m?.isMe) {
+        pending = false;
+      }
+    }
+    return pending;
+  }, [messages]);
+
   const composerActive =
-    isWelcome || (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)));
+    (isWelcome || (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
+    !isAwaitingExclusiveResponse;
   const canSubmitMessage =
-    !sending && (inputText || '').trim().length > 0 && (isWelcome || (isDirectPeer || (isGroupThread && groupConversationId)));
+    !sending &&
+    !isAwaitingExclusiveResponse &&
+    (inputText || '').trim().length > 0 &&
+    (isWelcome || (isDirectPeer || (isGroupThread && groupConversationId)));
 
   const offerLocationText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
@@ -953,6 +1078,35 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     );
   }, [exclusiveListingData, sharedListing]);
 
+  const timelineThumbPercent = useMemo(() => {
+    const n = Number(exclusiveMonths);
+    const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+    return (10 - clamped) * (100 / 9);
+  }, [exclusiveMonths]);
+  const timelineActiveWidthPercent = `${Math.max(
+    0,
+    Math.min(100, 100 - timelineThumbPercent),
+  )}%`;
+
+  const exclusiveSenderName = useMemo(() => {
+    const name =
+      currentUser?.name ||
+      currentUser?.contact_person_name ||
+      currentUser?.agent_name ||
+      currentUser?.business_name ||
+      currentUser?.broker_office_name ||
+      currentUser?.email;
+    return String(name || 'המשתמש').trim();
+  }, [currentUser]);
+
+  const buildExclusiveTemplate = useCallback(
+    months => {
+      const safeMonths = Number.isFinite(Number(months)) ? Number(months) : 1;
+      return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי בתוך ${safeMonths} חודשים, אשמח לשוחח.`;
+    },
+    [exclusiveSenderName, offerLocationText],
+  );
+
   useEffect(() => {
     if (!showExclusiveOfferModal || !contextListingId) return;
     let cancelled = false;
@@ -974,6 +1128,11 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       cancelled = true;
     };
   }, [showExclusiveOfferModal, contextListingId]);
+
+  useEffect(() => {
+    if (!showExclusiveOfferModal) return;
+    setExclusiveMessage(buildExclusiveTemplate(exclusiveMonths));
+  }, [showExclusiveOfferModal, buildExclusiveTemplate, exclusiveMonths]);
 
   return (
     <View style={styles.container}>
@@ -1295,7 +1454,18 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               </View>
               <View style={styles.offerTimeline}>
                 <View style={styles.offerTimelineTrack} />
-                <View style={[styles.offerTimelineThumb, {left: `${(10 - exclusiveMonths) * (100 / 9)}%`}]} />
+                <View
+                  style={[
+                    styles.offerTimelineActive,
+                    {width: timelineActiveWidthPercent},
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.offerTimelineThumb,
+                    {left: `${timelineThumbPercent}%`},
+                  ]}
+                />
               </View>
               <View style={styles.offerScaleActions}>
                 {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
@@ -1305,16 +1475,19 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             </View>
 
             <Text style={styles.offerSectionTitle}>הודעה לבעל הנכס</Text>
-            <TextInput
-              multiline
-              value={exclusiveMessage}
-              onChangeText={setExclusiveMessage}
+            <View
               style={styles.offerMessageInput}
-              textAlign="right"
-              placeholder="כתוב הודעה"
-              placeholderTextColor="rgba(255,255,255,0.55)"
-              {...(Platform.OS === 'web' ? {id: 'pi-chat-offer-message-textarea'} : {})}
-            />
+              {...(Platform.OS === 'web'
+                ? {nativeID: 'pi-chat-offer-message-textarea'}
+                : {})}>
+              <Text style={styles.offerMessageText}>
+                היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב{offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי{' '}
+                <Text style={styles.offerMessageHighlightGold}>
+                  בתוך {exclusiveMonths} חודשים
+                </Text>
+                , אשמח לשוחח.
+              </Text>
+            </View>
 
             <View style={styles.offerHowCard}>
               <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
@@ -1328,10 +1501,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             <TouchableOpacity
               style={styles.offerSubmitBtn}
               activeOpacity={0.85}
-              onPress={() => {
-                Alert.alert('', 'הצעת בלעדיות נשלחה');
-                setShowExclusiveOfferModal(false);
-              }}>
+              onPress={handleSubmitExclusiveOffer}>
               <Text style={styles.offerSubmitText}>שלח הצעת בלעדיות</Text>
             </TouchableOpacity>
           </View>
@@ -1560,8 +1730,8 @@ const styles = StyleSheet.create({
   groupInfoAvatarImg: {width: '100%', height: '100%'},
   groupInfoTitle: {
     color: '#fff',
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 22,
+    lineHeight: 26,
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'center',
     marginBottom: 16,
@@ -2028,6 +2198,13 @@ const styles = StyleSheet.create({
     borderRadius: 1000,
     backgroundColor: '#D2D0DC',
   },
+  offerTimelineActive: {
+    position: 'absolute',
+    right: 0,
+    height: 4,
+    borderRadius: 1000,
+    backgroundColor: '#FFC40A',
+  },
   offerTimelineThumb: {
     position: 'absolute',
     top: 1,
@@ -2066,6 +2243,17 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     textAlignVertical: 'top',
     backgroundColor: 'transparent',
+  },
+  offerMessageText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 28,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  offerMessageHighlightGold: {
+    color: '#FFC40A',
+    fontFamily: 'Rubik-Medium',
   },
   offerHowCard: {
     backgroundColor: '#2B2A39',
@@ -2175,6 +2363,24 @@ const styles = StyleSheet.create({
   bubbleThem: { backgroundColor: BUBBLE_GOLD, alignSelf: 'flex-start' },
   bubbleMe: { backgroundColor: BUBBLE_ME, borderTopLeftRadius: 16, borderTopRightRadius: 4, alignSelf: 'flex-end' },
   bubbleText: { color: CHAT_BG, fontSize: 15, textAlign: 'right', lineHeight: 22 },
+  exclusiveStatusBanner: {
+    alignSelf: 'stretch',
+    backgroundColor: '#2B2A39',
+    borderRadius: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 6,
+    marginHorizontal: 12,
+    alignItems: 'center',
+  },
+  exclusiveStatusText: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    letterSpacing: 0.14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
   welcomeBubble: {
     width: 268,
     backgroundColor: FIGMA_WELCOME_BUBBLE_BG,

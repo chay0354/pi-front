@@ -6,8 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Pressable,
+  TextInput,
 } from 'react-native';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
 
 const BG = '#1a1926';
 const MIN_DONAM = 0.5;
@@ -17,16 +18,34 @@ const STEP = 0.5;
 const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [minDonam, setMinDonam] = useState(initialFilter?.minDonam ?? 1);
   const [maxDonam, setMaxDonam] = useState(initialFilter?.maxDonam ?? 2);
+  const [minDraft, setMinDraft] = useState(String(initialFilter?.minDonam ?? 1));
+  const [maxDraft, setMaxDraft] = useState(String(initialFilter?.maxDonam ?? 2));
+  const minInputWidth = Math.max(20, String(minDraft || '').length * 11);
+  const maxInputWidth = Math.max(20, String(maxDraft || '').length * 11);
 
   useEffect(() => {
     if (initialFilter?.minDonam != null && initialFilter?.maxDonam != null) {
-      setMinDonam(Number(initialFilter.minDonam));
-      setMaxDonam(Number(initialFilter.maxDonam));
+      const nextMin = Number(initialFilter.minDonam);
+      const nextMax = Number(initialFilter.maxDonam);
+      setMinDonam(nextMin);
+      setMaxDonam(nextMax);
+      setMinDraft(String(nextMin));
+      setMaxDraft(String(nextMax));
     } else {
       setMinDonam(1);
       setMaxDonam(2);
+      setMinDraft('1');
+      setMaxDraft('2');
     }
   }, [initialFilter]);
+
+  useEffect(() => {
+    setMinDraft(display(minDonam));
+  }, [minDonam]);
+
+  useEffect(() => {
+    setMaxDraft(display(maxDonam));
+  }, [maxDonam]);
 
   const handleSave = () => {
     if (onSave) {
@@ -47,17 +66,45 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number((v).toFixed(1))));
   const display = v => (v % 1 === 0 ? v.toString() : v.toFixed(1));
 
+  const commitMinDraft = () => {
+    const normalized = String(minDraft ?? '').replace(/[^0-9.]/g, '');
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+      setMinDraft(display(minDonam));
+      return;
+    }
+    const next = clamp(parsed, MIN_DONAM, maxDonam - STEP);
+    setMinDonam(next);
+    setMinDraft(display(next));
+  };
+
+  const commitMaxDraft = () => {
+    const normalized = String(maxDraft ?? '').replace(/[^0-9.]/g, '');
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+      setMaxDraft(display(maxDonam));
+      return;
+    }
+    const next = clamp(parsed, minDonam + STEP, MAX_DONAM);
+    setMaxDonam(next);
+    setMaxDraft(display(next));
+  };
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={12}>
-        <MaterialCommunityIcons name="chevron-right" size={28} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.topRail}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onClose}
+          style={styles.handlePressArea}>
+          <View style={styles.handleBar} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.handleBar} />
         <View style={styles.header}>
           <Image
             source={require('../assets/donam.png')}
@@ -78,7 +125,16 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
                 <Text style={styles.counterButton}>-</Text>
               </TouchableOpacity>
               <View style={styles.counterValueContainer}>
-                <Text style={styles.counterValue}>{display(minDonam)}</Text>
+                <TextInput
+                  value={minDraft}
+                  onChangeText={setMinDraft}
+                  onBlur={commitMinDraft}
+                  onSubmitEditing={commitMinDraft}
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  style={[styles.counterValueInput, {width: minInputWidth}]}
+                  textAlign="center"
+                />
               </View>
               <TouchableOpacity
                 style={styles.counterBtn}
@@ -97,7 +153,16 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
                 <Text style={styles.counterButton}>-</Text>
               </TouchableOpacity>
               <View style={styles.counterValueContainer}>
-                <Text style={styles.counterValue}>{display(maxDonam)}</Text>
+                <TextInput
+                  value={maxDraft}
+                  onChangeText={setMaxDraft}
+                  onBlur={commitMaxDraft}
+                  onSubmitEditing={commitMaxDraft}
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  style={[styles.counterValueInput, {width: maxInputWidth}]}
+                  textAlign="center"
+                />
               </View>
               <TouchableOpacity
                 style={styles.counterBtn}
@@ -126,8 +191,26 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  backBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  container: {
+    flex: 1,
+    backgroundColor: BG,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  topRail: {
+    height: 37,
+    borderBottomWidth: 1,
+    borderBottomColor: '#373548',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handlePressArea: {
+    width: 42,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
   footer: {
@@ -137,12 +220,10 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   handleBar: {
-    alignSelf: 'center',
     width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
-    marginBottom: 16,
+    height: 5,
+    backgroundColor: '#464646',
+    borderRadius: 3,
   },
   header: { alignItems: 'center', marginBottom: 28 },
   headerIcon: { width: 36, height: 36 },
@@ -185,7 +266,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  counterValue: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  counterValueInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    minWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    textAlign: 'center',
+  },
   saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
   saveBtnImage: { width: '100%', height: 54 },
   clearWrap: { alignItems: 'center' },

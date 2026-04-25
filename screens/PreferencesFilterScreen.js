@@ -9,25 +9,40 @@ import {
   Dimensions,
   PanResponder,
 } from 'react-native';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
-const BG = '#1a1926';
-const BORDER = 'rgba(255,255,255,0.2)';
+// Figma: node 25:200959 (מגירה - העדפות)
+const BG = '#2B2A39';
+const DIVIDER = '#373548';
+const PILL_BORDER = '#4D4966';
+const DARK_INK = '#1E1D27';
+const DOT_BG = '#27262F';
+const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
+const TRACK_GRADIENT = ['#FFE073', '#FFBA30'];
+const TRACK_GRADIENT_LOCATIONS = [0.1113, 0.8662];
+
 const MIN_AGE = 18;
 const MAX_AGE = 100;
 
 const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [gender, setGender] = useState(initialFilter?.gender ?? 'female');
   const [ageMin, setAgeMin] = useState(initialFilter?.ageMin ?? 20);
-  const [ageMax, setAgeMax] = useState(initialFilter?.ageMax ?? 30);
+  const [ageMax, setAgeMax] = useState(initialFilter?.ageMax ?? 40);
   const [nonSmoker, setNonSmoker] = useState(initialFilter?.nonSmoker ?? false);
   const [students, setStudents] = useState(initialFilter?.students ?? false);
   const [stableJob, setStableJob] = useState(initialFilter?.stableJob ?? false);
-  const [occasionalJob, setOccasionalJob] = useState(initialFilter?.occasionalJob ?? false);
-  const [immediateEntry, setImmediateEntry] = useState(initialFilter?.immediateEntry ?? false);
+  const [occasionalJob, setOccasionalJob] = useState(
+    initialFilter?.occasionalJob ?? false,
+  );
+  const [immediateEntry, setImmediateEntry] = useState(
+    initialFilter?.immediateEntry ?? false,
+  );
 
-  const [sliderWidth, setSliderWidth] = useState(Dimensions.get('window').width - 48);
+  const [sliderWidth, setSliderWidth] = useState(
+    Dimensions.get('window').width - 48,
+  );
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
   const ageMinRef = useRef(ageMin);
@@ -54,7 +69,10 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
       onPanResponderGrant: evt => {
         const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
         const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX = rect && touch.pageX != null ? touch.pageX - rect.left : (touch.locationX ?? 0);
+        const locationX =
+          rect && touch.pageX != null
+            ? touch.pageX - rect.left
+            : touch.locationX ?? 0;
         const w = sliderWidth || 1;
         const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
         const minP = ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
@@ -68,12 +86,17 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         if (!thumb) return;
         const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
         const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX = rect && touch.pageX != null ? touch.pageX - rect.left : (touch.locationX ?? 0);
+        const locationX =
+          rect && touch.pageX != null
+            ? touch.pageX - rect.left
+            : touch.locationX ?? 0;
         const w = sliderWidth || 1;
         const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
         updateFromPercent(percent, thumb === 'min');
       },
-      onPanResponderRelease: () => { activeThumbRef.current = null; },
+      onPanResponderRelease: () => {
+        activeThumbRef.current = null;
+      },
     }),
   ).current;
 
@@ -96,7 +119,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   const handleClear = () => {
     setGender('female');
     setAgeMin(20);
-    setAgeMax(30);
+    setAgeMax(40);
     setNonSmoker(false);
     setStudents(false);
     setStableJob(false);
@@ -104,93 +127,201 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
     setImmediateEntry(false);
   };
 
+  const GenderPill = ({label, value}) => {
+    const active = gender === value;
+    const content = (
+      <>
+        <Text
+          style={[
+            styles.genderText,
+            active ? styles.genderTextActive : styles.genderTextInactive,
+          ]}>
+          {label}
+        </Text>
+        <View
+          style={[
+            styles.genderDot,
+            active ? styles.genderDotActive : styles.genderDotInactive,
+          ]}>
+          {active ? (
+            <LinearGradient
+              colors={GOLD_GRADIENT}
+              locations={[0, 0.5517, 1]}
+              start={{x: 0.805, y: 0}}
+              end={{x: 0.5, y: 1}}
+              style={styles.genderDotInner}
+            />
+          ) : null}
+        </View>
+      </>
+    );
+    if (active) {
+      return (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setGender(value)}
+          style={styles.genderPillWrap}>
+          <LinearGradient
+            colors={GOLD_GRADIENT}
+            locations={GOLD_GRADIENT_LOCATIONS}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={styles.genderPill}>
+            {content}
+          </LinearGradient>
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setGender(value)}
+        style={[styles.genderPillWrap, styles.genderPillInactive, styles.genderPill]}>
+        {content}
+      </TouchableOpacity>
+    );
+  };
+
   const CheckRow = ({label, checked, onToggle}) => (
-    <TouchableOpacity style={styles.checkRow} onPress={onToggle} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.checkRow}
+      onPress={onToggle}
+      activeOpacity={0.8}>
       <Text style={styles.checkLabel}>{label}</Text>
-      <View style={styles.radioSpacer} />
-      {checked ? (
-        <LinearGradient
-          colors={['#FEE787', '#BD9947', '#9C6522']}
-          locations={[0.0456, 0.5076, 0.8831]}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
-          style={styles.radioButtonGradient}>
-          <Image source={require('../assets/checkbox-selected.png')} style={styles.radioButtonSelected} resizeMode="contain" />
-        </LinearGradient>
-      ) : (
-        <View style={styles.radioButton} />
-      )}
+      <FigmaCheckbox checked={checked} />
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-        <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={onClose}
+        style={styles.topRail}>
+        <View style={styles.handleBar} />
       </TouchableOpacity>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.handleBar} />
         <View style={styles.header}>
-          <Image source={require('../assets/haadafot.png')} style={styles.headerIcon} resizeMode="contain" />
-          <Text style={styles.title}>העדפות</Text>
+          <Image
+            source={require('../assets/haadafot.png')}
+            style={styles.headerIcon}
+            resizeMode="contain"
+          />
+          <Text style={styles.headerLabel}>העדפות</Text>
         </View>
 
-        {/* מין - Gender: two pills with radio */}
         <Text style={styles.sectionLabel}>מין</Text>
         <View style={styles.genderRow}>
-          <TouchableOpacity
-            style={[styles.genderPill, gender === 'female' && styles.genderPillSelected]}
-            onPress={() => setGender('female')}
-            activeOpacity={0.8}>
-            <Text style={styles.genderText}>אישה</Text>
-            <View style={[styles.genderRadio, gender === 'female' && styles.genderRadioSelected]}>
-              {gender === 'female' ? <View style={styles.genderRadioInner} /> : null}
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.genderPill, gender === 'male' && styles.genderPillSelected]}
-            onPress={() => setGender('male')}
-            activeOpacity={0.8}>
-            <Text style={styles.genderText}>גבר</Text>
-            <View style={[styles.genderRadio, gender === 'male' && styles.genderRadioSelected]}>
-              {gender === 'male' ? <View style={styles.genderRadioInner} /> : null}
-            </View>
-          </TouchableOpacity>
+          <GenderPill label="אישה" value="female" />
+          <GenderPill label="גבר" value="male" />
         </View>
 
-        {/* גיל מועדף - Preferred Age */}
+        <View style={styles.divider} />
+
         <Text style={styles.sectionLabel}>גיל מועדף</Text>
-        <Text style={styles.ageRangeText}>{ageMin} – {ageMax}</Text>
+        <View style={styles.ageRangeRow}>
+          <Text style={styles.ageRangeValue}>{ageMin}</Text>
+          <View style={styles.ageRangeSeparator} />
+          <Text style={styles.ageRangeValue}>{ageMax}</Text>
+        </View>
         <View
           ref={sliderRef}
           style={styles.sliderContainer}
-          onLayout={e => { const w = e.nativeEvent.layout.width; if (w > 0) setSliderWidth(w); }}
+          onLayout={e => {
+            const w = e.nativeEvent.layout.width;
+            if (w > 0) setSliderWidth(w);
+          }}
           {...panResponder.panHandlers}>
           <View style={styles.sliderTrack}>
-            <View style={[styles.sliderTrackFill, { left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }]} />
+            <LinearGradient
+              colors={TRACK_GRADIENT}
+              locations={TRACK_GRADIENT_LOCATIONS}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={[
+                styles.sliderTrackFill,
+                {
+                  left: `${minPercent}%`,
+                  width: `${maxPercent - minPercent}%`,
+                },
+              ]}
+            />
           </View>
-          <View style={[styles.sliderThumb, { left: `${minPercent}%`, pointerEvents: 'none' }]} />
-          <View style={[styles.sliderThumb, { left: `${maxPercent}%`, pointerEvents: 'none' }]} />
+          <LinearGradient
+            colors={GOLD_GRADIENT}
+            locations={GOLD_GRADIENT_LOCATIONS}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={[
+              styles.sliderThumb,
+              {left: `${minPercent}%`, pointerEvents: 'none'},
+            ]}
+          />
+          <LinearGradient
+            colors={GOLD_GRADIENT}
+            locations={GOLD_GRADIENT_LOCATIONS}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={[
+              styles.sliderThumb,
+              {left: `${maxPercent}%`, pointerEvents: 'none'},
+            ]}
+          />
         </View>
 
-        {/* Checkbox list */}
         <View style={styles.divider} />
-        <CheckRow label="ללא מעשנים" checked={nonSmoker} onToggle={() => setNonSmoker(!nonSmoker)} />
-        <CheckRow label="סטודנטים" checked={students} onToggle={() => setStudents(!students)} />
-        <CheckRow label="בעלי עבודה מסודרת" checked={stableJob} onToggle={() => setStableJob(!stableJob)} />
-        <CheckRow label="בעלי עבודה מזדמנת" checked={occasionalJob} onToggle={() => setOccasionalJob(!occasionalJob)} />
-        <CheckRow label="כניסה מיידית" checked={immediateEntry} onToggle={() => setImmediateEntry(!immediateEntry)} />
+
+        <View style={styles.checksWrap}>
+          <CheckRow
+            label="ללא מעשנים"
+            checked={nonSmoker}
+            onToggle={() => setNonSmoker(!nonSmoker)}
+          />
+          <CheckRow
+            label="סטודנטים"
+            checked={students}
+            onToggle={() => setStudents(!students)}
+          />
+          <CheckRow
+            label="בעלי עבודה מסודרת"
+            checked={stableJob}
+            onToggle={() => setStableJob(!stableJob)}
+          />
+          <CheckRow
+            label="בעלי עבודה מזדמנת"
+            checked={occasionalJob}
+            onToggle={() => setOccasionalJob(!occasionalJob)}
+          />
+          <CheckRow
+            label="כניסה מיידית"
+            checked={immediateEntry}
+            onToggle={() => setImmediateEntry(!immediateEntry)}
+          />
+        </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-          <Image source={require('../assets/buy-rent/save.png')} style={styles.saveBtnImage} resizeMode="contain" />
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={handleSave}
+          style={styles.saveBtnWrap}>
+          <LinearGradient
+            colors={GOLD_GRADIENT}
+            locations={GOLD_GRADIENT_LOCATIONS}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={styles.saveBtn}>
+            <Text style={styles.saveBtnText}>שמור</Text>
+          </LinearGradient>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+        <TouchableOpacity
+          style={styles.clearWrap}
+          onPress={handleClear}
+          activeOpacity={0.7}>
           <Text style={styles.clearText}>נקה</Text>
         </TouchableOpacity>
       </View>
@@ -199,91 +330,167 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  backBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
-  footer: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
+  container: {
+    flex: 1,
     backgroundColor: BG,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  topRail: {
+    height: 37,
+    borderBottomWidth: 1,
+    borderBottomColor: DIVIDER,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   handleBar: {
-    alignSelf: 'center',
     width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
-    marginBottom: 16,
+    height: 5,
+    backgroundColor: '#464646',
+    borderRadius: 3,
   },
-  header: { alignItems: 'center', marginBottom: 24 },
-  headerIcon: { width: 36, height: 36 },
-  title: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium', marginTop: 8 },
+  scroll: {flex: 1},
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerIcon: {
+    width: 24,
+    height: 24,
+    marginBottom: 10,
+  },
+  headerLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textAlign: 'center',
+  },
   sectionLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Medium',
-    marginBottom: 12,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    marginBottom: 10,
     textAlign: 'right',
   },
   genderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
     marginBottom: 24,
+  },
+  genderPillWrap: {
+    flex: 1,
+    height: 40,
+    borderRadius: 846,
+    overflow: 'hidden',
+  },
+  genderPillInactive: {
+    borderWidth: 1.5,
+    borderColor: PILL_BORDER,
+    backgroundColor: 'transparent',
   },
   genderPill: {
     flex: 1,
-    flexDirection: 'row',
+    height: '100%',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 52,
-    backgroundColor: '#2B2A39',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    paddingHorizontal: 16,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    position: 'relative',
   },
-  genderPillSelected: { borderColor: '#D4AF37' },
-  genderText: { color: '#fff', fontSize: 16 },
-  genderRadio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#fff',
+  genderText: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  genderTextInactive: {
+    color: '#FFFFFF',
+  },
+  genderTextActive: {
+    color: DARK_INK,
+  },
+  genderDot: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    marginTop: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  genderRadioSelected: { borderColor: '#fff' },
-  genderRadioInner: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
-  ageRangeText: {
-    color: '#fff',
-    fontSize: 16,
-    marginBottom: 8,
-    textAlign: 'right',
+  genderDotInactive: {
+    borderWidth: 1.5,
+    borderColor: PILL_BORDER,
+    backgroundColor: 'transparent',
+  },
+  genderDotActive: {
+    backgroundColor: DOT_BG,
+  },
+  genderDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: DIVIDER,
+    marginVertical: 24,
+  },
+  ageRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 19,
+  },
+  ageRangeValue: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  ageRangeSeparator: {
+    width: 10,
+    height: 1.5,
+    backgroundColor: '#FFFFFF',
   },
   sliderContainer: {
     width: '100%',
-    height: 40,
+    height: 22,
     justifyContent: 'center',
     position: 'relative',
-    marginBottom: 24,
+    marginBottom: 0,
   },
   sliderTrack: {
-    width: '100%',
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 3,
-    position: 'relative',
-    overflow: 'visible',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 9,
+    height: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1000,
   },
   sliderTrackFill: {
     position: 'absolute',
     height: '100%',
-    backgroundColor: '#D4AF37',
-    borderRadius: 3,
+    borderRadius: 1000,
     top: 0,
   },
   sliderThumb: {
@@ -291,48 +498,68 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#D4AF37',
     marginLeft: -11,
-    top: 9,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    top: 0,
   },
-  divider: {
-    height: 1,
-    backgroundColor: BORDER,
-    marginVertical: 16,
+  checksWrap: {
+    gap: 28,
   },
   checkRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingVertical: 12,
+    gap: 8,
   },
-  checkLabel: { color: '#fff', fontSize: 16 },
-  radioSpacer: { width: 15 },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    backgroundColor: 'transparent',
+  checkLabel: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textAlign: 'right',
   },
-  radioButtonGradient: {
-    width: 23,
-    height: 23,
-    borderRadius: 11.5,
-    justifyContent: 'center',
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CCA447',
-    backgroundColor: '#27262F',
   },
-  radioButtonSelected: { width: 17, height: 17 },
-  saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
-  saveBtnImage: { width: '100%', height: 54 },
-  clearWrap: { alignItems: 'center' },
-  clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
+  saveBtnWrap: {
+    width: '100%',
+    borderRadius: 846,
+    overflow: 'hidden',
+  },
+  saveBtn: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 846,
+  },
+  saveBtnText: {
+    color: DARK_INK,
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  clearWrap: {
+    height: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
 });
 
 export default PreferencesFilterScreen;

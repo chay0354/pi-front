@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -25,58 +26,66 @@ const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
 
 // Figma assets for node 12:74885
-const FIGMA_CITY_ICON =
-  'https://www.figma.com/api/mcp/asset/13afe24c-1fb9-46f9-bb9d-5da91ec3136d';
-const FIGMA_CHECK_RING_ACTIVE =
-  'https://www.figma.com/api/mcp/asset/54892c84-e74b-44a2-9a00-559a7c607372';
-const FIGMA_CHECK_RING_INACTIVE =
-  'https://www.figma.com/api/mcp/asset/0c9e7829-fbed-4ec7-becf-fbdfa40a81bd';
-const FIGMA_CHECK_ICON =
-  'https://www.figma.com/api/mcp/asset/ae64e01c-f6f7-47c6-98e9-4db8d08a5e26';
-const FIGMA_SLIDER_KNOB =
-  'https://www.figma.com/api/mcp/asset/0fd409e1-d3ef-4899-bbdd-b74517a62692';
+const FIGMA_CITY_ICON = require('../assets/buttom-bar/city.png');
 
-const CityFilterScreen = ({initialFilter, onClose, onSave}) => {
+const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
+  const isBnb = selectedCategory === 5 || selectedCategory === '5';
+  const isPartners = selectedCategory === 3 || selectedCategory === '3';
   const [purpose, setPurpose] = useState(initialFilter?.purpose ?? 'rent'); // 'rent' | 'sale'
   const [city, setCity] = useState(initialFilter?.city ?? '');
   const [street, setStreet] = useState(initialFilter?.street ?? '');
   const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
   const [immediateEntry, setImmediateEntry] = useState(initialFilter?.immediateEntry ?? false);
 
+  // Non-functional for now; slider only reflects the static default value.
+  // Drag / tap wiring will be added in a follow-up.
   const thumbLeft = useMemo(() => {
     const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(distanceKm));
     const ratio = idx / (DISTANCE_OPTIONS.length - 1);
     return `${ratio * 100}%`;
   }, [distanceKm]);
 
+  const hidePurpose = isBnb || isPartners;
+
   const handleSave = () => {
     if (onSave) {
-      onSave({purpose, city, street, distanceKm, immediateEntry});
+      onSave({
+        purpose: hidePurpose ? null : purpose,
+        city,
+        street,
+        distanceKm,
+        immediateEntry: isBnb ? null : immediateEntry,
+      });
     }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
-    setPurpose('rent');
+    if (!hidePurpose) {
+      setPurpose('rent');
+    }
     setCity('');
     setStreet('');
     setDistanceKm(20);
-    setImmediateEntry(false);
+    if (!isBnb) {
+      setImmediateEntry(false);
+    }
   };
   const bottomInset = Math.max(insets.bottom, 8);
+  const CheckCircle = ({checked}) => <FigmaCheckbox checked={checked} />;
 
   return (
     <View style={styles.container}>
       <View style={styles.topRail}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={onClose}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           style={styles.handlePressArea}>
           <View style={styles.handle} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -88,51 +97,41 @@ const CityFilterScreen = ({initialFilter, onClose, onSave}) => {
             paddingBottom: bottomInset + (compact ? 20 : 52),
           },
         ]}
-        scrollEnabled={false}
+        scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={{uri: FIGMA_CITY_ICON}} style={styles.headerIcon} resizeMode="contain" />
+          <Image source={FIGMA_CITY_ICON} style={styles.headerIcon} resizeMode="contain" />
           <Text style={styles.title}>עיר</Text>
         </View>
 
-        <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionTitle}>עיר</Text>
-        </View>
-        <View style={styles.purposeList}>
-          <TouchableOpacity
-            style={styles.checkRow}
-            onPress={() => setPurpose('rent')}
-            activeOpacity={0.8}>
-            <Text style={styles.checkLabel}>להשכרה</Text>
-            <View style={styles.checkboxImageWrap}>
-              <Image
-                source={{uri: purpose === 'rent' ? FIGMA_CHECK_RING_ACTIVE : FIGMA_CHECK_RING_INACTIVE}}
-                style={styles.checkboxImage}
-                resizeMode="contain"
-              />
-              {purpose === 'rent' && (
-                <Image source={{uri: FIGMA_CHECK_ICON}} style={styles.checkboxCheck} resizeMode="contain" />
-              )}
+        {!hidePurpose && (
+          <>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>עיר</Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.checkRow}
-            onPress={() => setPurpose('sale')}
-            activeOpacity={0.8}>
-            <Text style={styles.checkLabel}>למכירה</Text>
-            <View style={styles.checkboxImageWrap}>
-              <Image
-                source={{uri: purpose === 'sale' ? FIGMA_CHECK_RING_ACTIVE : FIGMA_CHECK_RING_INACTIVE}}
-                style={styles.checkboxImage}
-                resizeMode="contain"
-              />
-              {purpose === 'sale' && (
-                <Image source={{uri: FIGMA_CHECK_ICON}} style={styles.checkboxCheck} resizeMode="contain" />
-              )}
+            <View style={styles.purposeList}>
+              <TouchableOpacity
+                style={styles.checkRow}
+                onPress={() => setPurpose('rent')}
+                activeOpacity={0.8}>
+                <Text style={styles.checkLabel}>להשכרה</Text>
+                <View style={styles.checkboxImageWrap}>
+                  <CheckCircle checked={purpose === 'rent'} />
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.checkRow}
+                onPress={() => setPurpose('sale')}
+                activeOpacity={0.8}>
+                <Text style={styles.checkLabel}>למכירה</Text>
+                <View style={styles.checkboxImageWrap}>
+                  <CheckCircle checked={purpose === 'sale'} />
+                </View>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.divider} />
+            <View style={styles.divider} />
+          </>
+        )}
 
         <View style={styles.fieldWrap}>
           <Text style={styles.label}>עיר</Text>
@@ -162,61 +161,67 @@ const CityFilterScreen = ({initialFilter, onClose, onSave}) => {
 
         <View style={styles.fieldWrap}>
           <Text style={styles.label}>מרחק ממני (ק"מ)</Text>
-          <View style={styles.sliderTrackWrap}>
+          <View style={styles.sliderTrackWrap} pointerEvents="none">
             <View style={styles.sliderMarkers}>
               {DISTANCE_OPTIONS.map((km) => (
-                <TouchableOpacity
-                  key={km}
-                  onPress={() => setDistanceKm(km)}
-                  style={styles.sliderMarkerTouch}>
+                <View key={km} style={styles.sliderMarkerCell}>
                   <Text style={styles.sliderMarkerText}>{km}</Text>
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
-            <View style={styles.sliderTrack}>
-              {DISTANCE_OPTIONS.map((_, idx) => (
-                <View
-                  key={`dot-${idx}`}
-                  style={[
-                    styles.sliderDot,
-                    {
-                      left: `${(idx / (DISTANCE_OPTIONS.length - 1)) * 100}%`,
-                      marginLeft: -2,
-                    },
-                  ]}
+            <View style={styles.sliderRow}>
+              <View style={styles.sliderTrack}>
+                {DISTANCE_OPTIONS.map((_, idx) => {
+                  if (idx === DISTANCE_OPTIONS.length - 1) return null;
+                  return (
+                    <View
+                      key={`dot-${idx}`}
+                      style={[
+                        styles.sliderDot,
+                        {
+                          left: `${(idx / (DISTANCE_OPTIONS.length - 1)) * 100}%`,
+                          marginLeft: -2,
+                        },
+                      ]}
+                    />
+                  );
+                })}
+                <LinearGradient
+                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  locations={[0.0456, 0.5076, 0.8831]}
+                  start={{x: 0.5, y: 0}}
+                  end={{x: 0.5, y: 1}}
+                  style={[styles.sliderTrackFill, {left: thumbLeft}]}
                 />
-              ))}
-              <View
+              </View>
+              <LinearGradient
+                colors={['#FFE073', '#FFBA30']}
+                start={{x: 0.17, y: 0.13}}
+                end={{x: 0.79, y: 0.87}}
                 style={[
                   styles.sliderThumb,
                   {
                     left: thumbLeft,
                     marginLeft: -(KNOB_SIZE / 2),
                   },
-                ]}>
-                <Image source={{uri: FIGMA_SLIDER_KNOB}} style={styles.sliderThumbImage} resizeMode="contain" />
-              </View>
+                ]}
+              />
             </View>
           </View>
         </View>
         <View style={styles.divider} />
 
-        <TouchableOpacity
-          style={styles.checkRow}
-          onPress={() => setImmediateEntry(!immediateEntry)}
-          activeOpacity={0.8}>
-          <Text style={styles.checkLabel}>כניסה מיידית</Text>
-          <View style={styles.checkboxImageWrap}>
-            <Image
-              source={{uri: immediateEntry ? FIGMA_CHECK_RING_ACTIVE : FIGMA_CHECK_RING_INACTIVE}}
-              style={styles.checkboxImage}
-              resizeMode="contain"
-            />
-            {immediateEntry && (
-              <Image source={{uri: FIGMA_CHECK_ICON}} style={styles.checkboxCheck} resizeMode="contain" />
-            )}
-          </View>
-        </TouchableOpacity>
+        {!isBnb && (
+          <TouchableOpacity
+            style={styles.checkRow}
+            onPress={() => setImmediateEntry(!immediateEntry)}
+            activeOpacity={0.8}>
+            <Text style={styles.checkLabel}>כניסה מיידית</Text>
+            <View style={styles.checkboxImageWrap}>
+              <CheckCircle checked={immediateEntry} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         <View style={[styles.footer, compact && styles.footerCompact]}>
           <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
@@ -335,6 +340,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   sliderTrackWrap: {
     marginTop: 10,
@@ -342,19 +349,33 @@ const styles = StyleSheet.create({
   sliderMarkers: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 0,
+    alignItems: 'center',
+    height: 11,
+    marginBottom: 14,
+  },
+  sliderMarkerCell: {
+    width: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sliderMarkerText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
+    lineHeight: 22,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  sliderRow: {
+    height: KNOB_SIZE,
+    justifyContent: 'center',
+    position: 'relative',
   },
   sliderTrack: {
     height: 4,
     backgroundColor: '#D2D0DC',
-    borderRadius: 2,
+    borderRadius: 1000,
     position: 'relative',
+    marginHorizontal: KNOB_SIZE / 2,
   },
   sliderDot: {
     position: 'absolute',
@@ -362,17 +383,23 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#D2D0DC',
+    backgroundColor: '#A5A3B6',
+  },
+  sliderTrackFill: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    height: '100%',
+    borderRadius: 1000,
   },
   sliderThumb: {
     position: 'absolute',
-    top: -(KNOB_SIZE - 4) / 2,
+    top: 0,
     width: KNOB_SIZE,
     height: KNOB_SIZE,
-  },
-  sliderThumbImage: {width: KNOB_SIZE, height: KNOB_SIZE},
-  sliderMarkerTouch: {
-    padding: 4,
+    borderRadius: KNOB_SIZE / 2,
+    borderWidth: 2,
+    borderColor: '#2B2A39',
   },
   checkRow: {
     flexDirection: 'row',
@@ -384,12 +411,9 @@ const styles = StyleSheet.create({
   checkboxImageWrap: {
     width: 24,
     height: 24,
-    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxImage: {width: 24, height: 24},
-  checkboxCheck: {position: 'absolute', width: 9, height: 7},
   checkLabel: {
     color: '#fff',
     fontSize: 18,

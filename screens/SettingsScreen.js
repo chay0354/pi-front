@@ -1,4 +1,4 @@
-import React, {useContext, useEffect} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {
   View,
   ScrollView,
@@ -10,11 +10,12 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
-import {getCurrentUser} from '../utils/api';
+import {getCurrentUser, getFollowHubRows, toSubscriptionId} from '../utils/api';
 
 /** Set URLs when pages are ready; empty string shows a short “בקרוב” alert */
 const LEGAL_DEFAULTS = {
@@ -60,18 +61,26 @@ const SettingsScreen = ({
   onOpenFeedback,
   onOpenTermsOfUse,
   onOpenAccessibilityStatement,
+  onOpenOwnProfile,
   onEditProfile,
   unreadChatCount = 0,
   termsOfUseUrl = LEGAL_DEFAULTS.termsOfUseUrl,
   accessibilityStatementUrl = LEGAL_DEFAULTS.accessibilityStatementUrl,
   supportEmail = LEGAL_DEFAULTS.supportEmail,
   transactionCancellationUrl = LEGAL_DEFAULTS.transactionCancellationUrl,
+  onOpenFollowHub,
 }) => {
   const {currentUser, setCurrentUser} = useContext(ContextHook);
   const isLoggedBroker = currentUser?.subscription_type === subscriptionTypes.broker;
   const isLoggedProfessional =
     currentUser?.subscription_type === subscriptionTypes.professional;
   const isLoggedCompany = currentUser?.subscription_type === subscriptionTypes.company;
+  const isLoggedRegular = currentUser?.subscription_type === subscriptionTypes.user;
+  const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
+  const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
+  const viewerId = toSubscriptionId(
+    currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id,
+  );
 
   const openUrlOrPlaceholder = async (url, titleHebrew) => {
     const u = url && String(url).trim();
@@ -155,6 +164,36 @@ const SettingsScreen = ({
       cancelled = true;
     };
   }, [currentUser?.email, setCurrentUser]);
+
+  useEffect(() => {
+    if (!isLoggedRegular || !viewerId) {
+      setFollowingPreviewRows([]);
+      setFollowingPreviewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFollowingPreviewLoading(true);
+    getFollowHubRows({
+      userId: viewerId,
+      viewerId,
+      tab: 'following',
+      q: '',
+    })
+      .then(data => {
+        if (cancelled) return;
+        const rows = Array.isArray(data?.rows) ? data.rows : [];
+        setFollowingPreviewRows(rows.slice(0, 4));
+      })
+      .catch(() => {
+        if (!cancelled) setFollowingPreviewRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFollowingPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedRegular, viewerId]);
   const handleSubscriptionPress = type => {
     if (onOpenSubscription) {
       onOpenSubscription(type);
@@ -239,22 +278,15 @@ const SettingsScreen = ({
                   </Text>
                 ) : null}
               </View>
-              <View style={styles.profilePictureContainer}>
-                {settingsProfilePicUrl ? (
-                  <Image
-                    source={{uri: String(settingsProfilePicUrl)}}
-                    style={styles.profilePicture}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={[styles.profilePicture, styles.profilePicturePlaceholder]}>
-                    <Text style={styles.profilePicturePlaceholderText}>
-                      {String(settingsProfileDisplayName).trim().charAt(0).toUpperCase() ||
-                        '?'}
-                    </Text>
-                  </View>
-                )}
-              </View>
+              <TouchableOpacity
+                onPress={() => onOpenOwnProfile && onOpenOwnProfile()}
+                activeOpacity={0.8}>
+                <ProfileAvatar
+                  uri={settingsProfilePicUrl}
+                  name={settingsProfileDisplayName}
+                  size={82}
+                />
+              </TouchableOpacity>
             </View>
           </View>
           <View style={styles.profileDivider} />
@@ -286,6 +318,44 @@ const SettingsScreen = ({
             </View>
           )}
         </TouchableOpacity>
+        {isLoggedRegular ? (
+          <TouchableOpacity
+            style={styles.followingPreviewWrap}
+            activeOpacity={0.8}
+            onPress={() => onOpenFollowHub && onOpenFollowHub('following')}>
+            <Text style={styles.followingPreviewTitle}>במעקב</Text>
+            <View style={styles.followingPreviewAvatars}>
+              {followingPreviewLoading ? (
+                <Text style={styles.followingPreviewHint}>...</Text>
+              ) : followingPreviewRows.length === 0 ? (
+                <Text style={styles.followingPreviewHint}>אין עדיין מעקבים</Text>
+              ) : (
+                followingPreviewRows.map((row, idx) => {
+                  const raw =
+                    getUserProfileImageUrl(row) ||
+                    row?.profile_image_url ||
+                    row?.profile_picture_url ||
+                    null;
+                  return (
+                    <View
+                      key={row?.id || row?.subscription_id || `following-preview-${idx}`}
+                      style={styles.followingPreviewAvatarWrap}>
+                      <Image
+                        source={
+                          raw
+                            ? {uri: String(raw)}
+                            : require('../assets/image-copy-10.png')
+                        }
+                        style={styles.followingPreviewAvatar}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>ניהול המודעות</Text>
           <TouchableOpacity style={[styles.cardItem, styles.cardItemDivider]} onPress={onOpenEditPublishAd}>
@@ -460,16 +530,17 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 7,
+    top: '50%',
     left: 0,
     width: 40,
     height: 40,
+    marginTop: -20,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
   },
   closeIcon: {
-    fontSize: 24,
+    fontSize: 18,
     color: Colors.white100,
     fontWeight: '300',
   },
@@ -504,6 +575,49 @@ const styles = StyleSheet.create({
     maxWidth: 313,
     alignSelf: 'center',
     overflow: 'visible',
+  },
+  followingPreviewWrap: {
+    width: '100%',
+    maxWidth: 313,
+    alignSelf: 'center',
+    marginTop: 2,
+    marginBottom: 2,
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  followingPreviewTitle: {
+    color: '#D2D0DC',
+    fontSize: 16,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  followingPreviewAvatars: {
+    width: '100%',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 34,
+  },
+  followingPreviewAvatarWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: '#FEE787',
+    overflow: 'hidden',
+    backgroundColor: '#1E1D27',
+  },
+  followingPreviewAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  followingPreviewHint: {
+    color: '#8C85B3',
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
   },
   chatBadge: {
     position: 'absolute',
@@ -631,11 +745,30 @@ const styles = StyleSheet.create({
     width: 78,
     height: 78,
     borderRadius: 39,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: Colors.yellowIcons,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2b2a39',
+  },
+  /** Gradient gold ring for the profile avatar, matches the Figma 1:1 (gold gradient 4.5% → 50.7% → 88.3%). */
+  profilePictureRing: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    padding: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Dark inner mask so the gold gradient reads as a ring, with a visible gap around the photo. */
+  profilePictureInnerWrap: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#2b2a39',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
   },
   profileInfo: {
     width: 200,
@@ -661,9 +794,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   profilePicture: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
   },
   profilePicturePlaceholder: {
     backgroundColor: '#1e1d27',

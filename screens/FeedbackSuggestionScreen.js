@@ -1,74 +1,93 @@
-import React, {useState} from 'react';
+import React, {useContext, useState} from 'react';
 import {
   View,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Platform,
   Alert,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
-import {Colors, BorderRadius, Spacing} from '../constants/styles';
+import Svg, {Defs, LinearGradient as SvgLinearGradient, Path, Stop} from 'react-native-svg';
+import {Colors} from '../constants/styles';
+import {ContextHook} from '../hooks/ContextHook';
+import {submitImprovementFeedback, toSubscriptionId} from '../utils/api';
 
 const TEAL = '#2DD4BF';
 
-const isWeb = Platform.OS === 'web';
-const baseUrl = isWeb && typeof window !== 'undefined' ? window.location.origin : '';
+// Local SVG rating stars — instant state changes, identical sizing, no remote fetch.
+const STAR_PATH =
+  'M13.5449 0.760714C14.2554 -0.25357 15.7446 -0.253572 16.4551 0.760712L20.4041 7.29935C20.6303 7.62228 20.9553 7.86099 21.3291 7.97861L28.7463 10.0321C29.9203 10.4015 30.3805 11.8329 29.6456 12.8292L24.669 18.367C24.435 18.6842 24.3109 19.0704 24.3157 19.4661L25.2912 28.1747C25.3063 29.4173 24.1015 30.3019 22.9369 29.9034L15.5717 27.6881C15.2009 27.5612 14.7991 27.5612 14.4283 27.6881L7.06314 29.9034C5.89846 30.3019 4.69366 29.4173 4.7088 28.1747L5.68432 19.4661C5.68914 19.0704 5.56497 18.6842 5.33097 18.367L0.354447 12.8292C-0.380505 11.8329 0.079687 10.4015 1.25372 10.0321L8.67086 7.97861C9.04466 7.86099 9.36975 7.62228 9.59594 7.29935L13.5449 0.760714Z';
+/** Gold gradient used across the Figma design system (ratings, gold pills, rings). */
+const STAR_GRADIENT_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
+const STAR_OUTLINE_COLOR = '#8C85B3';
+const STAR_SIZE = 34.892;
 
-/** Pressed / selected stars (yellow, numbered) — native: require; web: public/starts (see UserProfileScreen) */
-const pressedStarImages = [
-  require('../assets/starts/1.png'),
-  require('../assets/starts/2.png'),
-  require('../assets/starts/3.png'),
-  require('../assets/starts/4.png'),
-  require('../assets/starts/5.png'),
-];
-const pressedStarWebSources =
-  isWeb && typeof window !== 'undefined'
-    ? [1, 2, 3, 4, 5].map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
-    : null;
-
-/** Not pressed (outline) — native: require; web: public/not-pressed-starts/outline-*.png */
-const notPressedStarImages = [
-  require('../assets/not-pressed-starts/outline-1.png'),
-  require('../assets/not-pressed-starts/outline-2.png'),
-  require('../assets/not-pressed-starts/outline-3.png'),
-  require('../assets/not-pressed-starts/outline-4.png'),
-  require('../assets/not-pressed-starts/outline-5.png'),
-];
-const notPressedStarWebSources =
-  isWeb && typeof window !== 'undefined'
-    ? [1, 2, 3, 4, 5].map(i => ({
-        uri: `${baseUrl}/not-pressed-starts/outline-${i}.png`,
-      }))
-    : null;
-
-function getPressedStarSource(index) {
-  const i = Math.min(4, Math.max(0, index));
-  if (pressedStarWebSources) return pressedStarWebSources[i];
-  return pressedStarImages[i];
-}
-
-function getNotPressedStarSource(index) {
-  const i = Math.min(4, Math.max(0, index));
-  if (notPressedStarWebSources) return notPressedStarWebSources[i];
-  return notPressedStarImages[i];
-}
+const RatingStar = ({active}) => {
+  const gradientId = 'rating-star-grad-active';
+  return (
+    <Svg width={STAR_SIZE} height={STAR_SIZE} viewBox="-2 -2 34 34">
+      {active ? (
+        <Defs>
+          <SvgLinearGradient
+            id={gradientId}
+            x1="0"
+            y1="0"
+            x2="30"
+            y2="30"
+            gradientUnits="userSpaceOnUse">
+            <Stop offset="0.0456" stopColor={STAR_GRADIENT_COLORS[0]} />
+            <Stop offset="0.5076" stopColor={STAR_GRADIENT_COLORS[1]} />
+            <Stop offset="0.8831" stopColor={STAR_GRADIENT_COLORS[2]} />
+          </SvgLinearGradient>
+        </Defs>
+      ) : null}
+      <Path
+        d={STAR_PATH}
+        fill={active ? `url(#${gradientId})` : 'transparent'}
+        stroke={active ? 'transparent' : STAR_OUTLINE_COLOR}
+        strokeWidth={active ? 0 : 1.5}
+      />
+    </Svg>
+  );
+};
 
 /**
  * הצעות לשיפור — rating + text, then thank-you step
  */
 const FeedbackSuggestionScreen = ({onClose}) => {
+  const {currentUser} = useContext(ContextHook);
   const [step, setStep] = useState('form');
   const [rating, setRating] = useState(0);
   const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (rating < 1) {
-      Alert.alert('', 'אנא דרג את החוויה (1–5 כוכבים)');
+  const handleSubmit = async () => {
+    if (submitting || rating < 1 || !message.trim()) return;
+    setSubmitting(true);
+    const creatorName =
+      (currentUser?.name && String(currentUser.name).trim()) ||
+      (currentUser?.contact_person_name &&
+        String(currentUser.contact_person_name).trim()) ||
+      (currentUser?.business_name && String(currentUser.business_name).trim()) ||
+      (currentUser?.broker_office_name &&
+        String(currentUser.broker_office_name).trim()) ||
+      null;
+    const result = await submitImprovementFeedback({
+      rating,
+      improvementText: message,
+      creatorSubscriptionId: toSubscriptionId(currentUser?.id),
+      creatorEmail: currentUser?.email || null,
+      creatorName,
+      creatorSubscriptionType: currentUser?.subscription_type || null,
+      creatorSubscriberNumber: currentUser?.subscriber_number || null,
+      sourceScreen: 'feedbackSuggestion',
+    });
+    setSubmitting(false);
+    if (!result.success) {
+      Alert.alert('', 'לא הצלחנו לשלוח את המשוב. נסה שוב.');
       return;
     }
     setStep('thanks');
@@ -128,25 +147,33 @@ const FeedbackSuggestionScreen = ({onClose}) => {
 
         <View style={styles.card}>
           <Text style={styles.question}>נהנית מהחוויה?</Text>
-          <Text style={styles.rateHint}>דרג את החוויה שלך</Text>
+          <Text style={styles.rateHint}>דרג את החווייה שלך</Text>
 
-          <View style={styles.starsRow}>
+          <View style={styles.starsSection}>
+            <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map(star => {
               const active = rating >= star;
-              const source = active
-                ? getPressedStarSource(star - 1)
-                : getNotPressedStarSource(star - 1);
               return (
                 <TouchableOpacity
                   key={star}
+                  onPressIn={() => setRating(star)}
                   onPress={() => setRating(star)}
                   style={styles.starHit}
                   hitSlop={8}
                   activeOpacity={0.8}>
-                  <Image source={source} style={styles.starImg} resizeMode="contain" />
+                  <View style={styles.starStack}>
+                    <RatingStar rank={star} active={active} />
+                    <View style={styles.starNumberWrap} pointerEvents="none">
+                      <Text
+                        style={[styles.starNumber, active && styles.starNumberActive]}>
+                        {star}
+                      </Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
               );
             })}
+            </View>
           </View>
 
           <Text style={styles.feedbackHint}>
@@ -156,7 +183,7 @@ const FeedbackSuggestionScreen = ({onClose}) => {
           <TextInput
             style={styles.textArea}
             placeholder="כתוב משוב"
-            placeholderTextColor={Colors.grey200}
+            placeholderTextColor="rgba(255,255,255,0.35)"
             value={message}
             onChangeText={setMessage}
             multiline
@@ -167,7 +194,11 @@ const FeedbackSuggestionScreen = ({onClose}) => {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleSubmit}
-            style={styles.submitBtn}>
+            disabled={submitting || rating < 1 || !message.trim()}
+            style={[
+              styles.submitBtn,
+              (submitting || rating < 1 || !message.trim()) && styles.submitBtnDisabled,
+            ]}>
             <Text style={styles.submitBtnText}>שלח משוב</Text>
           </TouchableOpacity>
         </View>
@@ -185,8 +216,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scroll: {
-    paddingTop: Platform.OS === 'web' ? 48 : 56,
-    paddingHorizontal: Spacing.lg,
+    paddingTop: Platform.OS === 'web' ? 43 : 50,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
   header: {
@@ -203,7 +234,7 @@ const styles = StyleSheet.create({
   },
   backChevron: {
     color: Colors.white100,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '300',
     marginTop: -4,
   },
@@ -212,72 +243,112 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.white100,
     fontSize: 18,
-    fontFamily: 'Rubik-Medium',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
   headerSpacer: {width: 44},
   card: {
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL || 20,
+    backgroundColor: '#2b2a39',
+    borderRadius: 12,
     padding: 24,
     alignItems: 'stretch',
   },
   question: {
-    color: Colors.white100,
-    fontSize: 22,
-    fontFamily: 'Rubik-Bold',
-    textAlign: 'right',
-    marginBottom: 8,
+    color: '#F7F3E6',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   rateHint: {
-    color: Colors.white100,
-    fontSize: 15,
-    textAlign: 'right',
-    marginBottom: 16,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  starsSection: {
+    paddingHorizontal: 0,
+    marginBottom: 24,
+    alignItems: 'center',
   },
   starsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 4,
+    width: 270,
   },
   starHit: {
-    padding: 4,
+    width: 54.892,
+    height: 54.892,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  starImg: {
-    width: 48,
-    height: 48,
+  starStack: {
+    width: 34.892,
+    height: 34.892,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starNumberWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starNumber: {
+    color: '#E0B040',
+    fontSize: 16,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
+    includeFontPadding: false,
+  },
+  starNumberActive: {
+    color: '#1e1d27',
+    fontFamily: 'Rubik-Medium',
   },
   feedbackHint: {
-    color: Colors.white100,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'right',
-    marginBottom: 16,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    textAlign: 'center',
+    marginBottom: 18,
   },
   textArea: {
     borderWidth: 1,
     borderColor: '#8c85b3',
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 24,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     color: Colors.white100,
-    fontSize: 16,
-    minHeight: 120,
-    backgroundColor: '#23222c',
-    marginBottom: 20,
+    fontSize: 20,
+    lineHeight: 24,
+    minHeight: 98,
+    backgroundColor: '#2b2a39',
+    marginBottom: 18,
+    letterSpacing: 0.2,
   },
   submitBtn: {
-    backgroundColor: '#3d3c48',
-    borderRadius: 28,
-    paddingVertical: 16,
+    backgroundColor: '#4d4966',
+    borderRadius: 1000,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  submitBtnDisabled: {
+    opacity: 0.4,
+  },
   submitBtnText: {
     color: Colors.white100,
-    fontSize: 17,
-    fontFamily: 'Rubik-Bold',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
   },
   successIconWrap: {
     width: 72,

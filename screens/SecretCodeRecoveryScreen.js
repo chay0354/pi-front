@@ -12,8 +12,10 @@ import {
   Image,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
-import {Colors, BorderRadius, Spacing} from '../constants/styles';
+import {Colors} from '../constants/styles';
 import {recoverSubscriberCodeByEmail} from '../utils/api';
+
+const KEY_ICON = require('../assets/menu/key.png');
 
 /**
  * שחזור קוד סודי – enter email, send מספר מנוי by mail
@@ -61,31 +63,40 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
         </View>
 
         <View style={styles.card}>
-          <View style={styles.keyImageWrap}>
-            <Image
-              source={require('../assets/key.png')}
-              style={styles.keyImage}
-              resizeMode="contain"
-            />
+          <View style={styles.keyIconWrap}>
+            <Image source={KEY_ICON} style={styles.keyImage} resizeMode="contain" />
           </View>
           <Text style={styles.cardTitle}>שכחת את הקוד?</Text>
           <Text style={styles.cardBody}>
             לא נורא, הזן את כתובת המייל המשויכת לחשבונך, ואנו נשלח לך את קוד המנוי שלך.
           </Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="כתובת מייל"
-            placeholderTextColor={Colors.grey200}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            textAlign="right"
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              placeholder="כתובת מייל"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlign="center"
+            />
+            {email.trim().length > 0 ? (
+              <TouchableOpacity
+                onPress={() => setEmail('')}
+                style={styles.clearBtn}
+                hitSlop={10}
+                activeOpacity={0.7}>
+                <Text style={styles.clearBtnText}>×</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-          <Text style={styles.promo}>הזן מייל לקבלת קוד חינם לחצי שנה</Text>
+          {email.trim().length === 0 ? (
+            <Text style={styles.promo}>הזן מייל לקבלת קוד חינם לחצי  שנה</Text>
+          ) : null}
 
           <TouchableOpacity
             activeOpacity={0.85}
@@ -93,7 +104,7 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
             onPress={handleSend}
             style={[styles.btnWrap, !canSend && styles.btnWrapDisabled]}>
             <LinearGradient
-              colors={canSend ? ['#c9a227', '#8b6914'] : ['#4a4a55', '#3a3a44']}
+              colors={canSend ? ['#FEE787', '#BD9947', '#9C6522'] : ['#4d4966', '#4d4966']}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.btnGradient}>
@@ -119,15 +130,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scroll: {
-    paddingTop: Platform.OS === 'web' ? 48 : 56,
-    paddingHorizontal: Spacing.lg,
+    paddingTop: Platform.OS === 'web' ? 44 : 52,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 28,
+    marginBottom: 10,
   },
   backBtn: {
     width: 44,
@@ -137,7 +148,7 @@ const styles = StyleSheet.create({
   },
   backChevron: {
     color: Colors.white100,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '300',
     marginTop: -4,
   },
@@ -146,77 +157,106 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.white100,
     fontSize: 18,
-    fontFamily: 'Rubik-Medium',
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
   },
   headerSpacer: {width: 44},
   card: {
-    backgroundColor: '#2a2933',
-    borderRadius: BorderRadius.roundCorner2XL || 20,
+    backgroundColor: '#2b2a39',
+    borderRadius: 12,
     padding: 24,
     alignItems: 'stretch',
+    minHeight: 373,
+    justifyContent: 'center',
   },
-  keyImageWrap: {
+  keyIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    height: 72,
+    marginBottom: 36,
+    height: 40,
+    width: 40,
+    alignSelf: 'center',
   },
   keyImage: {
-    width: 72,
-    height: 72,
+    width: 40,
+    height: 40,
   },
   cardTitle: {
-    color: Colors.white100,
+    color: '#F7F3E6',
     fontSize: 22,
-    fontFamily: 'Rubik-Bold',
+    lineHeight: 26,
+    fontFamily: 'Rubik-SemiBold',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 20,
   },
   cardBody: {
-    color: Colors.grey200,
-    fontSize: 15,
+    color: '#FFFFFF',
+    fontSize: 14,
     lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 4,
+    marginBottom: 20,
+  },
+  inputWrap: {
+    position: 'relative',
+    marginBottom: 10,
   },
   input: {
     borderWidth: 1,
     borderColor: '#8c85b3',
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 1000,
+    height: 52,
     paddingHorizontal: 16,
     color: Colors.white100,
-    fontSize: 16,
-    marginBottom: 10,
-    backgroundColor: '#23222c',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    backgroundColor: '#2b2a39',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  clearBtn: {
+    position: 'absolute',
+    left: 16,
+    top: 0,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 20,
+  },
+  clearBtnText: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    lineHeight: 34,
+    fontWeight: '300',
   },
   promo: {
-    color: Colors.yellowIcons,
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 24,
+    color: '#E39513',
+    fontSize: 14,
+    letterSpacing: 0.14,
+    textAlign: 'right',
+    marginBottom: 20,
   },
   btnWrap: {
-    borderRadius: 28,
+    borderRadius: 1000,
     overflow: 'hidden',
   },
   btnWrapDisabled: {
-    opacity: 0.85,
+    opacity: 0.4,
   },
   btnGradient: {
-    paddingVertical: 16,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 28,
+    borderRadius: 1000,
   },
   btnText: {
     color: '#1e1d27',
-    fontSize: 18,
-    fontFamily: 'Rubik-Bold',
+    fontSize: 20,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
   },
   btnTextDisabled: {
-    color: '#888',
+    color: '#FFFFFF',
   },
 });
 

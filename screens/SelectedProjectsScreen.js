@@ -21,9 +21,7 @@ const H_PAD = 20;
 const GAP = 12;
 const COLS = 3;
 const CELL_W = (SCREEN_WIDTH - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
-/** Circular logo mask (no plate background — image fills the circle). */
 const LOGO_DIAMETER = CELL_W;
-/** Search field border + icon accent. */
 const SEARCH_ACCENT = 'rgba(140, 133, 179, 1)';
 const SEARCH_BORDER = SEARCH_ACCENT;
 const SEARCH_ICON_MUTED = SEARCH_ACCENT;
@@ -44,9 +42,6 @@ const topSectionElevation = Platform.select({
   default: {},
 });
 
-/**
- * פרויקטים נבחרים — grid of company accounts (logo, name, project count).
- */
 const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState([]);
@@ -109,7 +104,12 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
             onChangeText={setQuery}
             textAlign="right"
           />
-          <MaterialCommunityIcons name="magnify" size={22} color={SEARCH_ICON_MUTED} style={styles.searchIcon} />
+          <MaterialCommunityIcons
+            name="magnify"
+            size={22}
+            color={SEARCH_ICON_MUTED}
+            style={styles.searchIcon}
+          />
         </View>
       </View>
 
@@ -143,11 +143,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
                     onPress={() => onOpenCompany?.(c)}>
                     <View style={styles.logoClip}>
                       {c.logo_url ? (
-                        <Image
-                          source={{uri: c.logo_url}}
-                          style={styles.logoImg}
-                          resizeMode="cover"
-                        />
+                        <Image source={{uri: c.logo_url}} style={styles.logoImg} resizeMode="cover" />
                       ) : (
                         <View style={styles.logoPlaceholder}>
                           <Text style={styles.logoLetter} numberOfLines={1}>
@@ -159,9 +155,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
                     <Text style={styles.companyName} numberOfLines={2}>
                       {c.name}
                     </Text>
-                    <Text style={styles.projectCount}>
-                      {c.project_count} פרויקטים
-                    </Text>
+                    <Text style={styles.projectCount}>{c.project_count} פרויקטים</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -224,6 +218,9 @@ const styles = StyleSheet.create({
     color: Colors.white100,
     fontSize: 15,
     paddingVertical: 10,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    direction: 'rtl',
   },
   searchIcon: {
     marginRight: 8,
@@ -256,7 +253,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
-  /** Explicit px + absolute so RN Web applies cover (no letterboxing / intrinsic size gaps). */
   logoImg: {
     position: 'absolute',
     top: 0,

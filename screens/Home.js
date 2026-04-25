@@ -25,6 +25,7 @@ const Home = ({
   onOpenSettings,
   onOpenTikTokFeed,
   onOpenSelectedProjects,
+  onOpenProfessionalsDirectory,
 }) => {
   const {currentUser} = useContext(ContextHook);
   const [storyRings, setStoryRings] = useState([]);
@@ -104,7 +105,7 @@ const Home = ({
               style={styles.profileBarHeaderButton}>
               <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
             </TouchableOpacity>
-            <Text style={styles.profileBarHeaderText}>בעלי מקצוע בתחום הנדל״ן</Text>
+            <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           </View>
           <View style={styles.projectCardWrap}>
             <View style={styles.videoContainer}>
@@ -137,7 +138,7 @@ const Home = ({
         <View style={styles.profileBar}>
           <View style={styles.profileBarHeader}>
             <TouchableOpacity
-              onPress={() => onOpenSelectedProjects?.()}
+              onPress={() => onOpenProfessionalsDirectory?.()}
               style={styles.profileBarHeaderButton}>
               <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
             </TouchableOpacity>

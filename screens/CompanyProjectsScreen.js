@@ -25,6 +25,55 @@ const TILE_SIZE = COL_W;
 const TITLE_MAX = 42;
 const ADDRESS_MAX = 52;
 
+/**
+ * Detect feed-post rows so this screen shows only ads.
+ * Catches: explicit type/feed_post flags, description "פוסט"/"post",
+ * and uploads with a "post_<digits>" filename segment in the image URL.
+ */
+function isPostListingRecord(item) {
+  if (!item) return false;
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  const description = String(item.description || item.desc || '').trim();
+  const descLower = description.toLowerCase();
+  if (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    descLower === 'post' ||
+    descLower.includes('פוסט') ||
+    descLower.includes('post') ||
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  ) {
+    return true;
+  }
+  const urls = [
+    item.main_image_url,
+    item.image_url,
+    item.image,
+    ...(Array.isArray(item.images)
+      ? item.images.map(i =>
+          i && typeof i === 'object' ? i.uri || i.image_url : i,
+        )
+      : []),
+    ...(Array.isArray(item.listing_images)
+      ? item.listing_images.map(i =>
+          i && typeof i === 'object' ? i.image_url || i.uri : i,
+        )
+      : []),
+  ].filter(Boolean);
+  return urls.some(u => /post_\d/i.test(String(u)));
+}
+
 function truncate(s, max) {
   const t = String(s).trim();
   if (t.length <= max) return t;
@@ -102,7 +151,7 @@ const CompanyProjectsScreen = ({
     getListings({subscription_id: companyId, status: 'published'})
       .then(res => {
         if (res.success && Array.isArray(res.listings)) {
-          setListings(res.listings);
+          setListings(res.listings.filter(l => !isPostListingRecord(l)));
         } else {
           setListings([]);
         }
@@ -120,6 +169,7 @@ const CompanyProjectsScreen = ({
 
   const renderItem = useCallback(
     ({item}) => {
+      if (isPostListingRecord(item)) return null;
       const uri = firstListingImageUrl(item);
       const projectTitle = listingCardProjectTitle(item);
       const addressLine = listingCardAddressLine(item);
@@ -222,11 +272,12 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     color: Colors.white100,
-    fontSize: FontSizes.fs18,
+    fontSize: 15,
     fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: H_PAD,
+    paddingTop: 48,
     paddingBottom: 32,
   },
   columnWrap: {

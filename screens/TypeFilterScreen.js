@@ -15,13 +15,9 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
-const RADIO_BORDER = '#CCA447';
 const RADIO_BG = '#27262F';
 
-const MENU_ICON =
-  'https://www.figma.com/api/mcp/asset/6acbcfee-410e-4065-953e-b296a61e1772';
-const RADIO_ACTIVE_ICON =
-  'https://www.figma.com/api/mcp/asset/93f89459-4a3e-4794-a5fd-f0c1f1edd8ec';
+const MENU_ICON = require('../assets/tiktok/kind-filter.png');
 
 // סוג (Type) options for global feed – maps to listing.category in applyFeedFilters
 const TYPE_OPTIONS_GLOBAL = [
@@ -46,6 +42,17 @@ const TYPE_OPTIONS_COMMERCE = [
   {id: 'whole_floor', label: 'קומה שלמה'},
 ];
 
+// BnB (category 5): סוג – matches property_type from BnB ad form
+const TYPE_OPTIONS_BNB = [
+  {id: 'room', label: 'חדר'},
+  {id: 'housing_unit', label: 'יחידת דיור'},
+  {id: 'house', label: 'בית'},
+  {id: 'b&b', label: 'צימר'},
+  {id: 'holiday_apartment', label: 'דירת נופש'},
+  {id: 'villa', label: 'וילה'},
+  {id: 'special', label: 'מיוחדים'},
+];
+
 // קרקעות (category 7): סוג — matches land form radio values (plan_approval, etc.)
 const TYPE_OPTIONS_LAND = [
   {id: 'own_private', label: 'בעלות קרקע — פרטי'},
@@ -68,7 +75,11 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   const isCommerce =
     selectedCategory === 8 || selectedCategory === '8';
   const isLand = selectedCategory === 7 || selectedCategory === '7';
+  const isBnb = selectedCategory === 5 || selectedCategory === '5';
   const options = useMemo(() => {
+    if (isBnb) {
+      return TYPE_OPTIONS_BNB;
+    }
     if (isCommerce) {
       return TYPE_OPTIONS_COMMERCE;
     }
@@ -76,25 +87,25 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
       return TYPE_OPTIONS_LAND;
     }
     return TYPE_OPTIONS_GLOBAL;
-  }, [isCommerce, isLand]);
+  }, [isBnb, isCommerce, isLand]);
 
-  const [selectedIds, setSelectedIds] = useState(() =>
-    Array.isArray(initialFilter)
+  const [selectedIds, setSelectedIds] = useState(() => {
+    const initial = Array.isArray(initialFilter)
       ? initialFilter.filter(Boolean)
       : initialFilter
         ? [initialFilter]
-        : [],
-  );
+        : [];
+    return isBnb ? initial.slice(0, 1) : initial;
+  });
 
   useEffect(() => {
-    setSelectedIds(
-      Array.isArray(initialFilter)
-        ? initialFilter.filter(Boolean)
-        : initialFilter
-          ? [initialFilter]
-          : [],
-    );
-  }, [initialFilter, isCommerce, isLand]);
+    const next = Array.isArray(initialFilter)
+      ? initialFilter.filter(Boolean)
+      : initialFilter
+        ? [initialFilter]
+        : [];
+    setSelectedIds(isBnb ? next.slice(0, 1) : next);
+  }, [initialFilter, isBnb, isCommerce, isLand]);
   const bottomInset = Math.max(insets.bottom, 8);
 
   const handleSave = () => {
@@ -109,6 +120,10 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   };
 
   const toggleOption = optionId => {
+    if (isBnb) {
+      setSelectedIds(prev => (prev[0] === optionId ? [] : [optionId]));
+      return;
+    }
     setSelectedIds(prev =>
       prev.includes(optionId)
         ? prev.filter(id => id !== optionId)
@@ -119,12 +134,12 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   return (
     <View style={styles.container}>
       <View style={styles.topRail}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={onClose}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           style={styles.handlePressArea}>
           <View style={styles.handle} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -136,10 +151,10 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
             paddingBottom: bottomInset + (compact ? 20 : 52),
           },
         ]}
-        scrollEnabled={false}
+        scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={{uri: MENU_ICON}} style={styles.headerIcon} resizeMode="contain" />
+          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
           <Text style={styles.title}>סוג</Text>
         </View>
 
@@ -151,9 +166,16 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
               onPress={() => toggleOption(option.id)}
               activeOpacity={0.8}>
               <Text style={styles.radioLabel}>{option.label}</Text>
-              <View style={styles.radioOuter}>
+              <View
+                style={[
+                  styles.radioOuter,
+                  selectedIds.includes(option.id) && styles.radioOuterChecked,
+                ]}>
                 {selectedIds.includes(option.id) ? (
-                  <Image source={{uri: RADIO_ACTIVE_ICON}} style={styles.radioInnerImage} resizeMode="contain" />
+                  <View style={styles.checkMarkWrap}>
+                    <View style={styles.checkMarkShort} />
+                    <View style={styles.checkMarkLong} />
+                  </View>
                 ) : null}
               </View>
             </TouchableOpacity>
@@ -266,14 +288,38 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: RADIO_BORDER,
+    borderColor: '#A5A5A5',
     backgroundColor: RADIO_BG,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioInnerImage: {
-    width: 10,
-    height: 10,
+  radioOuterChecked: {
+    borderColor: '#FFC140',
+  },
+  checkMarkWrap: {
+    width: 11,
+    height: 8,
+    position: 'relative',
+  },
+  checkMarkShort: {
+    position: 'absolute',
+    left: 1,
+    bottom: 1,
+    width: 4,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#FFC140',
+    transform: [{rotate: '42deg'}],
+  },
+  checkMarkLong: {
+    position: 'absolute',
+    left: 3,
+    bottom: 1,
+    width: 8,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#FFC140',
+    transform: [{rotate: '-45deg'}],
   },
   saveBtnWrap: {
     marginBottom: 12,

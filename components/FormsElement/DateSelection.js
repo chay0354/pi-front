@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View, TouchableOpacity, Image} from 'react-native';
 import {Title} from './Title';
 import {Divider} from './Divider';
@@ -14,6 +14,19 @@ export const DateSelection = ({
 }) => {
   const [visible, setVisible] = useState(false);
   const [selected, setSelected] = useState(date);
+
+  const formatDateForDisplay = rawDate => {
+    if (!rawDate || typeof rawDate !== 'string') return rawDate;
+    if (/^\d{2}\.\d{2}\.\d{2}$/.test(rawDate)) return rawDate;
+    const parts = rawDate.split('-');
+    if (parts.length !== 3) return rawDate;
+    const [y, m, d] = parts;
+    return `${d}.${m}.${y.slice(2)}`;
+  };
+
+  useEffect(() => {
+    if (date) setSelected(formatDateForDisplay(date));
+  }, [date]);
 
   const handleSelect = isoDate => {
     if (!isoDate) return;

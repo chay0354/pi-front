@@ -11,7 +11,26 @@ export const ContactDetails = ({
   onBnbBusinessLogoPress,
   bnbBusinessLogoInputRef,
   onBnbBusinessLogoWebFileChange,
+  contactFullName = '',
+  setContactFullName,
+  address = '',
+  setAddress,
+  contactEmail = '',
+  setContactEmail,
+  phone = '',
+  setPhone,
+  description = '',
+  setDescription,
 }) => {
+  const safeSetContactFullName =
+    typeof setContactFullName === 'function' ? setContactFullName : () => {};
+  const safeSetAddress = typeof setAddress === 'function' ? setAddress : () => {};
+  const safeSetContactEmail =
+    typeof setContactEmail === 'function' ? setContactEmail : () => {};
+  const safeSetPhone = typeof setPhone === 'function' ? setPhone : () => {};
+  const safeSetDescription =
+    typeof setDescription === 'function' ? setDescription : () => {};
+
   return (
     <View style={styles.container}>
       <Title text="פרטי התקשרות" />
@@ -24,31 +43,31 @@ export const ContactDetails = ({
         />
       )}
       <InputBox
-        // value={address}
-        // setValue={setAddress}
+        value={contactFullName}
+        setValue={safeSetContactFullName}
         title={'שם פרטי ומשפחה'}
         required={true}
         placeholder={'הזן שם פרטי ומשפחה'}
       />
       <InputBox
-        // value={address}
-        // setValue={setAddress}
+        value={address}
+        setValue={safeSetAddress}
         title={'כתובת המקום'}
         required={true}
         placeholder={'הזן עיר, רחוב ומספר'}
       />
       <InputBox
-        // value={address}
-        // setValue={setAddress}
+        value={contactEmail}
+        setValue={safeSetContactEmail}
         title={'כתובת מייל'}
         required={true}
         placeholder={'הזן כתובת מייל'}
       />
-      <PhoneInput />
+      <PhoneInput phone={phone} setPhone={safeSetPhone} />
 
       <TextAreaBox
-        // value={description}
-        // setValue={setDescription}
+        value={description}
+        setValue={safeSetDescription}
         title={'תיאור'}
         required={true}
         placeholder={'כתוב תיאור'}

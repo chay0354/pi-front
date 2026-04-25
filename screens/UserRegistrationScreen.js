@@ -13,9 +13,8 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import {Colors} from '../constants/styles';
 import {subscriptionTypes} from '../utils/constant';
-import {uploadProfilePicture} from '../utils/api';
+import {uploadProfilePicture, registerRegularUser} from '../utils/api';
 
 /**
  * Regular user registration – shown when user without profile tries to publish an ad.
@@ -24,8 +23,8 @@ import {uploadProfilePicture} from '../utils/api';
 const UserRegistrationScreen = ({
   onSuccess,
   onCancel,
-  onOpenLogin,
-  selectedCategory,
+  onOpenLogin: _onOpenLogin,
+  selectedCategory: _selectedCategory,
 }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -33,6 +32,9 @@ const UserRegistrationScreen = ({
   const [profileImage, setProfileImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const PROFILE_PLACEHOLDER = require('../assets/add-image-1.png');
+  const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
+  const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
 
   const requestMediaPermission = async () => {
     if (Platform.OS !== 'web') {
@@ -61,10 +63,6 @@ const UserRegistrationScreen = ({
     } catch (err) {
       Alert.alert('שגיאה', 'לא ניתן לבחור תמונה. נסה שוב.');
     }
-  };
-
-  const removeProfileImage = () => {
-    setProfileImage(null);
   };
 
   const handleRegister = async () => {
@@ -102,15 +100,39 @@ const UserRegistrationScreen = ({
           console.warn('Profile picture upload failed:', uploadErr);
         }
       }
+      let reg;
+      try {
+        reg = await registerRegularUser({
+          email: emailTrim,
+          name,
+          phone: phoneTrim,
+          profilePictureUrl,
+        });
+      } catch (regErr) {
+        console.error('registerRegularUser threw:', regErr);
+        setErrorMessage(regErr?.message || 'שגיאה בשמירת המשתמש. נסה שוב.');
+        return;
+      }
+
+      if (!reg || !reg.success || !reg.subscription || !reg.subscription.id) {
+        setErrorMessage(
+          (reg && reg.error) || 'לא הצלחנו ליצור את המשתמש. נסה שוב.',
+        );
+        return;
+      }
+
       const user = {
-        id: `user-${Date.now()}`,
-        subscription_type: subscriptionTypes.user,
-        name: name,
-        email: emailTrim,
-        phone: phoneTrim,
-        profile_picture_url: profilePictureUrl,
-        status: 'verified',
+        ...reg.subscription,
+        id: reg.subscription.id,
+        subscription_type: reg.subscription.subscription_type || subscriptionTypes.user,
+        email: reg.subscription.email || emailTrim,
+        name: reg.subscription.name || name,
+        phone: reg.subscription.phone || phoneTrim,
+        profile_picture_url:
+          reg.subscription.profile_picture_url || profilePictureUrl,
+        status: reg.subscription.status || 'verified',
       };
+
       if (onSuccess) onSuccess(user);
     } catch (err) {
       setErrorMessage(err.message || 'אירעה שגיאה. נסה שוב.');
@@ -125,139 +147,141 @@ const UserRegistrationScreen = ({
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>הירשם ופרסם מודעה</Text>
-        <Text style={styles.subtitle}>בוא נתחיל – זה ייקח שניות בודדות</Text>
+        <View style={styles.card}>
+          <View style={styles.mainContent}>
+            <View style={styles.headerBlock}>
+              <Text style={styles.title}>הירשם ופרסם מודעה</Text>
+              <Text style={styles.subtitle}>בוא נתחיל - זה ייקח שניות בודדות</Text>
+            </View>
 
-        {/* Profile picture */}
-        <View style={styles.profileSection}>
-          <TouchableOpacity
-            style={styles.profileCircle}
-            onPress={pickProfileImage}
-            activeOpacity={0.8}>
-            {profileImage ? (
-              <Image
-                source={{uri: profileImage.uri}}
-                style={styles.profileImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.profilePlaceholder}>
-                <Text style={styles.profilePlaceholderText}>+</Text>
+            <View style={styles.formBlock}>
+              <View style={styles.profileSection}>
+                <TouchableOpacity
+                  style={styles.profileCircle}
+                  onPress={pickProfileImage}
+                  activeOpacity={0.85}>
+                  <Image
+                    source={profileImage ? {uri: profileImage.uri} : PROFILE_PLACEHOLDER}
+                    style={[
+                      styles.profileImage,
+                      !profileImage && styles.profilePlaceholderImage,
+                    ]}
+                    resizeMode={profileImage ? 'cover' : 'contain'}
+                  />
+                </TouchableOpacity>
+                <Text style={styles.profileLabel}>תמונת פרופיל</Text>
               </View>
-            )}
-            {profileImage ? (
-              <TouchableOpacity
-                style={styles.removeProfileButton}
-                onPress={removeProfileImage}>
-                <Text style={styles.removeProfileText}>✕</Text>
-              </TouchableOpacity>
-            ) : null}
-          </TouchableOpacity>
-          <Text style={styles.profileLabel}>תמונת פרופיל</Text>
-        </View>
 
-        {errorMessage ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errorMessage}</Text>
-          </View>
-        ) : null}
+              {errorMessage ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{errorMessage}</Text>
+                </View>
+              ) : null}
 
-        {/* Full name */}
-        <View style={styles.inputWrap}>
-          <Text style={styles.label}>שם מלא</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="שם פרטי ומשפחה"
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            value={fullName}
-            onChangeText={setFullName}
-            textAlign="right"
-          />
-        </View>
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>שם מלא</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="שם פרטי ומשפחה"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  textAlign="right"
+                />
+              </View>
 
-        {/* Email */}
-        <View style={styles.inputWrap}>
-          <Text style={styles.label}>כתובת מייל</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="example@gmail.com"
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            textAlign="right"
-          />
-        </View>
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>כתובת מייל</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="example@gmail.com"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  textAlign="right"
+                />
+              </View>
 
-        {/* Phone */}
-        <View style={styles.inputWrap}>
-          <Text style={styles.label}>טלפון</Text>
-          <View style={styles.phoneRow}>
-            <TouchableOpacity style={styles.countrySelector}>
-              <Text style={styles.chevron}>▼</Text>
-              <Text style={styles.flag}>🇮🇱</Text>
+              <View style={styles.inputWrap}>
+                <Text style={styles.label}>טלפון</Text>
+                <View style={styles.phoneRow}>
+                  <TouchableOpacity style={styles.countrySelector} activeOpacity={0.8}>
+                    <Text style={styles.countryChevron}>⌄</Text>
+                    <Text style={styles.countryCode}>IL</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder="00 000 0000"
+                    placeholderTextColor="rgba(255,255,255,0.35)"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    textAlign="right"
+                  />
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleRegister}
+              disabled={submitting}
+              style={styles.registerButtonWrap}
+              activeOpacity={0.9}>
+              <LinearGradient
+                colors={['#FEE787', '#BD9947', '#9C6522']}
+                locations={[0.045575, 0.50763, 0.88314]}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={styles.registerButton}>
+                {submitting ? (
+                  <ActivityIndicator color="#1E1D27" />
+                ) : (
+                  <Text style={styles.registerButtonText}>הרשם ופרסם מודעה</Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
-            <TextInput
-              style={styles.phoneInput}
-              placeholder="00 000 0000"
-              placeholderTextColor="rgba(255,255,255,0.5)"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              textAlign="right"
-            />
+
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>או</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <View style={styles.socialWrap}>
+              <TouchableOpacity
+                style={styles.socialButtonImageWrap}
+                onPress={() => {}}
+                activeOpacity={0.85}>
+                <Image
+                  source={GOOGLE_BUTTON_IMAGE}
+                  style={styles.socialButtonImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.socialButtonImageWrap}
+                onPress={() => {}}
+                activeOpacity={0.85}>
+                <Image
+                  source={APPLE_BUTTON_IMAGE}
+                  style={styles.socialButtonImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
-        {/* Register button */}
-        <TouchableOpacity
-          onPress={handleRegister}
-          disabled={submitting}
-          style={styles.registerButtonWrap}
-          activeOpacity={0.9}>
-          <LinearGradient
-            colors={['#FEE787', '#BD9947', '#9C6522']}
-            locations={[0.05, 0.5, 0.88]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.registerButton}>
-            {submitting ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.registerButtonText}>הרשם ופרסם מודעה</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <View style={styles.orRow}>
-          <View style={styles.orLine} />
-          <Text style={styles.orText}>או</Text>
-          <View style={styles.orLine} />
-        </View>
-
-        {/* Google */}
-        <TouchableOpacity
-          style={styles.socialButton}
-          onPress={() => {}}
-          activeOpacity={0.8}>
-          <Text style={styles.socialButtonText}>הרשמה עם גוגל</Text>
-        </TouchableOpacity>
-
-        {/* Apple */}
-        <TouchableOpacity
-          style={[styles.socialButton, styles.socialButtonApple]}
-          onPress={() => {}}
-          activeOpacity={0.8}>
-          <Text style={styles.socialButtonTextApple}>הרשמה עם אפל</Text>
-        </TouchableOpacity>
-
-        <View style={styles.footer}>
-          <TouchableOpacity onPress={onCancel}>
+          <TouchableOpacity onPress={onCancel} activeOpacity={0.8}>
             <Text style={styles.footerCancel}>בטל הרשמה ופרסום מודעה</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onOpenLogin} style={styles.footerLoginWrap}>
-            <Text style={styles.footerLogin}>מחפש להיכנס</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -268,83 +292,88 @@ const UserRegistrationScreen = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1e1d27',
+    backgroundColor: '#2B2A39',
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 50,
-    paddingBottom: 40,
-    maxWidth: 414,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    minHeight: '100%',
+  },
+  card: {
+    backgroundColor: '#2B2A39',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 28,
+    gap: 32,
+    maxWidth: 366,
     alignSelf: 'center',
     width: '100%',
   },
+  mainContent: {
+    width: '100%',
+    gap: 28,
+  },
+  headerBlock: {
+    width: '100%',
+    gap: 14,
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.whiteGeneral,
+    width: '100%',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    color: '#F7F3E6',
     textAlign: 'center',
-    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: Colors.textSecondary,
+    width: '100%',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 28,
+  },
+  formBlock: {
+    width: '100%',
+    gap: 20,
+    alignItems: 'center',
   },
   profileSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    gap: 12,
   },
   profileCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    overflow: 'hidden',
-    backgroundColor: '#2a2932',
-    position: 'relative',
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 40,
   },
-  profilePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profilePlaceholderText: {
-    fontSize: 40,
-    color: Colors.textSecondary,
-  },
-  removeProfileButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeProfileText: {
-    color: '#fff',
-    fontSize: 16,
+  profilePlaceholderImage: {
+    borderRadius: 0,
   },
   profileLabel: {
     fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 10,
+    lineHeight: 14,
+    letterSpacing: 0.14,
+    color: '#D2D0DC',
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
   },
   errorContainer: {
     backgroundColor: 'rgba(255,0,0,0.15)',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 16,
+    width: '100%',
   },
   errorText: {
     color: '#ffcccc',
@@ -352,130 +381,156 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   inputWrap: {
-    marginBottom: 20,
+    width: '100%',
+    gap: 10,
+  },
+  labelRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 2,
+    paddingHorizontal: 16,
   },
   label: {
     fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 8,
+    lineHeight: 14,
+    letterSpacing: 0.14,
+    color: '#D2D0DC',
     textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
+  },
+  requiredMark: {
+    fontSize: 14,
+    lineHeight: 14,
+    letterSpacing: 0.14,
+    color: '#D2D0DC',
+    textAlign: 'right',
+    fontFamily: 'Rubik-Regular',
   },
   input: {
-    backgroundColor: '#1E1D27',
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: '#8C85B3',
-    borderRadius: 25,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: Colors.whiteGeneral,
+    borderRadius: 1000,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 20,
+    lineHeight: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
+    color: '#FFFFFF',
     height: 52,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   phoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1D27',
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: '#8C85B3',
-    borderRadius: 25,
+    borderRadius: 1000,
     height: 52,
-    paddingLeft: 14,
-    marginTop: 8,
+    overflow: 'hidden',
   },
   countrySelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
+    justifyContent: 'center',
+    gap: 8,
+    width: 78,
+    height: 50,
+    borderRightWidth: 1,
+    borderRightColor: '#343243',
   },
-  chevron: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginRight: 4,
+  countryChevron: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Regular',
+    marginTop: -6,
   },
-  flag: {
-    fontSize: 20,
+  countryCode: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: 'Rubik-Regular',
+    marginTop: -1,
   },
   phoneInput: {
     flex: 1,
-    fontSize: 16,
-    color: Colors.whiteGeneral,
-    paddingVertical: 14,
-    paddingRight: 18,
+    fontSize: 20,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    paddingVertical: 0,
+    paddingHorizontal: 14,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'right',
+    writingDirection: 'ltr',
+    height: '100%',
   },
   registerButtonWrap: {
-    marginTop: 8,
-    marginBottom: 24,
-    borderRadius: 25,
+    width: '100%',
+    borderRadius: 1000,
     overflow: 'hidden',
-    minHeight: 56,
+    height: 52,
   },
   registerButton: {
-    paddingVertical: 16,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
   },
   registerButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
+    fontSize: 20,
+    lineHeight: 20,
+    letterSpacing: 0.2,
+    color: '#1E1D27',
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'center',
   },
   orRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'center',
+    gap: 18,
+    width: '100%',
   },
   orLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#343243',
   },
   orText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginHorizontal: 12,
+    fontSize: 18,
+    lineHeight: 22,
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
   },
-  socialButton: {
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    paddingVertical: 14,
+  socialWrap: {
+    width: '100%',
+    gap: 14,
     alignItems: 'center',
-    marginBottom: 12,
   },
-  socialButtonApple: {
-    backgroundColor: '#2a2932',
-    borderWidth: 1,
-    borderColor: '#8C85B3',
+  socialButtonImageWrap: {
+    width: 326,
+    height: 52,
+    borderRadius: 1000,
+    overflow: 'hidden',
   },
-  socialButtonText: {
-    fontSize: 16,
-    color: '#000',
-    fontWeight: '600',
-  },
-  socialButtonTextApple: {
-    fontSize: 16,
-    color: Colors.whiteGeneral,
-    fontWeight: '600',
-  },
-  footer: {
-    marginTop: 28,
-    alignItems: 'center',
+  socialButtonImage: {
+    width: '100%',
+    height: '100%',
   },
   footerCancel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: 18,
+    lineHeight: 34,
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
     textDecorationLine: 'underline',
-    marginBottom: 12,
-  },
-  footerLoginWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  footerLogin: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    textAlign: 'center',
+    textDecorationColor: '#FFFFFF',
   },
 });
 

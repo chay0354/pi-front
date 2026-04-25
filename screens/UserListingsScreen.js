@@ -19,6 +19,49 @@ const CARD_BG = '#252436';
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const CARD_IMAGE_HEIGHT = 200;
 
+/** Detect feed-post entries so we can exclude them from the ads list. */
+function isPostListingRecord(item) {
+  if (!item) return false;
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  const description = String(item.description || item.desc || '').trim();
+  if (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    description.toLowerCase() === 'post' ||
+    description === 'פוסט' ||
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  ) {
+    return true;
+  }
+  const urls = [
+    item.main_image_url,
+    item.image_url,
+    item.image,
+    ...(Array.isArray(item.images)
+      ? item.images.map(i =>
+          i && typeof i === 'object' ? i.uri || i.image_url : i,
+        )
+      : []),
+    ...(Array.isArray(item.listing_images)
+      ? item.listing_images.map(i =>
+          i && typeof i === 'object' ? i.image_url || i.uri : i,
+        )
+      : []),
+  ].filter(Boolean);
+  return urls.some(u => /post_\d/i.test(String(u)));
+}
+
 const UserListingsScreen = ({creatorId, displayName = '', onClose}) => {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +76,8 @@ const UserListingsScreen = ({creatorId, displayName = '', onClose}) => {
     getListings({subscription_id: creatorId})
       .then(result => {
         if (result.success && Array.isArray(result.listings)) {
-          setListings(result.listings);
+          // Exclude feed posts – this screen shows ads only.
+          setListings(result.listings.filter(l => !isPostListingRecord(l)));
         } else {
           setListings([]);
         }

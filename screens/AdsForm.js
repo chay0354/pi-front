@@ -216,6 +216,7 @@ const AdsForm = ({
   initialBnbHostType = null,
 }) => {
   const [propertyType, setPropertyType] = useState(null);
+  const [serviceAndFacilityType, setServiceAndFacilityType] = useState(null);
   const [cancellationPolicy, setCancellationPolicy] = useState(null);
   /** מחיר ללילה — "מחיר במבצע" / Hot deal (saved as ads.hot_deal) */
   const [hotDeal, setHotDeal] = useState(false);
@@ -223,6 +224,7 @@ const AdsForm = ({
   const [rooms, setRooms] = useState(1);
   const [floor, setFloor] = useState(1);
   const [amenities, setAmenities] = useState({}); // { amenity: quantity or true }
+  const [optionSecondValues, setOptionSecondValues] = useState({});
   const [condition, setCondition] = useState(null);
   const [purpose, setPurpose] = useState('sale'); // 'sale' or 'rent'
   const [price, setPrice] = useState(1000000);
@@ -232,6 +234,8 @@ const AdsForm = ({
   const [landBlock, setLandBlock] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
+  const [contactFullName, setContactFullName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [hasVideo, setHasVideo] = useState(false);
   const [feedDisplayPriority, setFeedDisplayPriority] = useState('video'); // 'video' | 'mainImage' – what to show first on TikTok feed
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
@@ -258,6 +262,11 @@ const AdsForm = ({
   const [budget, setBudget] = useState(1000);
   /** BnB category 5: from feed sheet — persisted in general_details.bnb_host_type */
   const [bnbHostType, setBnbHostType] = useState(null);
+  const [guestCount, setGuestCount] = useState(1);
+  const [checkInDate, setCheckInDate] = useState(null);
+  const [checkOutDate, setCheckOutDate] = useState(null);
+  /** Pre-sale tag — stored in ads.sale_at_presale (boolean). */
+  const [saleAtPresale, setSaleAtPresale] = useState(false);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -272,6 +281,16 @@ const AdsForm = ({
   useEffect(() => {
     setProjectOfferGroupsOn({});
   }, [category]);
+
+  useEffect(() => {
+    const fields = formList?.[category]?.fields || [];
+    const hasPricePerNight = fields.some(field => field?.key === 'pricepernight');
+    if (!hasPricePerNight) return;
+    const numericPrice = Number(price);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+      setPrice(1000);
+    }
+  }, [category, formList, price]);
 
   useEffect(() => {
     if (initialListing) {
@@ -331,6 +350,16 @@ const AdsForm = ({
     setLandParcel(parcel);
     setLandBlock(block);
     setPhone(initialListing.phone != null ? String(initialListing.phone) : '');
+    setContactFullName(
+      initialListing.contact_details?.full_name != null
+        ? String(initialListing.contact_details.full_name)
+        : '',
+    );
+    setContactEmail(
+      initialListing.contact_details?.email != null
+        ? String(initialListing.contact_details.email)
+        : '',
+    );
     if (
       cat === 5 &&
       initialListing.price_per_night != null &&
@@ -389,9 +418,35 @@ const AdsForm = ({
         floor_count: gd.floor_count != null ? Number(gd.floor_count) : prev.floor_count,
         apartment_count: gd.apartment_count != null ? Number(gd.apartment_count) : prev.apartment_count,
       }));
+      if (gd.guest_count != null && !Number.isNaN(Number(gd.guest_count))) {
+        setGuestCount(Math.max(1, Number(gd.guest_count)));
+      }
+      if (gd.check_in_date) {
+        setCheckInDate(String(gd.check_in_date));
+      }
+      if (gd.check_out_date) {
+        setCheckOutDate(String(gd.check_out_date));
+      }
     }
     if (initialListing.project_offers && typeof initialListing.project_offers === 'object') {
       setProjectOffers(prev => ({ ...prev, ...initialListing.project_offers }));
+    }
+    if (initialListing.sale_at_presale !== undefined) {
+      setSaleAtPresale(
+        initialListing.sale_at_presale === true ||
+          initialListing.sale_at_presale === 'true' ||
+          initialListing.sale_at_presale === 't',
+      );
+    }
+    const salesImageRaw =
+      initialListing.sales_image_url ?? initialListing.salesImageUrl ?? null;
+    if (salesImageRaw && String(salesImageRaw).trim() !== '') {
+      const u = String(salesImageRaw).trim();
+      setSalesImage({uri: u});
+      setSalesImageUrl(u);
+    } else {
+      setSalesImage(null);
+      setSalesImageUrl(null);
     }
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
@@ -455,6 +510,10 @@ const AdsForm = ({
   const bnbBusinessLogoInputRef = useRef(null);
   const [bnbBusinessLogo, setBnbBusinessLogo] = useState(null);
   const [bnbBusinessLogoUrl, setBnbBusinessLogoUrl] = useState(null);
+  /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
+  const salesImageInputRef = useRef(null);
+  const [salesImage, setSalesImage] = useState(null);
+  const [salesImageUrl, setSalesImageUrl] = useState(null);
   // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
@@ -505,6 +564,7 @@ const AdsForm = ({
     };
     const setValue = (key, val) => {
       const numVal = key.endsWith('_price') ? Number(val) || 0 : Math.max(0, Number(val) || 0);
+      console.log('[AdsForm.generalDetailsWithRadio.setValue]', {key, val, numVal});
       if (key in generalDetailsCounts) {
         setGeneralDetailsCounts(prev => ({ ...prev, [key]: numVal }));
       } else if (key in projectOffers) {
@@ -581,6 +641,13 @@ const AdsForm = ({
     });
   };
 
+  const setOptionSecondValue = (key, value) => {
+    setOptionSecondValues(prev => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
   // File upload handlers
   const handleMainImageUpload = async () => {
     if (Platform.OS === 'web' && mainImageInputRef.current) {
@@ -622,6 +689,43 @@ const AdsForm = ({
       };
       setMainImage(fileObj);
       // Don't upload yet - will upload when publish button is pressed
+    }
+  };
+
+  const handleSalesImageUpload = async () => {
+    if (Platform.OS === 'web' && salesImageInputRef.current) {
+      salesImageInputRef.current.click();
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        setSalesImage({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.filename || `sales-${Date.now()}.jpg`,
+          file: asset,
+        });
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת תמונה: ' + error.message);
+    }
+  };
+
+  const handleSalesImageChange = event => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      setSalesImage({
+        uri: URL.createObjectURL(file),
+        type: file.type,
+        name: file.name,
+        file,
+      });
     }
   };
 
@@ -760,6 +864,48 @@ const AdsForm = ({
 
       const fields = formList[category]?.fields || [];
       const fieldKeys = fields.map(f => f.key);
+      const generalDetailsField = fields.find(f => f.key === 'generaldetails');
+      const selectedOptionSecondValues = {};
+      (generalDetailsField?.data || []).forEach(amenity => {
+        const amenityKey = amenity?.title || amenity;
+        const optionSecondKey = amenity?.optionSecond?.title;
+        if (!optionSecondKey || !amenities?.[amenityKey]) return;
+        const value = optionSecondValues?.[optionSecondKey];
+        if (typeof value === 'string' && value.trim()) {
+          selectedOptionSecondValues[optionSecondKey] = value;
+        }
+      });
+      const amenitiesForPayload = {
+        ...(amenities || {}),
+        ...selectedOptionSecondValues,
+      };
+      const generalDetailsForPayload = {
+        ...generalDetailsCounts,
+        ...(guestCount > 0 ? {guest_count: Number(guestCount)} : {}),
+        ...(checkInDate ? {check_in_date: checkInDate} : {}),
+        ...(checkOutDate ? {check_out_date: checkOutDate} : {}),
+      };
+      const accommodationOffersPayload =
+        guestCount || checkInDate || checkOutDate
+          ? {
+              guest_count: Number(guestCount) || 1,
+              check_in_date: checkInDate || null,
+              check_out_date: checkOutDate || null,
+            }
+          : undefined;
+      const serviceFacilityPayload = serviceAndFacilityType
+        ? {selected: serviceAndFacilityType}
+        : undefined;
+      const contactDetailsPayload =
+        contactFullName || contactEmail || phone || address || description
+          ? {
+              full_name: contactFullName || null,
+              email: contactEmail || null,
+              phone: phone || null,
+              address: address || null,
+              description: description || null,
+            }
+          : undefined;
 
       // Validate only fields that exist in this form
       if (category === 3) {
@@ -1043,6 +1189,30 @@ const AdsForm = ({
         }
       }
 
+      let uploadedSalesImageUrl = null;
+      if (salesImage?.uri && !salesImage?.file) {
+        uploadedSalesImageUrl = salesImage.uri || salesImageUrl;
+      } else if (salesImage?.file) {
+        try {
+          setUploadProgress(prev => ({...prev, salesImage: true}));
+          const formData = new FormData();
+          formData.append('file', salesImage.file);
+          formData.append('folder', 'listings/images');
+          const response = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            {method: 'POST', body: formData},
+          );
+          const data = await response.json();
+          if (data.success && data.url) {
+            uploadedSalesImageUrl = data.url;
+          }
+        } catch (err) {
+          console.warn('[AdsForm] sales image upload failed:', err.message);
+        } finally {
+          setUploadProgress(prev => ({...prev, salesImage: false}));
+        }
+      }
+
       let uploadedBnbBusinessLogoUrl = null;
       if (category === 5 && bnbHostType === 'business') {
         if (initialListing && bnbBusinessLogo?.uri && !bnbBusinessLogo?.file) {
@@ -1098,6 +1268,8 @@ const AdsForm = ({
               budget: parseFloat(budget) || 0,
               description: description.trim(),
               mainImageUrl: uploadedMainImageUrl,
+              videoUrl: uploadedVideoUrl,
+              hasVideo: !!uploadedVideoUrl,
               profileImageUrl: getUserProfileImageUrl(currentUser),
               category: listingCategory,
               // Set defaults for required fields that don't apply to category 3
@@ -1120,7 +1292,7 @@ const AdsForm = ({
               area: parseInt(area) || 1,
               rooms: parseInt(rooms) || 1,
               floor: parseInt(floor) || 1,
-              amenities: amenities || {},
+              amenities: amenitiesForPayload,
               condition: condition || null,
               purpose: purpose || 'sale',
               price: parseFloat(price) || 0,
@@ -1149,9 +1321,11 @@ const AdsForm = ({
               agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
               landOwnership: landRadioValues['בעלות קרקע'] || null,
               generalDetails:
-                Object.keys(generalDetailsCounts).length > 0
-                  ? { ...generalDetailsCounts }
+                Object.keys(generalDetailsForPayload).length > 0
+                  ? generalDetailsForPayload
                   : undefined,
+              saleAtPresale: saleAtPresale === true,
+              salesImageUrl: uploadedSalesImageUrl || null,
               projectOffers: (() => {
                 const merged = { ...projectOffers, ...otherFormValues };
                 const hasAny = Object.values(merged).some(v => v !== 0 && v !== undefined && v !== '');
@@ -1170,6 +1344,18 @@ const AdsForm = ({
               ...(listingCategory === 5 &&
                 preferredApartmentType && {
                   hospitalityNature: preferredApartmentType,
+                }),
+              ...(listingCategory === 5 &&
+                serviceFacilityPayload && {
+                  serviceFacility: serviceFacilityPayload,
+                }),
+              ...(listingCategory === 5 &&
+                accommodationOffersPayload && {
+                  accommodationOffers: accommodationOffersPayload,
+                }),
+              ...(listingCategory === 5 &&
+                contactDetailsPayload && {
+                  contactDetails: contactDetailsPayload,
                 }),
               ...(fieldKeys.includes('cancellationpolicy') &&
                 cancellationPolicy && {
@@ -1308,6 +1494,16 @@ const AdsForm = ({
                   return (
                     <ContactDetails
                       key="contactdetails"
+                      contactFullName={contactFullName}
+                      setContactFullName={setContactFullName}
+                      address={address}
+                      setAddress={setAddress}
+                      contactEmail={contactEmail}
+                      setContactEmail={setContactEmail}
+                      phone={phone}
+                      setPhone={setPhone}
+                      description={description}
+                      setDescription={setDescription}
                       showBnbBusinessLogo={
                         category === 5 && bnbHostType === 'business'
                       }
@@ -1492,6 +1688,8 @@ const AdsForm = ({
                       isRooms={field.isRooms}
                       isFloor={field.isFloor}
                       amenitiesData={field.data}
+                      optionSecondValues={optionSecondValues}
+                      setOptionSecondValue={setOptionSecondValue}
                       counterData={counterDataWithSetters}
                     />
                   );
@@ -1500,14 +1698,24 @@ const AdsForm = ({
                   return (
                     <ServiceAndFacility
                       key="serviceandfacility"
-                      propertyType={propertyType}
-                      setPropertyType={setPropertyType}
+                      propertyType={serviceAndFacilityType}
+                      setPropertyType={setServiceAndFacilityType}
                       data={field.data || []}
                       title={field.title}
                     />
                   );
                 case 'accommodationoffers':
-                  return <AccommodationOffers key="accommodationoffers" />;
+                  return (
+                    <AccommodationOffers
+                      key="accommodationoffers"
+                      guestCount={guestCount}
+                      setGuestCount={setGuestCount}
+                      checkInDate={checkInDate}
+                      setCheckInDate={setCheckInDate}
+                      checkOutDate={checkOutDate}
+                      setCheckOutDate={setCheckOutDate}
+                    />
+                  );
                 case 'cancellationpolicy':
                   return (
                     <CancellationPolicy
@@ -1550,15 +1758,21 @@ const AdsForm = ({
                   return (
                     <SalesImage
                       key="salesimage"
-                      mainImage={mainImage}
-                      handleMainImageUpload={handleMainImageUpload}
-                      handleMainImageChange={handleMainImageChange}
-                      mainImageInputRef={mainImageInputRef}
+                      salesImage={salesImage}
+                      handleSalesImageUpload={handleSalesImageUpload}
+                      handleSalesImageChange={handleSalesImageChange}
+                      salesImageInputRef={salesImageInputRef}
                       uploadProgress={uploadProgress}
                     />
                   );
                 case 'saleatpresale':
-                  return <SaleAtPreSale key="saleatpresale" />;
+                  return (
+                    <SaleAtPreSale
+                      key="saleatpresale"
+                      isSelected={saleAtPresale}
+                      onToggle={setSaleAtPresale}
+                    />
+                  );
                 case 'generaldetailswithradio': {
                   const toggleable =
                     field.groups?.toggleableOfferGroups === true;

@@ -407,7 +407,16 @@ const SubscriptionFormScreen = ({
 
       if (additionalImages.length > 0)
         files.additionalImages = additionalImages.filter(img => img !== null);
-      if (companyLogo) files.companyLogo = companyLogo;
+
+      const companyLogoIsUrl =
+        companyLogo?.uri &&
+        (companyLogo.uri.startsWith('http://') || companyLogo.uri.startsWith('https://'));
+      if (companyLogoIsUrl) {
+        formData.company_logo_url = companyLogo.uri;
+      } else if (companyLogo) {
+        files.companyLogo = companyLogo;
+      }
+      console.log('[SubscriptionFormScreen] Submitting company logo for subscription_type=', subscriptionType, '-> company_logo_url target column. hasLogo:', !!companyLogo);
       if (video && activeTab === 'video') files.video = video;
 
       // Submit to backend

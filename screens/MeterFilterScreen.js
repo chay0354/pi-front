@@ -6,8 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Pressable,
+  TextInput,
 } from 'react-native';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
 
 const BG = '#1a1926';
 const BORDER = 'rgba(255,255,255,0.2)';
@@ -18,12 +19,38 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [meterValue, setMeterValue] = useState(
     initialFilter?.meter != null ? Number(initialFilter.meter) : null,
   );
+  const [meterDraft, setMeterDraft] = useState(
+    initialFilter?.meter != null ? String(Number(initialFilter.meter)) : '',
+  );
+  const meterInputWidth = Math.max(20, String(meterDraft || '').length * 11);
 
   useEffect(() => {
-    setMeterValue(
-      initialFilter?.meter != null ? Number(initialFilter.meter) : null,
-    );
+    const next =
+      initialFilter?.meter != null ? Number(initialFilter.meter) : null;
+    setMeterValue(next);
+    setMeterDraft(next != null ? String(next) : '');
   }, [initialFilter]);
+
+  useEffect(() => {
+    setMeterDraft(meterValue != null ? String(meterValue) : '');
+  }, [meterValue]);
+
+  const commitMeterDraft = () => {
+    const normalized = String(meterDraft ?? '').replace(/[^\d]/g, '');
+    if (!normalized) {
+      setMeterValue(null);
+      setMeterDraft('');
+      return;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed)) {
+      setMeterDraft(meterValue != null ? String(meterValue) : '');
+      return;
+    }
+    const clamped = Math.max(MIN_METER, Math.min(MAX_METER, parsed));
+    setMeterValue(clamped);
+    setMeterDraft(String(clamped));
+  };
 
   const handleSave = () => {
     if (onSave) {
@@ -47,15 +74,19 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={12}>
-        <MaterialCommunityIcons name="chevron-right" size={28} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.topRail}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onClose}
+          style={styles.handlePressArea}>
+          <View style={styles.handleBar} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.handleBar} />
         <View style={styles.header}>
           <Image
             source={require('../assets/meter.png')}
@@ -81,11 +112,19 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
             </TouchableOpacity>
             <View style={styles.counterDivider} />
             <View style={styles.counterValueContainer}>
-              <Text style={styles.counterValue}>
-                {meterValue == null
-                  ? 'ללא סינון'
-                  : `${meterValue} מ"ר`}
-              </Text>
+              <TextInput
+                value={meterDraft}
+                onChangeText={setMeterDraft}
+                onBlur={commitMeterDraft}
+                onSubmitEditing={commitMeterDraft}
+                keyboardType="numeric"
+                returnKeyType="done"
+                placeholder="ללא סינון"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={[styles.counterValueInput, {width: meterInputWidth}]}
+                textAlign="center"
+              />
+              <Text style={styles.counterValueSuffix}>מ"ר</Text>
             </View>
             <View style={styles.counterDivider} />
             <TouchableOpacity
@@ -93,7 +132,9 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
               onPress={() =>
                 setMeterValue(v => {
                   const base = v == null ? MIN_METER - 10 : v;
-                  return Math.min(MAX_METER, base + 10);
+                  const next = Math.min(MAX_METER, base + 10);
+                  setMeterDraft(String(next));
+                  return next;
                 })
               }>
               <Text style={styles.counterButton}>+</Text>
@@ -119,8 +160,26 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  backBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  container: {
+    flex: 1,
+    backgroundColor: BG,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  topRail: {
+    height: 37,
+    borderBottomWidth: 1,
+    borderBottomColor: '#373548',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handlePressArea: {
+    width: 42,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
   footer: {
@@ -130,12 +189,10 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   handleBar: {
-    alignSelf: 'center',
     width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
-    marginBottom: 16,
+    height: 5,
+    backgroundColor: '#464646',
+    borderRadius: 3,
   },
   header: { alignItems: 'center', marginBottom: 28 },
   headerIcon: { width: 36, height: 36 },
@@ -171,7 +228,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  counterValue: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  counterValueInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    minWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    textAlign: 'center',
+  },
+  counterValueSuffix: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginStart: 4,
+  },
   saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
   saveBtnImage: { width: '100%', height: 54 },
   clearWrap: { alignItems: 'center' },

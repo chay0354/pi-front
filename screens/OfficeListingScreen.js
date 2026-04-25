@@ -16,6 +16,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
 import {categoryImages} from '../utils/constant';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 /**
  * Age Range Slider Component
@@ -192,6 +193,16 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const [preferredAgeMax, setPreferredAgeMax] = useState(100);
   const [preferences, setPreferences] = useState({}); // { nonSmokers: false, students: false, etc. }
   const [budget, setBudget] = useState(1000);
+  const [budgetDraft, setBudgetDraft] = useState('1000');
+  const [priceDraft, setPriceDraft] = useState('1000000');
+  const [areaDraft, setAreaDraft] = useState('1');
+  const [roomsDraft, setRoomsDraft] = useState('1');
+  const [floorDraft, setFloorDraft] = useState('1');
+  const budgetInputWidth = Math.max(20, String(budgetDraft || '').length * 11);
+  const priceInputWidth = Math.max(20, String(priceDraft || '').length * 11);
+  const areaInputWidth = Math.max(20, String(areaDraft || '').length * 11);
+  const roomsInputWidth = Math.max(20, String(roomsDraft || '').length * 11);
+  const floorInputWidth = Math.max(20, String(floorDraft || '').length * 11);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -206,6 +217,63 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       }
     }
   }, [initialCategory]);
+
+  useEffect(() => {
+    setBudgetDraft(String(Math.max(0, Number(budget) || 0)));
+  }, [budget]);
+
+  useEffect(() => {
+    setPriceDraft(String(Math.max(0, Number(price) || 0)));
+  }, [price]);
+
+  useEffect(() => {
+    setAreaDraft(String(Math.max(1, Number(area) || 1)));
+  }, [area]);
+
+  useEffect(() => {
+    setRoomsDraft(String(Math.max(1, Number(rooms) || 1)));
+  }, [rooms]);
+
+  useEffect(() => {
+    setFloorDraft(String(Math.max(1, Number(floor) || 1)));
+  }, [floor]);
+
+  const parseNumericDraft = (value, min = 0) => {
+    const digitsOnly = String(value || '').replace(/[^\d]/g, '');
+    const parsed = Number.parseInt(digitsOnly || String(min), 10);
+    if (Number.isNaN(parsed)) return min;
+    return Math.max(min, parsed);
+  };
+
+  const commitBudgetDraft = () => {
+    const next = parseNumericDraft(budgetDraft, 0);
+    setBudget(next);
+    setBudgetDraft(String(next));
+  };
+
+  const commitPriceDraft = () => {
+    const next = parseNumericDraft(priceDraft, 0);
+    setPrice(next);
+    setPriceDraft(String(next));
+  };
+
+  const commitAreaDraft = () => {
+    const next = parseNumericDraft(areaDraft, 1);
+    setArea(next);
+    setAreaDraft(String(next));
+  };
+
+  const commitRoomsDraft = () => {
+    const next = parseNumericDraft(roomsDraft, 1);
+    setRooms(next);
+    setRoomsDraft(String(next));
+  };
+
+  const commitFloorDraft = () => {
+    const next = parseNumericDraft(floorDraft, 1);
+    setFloor(next);
+    setFloorDraft(String(next));
+  };
 
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
@@ -1220,9 +1288,18 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                 </TouchableOpacity>
                 <View style={styles.counterDivider} />
                 <View style={styles.counterValueContainer}>
-                  <Text style={styles.priceValue}>
-                    ₪ {budget.toLocaleString()}
-                  </Text>
+                  <View style={styles.valueRow}>
+                    <Text style={styles.priceValue}>₪</Text>
+                    <TextInput
+                      style={[styles.valueInput, {width: budgetInputWidth}]}
+                      value={budgetDraft}
+                      onChangeText={setBudgetDraft}
+                      onBlur={commitBudgetDraft}
+                      onSubmitEditing={commitBudgetDraft}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                  </View>
                 </View>
                 <View style={styles.counterDivider} />
                 <TouchableOpacity
@@ -1405,7 +1482,18 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   </TouchableOpacity>
                   <View style={styles.counterDivider} />
                   <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{area} מ"ר</Text>
+                    <View style={styles.valueRow}>
+                      <Text style={styles.counterValueSuffix}>מ"ר</Text>
+                      <TextInput
+                        style={[styles.valueInput, {width: areaInputWidth}]}
+                        value={areaDraft}
+                        onChangeText={setAreaDraft}
+                        onBlur={commitAreaDraft}
+                        onSubmitEditing={commitAreaDraft}
+                        keyboardType="numeric"
+                        returnKeyType="done"
+                      />
+                    </View>
                   </View>
                   <View style={styles.counterDivider} />
                   <TouchableOpacity
@@ -1429,7 +1517,15 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   </TouchableOpacity>
                   <View style={styles.counterDivider} />
                   <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{rooms}</Text>
+                    <TextInput
+                      style={[styles.valueInput, {width: roomsInputWidth}]}
+                      value={roomsDraft}
+                      onChangeText={setRoomsDraft}
+                      onBlur={commitRoomsDraft}
+                      onSubmitEditing={commitRoomsDraft}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
                   </View>
                   <View style={styles.counterDivider} />
                   <TouchableOpacity
@@ -1453,7 +1549,15 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   </TouchableOpacity>
                   <View style={styles.counterDivider} />
                   <View style={styles.counterValueContainer}>
-                    <Text style={styles.counterValue}>{floor}</Text>
+                    <TextInput
+                      style={[styles.valueInput, {width: floorInputWidth}]}
+                      value={floorDraft}
+                      onChangeText={setFloorDraft}
+                      onBlur={commitFloorDraft}
+                      onSubmitEditing={commitFloorDraft}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
                   </View>
                   <View style={styles.counterDivider} />
                   <TouchableOpacity
@@ -1479,26 +1583,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                         onPress={() => toggleAmenity(amenity)}>
                         <Text style={styles.amenityText}>{amenity}</Text>
                         <View style={styles.radioSpacer} />
-                        {isSelected ? (
-                          <LinearGradient
-                            colors={['#FEE787', '#BD9947', '#9C6522']}
-                            locations={[0.0456, 0.5076, 0.8831]}
-                            start={{x: 0, y: 0}}
-                            end={{x: 1, y: 1}}
-                            style={styles.radioButtonGradient}>
-                            <Image
-                              source={require('../assets/checkbox-selected.png')}
-                              style={styles.radioButtonSelected}
-                              resizeMode="contain"
-                            />
-                          </LinearGradient>
-                        ) : (
-                          <View style={styles.radioButton}>
-                            {false && (
-                              <View style={styles.radioButtonSelected} />
-                            )}
-                          </View>
-                        )}
+                        <FigmaCheckbox checked={isSelected} />
                       </TouchableOpacity>
 
                       {/* Quantity selector for amenities that need it - below the amenity row */}
@@ -1684,9 +1769,18 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                 </TouchableOpacity>
                 <View style={styles.counterDivider} />
                 <View style={styles.counterValueContainer}>
-                  <Text style={styles.priceValue}>
-                    ₪ {price.toLocaleString()}
-                  </Text>
+                  <View style={styles.valueRow}>
+                    <Text style={styles.priceValue}>₪</Text>
+                    <TextInput
+                      style={[styles.valueInput, {width: priceInputWidth}]}
+                      value={priceDraft}
+                      onChangeText={setPriceDraft}
+                      onBlur={commitPriceDraft}
+                      onSubmitEditing={commitPriceDraft}
+                      keyboardType="numeric"
+                      returnKeyType="done"
+                    />
+                  </View>
                 </View>
                 <View style={styles.counterDivider} />
                 <TouchableOpacity
@@ -2036,6 +2130,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valueInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    minWidth: 0,
+    textAlign: 'center',
+    paddingVertical: 0,
+  },
+  counterValueSuffix: {
+    color: '#fff',
+    fontSize: 16,
+    marginRight: 6,
+  },
   amenityRow: {
     marginBottom: 15,
   },
@@ -2109,9 +2221,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   amenityQuantityDotInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   segmentedButtons: {
     flexDirection: 'row',

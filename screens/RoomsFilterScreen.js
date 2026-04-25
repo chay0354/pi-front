@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   Pressable,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -18,20 +19,13 @@ const INPUT_BORDER = '#8C85B3';
 const GOLD = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
-// Figma assets for node 12:75174
-const CHECKBOX_ACTIVE =
-  'https://www.figma.com/api/mcp/asset/725a7cfa-bcc5-4439-aa9c-e6bebc8f65b7';
-const CHECKBOX_INACTIVE =
-  'https://www.figma.com/api/mcp/asset/7700c88d-a12e-49e4-9406-f17594e99e75';
-const CHECKBOX_CHECK =
-  'https://www.figma.com/api/mcp/asset/4cadfe67-bbb4-4252-943e-e19f5267a121';
-const MENU_ICON =
-  'https://www.figma.com/api/mcp/asset/73e13e9b-5595-44df-aeb4-3fdee57a1710';
+const MENU_ICON = require('../assets/buttom-bar/rooms_number.png');
 
-const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
+const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
+  const isBnb = selectedCategory === 5 || selectedCategory === '5';
   const [area, setArea] = useState(initialFilter?.area ?? 60);
   const [rooms, setRooms] = useState(initialFilter?.rooms ?? 2);
   const [floor, setFloor] = useState(initialFilter?.floor ?? 2);
@@ -45,74 +39,129 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [balconyValue, setBalconyValue] = useState(initialFilter?.balcony ?? 1);
   const [elevator, setElevator] = useState(initialFilter?.elevator ?? true);
   const [mamad, setMamad] = useState(initialFilter?.mamad ?? false);
+  const [freeParking, setFreeParking] = useState(initialFilter?.freeParking ?? false);
   const bottomInset = Math.max(insets.bottom, 8);
 
   const handleSave = () => {
     if (onSave) {
-      onSave({
-        area,
-        rooms,
-        floor,
-        parking: parkingEnabled ? parkingValue : null,
-        balcony: balconyEnabled ? balconyValue : null,
-        elevator,
-        mamad,
-      });
+      if (isBnb) {
+        onSave({
+          rooms,
+          area: null, // BnB UI has no area input in the design
+          floor,
+          parking: parkingEnabled ? parkingValue : null,
+          balcony: null,
+          elevator,
+          mamad: null,
+          freeParking,
+        });
+      } else {
+        onSave({
+          area,
+          rooms,
+          floor,
+          parking: parkingEnabled ? parkingValue : null,
+          balcony: balconyEnabled ? balconyValue : null,
+          elevator,
+          mamad,
+          freeParking: null,
+        });
+      }
     }
     onClose?.();
   };
 
   const handleClear = () => {
-    setArea(60);
     setRooms(2);
     setFloor(2);
     setParkingEnabled(false);
     setParkingValue(1);
-    setBalconyEnabled(false);
-    setBalconyValue(1);
     setElevator(false);
-    setMamad(false);
+    setFreeParking(false);
+    if (!isBnb) {
+      setArea(60);
+      setBalconyEnabled(false);
+      setBalconyValue(1);
+      setMamad(false);
+    }
   };
 
-  const StepperRow = ({label, value, suffix = '', onMinus, onPlus}) => (
-    <View style={styles.sectionWrap}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={styles.counterInput}>
-        <TouchableOpacity style={styles.counterButtonLeft} onPress={onPlus}>
-          <Text style={styles.counterButton}>+</Text>
-        </TouchableOpacity>
-        <View style={styles.counterDivider} />
-        <View style={styles.counterValueContainer}>
-          <Text style={styles.counterValue}>
-            {value}
-            {suffix}
-          </Text>
+  const StepperRow = ({
+    label,
+    value,
+    suffix = '',
+    onMinus,
+    onPlus,
+    onCommitValue,
+  }) => {
+    const [draft, setDraft] = useState(String(value ?? ''));
+    const inputWidth = Math.max(20, String(draft || '').length * 11);
+
+    React.useEffect(() => {
+      setDraft(String(value ?? ''));
+    }, [value]);
+
+    const commitDraft = () => {
+      const normalized = String(draft ?? '').replace(/[^\d]/g, '');
+      if (!normalized) {
+        setDraft(String(value ?? ''));
+        return;
+      }
+      const parsed = Number.parseInt(normalized, 10);
+      if (!Number.isFinite(parsed)) {
+        setDraft(String(value ?? ''));
+        return;
+      }
+      onCommitValue(parsed);
+    };
+
+    return (
+      <View style={styles.sectionWrap}>
+        <Text style={styles.inputLabel}>{label}</Text>
+        <View style={styles.counterInput}>
+          <TouchableOpacity style={styles.counterButtonLeft} onPress={onPlus}>
+            <Text style={styles.counterButton}>+</Text>
+          </TouchableOpacity>
+          <View style={styles.counterDivider} />
+          <View style={styles.counterValueContainer}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              onBlur={commitDraft}
+              onSubmitEditing={commitDraft}
+              keyboardType="numeric"
+              returnKeyType="done"
+              style={[styles.counterValueInput, {width: inputWidth}]}
+              textAlign="center"
+            />
+            {!!suffix && <Text style={styles.counterValueSuffix}>{suffix}</Text>}
+          </View>
+          <View style={styles.counterDivider} />
+          <TouchableOpacity style={styles.counterButtonRight} onPress={onMinus}>
+            <Text style={styles.counterButton}>−</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.counterDivider} />
-        <TouchableOpacity style={styles.counterButtonRight} onPress={onMinus}>
-          <Text style={styles.counterButton}>−</Text>
-        </TouchableOpacity>
+        <View style={styles.divider} />
       </View>
-      <View style={styles.divider} />
-    </View>
-  );
+    );
+  };
 
   const CheckRow = ({label, checked, onToggle}) => (
     <TouchableOpacity style={styles.amenityOption} onPress={onToggle} activeOpacity={0.8}>
       <Text style={styles.amenityText}>{label}</Text>
       <View style={styles.checkboxWrap}>
-        <Image
-          source={{uri: checked ? CHECKBOX_ACTIVE : CHECKBOX_INACTIVE}}
-          style={styles.checkboxImage}
-          resizeMode="contain"
-        />
-        {checked && (
-          <Image
-            source={{uri: CHECKBOX_CHECK}}
-            style={styles.checkboxCheck}
-            resizeMode="contain"
-          />
-        )}
+        <View
+          style={[
+            styles.checkboxCircle,
+            checked && styles.checkboxCircleChecked,
+          ]}>
+          {checked ? (
+            <View style={styles.checkMarkWrap}>
+              <View style={styles.checkMarkShort} />
+              <View style={styles.checkMarkLong} />
+            </View>
+          ) : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -156,12 +205,12 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
   return (
     <View style={styles.container}>
       <View style={styles.topRail}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={onClose}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           style={styles.handlePressArea}>
           <View style={styles.handle} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -173,35 +222,40 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
             paddingBottom: bottomInset + (compact ? 20 : 52),
           },
         ]}
-        scrollEnabled={false}
+        scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={{uri: MENU_ICON}} style={styles.headerIcon} resizeMode="contain" />
+          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
           <Text style={styles.title}>חדרים</Text>
         </View>
 
-        <StepperRow
-          label="שטח הנכס"
-          value={area}
-          suffix=' מ"ר'
-          onMinus={() => setArea(Math.max(10, area - 10))}
-          onPlus={() => setArea(area + 10)}
-        />
+        {!isBnb && (
+          <StepperRow
+            label="שטח הנכס"
+            value={area}
+            suffix='מ"ר'
+            onMinus={() => setArea(Math.max(10, area - 10))}
+            onPlus={() => setArea(area + 10)}
+            onCommitValue={next => setArea(Math.max(10, next))}
+          />
+        )}
         <StepperRow
           label="מספר חדרים"
           value={rooms}
           onMinus={() => setRooms(Math.max(1, rooms - 1))}
           onPlus={() => setRooms(rooms + 1)}
+          onCommitValue={next => setRooms(Math.max(1, next))}
         />
         <StepperRow
           label="קומה"
           value={floor}
           onMinus={() => setFloor(Math.max(0, floor - 1))}
           onPlus={() => setFloor(floor + 1)}
+          onCommitValue={next => setFloor(Math.max(0, next))}
         />
 
         <CheckRow
-          label="חנייה"
+          label={isBnb ? 'כמות חנייה' : 'חנייה'}
           checked={parkingEnabled}
           onToggle={() => setParkingEnabled(!parkingEnabled)}
         />
@@ -210,16 +264,30 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
         )}
         <View style={styles.divider} />
 
-        <CheckRow
-          label="מרפסת"
-          checked={balconyEnabled}
-          onToggle={() => setBalconyEnabled(!balconyEnabled)}
-        />
-        {balconyEnabled && (
-          <OptionPills selected={balconyValue} onSelect={setBalconyValue} />
+        {!isBnb && (
+          <>
+            <CheckRow
+              label="מרפסת"
+              checked={balconyEnabled}
+              onToggle={() => setBalconyEnabled(!balconyEnabled)}
+            />
+            {balconyEnabled && (
+              <OptionPills selected={balconyValue} onSelect={setBalconyValue} />
+            )}
+            <View style={styles.divider} />
+          </>
         )}
-        <View style={styles.divider} />
 
+        {isBnb && (
+          <>
+            <CheckRow
+              label="חנייה בחינם"
+              checked={freeParking}
+              onToggle={() => setFreeParking(!freeParking)}
+            />
+            <View style={styles.divider} />
+          </>
+        )}
         <CheckRow
           label="מעלית"
           checked={elevator}
@@ -227,8 +295,12 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave}) => {
         />
         <View style={styles.divider} />
 
-        <CheckRow label='ממ"ד' checked={mamad} onToggle={() => setMamad(!mamad)} />
-        <View style={styles.divider} />
+        {!isBnb && (
+          <>
+            <CheckRow label='ממ"ד' checked={mamad} onToggle={() => setMamad(!mamad)} />
+            <View style={styles.divider} />
+          </>
+        )}
 
         <View style={[styles.footer, compact && styles.footerCompact]}>
           <TouchableOpacity
@@ -335,8 +407,23 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
-  counterValue: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
+  counterValueInput: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+    minWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    textAlign: 'center',
+  },
+  counterValueSuffix: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+  },
   divider: {
     height: 1,
     backgroundColor: DIVIDER,
@@ -356,8 +443,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxImage: {width: 24, height: 24},
-  checkboxCheck: {position: 'absolute', width: 9, height: 7},
+  checkboxCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#A5A5A5',
+    backgroundColor: '#27262F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxCircleChecked: {
+    borderColor: '#FFC140',
+  },
+  checkMarkWrap: {
+    width: 11,
+    height: 8,
+    position: 'relative',
+  },
+  checkMarkShort: {
+    position: 'absolute',
+    left: 1,
+    bottom: 1,
+    width: 4,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#FFC140',
+    transform: [{rotate: '42deg'}],
+  },
+  checkMarkLong: {
+    position: 'absolute',
+    left: 3,
+    bottom: 1,
+    width: 8,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#FFC140',
+    transform: [{rotate: '-45deg'}],
+  },
   amenityQuantitySelector: {
     flexDirection: 'row',
     alignItems: 'center',

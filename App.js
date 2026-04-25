@@ -6,6 +6,8 @@ import {
   HomeScreen,
   Home,
   SelectedProjectsScreen,
+  ProfessionalsDirectoryScreen,
+  ProfessionalFlyerScreen,
   CompanyProjectsScreen,
   SettingsScreen,
   SuccessScreen,
@@ -26,6 +28,7 @@ import {
   ChatScreen,
   ChatListScreen,
   UserProfileScreen,
+  FollowHubScreen,
   UserListingsScreen,
   SubscriptionScreen,
   SubscriptionFormScreen,
@@ -43,7 +46,7 @@ import {
 } from './screens';
 import {ContextHook} from './hooks/ContextHook';
 import {subscriptionTypes} from './utils/constant';
-import {getChatUnreadCount} from './utils/api';
+import {getChatUnreadCount, getListings} from './utils/api';
 import {getUserProfileImageUrl, normalizeUserProfileAliases} from './utils/userProfileImage';
 import {getChatListingCategoryLabel} from './utils/chatListingCategory';
 import {isAdsListingRecord} from './utils/listingShape';
@@ -92,6 +95,7 @@ const screenName = {
   chatList: 'chatList',
   chat: 'chat',
   userProfile: 'userProfile',
+  followHub: 'followHub',
   userListings: 'userListings',
   secretCodeRecovery: 'secretCodeRecovery',
   secretCodeRecoverySent: 'secretCodeRecoverySent',
@@ -99,6 +103,8 @@ const screenName = {
   termsOfUse: 'termsOfUse',
   accessibilityStatement: 'accessibilityStatement',
   selectedProjects: 'selectedProjects',
+  professionalsDirectory: 'professionalsDirectory',
+  professionalFlyer: 'professionalFlyer',
   companyProjects: 'companyProjects',
 };
 
@@ -153,6 +159,8 @@ export default function App() {
   const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
   const [profileReturnScreen, setProfileReturnScreen] = useState(screenName.tikTokFeed);
+  const [followHubInitialTab, setFollowHubInitialTab] = useState('followers');
+  const [followHubReturnScreen, setFollowHubReturnScreen] = useState(screenName.userProfile);
   const [companyProjectsContext, setCompanyProjectsContext] = useState(null);
   const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null); // 'userProfile' when registration was opened from profile (to post review)
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
@@ -301,6 +309,9 @@ export default function App() {
             onOpenSelectedProjects={() =>
               setCurrentScreen(screenName.selectedProjects)
             }
+            onOpenProfessionalsDirectory={() =>
+              setCurrentScreen(screenName.professionalsDirectory)
+            }
             onOpenSettings={() => setCurrentScreen(screenName.settings)}
             onOpenTikTokFeed={category => {
               setSelectedCategory(category);
@@ -356,6 +367,7 @@ export default function App() {
               setProfileUser(user);
               setCurrentScreen(screenName.userProfile);
             }}
+            onOpenFavorites={() => setCurrentScreen(screenName.favorites)}
             uploadedListings={uploadedListings}
             selectedCategory={selectedCategory}
             feedFilters={feedFilters}
@@ -372,6 +384,97 @@ export default function App() {
                 logo_url: company.logo_url || null,
               });
               setCurrentScreen(screenName.companyProjects);
+            }}
+          />
+        )}
+        {currentScreen === screenName.professionalsDirectory && (
+          <ProfessionalsDirectoryScreen
+            onClose={() => setCurrentScreen(screenName.home)}
+            onOpenProfessional={professional => {
+              setProfileReturnScreen(screenName.professionalsDirectory);
+              setProfileUser({
+                ...professional,
+                subscription_id: professional?.id || null,
+                owner_id: professional?.id || null,
+                creator_name: professional?.display_name || professional?.name || null,
+                creator_profile_image_url: professional?.profile_image_url || null,
+                profile_picture_url: professional?.profile_image_url || null,
+                subscription_type: subscriptionTypes.professional,
+              });
+              setCurrentScreen(screenName.userProfile);
+            }}
+            onMessageProfessional={professional => {
+              const u = {
+                ...professional,
+                creator_name: professional?.display_name || professional?.name || null,
+                creator_profile_image_url: professional?.profile_image_url || null,
+                profile_picture_url: professional?.profile_image_url || null,
+                subscription_id: professional?.id || null,
+                owner_id: professional?.id || null,
+                subscription_type: subscriptionTypes.professional,
+              };
+              const displayName =
+                u?.creator_name ||
+                u?.display_name ||
+                u?.name ||
+                u?.agent_name ||
+                u?.contact_person_name ||
+                u?.business_name ||
+                u?.broker_office_name ||
+                'משתמש';
+              const otherEmail =
+                (u?.creator_email || u?.email || '').trim().toLowerCase() || null;
+              const fromFeedListing = isAdsListingRecord(u);
+              const listingId = fromFeedListing ? String(u.id).trim() : null;
+              const listingCategoryLabel = fromFeedListing
+                ? getChatListingCategoryLabel(u?.category)
+                : null;
+              const conversation = {
+                id: otherEmail || u?.subscription_id || u?.id || 'profile',
+                name: displayName,
+                preview: '',
+                time: '',
+                profileImageUrl: getUserProfileImageUrl(u),
+                ...(listingId
+                  ? {listingId, listingCategoryLabel: listingCategoryLabel || null}
+                  : {}),
+              };
+              setSharedListingForChat(fromFeedListing ? u : null);
+              setSelectedConversation(conversation);
+              setChatReturnScreen(screenName.professionalsDirectory);
+              setCurrentScreen(screenName.chat);
+            }}
+          />
+        )}
+        {currentScreen === screenName.professionalFlyer && (
+          <ProfessionalFlyerScreen
+            professional={profileUser}
+            currentUser={currentUser}
+            onClose={() => setCurrentScreen(screenName.professionalsDirectory)}
+            onMessage={() => {
+              const u = profileUser;
+              const displayName = u?.creator_name || u?.display_name || u?.name || u?.agent_name || u?.contact_person_name || u?.business_name || u?.broker_office_name || 'משתמש';
+              const otherEmail = (u?.creator_email || u?.email || '').trim().toLowerCase() || null;
+              const fromFeedListing = isAdsListingRecord(u);
+              const listingId = fromFeedListing ? String(u.id).trim() : null;
+              const listingCategoryLabel = fromFeedListing ? getChatListingCategoryLabel(u?.category) : null;
+              const conversation = {
+                id: otherEmail || u?.subscription_id || u?.id || 'profile',
+                name: displayName,
+                preview: '',
+                time: '',
+                profileImageUrl: getUserProfileImageUrl(u),
+                ...(listingId ? {listingId, listingCategoryLabel: listingCategoryLabel || null} : {}),
+              };
+              setSharedListingForChat(fromFeedListing ? u : null);
+              setSelectedConversation(conversation);
+              setChatReturnScreen(screenName.professionalFlyer);
+              setCurrentScreen(screenName.chat);
+            }}
+            onCall={phone => {
+              if (typeof alert !== 'undefined') {
+                alert(phone ? `פנייה בטלפון ${phone}` : 'אין מספר טלפון');
+              }
             }}
           />
         )}
@@ -445,6 +548,19 @@ export default function App() {
               setCurrentScreen(screenName.userRegistration);
             }}
             onOpenAllListings={() => setCurrentScreen(screenName.userListings)}
+            onOpenFollowHub={tab => {
+              setFollowHubInitialTab(tab || 'followers');
+              setFollowHubReturnScreen(screenName.userProfile);
+              setCurrentScreen(screenName.followHub);
+            }}
+          />
+        )}
+        {currentScreen === screenName.followHub && (
+          <FollowHubScreen
+            onClose={() => setCurrentScreen(followHubReturnScreen)}
+            currentUser={currentUser}
+            profileUser={profileUser}
+            initialTab={followHubInitialTab}
           />
         )}
         {currentScreen === screenName.userListings && (
@@ -457,6 +573,7 @@ export default function App() {
         {currentScreen === screenName.cityFilter && (
           <CityFilterScreen
             initialFilter={feedFilters.city}
+            selectedCategory={selectedCategory}
             onClose={() => setCurrentScreen(screenName.tikTokFeed)}
             onSave={filter => {
               setExclusiveFeedFilter('city', filter);
@@ -477,6 +594,7 @@ export default function App() {
         {currentScreen === screenName.roomsFilter && (
           <RoomsFilterScreen
             initialFilter={feedFilters.rooms}
+            selectedCategory={selectedCategory}
             onClose={() => setCurrentScreen(screenName.tikTokFeed)}
             onSave={filter => {
               setExclusiveFeedFilter('rooms', filter);
@@ -487,6 +605,7 @@ export default function App() {
         {currentScreen === screenName.priceFilter && (
           <PriceFilterScreen
             initialFilter={feedFilters.price}
+            selectedCategory={selectedCategory}
             onClose={() => setCurrentScreen(screenName.tikTokFeed)}
             onSave={filter => {
               setExclusiveFeedFilter('price', filter);
@@ -674,6 +793,77 @@ export default function App() {
             onOpenAccessibilityStatement={() =>
               setCurrentScreen(screenName.accessibilityStatement)
             }
+            onOpenFollowHub={tab => {
+              if (!currentUser) return;
+              setProfileUser(currentUser);
+              setFollowHubInitialTab(tab || 'following');
+              setFollowHubReturnScreen(screenName.settings);
+              setCurrentScreen(screenName.followHub);
+            }}
+            onOpenOwnProfile={() => {
+              if (!currentUser) return;
+              const openOwnProfile = async () => {
+                let profilePayload = currentUser;
+                try {
+                  const mySubId = currentUser?.id ? String(currentUser.id).trim() : '';
+                  if (mySubId) {
+                    const res = await getListings({
+                      status: 'published',
+                      subscription_id: mySubId,
+                    });
+                    const myListings = Array.isArray(res?.listings)
+                      ? [...res.listings]
+                          .filter(item => String(item?.subscription_id || '').trim() === mySubId)
+                          .sort((a, b) => {
+                            const ta = new Date(a?.created_at || 0).getTime();
+                            const tb = new Date(b?.created_at || 0).getTime();
+                            return tb - ta;
+                          })
+                      : [];
+                    if (myListings.length > 0) {
+                      const latest = myListings[0];
+                      profilePayload = {
+                        ...latest,
+                        subscription_id: latest.subscription_id || mySubId,
+                        owner_id: latest.owner_id || mySubId,
+                        creator_name:
+                          latest.creator_name ||
+                          currentUser?.name ||
+                          currentUser?.contact_person_name ||
+                          currentUser?.business_name ||
+                          currentUser?.broker_office_name ||
+                          null,
+                        creator_email:
+                          latest.creator_email ||
+                          (currentUser?.email
+                            ? String(currentUser.email).trim().toLowerCase()
+                            : null),
+                        creator_profile_image_url:
+                          latest.creator_profile_image_url ||
+                          currentUser?.profile_picture_url ||
+                          currentUser?.company_logo_url ||
+                          null,
+                        profile_picture_url:
+                          latest.profile_picture_url ||
+                          currentUser?.profile_picture_url ||
+                          currentUser?.company_logo_url ||
+                          null,
+                        company_logo_url:
+                          latest.company_logo_url || currentUser?.company_logo_url || null,
+                        subscription_type:
+                          latest.subscription_type || currentUser?.subscription_type || null,
+                      };
+                    }
+                  }
+                } catch (_) {
+                  // Fallback to currentUser payload if listings request fails.
+                }
+                setProfileReturnScreen(screenName.settings);
+                setProfileUser(profilePayload);
+                setCurrentScreen(screenName.userProfile);
+              };
+              openOwnProfile();
+            }}
           />
         )}
         {currentScreen === screenName.termsOfUse && (
@@ -688,7 +878,14 @@ export default function App() {
           <FeedbackSuggestionScreen onClose={() => setCurrentScreen(screenName.settings)} />
         )}
         {currentScreen === screenName.favorites && (
-          <FavoritesScreen onClose={() => setCurrentScreen(screenName.settings)} />
+          <FavoritesScreen
+            onClose={() => setCurrentScreen(screenName.tikTokFeed)}
+            onOpenListing={listing => {
+              setProfileReturnScreen(screenName.favorites);
+              setProfileUser(listing);
+              setCurrentScreen(screenName.userProfile);
+            }}
+          />
         )}
         {currentScreen === screenName.secretCodeRecovery && (
           <SecretCodeRecoveryScreen
@@ -728,10 +925,19 @@ export default function App() {
                   : 8
             }
             onOpenListingAnalysis={() => setCurrentScreen(screenName.listingAnalysis)}
-            onCreateAd={categoryId => {
+            onCreateAd={(categoryId, opts) => {
               setSelectedCategory(String(categoryId));
               setEditPublishSourceCategory(Number(categoryId));
+              setBnbPublishHostType(opts?.bnbHostType ?? null);
               setCurrentScreen(screenName.adsForm);
+            }}
+            onCreatePost={categoryId => {
+              setSelectedCategory(String(categoryId));
+              setPostEditorConfig({
+                publishTarget: 'post',
+                returnScreen: screenName.editPublishAd,
+              });
+              setCurrentScreen(screenName.postEditor);
             }}
             onEditAd={listing => {
               setBnbPublishHostType(null);
@@ -808,6 +1014,10 @@ export default function App() {
             onClose={() => {
               setReturnToScreenAfterAuth(null);
               setCurrentScreen(screenName.settings);
+            }}
+            onSkipToHome={() => {
+              setReturnToScreenAfterAuth(null);
+              setCurrentScreen(screenName.home);
             }}
             onLoginSuccess={subscription => {
               setCurrentUser(subscription);

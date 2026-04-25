@@ -12,28 +12,60 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {CalendarModal} from '../components/FormsElement/CalendarModal';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const INPUT_BORDER = '#8C85B3';
 const GOLD = ['#FEE787', '#BD9947', '#9C6522'];
-const MAX_PRICE = 10000000;
+const MAX_PRICE_DEFAULT = 10000000;
+const MAX_PRICE_BNB = 10000;
+// Initial max value displayed when no filter has been saved yet. The slider
+// can still be dragged all the way up to `maxPriceCap`.
+const INITIAL_MAX_PRICE = 1000;
+const MENU_ICON = require('../assets/buttom-bar/price.png');
+const CALENDAR_ICON = require('../assets/calendarIcon.png');
 
-// Figma asset (node 12:75198)
-const MENU_ICON =
-  'https://www.figma.com/api/mcp/asset/703cc13b-492e-40a5-b899-18d2b59ec983';
-const SLIDER_KNOB =
-  'https://www.figma.com/api/mcp/asset/27b1e6ab-cf3a-4723-a5e3-f643da4dfdd9';
+const formatPrice = n => `₪${Math.max(0, Number(n) || 0).toLocaleString()}`;
 
-const formatPrice = n =>
-  n >= 1000000 ? `₪${(n / 1000000).toFixed(0)}M` : `₪${(n || 0).toLocaleString()}`;
+const toIsoDate = value => {
+  if (!value) return null;
+  const text = String(value).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+};
 
-const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
+const formatDateForDisplay = isoDate => {
+  const safe = toIsoDate(isoDate);
+  if (!safe) return 'DD.MM.YY';
+  const [year, month, day] = safe.split('-');
+  return `${day}.${month}.${year.slice(2)}`;
+};
+
+const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
-  const [minPrice, setMinPrice] = useState(initialFilter?.minPrice ?? 0);
-  const [maxPrice, setMaxPrice] = useState(initialFilter?.maxPrice ?? MAX_PRICE);
+  const isBnb = selectedCategory === 5 || selectedCategory === '5';
+  const maxPriceCap = isBnb ? MAX_PRICE_BNB : MAX_PRICE_DEFAULT;
+
+  const [minPrice, setMinPrice] = useState(
+    Math.max(0, Math.min(initialFilter?.minPrice ?? 0, maxPriceCap)),
+  );
+  const [maxPrice, setMaxPrice] = useState(
+    Math.max(
+      0,
+      Math.min(initialFilter?.maxPrice ?? INITIAL_MAX_PRICE, maxPriceCap),
+    ),
+  );
+  const [checkInDate, setCheckInDate] = useState(toIsoDate(initialFilter?.checkInDate));
+  const [checkOutDate, setCheckOutDate] = useState(toIsoDate(initialFilter?.checkOutDate));
+  const [freeCancellation, setFreeCancellation] = useState(
+    initialFilter?.freeCancellation === true,
+  );
+  const [hotDealOnly, setHotDealOnly] = useState(initialFilter?.hotDealOnly === true);
+  const [calendarTarget, setCalendarTarget] = useState(null);
+
   const [sliderWidth, setSliderWidth] = useState(1);
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
@@ -43,15 +75,18 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
   maxPriceRef.current = maxPrice;
   const bottomInset = Math.max(insets.bottom, 8);
 
-  const minPercent = useMemo(() => (minPrice / MAX_PRICE) * 100, [minPrice]);
-  const maxPercent = useMemo(() => (maxPrice / MAX_PRICE) * 100, [maxPrice]);
+  const minPercent = useMemo(() => (minPrice / maxPriceCap) * 100, [minPrice, maxPriceCap]);
+  const maxPercent = useMemo(() => (maxPrice / maxPriceCap) * 100, [maxPrice, maxPriceCap]);
 
   const updateFromPercent = (percent, isMin) => {
     const maxP = maxPriceRef.current;
     const minP = minPriceRef.current;
-    const value = Math.round((percent / 100) * MAX_PRICE);
-    if (isMin) setMinPrice(Math.max(0, Math.min(value, maxP - 1)));
-    else setMaxPrice(Math.min(MAX_PRICE, Math.max(value, minP + 1)));
+    const value = Math.round((percent / 100) * maxPriceCap);
+    if (isMin) {
+      setMinPrice(Math.max(0, Math.min(value, maxP - 1)));
+      return;
+    }
+    setMaxPrice(Math.min(maxPriceCap, Math.max(value, minP + 1)));
   };
 
   const panResponder = useRef(
@@ -67,8 +102,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
             : (touch.locationX ?? 0);
         const w = sliderWidth || 1;
         const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        const minP = (minPriceRef.current / MAX_PRICE) * 100;
-        const maxP = (maxPriceRef.current / MAX_PRICE) * 100;
+        const minP = (minPriceRef.current / maxPriceCap) * 100;
+        const maxP = (maxPriceRef.current / maxPriceCap) * 100;
         activeThumbRef.current =
           Math.abs(percent - minP) < Math.abs(percent - maxP) ? 'min' : 'max';
       },
@@ -92,24 +127,39 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
   ).current;
 
   const handleSave = () => {
-    onSave?.({minPrice, maxPrice});
+    onSave?.({
+      minPrice,
+      maxPrice,
+      ...(isBnb
+        ? {
+            checkInDate,
+            checkOutDate,
+            freeCancellation,
+            hotDealOnly,
+          }
+        : {}),
+    });
     onClose?.();
   };
 
   const handleClear = () => {
     setMinPrice(0);
-    setMaxPrice(MAX_PRICE);
+    setMaxPrice(Math.min(INITIAL_MAX_PRICE, maxPriceCap));
+    setCheckInDate(null);
+    setCheckOutDate(null);
+    setFreeCancellation(false);
+    setHotDealOnly(false);
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.topRail}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={onClose}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
           style={styles.handlePressArea}>
           <View style={styles.handle} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -121,20 +171,23 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
             paddingBottom: bottomInset + (compact ? 20 : 52),
           },
         ]}
-        scrollEnabled={false}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={{uri: MENU_ICON}} style={styles.headerIcon} resizeMode="contain" />
+          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
           <Text style={styles.title}>מחיר</Text>
         </View>
 
         <View style={styles.priceInputsRow}>
-          <View style={styles.pricePill}>
-            <Text style={styles.pricePillText}>{formatPrice(maxPrice)} +</Text>
+          <View style={styles.priceInputGroup}>
+            <View style={styles.pricePill}>
+              <Text style={styles.pricePillText}>{formatPrice(maxPrice)} +</Text>
+            </View>
           </View>
           <Text style={styles.priceDash}>-</Text>
-          <View style={styles.pricePill}>
-            <Text style={styles.pricePillText}>{formatPrice(minPrice)}</Text>
+          <View style={styles.priceInputGroup}>
+            <View style={styles.pricePill}>
+              <Text style={styles.pricePillText}>{formatPrice(minPrice)}</Text>
+            </View>
           </View>
         </View>
 
@@ -158,12 +211,62 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
             />
           </View>
           <View style={[styles.sliderThumb, {left: `${minPercent}%`}]} pointerEvents="none">
-            <Image source={{uri: SLIDER_KNOB}} style={styles.sliderThumbImage} resizeMode="contain" />
+            <View style={styles.sliderThumbCore} />
           </View>
           <View style={[styles.sliderThumb, {left: `${maxPercent}%`}]} pointerEvents="none">
-            <Image source={{uri: SLIDER_KNOB}} style={styles.sliderThumbImage} resizeMode="contain" />
+            <View style={styles.sliderThumbCore} />
           </View>
         </View>
+
+        {isBnb ? (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.dateSection}>
+              <Text style={styles.dateLabel}>
+                <Text style={styles.requiredAsterisk}>*</Text>
+                תאריך כניסה
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.datePill}
+                onPress={() => setCalendarTarget('checkIn')}>
+                <Text style={styles.dateText}>{formatDateForDisplay(checkInDate)}</Text>
+                <Image source={CALENDAR_ICON} style={styles.dateIcon} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateSection}>
+              <Text style={styles.dateLabel}>
+                <Text style={styles.requiredAsterisk}>*</Text>
+                תאריך יציאה
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.datePill}
+                onPress={() => setCalendarTarget('checkOut')}>
+                <Text style={styles.dateText}>{formatDateForDisplay(checkOutDate)}</Text>
+                <Image source={CALENDAR_ICON} style={styles.dateIcon} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => setFreeCancellation(prev => !prev)}
+              activeOpacity={0.8}>
+              <Text style={styles.toggleLabel}>ביטול ללא קנס</Text>
+              <FigmaCheckbox checked={freeCancellation} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleRow, styles.hotDealRow]}
+              onPress={() => setHotDealOnly(prev => !prev)}
+              activeOpacity={0.8}>
+              <Text style={styles.toggleLabel}>דיל משתלם</Text>
+              <FigmaCheckbox checked={hotDealOnly} />
+            </TouchableOpacity>
+            <Text style={styles.hotDealDescription}>
+              אופציה זו תמצא לכם את התמורה הכי משתלמת ביחס למחיר המוצע ומחירי מבצע.
+            </Text>
+          </>
+        ) : null}
 
         <View style={[styles.footer, compact && styles.footerCompact]}>
           <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
@@ -175,11 +278,23 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave}) => {
               <Text style={styles.saveBtnText}>שמור</Text>
             </LinearGradient>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
+          {!isBnb ? (
+            <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+              <Text style={styles.clearText}>נקה</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
+      {isBnb ? (
+        <CalendarModal
+          visible={calendarTarget != null}
+          onClose={() => setCalendarTarget(null)}
+          onSelect={isoDate => {
+            if (calendarTarget === 'checkIn') setCheckInDate(toIsoDate(isoDate));
+            if (calendarTarget === 'checkOut') setCheckOutDate(toIsoDate(isoDate));
+          }}
+        />
+      ) : null}
     </View>
   );
 };
@@ -229,13 +344,15 @@ const styles = StyleSheet.create({
   },
   priceInputsRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 24,
     gap: 12,
   },
-  pricePill: {
+  priceInputGroup: {
     flex: 1,
+  },
+  pricePill: {
     height: 52,
     borderRadius: 1000,
     borderWidth: 1,
@@ -247,9 +364,16 @@ const styles = StyleSheet.create({
   pricePillText: {
     color: '#fff',
     fontSize: 18,
+    lineHeight: 24,
     fontFamily: 'Rubik-Medium',
   },
-  priceDash: {color: 'rgba(255,255,255,0.5)', fontSize: 18, fontFamily: 'Rubik-Regular'},
+  priceDash: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Regular',
+    marginTop: 14,
+  },
   sliderContainer: {
     width: '100%',
     height: 42,
@@ -260,7 +384,7 @@ const styles = StyleSheet.create({
   sliderTrack: {
     width: '100%',
     height: 4,
-    backgroundColor: '#D2D0DC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 1000,
     overflow: 'visible',
   },
@@ -269,7 +393,7 @@ const styles = StyleSheet.create({
     top: 0,
     height: 4,
     borderRadius: 1000,
-    backgroundColor: '#D2D0DC',
+    backgroundColor: '#FFCF4B',
   },
   sliderThumb: {
     position: 'absolute',
@@ -278,7 +402,79 @@ const styles = StyleSheet.create({
     marginLeft: -11,
     top: 10,
   },
-  sliderThumbImage: {width: 22, height: 22},
+  sliderThumbCore: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFCF4B',
+    borderWidth: 1,
+    borderColor: '#F3C13D',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#252434',
+    marginBottom: 24,
+  },
+  dateSection: {
+    marginBottom: 24,
+  },
+  dateLabel: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginBottom: 20,
+  },
+  requiredAsterisk: {
+    color: '#FFC40A',
+  },
+  datePill: {
+    height: 52,
+    borderRadius: 1000,
+    borderWidth: 1,
+    borderColor: INPUT_BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  dateText: {
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: 0.2,
+  },
+  dateIcon: {
+    width: 24,
+    height: 24,
+    marginLeft: 8,
+  },
+  toggleRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+    marginBottom: 20,
+  },
+  hotDealRow: {
+    marginBottom: 10,
+  },
+  toggleLabel: {
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    fontSize: 18,
+    textAlign: 'right',
+  },
+  hotDealDescription: {
+    color: '#9E9DA4',
+    fontFamily: 'Rubik-Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'right',
+    marginBottom: 8,
+    paddingRight: 32,
+  },
   footer: {marginTop: 'auto', alignItems: 'center'},
   footerCompact: {marginTop: 10},
   saveBtnWrap: {marginBottom: 12, width: '100%'},
