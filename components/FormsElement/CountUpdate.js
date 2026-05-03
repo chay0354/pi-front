@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View, TouchableOpacity, TextInput} from 'react-native';
 import {Title} from './Title';
 import {Divider} from './Divider';
+import {Colors} from '../../constants/styles';
 
 export const CountUpdate = ({
   title,
@@ -11,6 +12,8 @@ export const CountUpdate = ({
   isLast = false,
   isDivider = true,
   min = 0,
+  required = true,
+  variant = 'default',
   counterInputStyle,
   containerStyle,
   deviderStyle,
@@ -36,10 +39,13 @@ export const CountUpdate = ({
     setDraft(String(clamped));
   };
 
-  return (
-    <View style={[{marginBottom: isLast ? 0 : 20}, containerStyle]}>
-      {title && <Title text={title} required textStyle={{marginBottom: 15}} />}
-      <View style={[styles.counterInput, counterInputStyle]}>
+  const counterPill = (
+    <View
+      style={[
+        styles.counterInput,
+        variant === 'figmaOffice' && styles.counterInputFigma,
+        counterInputStyle,
+      ]}>
         <TouchableOpacity
           style={styles.counterButtonLeft}
           onPress={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}>
@@ -50,7 +56,11 @@ export const CountUpdate = ({
           <View style={styles.counterValueRow}>
             {isArea ? <Text style={styles.counterValueSuffix}>מ"ר</Text> : null}
             <TextInput
-              style={[styles.counterValueInput, {width: inputWidth}]}
+              style={[
+                styles.counterValueInput,
+                variant === 'figmaOffice' && styles.counterValueInputFigma,
+                {width: inputWidth},
+              ]}
               value={draft}
               onChangeText={setDraft}
               onBlur={commitDraft}
@@ -68,6 +78,35 @@ export const CountUpdate = ({
           <Text style={styles.counterButtonPlus}>+</Text>
         </TouchableOpacity>
       </View>
+  );
+
+  if (variant === 'figmaOffice') {
+    return (
+      <View style={[{marginBottom: isLast ? 0 : 0}, containerStyle]}>
+        {title ? (
+          <View style={styles.figmaOfficeLabelRow}>
+            <Text style={styles.figmaOfficeLabelText}>{title}</Text>
+            {required ? (
+              <Text style={styles.figmaOfficeStar}>*</Text>
+            ) : null}
+          </View>
+        ) : null}
+        {counterPill}
+        {isDivider && <Divider style={deviderStyle} />}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[{marginBottom: isLast ? 0 : 20}, containerStyle]}>
+      {title ? (
+        <Title
+          text={title}
+          required={required}
+          textStyle={{marginBottom: 15}}
+        />
+      ) : null}
+      {counterPill}
       {isDivider && <Divider style={deviderStyle} />}
     </View>
   );
@@ -84,6 +123,27 @@ const styles = StyleSheet.create({
     borderColor: '#8C85B3',
     overflow: 'hidden',
     marginBottom: 22,
+  },
+  counterInputFigma: {
+    marginBottom: 0,
+  },
+  figmaOfficeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginBottom: 20,
+  },
+  figmaOfficeLabelText: {
+    color: Colors.whiteGeneral,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+  },
+  figmaOfficeStar: {
+    color: Colors.yellowIcons,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
   },
   counterButtonLeft: {
     flex: 1,
@@ -144,6 +204,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     textAlign: 'center',
     paddingVertical: 0,
+  },
+  counterValueInputFigma: {
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    lineHeight: 24,
   },
   counterValueSuffix: {
     color: '#fff',

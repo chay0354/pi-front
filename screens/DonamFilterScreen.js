@@ -9,6 +9,8 @@ import {
   Pressable,
   TextInput,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const BG = '#1a1926';
 const MIN_DONAM = 0.5;
@@ -16,6 +18,8 @@ const MAX_DONAM = 500;
 const STEP = 0.5;
 
 const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
   const [minDonam, setMinDonam] = useState(initialFilter?.minDonam ?? 1);
   const [maxDonam, setMaxDonam] = useState(initialFilter?.maxDonam ?? 2);
   const [minDraft, setMinDraft] = useState(String(initialFilter?.minDonam ?? 1));
@@ -174,14 +178,8 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-          <Image
-            source={require('../assets/buy-rent/save.png')}
-            style={styles.saveBtnImage}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+      <View style={[styles.footer, {paddingBottom: bottomInset + 8}]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
         <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
           <Text style={styles.clearText}>נקה</Text>
         </TouchableOpacity>
@@ -216,8 +214,9 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 40,
     backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: '#373548',
   },
   handleBar: {
     width: 40,
@@ -275,8 +274,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     textAlign: 'center',
   },
-  saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
-  saveBtnImage: { width: '100%', height: 54 },
+  saveBtnWrap: { marginBottom: 12, width: '100%' },
   clearWrap: { alignItems: 'center' },
   clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
 });

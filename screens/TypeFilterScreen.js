@@ -6,16 +6,14 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  Pressable,
   useWindowDimensions,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
-const RADIO_BG = '#27262F';
 
 const MENU_ICON = require('../assets/tiktok/kind-filter.png');
 
@@ -53,19 +51,26 @@ const TYPE_OPTIONS_BNB = [
   {id: 'special', label: 'מיוחדים'},
 ];
 
-// קרקעות (category 7): סוג — matches land form radio values (plan_approval, etc.)
+// קרקעות (category 7): סוג only — same predicate ids as `applyFeedFilters` landPredicates in TikTokFeedScreen
 const TYPE_OPTIONS_LAND = [
-  {id: 'own_private', label: 'בעלות קרקע — פרטי'},
-  {id: 'own_administration', label: 'בעלות קרקע — מינהל'},
-  {id: 'agri_yes', label: 'קרקע חקלאית — כן'},
-  {id: 'agri_not', label: 'קרקע חקלאית — לא'},
-  {id: 'plan_happy', label: 'תב״ע — מאושרת'},
-  {id: 'plan_nothing', label: 'תב״ע — אין'},
-  {id: 'plan_there_is', label: 'תב״ע — יש'},
-  {id: 'mortgage_not', label: 'קרקע במושע — לא'},
-  {id: 'mortgage_yes', label: 'קרקע במושע — כן'},
-  {id: 'permit_nothing', label: 'היתר — אין'},
-  {id: 'permit_there_is', label: 'היתר — יש'},
+  {id: 'own_private', label: 'קרקע פרטית'},
+  {id: 'agri_yes', label: 'קרקע חקלאית'},
+  {id: 'mortgage_yes', label: 'קרקע במושב'},
+  {id: 'permit_there_is', label: 'קרקע עם היתר'},
+  {id: 'plan_there_is', label: 'קרקע עם תב״ע'},
+  {id: 'plan_happy', label: 'קרקע עם תב״ע מאושרת'},
+];
+
+/** חדש מקבלן (category 1) — property slice via `property_type` / `apartmentTypeId` in TikTokFeedScreen */
+const TYPE_OPTIONS_NEW_FROM_DEVELOPER = [
+  {id: 'apartment', label: 'דירה'},
+  {id: 'garden', label: 'דירת גן'},
+  {id: 'penthouses', label: 'פנטהאוז'},
+  {id: 'private_houses', label: 'בית פרטי'},
+  {id: 'villas', label: 'וילה'},
+  {id: 'offices', label: 'משרדים'},
+  {id: 'commercial', label: 'מסחר'},
+  {id: 'religious_sector', label: 'מגזר דתי'},
 ];
 
 const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
@@ -76,7 +81,12 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
     selectedCategory === 8 || selectedCategory === '8';
   const isLand = selectedCategory === 7 || selectedCategory === '7';
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
+  const isNewFromDeveloper =
+    selectedCategory === 1 || selectedCategory === '1';
   const options = useMemo(() => {
+    if (isNewFromDeveloper) {
+      return TYPE_OPTIONS_NEW_FROM_DEVELOPER;
+    }
     if (isBnb) {
       return TYPE_OPTIONS_BNB;
     }
@@ -87,7 +97,7 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
       return TYPE_OPTIONS_LAND;
     }
     return TYPE_OPTIONS_GLOBAL;
-  }, [isBnb, isCommerce, isLand]);
+  }, [isBnb, isCommerce, isLand, isNewFromDeveloper]);
 
   const [selectedIds, setSelectedIds] = useState(() => {
     const initial = Array.isArray(initialFilter)
@@ -95,7 +105,17 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
       : initialFilter
         ? [initialFilter]
         : [];
-    return isBnb ? initial.slice(0, 1) : initial;
+    if (isBnb) {
+      const allow = new Set(TYPE_OPTIONS_BNB.map(o => o.id));
+      return initial.map(String).filter(id => allow.has(id));
+    }
+    if (isNewFromDeveloper) {
+      const allow = new Set(TYPE_OPTIONS_NEW_FROM_DEVELOPER.map(o => o.id));
+      return initial
+        .map(id => (String(id) === 'apartments' ? 'apartment' : id))
+        .filter(id => allow.has(String(id)));
+    }
+    return initial;
   });
 
   useEffect(() => {
@@ -104,8 +124,22 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
       : initialFilter
         ? [initialFilter]
         : [];
-    setSelectedIds(isBnb ? next.slice(0, 1) : next);
-  }, [initialFilter, isBnb, isCommerce, isLand]);
+    if (isBnb) {
+      const allow = new Set(TYPE_OPTIONS_BNB.map(o => o.id));
+      setSelectedIds(next.map(String).filter(id => allow.has(id)));
+      return;
+    }
+    if (isNewFromDeveloper) {
+      const allow = new Set(TYPE_OPTIONS_NEW_FROM_DEVELOPER.map(o => o.id));
+      setSelectedIds(
+        next
+          .map(id => (String(id) === 'apartments' ? 'apartment' : id))
+          .filter(id => allow.has(String(id))),
+      );
+      return;
+    }
+    setSelectedIds(next);
+  }, [initialFilter, isBnb, isCommerce, isLand, isNewFromDeveloper]);
   const bottomInset = Math.max(insets.bottom, 8);
 
   const handleSave = () => {
@@ -116,14 +150,11 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   };
 
   const handleClear = () => {
-    setSelectedIds([]);
+    if (onSave) onSave({type: null});
+    if (onClose) onClose();
   };
 
   const toggleOption = optionId => {
-    if (isBnb) {
-      setSelectedIds(prev => (prev[0] === optionId ? [] : [optionId]));
-      return;
-    }
     setSelectedIds(prev =>
       prev.includes(optionId)
         ? prev.filter(id => id !== optionId)
@@ -148,7 +179,7 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
           styles.scrollContent,
           {
             paddingTop: compact ? 16 : 24,
-            paddingBottom: bottomInset + (compact ? 20 : 52),
+            paddingBottom: compact ? 16 : 24,
           },
         ]}
         scrollEnabled
@@ -166,37 +197,27 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
               onPress={() => toggleOption(option.id)}
               activeOpacity={0.8}>
               <Text style={styles.radioLabel}>{option.label}</Text>
-              <View
-                style={[
-                  styles.radioOuter,
-                  selectedIds.includes(option.id) && styles.radioOuterChecked,
-                ]}>
-                {selectedIds.includes(option.id) ? (
-                  <View style={styles.checkMarkWrap}>
-                    <View style={styles.checkMarkShort} />
-                    <View style={styles.checkMarkLong} />
-                  </View>
-                ) : null}
-              </View>
+              <FigmaCheckbox
+                checked={selectedIds.includes(option.id)}
+                size={22}
+                variant="dot"
+              />
             </TouchableOpacity>
           ))}
         </View>
-
-        <View style={[styles.footer, compact && styles.footerCompact]}>
-          <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-            <LinearGradient
-              colors={GOLD_GRADIENT}
-              start={{x: 0.5, y: 0}}
-              end={{x: 0.5, y: 1}}
-              style={styles.saveBtnGradient}>
-              <Text style={styles.saveBtnText}>שמור</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
+
+      <View
+        style={[
+          styles.footer,
+          compact && styles.footerCompact,
+          {paddingBottom: bottomInset + 8},
+        ]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
+        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+          <Text style={styles.clearText}>נקה</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -231,14 +252,17 @@ const styles = StyleSheet.create({
   scroll: {flex: 1},
   scrollContent: {
     paddingHorizontal: 24,
-    flexGrow: 1,
   },
   footer: {
-    marginTop: 'auto',
+    paddingHorizontal: 24,
+    paddingTop: 12,
     alignItems: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
   footerCompact: {
-    marginTop: 12,
+    paddingTop: 8,
   },
   header: {
     alignItems: 'center',
@@ -283,60 +307,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
   },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: '#A5A5A5',
-    backgroundColor: RADIO_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioOuterChecked: {
-    borderColor: '#FFC140',
-  },
-  checkMarkWrap: {
-    width: 11,
-    height: 8,
-    position: 'relative',
-  },
-  checkMarkShort: {
-    position: 'absolute',
-    left: 1,
-    bottom: 1,
-    width: 4,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#FFC140',
-    transform: [{rotate: '42deg'}],
-  },
-  checkMarkLong: {
-    position: 'absolute',
-    left: 3,
-    bottom: 1,
-    width: 8,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#FFC140',
-    transform: [{rotate: '-45deg'}],
-  },
   saveBtnWrap: {
     marginBottom: 12,
     width: '100%',
-  },
-  saveBtnGradient: {
-    width: '100%',
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.2,
   },
   clearWrap: {
     alignItems: 'center',

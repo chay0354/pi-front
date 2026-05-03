@@ -1,7 +1,8 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -9,21 +10,23 @@ import {
   Pressable,
   useWindowDimensions,
   PanResponder,
+  Platform,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import FilterSaveButton from '../components/FilterSaveButton';
 import {CalendarModal} from '../components/FormsElement/CalendarModal';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const INPUT_BORDER = '#8C85B3';
-const GOLD = ['#FEE787', '#BD9947', '#9C6522'];
 const MAX_PRICE_DEFAULT = 10000000;
 const MAX_PRICE_BNB = 10000;
-// Initial max value displayed when no filter has been saved yet. The slider
-// can still be dragged all the way up to `maxPriceCap`.
-const INITIAL_MAX_PRICE = 1000;
+/** Non–BnB: slider and taps move in 1,000,000 increments (aligns with מחיר ± in forms). */
+const PRICE_SLIDER_STEP = 1000000;
+const BNB_PRICE_SLIDER_STEP = 100;
+// BnB: default max (₪/night) when no saved filter. Non-BnB uses `MAX_PRICE_DEFAULT` (0–10M+).
+const INITIAL_MAX_PRICE_BNB = 1000;
 const MENU_ICON = require('../assets/buttom-bar/price.png');
 const CALENDAR_ICON = require('../assets/calendarIcon.png');
 
@@ -42,6 +45,22 @@ const formatDateForDisplay = isoDate => {
   return `${day}.${month}.${year.slice(2)}`;
 };
 
+function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
+  const w = trackWidth > 0 ? trackWidth : 1;
+  const ne = nativeEvent;
+  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
+    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
+  }
+  const node = sliderViewRef && sliderViewRef.current;
+  const touch = ne.touches?.[0] || ne;
+  if (node && typeof node.getBoundingClientRect === 'function' && (touch?.clientX != null || touch?.pageX != null)) {
+    const rect = node.getBoundingClientRect();
+    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
+    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
+  }
+  return 0;
+}
+
 const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
@@ -52,12 +71,13 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   const [minPrice, setMinPrice] = useState(
     Math.max(0, Math.min(initialFilter?.minPrice ?? 0, maxPriceCap)),
   );
-  const [maxPrice, setMaxPrice] = useState(
-    Math.max(
-      0,
-      Math.min(initialFilter?.maxPrice ?? INITIAL_MAX_PRICE, maxPriceCap),
-    ),
-  );
+  const [maxPrice, setMaxPrice] = useState(() => {
+    if (initialFilter?.maxPrice != null) {
+      return Math.max(0, Math.min(Number(initialFilter.maxPrice), maxPriceCap));
+    }
+    // No saved price filter: default 0 to 10,000,000+ (non-BnB) or BnB default scale.
+    return isBnb ? Math.min(INITIAL_MAX_PRICE_BNB, maxPriceCap) : maxPriceCap;
+  });
   const [checkInDate, setCheckInDate] = useState(toIsoDate(initialFilter?.checkInDate));
   const [checkOutDate, setCheckOutDate] = useState(toIsoDate(initialFilter?.checkOutDate));
   const [freeCancellation, setFreeCancellation] = useState(
@@ -66,7 +86,12 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   const [hotDealOnly, setHotDealOnly] = useState(initialFilter?.hotDealOnly === true);
   const [calendarTarget, setCalendarTarget] = useState(null);
 
+  const [minFocused, setMinFocused] = useState(false);
+  const [maxFocused, setMaxFocused] = useState(false);
+  const [minDraft, setMinDraft] = useState('');
+  const [maxDraft, setMaxDraft] = useState('');
   const [sliderWidth, setSliderWidth] = useState(1);
+  const sliderWidthRef = useRef(1);
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
   const minPriceRef = useRef(minPrice);
@@ -78,53 +103,68 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   const minPercent = useMemo(() => (minPrice / maxPriceCap) * 100, [minPrice, maxPriceCap]);
   const maxPercent = useMemo(() => (maxPrice / maxPriceCap) * 100, [maxPrice, maxPriceCap]);
 
-  const updateFromPercent = (percent, isMin) => {
-    const maxP = maxPriceRef.current;
-    const minP = minPriceRef.current;
-    const value = Math.round((percent / 100) * maxPriceCap);
-    if (isMin) {
-      setMinPrice(Math.max(0, Math.min(value, maxP - 1)));
-      return;
-    }
-    setMaxPrice(Math.min(maxPriceCap, Math.max(value, minP + 1)));
-  };
+  const applyPriceFromPercent = useCallback(
+    (percent, isMin) => {
+      const cap = maxPriceCap;
+      const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
+      let value = (percent / 100) * cap;
+      if (isBnb) {
+        value = Math.round(value / BNB_PRICE_SLIDER_STEP) * BNB_PRICE_SLIDER_STEP;
+      } else {
+        value = Math.round(value / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
+      }
+      value = Math.max(0, Math.min(cap, value));
+      const minP = minPriceRef.current;
+      const maxP = maxPriceRef.current;
+      if (isMin) {
+        setMinPrice(Math.max(0, Math.min(value, Math.max(0, maxP - minGap))));
+        return;
+      }
+      setMaxPrice(Math.min(cap, Math.max(value, minP + minGap)));
+    },
+    [isBnb, maxPriceCap],
+  );
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: evt => {
-        const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
-        const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX =
-          rect && touch.pageX != null
-            ? touch.pageX - rect.left
-            : (touch.locationX ?? 0);
-        const w = sliderWidth || 1;
-        const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        const minP = (minPriceRef.current / maxPriceCap) * 100;
-        const maxP = (maxPriceRef.current / maxPriceCap) * 100;
-        activeThumbRef.current =
-          Math.abs(percent - minP) < Math.abs(percent - maxP) ? 'min' : 'max';
-      },
-      onPanResponderMove: evt => {
-        const thumb = activeThumbRef.current;
-        if (!thumb) return;
-        const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
-        const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX =
-          rect && touch.pageX != null
-            ? touch.pageX - rect.left
-            : (touch.locationX ?? 0);
-        const w = sliderWidth || 1;
-        const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        updateFromPercent(percent, thumb === 'min');
-      },
-      onPanResponderRelease: () => {
-        activeThumbRef.current = null;
-      },
-    }),
-  ).current;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: evt => {
+          const w = sliderWidthRef.current;
+          const percent = getSliderPercentFromEvent(
+            evt.nativeEvent,
+            w,
+            sliderRef,
+          );
+          const cap = maxPriceCap;
+          const minP = (minPriceRef.current / cap) * 100;
+          const maxP = (maxPriceRef.current / cap) * 100;
+          const nearestMin = Math.abs(percent - minP) < Math.abs(percent - maxP);
+          activeThumbRef.current = nearestMin ? 'min' : 'max';
+          applyPriceFromPercent(percent, activeThumbRef.current === 'min');
+        },
+        onPanResponderMove: evt => {
+          const thumb = activeThumbRef.current;
+          if (!thumb) return;
+          const w = sliderWidthRef.current;
+          const percent = getSliderPercentFromEvent(
+            evt.nativeEvent,
+            w,
+            sliderRef,
+          );
+          applyPriceFromPercent(percent, thumb === 'min');
+        },
+        onPanResponderRelease: () => {
+          activeThumbRef.current = null;
+        },
+      }),
+    [applyPriceFromPercent, maxPriceCap],
+  );
 
   const handleSave = () => {
     onSave?.({
@@ -143,12 +183,43 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   };
 
   const handleClear = () => {
-    setMinPrice(0);
-    setMaxPrice(Math.min(INITIAL_MAX_PRICE, maxPriceCap));
-    setCheckInDate(null);
-    setCheckOutDate(null);
-    setFreeCancellation(false);
-    setHotDealOnly(false);
+    onSave?.(null);
+    onClose?.();
+  };
+
+  const digitsOnly = text =>
+    String(text ?? '')
+      .replace(/[^\d]/g, '')
+      .slice(0, 10);
+
+  const commitMinDraft = () => {
+    const n = minDraft === '' ? 0 : Number(minDraft);
+    const safe = Number.isFinite(n) ? n : 0;
+    const maxP = maxPriceRef.current;
+    const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
+    let next = Math.max(0, Math.min(safe, Math.max(0, maxP - minGap)));
+    if (!isBnb) {
+      next = Math.round(next / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
+      next = Math.max(0, Math.min(next, Math.max(0, maxP - minGap)));
+    }
+    setMinPrice(next);
+    setMinDraft('');
+    setMinFocused(false);
+  };
+
+  const commitMaxDraft = () => {
+    const n = maxDraft === '' ? 0 : Number(maxDraft);
+    const safe = Number.isFinite(n) ? n : 0;
+    const minP = minPriceRef.current;
+    const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
+    let next = Math.min(maxPriceCap, Math.max(safe, minP + minGap));
+    if (!isBnb) {
+      next = Math.round(next / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
+      next = Math.min(maxPriceCap, Math.max(next, minP + minGap));
+    }
+    setMaxPrice(next);
+    setMaxDraft('');
+    setMaxFocused(false);
   };
 
   return (
@@ -168,7 +239,7 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           styles.scrollContent,
           {
             paddingTop: compact ? 16 : 24,
-            paddingBottom: bottomInset + (compact ? 20 : 52),
+            paddingBottom: compact ? 16 : 24,
           },
         ]}
         showsVerticalScrollIndicator={false}>
@@ -177,18 +248,68 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           <Text style={styles.title}>מחיר</Text>
         </View>
 
+        <View style={styles.priceInputsRowBleed}>
         <View style={styles.priceInputsRow}>
           <View style={styles.priceInputGroup}>
             <View style={styles.pricePill}>
-              <Text style={styles.pricePillText}>{formatPrice(maxPrice)} +</Text>
+              <Text style={styles.pricePillPrefix}>
+                {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
+                  ? '+ ₪'
+                  : '₪'}
+              </Text>
+              <TextInput
+                value={
+                  maxFocused
+                    ? maxDraft
+                    : Math.max(0, Number(maxPrice) || 0).toLocaleString()
+                }
+                onFocus={() => {
+                  setMaxFocused(true);
+                  setMaxDraft(String(Math.max(0, Number(maxPrice) || 0)));
+                }}
+                onChangeText={text => setMaxDraft(digitsOnly(text))}
+                onBlur={commitMaxDraft}
+                onSubmitEditing={commitMaxDraft}
+                keyboardType="numeric"
+                inputMode="numeric"
+                placeholder="0"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                style={styles.pricePillInput}
+                textAlign="right"
+                selectTextOnFocus
+                returnKeyType="done"
+              />
             </View>
           </View>
           <Text style={styles.priceDash}>-</Text>
           <View style={styles.priceInputGroup}>
             <View style={styles.pricePill}>
-              <Text style={styles.pricePillText}>{formatPrice(minPrice)}</Text>
+              <Text style={styles.pricePillPrefix}>₪</Text>
+              <TextInput
+                value={
+                  minFocused
+                    ? minDraft
+                    : Math.max(0, Number(minPrice) || 0).toLocaleString()
+                }
+                onFocus={() => {
+                  setMinFocused(true);
+                  setMinDraft(String(Math.max(0, Number(minPrice) || 0)));
+                }}
+                onChangeText={text => setMinDraft(digitsOnly(text))}
+                onBlur={commitMinDraft}
+                onSubmitEditing={commitMinDraft}
+                keyboardType="numeric"
+                inputMode="numeric"
+                placeholder="0"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                style={styles.pricePillInput}
+                textAlign="right"
+                selectTextOnFocus
+                returnKeyType="done"
+              />
             </View>
           </View>
+        </View>
         </View>
 
         <View
@@ -196,9 +317,13 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           style={styles.sliderContainer}
           onLayout={e => {
             const w = e.nativeEvent.layout.width;
-            if (w > 0) setSliderWidth(w);
+            if (w > 0) {
+              sliderWidthRef.current = w;
+              setSliderWidth(w);
+            }
           }}
-          {...panResponder.panHandlers}>
+          {...panResponder.panHandlers}
+          collapsable={false}>
           <View style={styles.sliderTrack}>
             <View
               style={[
@@ -267,24 +392,21 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
             </Text>
           </>
         ) : null}
-
-        <View style={[styles.footer, compact && styles.footerCompact]}>
-          <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-            <LinearGradient
-              colors={GOLD}
-              start={{x: 0.5, y: 0}}
-              end={{x: 0.5, y: 1}}
-              style={styles.saveBtnGradient}>
-              <Text style={styles.saveBtnText}>שמור</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          {!isBnb ? (
-            <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-              <Text style={styles.clearText}>נקה</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
       </ScrollView>
+
+      <View
+        style={[
+          styles.footer,
+          compact && styles.footerCompact,
+          {paddingBottom: bottomInset + 8},
+        ]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
+        {!isBnb ? (
+          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+            <Text style={styles.clearText}>נקה</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       {isBnb ? (
         <CalendarModal
           visible={calendarTarget != null}
@@ -329,7 +451,6 @@ const styles = StyleSheet.create({
   scroll: {flex: 1},
   scrollContent: {
     paddingHorizontal: 24,
-    flexGrow: 1,
   },
   header: {alignItems: 'center', marginBottom: 24},
   headerCompact: {marginBottom: 16},
@@ -342,30 +463,55 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     marginTop: 10,
   },
+  priceInputsRowBleed: {
+    marginHorizontal: -16,
+    alignSelf: 'stretch',
+  },
   priceInputsRow: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 24,
-    gap: 12,
+    gap: 8,
   },
   priceInputGroup: {
     flex: 1,
+    minWidth: 0,
   },
   pricePill: {
     height: 52,
     borderRadius: 1000,
     borderWidth: 1,
     borderColor: INPUT_BORDER,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
     paddingHorizontal: 16,
+    gap: 6,
+    overflow: 'hidden',
   },
   pricePillText: {
     color: '#fff',
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
+  },
+  pricePillPrefix: {
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+  },
+  pricePillInput: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+    paddingVertical: 0,
+    ...(Platform.OS === 'web' ? {outlineStyle: 'none'} : {}),
   },
   priceDash: {
     color: 'rgba(255,255,255,0.8)',
@@ -475,22 +621,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingRight: 32,
   },
-  footer: {marginTop: 'auto', alignItems: 'center'},
-  footerCompact: {marginTop: 10},
-  saveBtnWrap: {marginBottom: 12, width: '100%'},
-  saveBtnGradient: {
-    width: '100%',
-    height: 44,
-    borderRadius: 999,
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
     alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
-  saveBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.2,
-  },
+  footerCompact: {paddingTop: 8},
+  saveBtnWrap: {marginBottom: 12, width: '100%'},
   clearWrap: {alignItems: 'center', paddingVertical: 6},
   clearText: {
     color: '#FFFFFF',

@@ -72,9 +72,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
   },
+  /** Preview thumbs — smaller on all upload flows that use this component */
   displayOptionImage: {
-    height: 100,
-    marginBottom: 15,
+    width: 104,
+    height: 68,
+    alignSelf: 'center',
+    borderRadius: 12,
+    marginBottom: 12,
   },
   displayOptionSubtitle: {
     color: '#D2D0DC',

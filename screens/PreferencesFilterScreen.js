@@ -10,7 +10,9 @@ import {
   PanResponder,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 // Figma: node 25:200959 (מגירה - העדפות)
 const BG = '#2B2A39';
@@ -27,6 +29,8 @@ const MIN_AGE = 18;
 const MAX_AGE = 100;
 
 const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
   const [gender, setGender] = useState(initialFilter?.gender ?? 'female');
   const [ageMin, setAgeMin] = useState(initialFilter?.ageMin ?? 20);
   const [ageMax, setAgeMax] = useState(initialFilter?.ageMax ?? 40);
@@ -117,14 +121,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   };
 
   const handleClear = () => {
-    setGender('female');
-    setAgeMin(20);
-    setAgeMax(40);
-    setNonSmoker(false);
-    setStudents(false);
-    setStableJob(false);
-    setOccasionalJob(false);
-    setImmediateEntry(false);
+    if (onSave) onSave(null);
+    if (onClose) onClose();
   };
 
   const GenderPill = ({label, value}) => {
@@ -207,7 +205,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Image
-            source={require('../assets/haadafot.png')}
+            source={require('../assets/tiktok/prefrences.png')}
             style={styles.headerIcon}
             resizeMode="contain"
           />
@@ -304,20 +302,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={handleSave}
-          style={styles.saveBtnWrap}>
-          <LinearGradient
-            colors={GOLD_GRADIENT}
-            locations={GOLD_GRADIENT_LOCATIONS}
-            start={{x: 0.5, y: 0}}
-            end={{x: 0.5, y: 1}}
-            style={styles.saveBtn}>
-            <Text style={styles.saveBtnText}>שמור</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+      <View style={[styles.footer, {paddingBottom: bottomInset + 8}]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
         <TouchableOpacity
           style={styles.clearWrap}
           onPress={handleClear}
@@ -522,29 +508,14 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 24,
     gap: 24,
     alignItems: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
   saveBtnWrap: {
     width: '100%',
-    borderRadius: 846,
-    overflow: 'hidden',
-  },
-  saveBtn: {
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 846,
-  },
-  saveBtnText: {
-    color: DARK_INK,
-    fontSize: 20,
-    lineHeight: 24,
-    letterSpacing: 0.2,
-    fontFamily: 'Rubik-Medium',
-    fontWeight: '500',
-    textAlign: 'center',
   },
   clearWrap: {
     height: 25,

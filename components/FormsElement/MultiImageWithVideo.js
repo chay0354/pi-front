@@ -25,7 +25,6 @@ export const MultiImageWithVideo = ({
   wayToDisplayAd,
   feedDisplayPriority = 'video',
   setFeedDisplayPriority,
-  addMorePhotos,
   profilePicture,
   setProfilePicture,
   handleProfilePictureUpload,
@@ -63,7 +62,6 @@ export const MultiImageWithVideo = ({
         handleAdditionalImageChange={handleAdditionalImageChange}
         mainImageInputRef={mainImageInputRef}
         additionalImageInputRefs={additionalImageInputRefs}
-        addMorePhotos={addMorePhotos}
       />
       <Divider style={styles.divider} />
       <VideoUpload

@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef, useMemo} from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,14 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Octicons} from '@expo/vector-icons';
-import {brokerCategories, categoriesEditProfile} from '../utils/constant';
+import {
+  brokerCategories,
+  brokerSheetAdListingCategoryIds,
+  categoriesEditProfile,
+  companySheetAdListingCategoryIds,
+  regularUserAdListingCategoryIds,
+  subscriptionTypes,
+} from '../utils/constant';
 import {getListings, getBoostQuota, boostListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -91,6 +98,7 @@ const UI_TO_LISTING_CATEGORY_ID = {
   7: 8, // מסחר
   8: 2, // משרדים
   9: 10, // דירות
+  10: 3, // שותפים
 };
 
 const LISTING_TO_UI_CATEGORY_ID = Object.entries(UI_TO_LISTING_CATEGORY_ID).reduce(
@@ -113,14 +121,8 @@ const toListingCategoryId = value => {
   return UI_TO_LISTING_CATEGORY_ID[n] ?? n;
 };
 
-const resolveListingCategoryId = (uiCategoryId, initialCategoryId) => {
-  const initial = Number(initialCategoryId);
-  const ui = Number(uiCategoryId);
-  // Partners (listing category 3) currently doesn't exist in categoriesEditProfile UI IDs.
-  // When opened from partners feed, keep the partners category instead of remapping to global.
-  if (initial === 3 && ui === 3) return 3;
-  return toListingCategoryId(uiCategoryId);
-};
+const resolveListingCategoryId = uiCategoryId =>
+  toListingCategoryId(uiCategoryId);
 
 const EditPublishAdScreen = ({
   onClose,
@@ -129,6 +131,8 @@ const EditPublishAdScreen = ({
   initialCategoryId = 9,
   onCreateAd,
   onEditAd,
+  /** Optional: edit handler for feed posts (plain listings); if omitted, posts show without pencil edit */
+  onEditPost,
   onBoost,
   onShare,
   onFreeze,
@@ -137,11 +141,9 @@ const EditPublishAdScreen = ({
   onOpenListingAnalysis,
   onCreatePost,
 }) => {
-  console.log('currentUser', currentUser);
   const insets = useSafeAreaInsets();
 
-  // All broker categories in same design; optional imageCrop, imageAdjust, borderRadius per item
-  const PUBLISH_CATEGORIES = categoriesEditProfile;
+  // Horizontal category strip: full list; regular users get a filtered copy (see publishCategoriesStrip).
   //   userCategoriesEditProfile.map(c => {
   //   const item = {id: c.id, name: c.name, image: c.image};
   //   if (c.id === 8) {
@@ -176,7 +178,7 @@ const EditPublishAdScreen = ({
     });
   };
 
-  // Keep selected category in sync with the category we came from (e.g. from feed)
+  // Sync selected tab with feed category; carousel lists every category for all user types.
   useEffect(() => {
     setSelectedCategoryId(toUiCategoryId(initialCategoryId));
   }, [initialCategoryId]);
@@ -225,10 +227,7 @@ const EditPublishAdScreen = ({
         });
         if (cancelled) return;
         if (result?.success && result?.listings?.length) {
-          const list =
-            currentUser?.id == null
-              ? []
-              : result.listings.filter(l => !isPostListingRecord(l));
+          const list = currentUser?.id == null ? [] : result.listings;
           const transformed = list.map(l => {
             const imgs = l.listing_images || [];
             const main = imgs.find(i => i.image_type === 'main');
@@ -238,6 +237,9 @@ const EditPublishAdScreen = ({
             additional
               .filter(i => i.image_url)
               .forEach(i => images.push({uri: i.image_url}));
+            if (!images.length && l.main_image_url) {
+              images.push({uri: l.main_image_url});
+            }
             return {
               id: l.id,
               category: l.category,
@@ -291,24 +293,65 @@ const EditPublishAdScreen = ({
       const id = l.id ?? l.ad_number;
       if (id != null && !byId.has(id)) byId.set(id, l);
     });
-    // Exclude free-form posts; this screen shows only ads.
-    return Array.from(byId.values()).filter(l => !isPostListingRecord(l));
+    return Array.from(byId.values());
   })();
 
-  const selectedListingCategoryId = resolveListingCategoryId(
-    selectedCategoryId,
-    initialCategoryId,
-  );
+  const selectedListingCategoryId =
+    resolveListingCategoryId(selectedCategoryId);
   const isBnbCategory = Number(selectedListingCategoryId) === 5;
   const isPartnersCategory = Number(selectedListingCategoryId) === 3;
-  const filteredListings = (selectedCategoryId
+  const isOfficesListingCategory =
+    Number(selectedListingCategoryId) === 2;
+  const isRegularUser =
+    (currentUser?.subscription_type || '').toLowerCase() ===
+    subscriptionTypes.user;
+  const isBroker =
+    (currentUser?.subscription_type || '').toLowerCase() ===
+    subscriptionTypes.broker;
+  const isCompany =
+    (currentUser?.subscription_type || '').toLowerCase() ===
+    subscriptionTypes.company;
+  const isProfessional =
+    (currentUser?.subscription_type || '').toLowerCase() ===
+    subscriptionTypes.professional;
+  const publishCategoriesStrip = categoriesEditProfile;
+  const showListingCreateInSheet = useMemo(() => {
+    if (isProfessional) {
+      return false;
+    }
+    if (isRegularUser) {
+      return (
+        selectedListingCategoryId != null &&
+        regularUserAdListingCategoryIds.has(
+          Number(selectedListingCategoryId),
+        )
+      );
+    }
+    if (isBroker) {
+      return (
+        selectedListingCategoryId != null &&
+        brokerSheetAdListingCategoryIds.has(
+          Number(selectedListingCategoryId),
+        )
+      );
+    }
+    if (isCompany) {
+      return (
+        selectedListingCategoryId != null &&
+        companySheetAdListingCategoryIds.has(
+          Number(selectedListingCategoryId),
+        )
+      );
+    }
+    return true;
+  }, [isRegularUser, isBroker, isCompany, isProfessional, selectedListingCategoryId]);
+  const filteredListings = selectedCategoryId
     ? mergedListings.filter(
         l =>
           (l.category != null && parseInt(l.category, 10)) ===
           selectedListingCategoryId,
       )
-    : mergedListings
-  ).filter(l => !isPostListingRecord(l));
+    : mergedListings;
 
   const getFirstImage = listing => {
     if (listing.images && listing.images.length > 0) {
@@ -456,10 +499,11 @@ const EditPublishAdScreen = ({
   };
 
   const renderListAdCard = ({item: listing}) => {
-    if (isPostListingRecord(listing)) return null;
+    const postRecord = isPostListingRecord(listing);
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
+    const reviewCount = listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -488,14 +532,29 @@ const EditPublishAdScreen = ({
                   </Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Image
-                    source={require('../assets/chat_icon.png')}
-                    style={styles.actionBtnImage}
-                    resizeMode="contain"
-                  />
-                  <Text style={[styles.statText, styles.statTextList]}>
-                    {likes}
-                  </Text>
+                  {postRecord ? (
+                    <>
+                      <Image
+                        source={require('../assets/chat_icon.png')}
+                        style={styles.actionBtnImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={[styles.statText, styles.statTextList]}>
+                        {likes}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Image
+                        source={require('../assets/chat_icon.png')}
+                        style={styles.actionBtnImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={[styles.statText, styles.statTextList]}>
+                        {reviewCount}
+                      </Text>
+                    </>
+                  )}
                 </View>
               </View>
             </View>
@@ -560,24 +619,33 @@ const EditPublishAdScreen = ({
             </View>
           )}
           <View style={styles.topRightTextWrap}>
-            <Text style={styles.topRightText}>{'נכס'}</Text>
+            <Text style={styles.topRightText}>
+              {postRecord ? 'פוסט' : 'נכס'}
+            </Text>
           </View>
-          <TouchableOpacity
-            style={styles.editBadgeList}
-            onPress={() => onEditAd && onEditAd(listing)}
-            activeOpacity={0.8}>
-            <Octicons name="pencil" size={25} color="#fff" />
-          </TouchableOpacity>
+          {!postRecord || onEditPost ? (
+            <TouchableOpacity
+              style={styles.editBadgeList}
+              onPress={() =>
+                postRecord
+                  ? onEditPost && onEditPost(listing)
+                  : onEditAd && onEditAd(listing)
+              }
+              activeOpacity={0.8}>
+              <Octicons name="pencil" size={25} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     );
   };
 
   const renderGridAdCard = ({item: listing, index}) => {
-    if (isPostListingRecord(listing)) return null;
+    const postRecord = isPostListingRecord(listing);
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
+    const reviewCount = listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -598,20 +666,29 @@ const EditPublishAdScreen = ({
               />
             </View>
           )}
-          <TouchableOpacity
-            style={styles.editBadge}
-            onPress={() => onEditAd && onEditAd(listing)}
-            activeOpacity={0.8}>
-            <Octicons name="pencil" size={25} color="#fff" />
-          </TouchableOpacity>
+          {!postRecord || onEditPost ? (
+            <TouchableOpacity
+              style={styles.editBadge}
+              onPress={() =>
+                postRecord
+                  ? onEditPost && onEditPost(listing)
+                  : onEditAd && onEditAd(listing)
+              }
+              activeOpacity={0.8}>
+              <Octicons name="pencil" size={25} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.topRightTextWrap}>
-            <Text style={styles.topRightText}>{'נכס'}</Text>
+            <Text style={styles.topRightText}>
+              {postRecord ? 'פוסט' : 'נכס'}
+            </Text>
           </View>
           <View style={styles.advertisementNo}>
-            <Text
-              style={
-                styles.advertisementNoText
-              }>{`מודעה מס׳ ${index + 1}`}</Text>
+            <Text style={styles.advertisementNoText}>
+              {postRecord
+                ? `פוסט מס׳ ${index + 1}`
+                : `מודעה מס׳ ${index + 1}`}
+            </Text>
           </View>
         </View>
         <View style={{padding: 16}}>
@@ -639,12 +716,25 @@ const EditPublishAdScreen = ({
                   <Text style={styles.statText}>{views}</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Image
-                    source={require('../assets/chat_icon.png')}
-                    style={styles.actionBtnImage}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.statText}>{likes}</Text>
+                  {postRecord ? (
+                    <>
+                      <Image
+                        source={require('../assets/chat_icon.png')}
+                        style={styles.actionBtnImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.statText}>{likes}</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Image
+                        source={require('../assets/chat_icon.png')}
+                        style={styles.actionBtnImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.statText}>{reviewCount}</Text>
+                    </>
+                  )}
                 </View>
               </View>
             </View>
@@ -764,7 +854,7 @@ const EditPublishAdScreen = ({
             contentContainerStyle={styles.categoryScrollContent}
             style={styles.categoryScroll}
             onContentSizeChange={onCategoryScrollContentSizeChange}>
-            {PUBLISH_CATEGORIES.map(cat => {
+            {publishCategoriesStrip.map(cat => {
               const selected = selectedCategoryId === cat.id;
               return (
                 <TouchableOpacity
@@ -853,9 +943,9 @@ const EditPublishAdScreen = ({
                   size={56}
                   color={TEXT_LIGHT}
                 /> */}
-                <Text style={styles.emptyText}>אין מודעות לפרסום</Text>
+                <Text style={styles.emptyText}>אין מודעות או פוסטים בקטגוריה זו</Text>
                 <Text style={styles.emptySubtext}>
-                  זה הזמן לייצר את מודעה חדשה!
+                  זה הזמן ליצור מודעה או פוסט חדש!
                 </Text>
                 <TouchableOpacity
                   style={[styles.createBtn, {marginTop: 30}]}
@@ -888,83 +978,91 @@ const EditPublishAdScreen = ({
           <View
             style={styles.createSheet}
             onStartShouldSetResponder={() => true}>
-            {isBnbCategory ? (
-              <>
+            {showListingCreateInSheet &&
+              (isBnbCategory ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.createSheetOption}
+                    onPress={() => openCreateListing({bnbHostType: 'private'})}
+                    activeOpacity={0.85}>
+                    <Text style={styles.createSheetArrow}>‹</Text>
+                    <View style={styles.createSheetOptionContent}>
+                      <View style={styles.createSheetTextContainer}>
+                        <Text style={styles.createSheetTitle}>פרסם כפרטי</Text>
+                        <Text style={styles.createSheetSubtitle}>
+                          פרסם חדר או אתר נופש פרטי
+                        </Text>
+                      </View>
+                      <Image
+                        source={require('../assets/ad-uplaud/bnb-private.png')}
+                        style={styles.createSheetIcon}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  <View style={styles.createSheetDivider} />
+                  <TouchableOpacity
+                    style={styles.createSheetOption}
+                    onPress={() => openCreateListing({bnbHostType: 'business'})}
+                    activeOpacity={0.85}>
+                    <Text style={styles.createSheetArrow}>‹</Text>
+                    <View style={styles.createSheetOptionContent}>
+                      <View style={styles.createSheetTextContainer}>
+                        <Text style={styles.createSheetTitle}>פרסם כעסק</Text>
+                        <Text style={styles.createSheetSubtitle}>
+                          פרסם חדר או אתר נופש עסקי
+                        </Text>
+                      </View>
+                      <Image
+                        source={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                        style={styles.createSheetIcon}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <TouchableOpacity
                   style={styles.createSheetOption}
-                  onPress={() => openCreateListing({bnbHostType: 'private'})}
+                  onPress={() => openCreateListing()}
                   activeOpacity={0.85}>
                   <Text style={styles.createSheetArrow}>‹</Text>
                   <View style={styles.createSheetOptionContent}>
                     <View style={styles.createSheetTextContainer}>
-                      <Text style={styles.createSheetTitle}>פרסם כפרטי</Text>
-                      <Text style={styles.createSheetSubtitle}>
-                        פרסם חדר או אתר נופש פרטי
+                      <Text style={styles.createSheetTitle}>
+                        {isOfficesListingCategory ? 'משרד' : 'פרסם מודעה'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.createSheetSubtitle,
+                          isPartnersCategory &&
+                            styles.createSheetSubtitleSecondary,
+                        ]}>
+                        {isPartnersCategory
+                          ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
+                          : isOfficesListingCategory
+                            ? 'פרסם משרד למכירה או השכרה'
+                            : 'צור מודעה חדשה בקטגוריה שנבחרה'}
                       </Text>
                     </View>
                     <Image
-                      source={require('../assets/ad-uplaud/bnb-private.png')}
-                      style={styles.createSheetIcon}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.createSheetDivider} />
-                <TouchableOpacity
-                  style={styles.createSheetOption}
-                  onPress={() => openCreateListing({bnbHostType: 'business'})}
-                  activeOpacity={0.85}>
-                  <Text style={styles.createSheetArrow}>‹</Text>
-                  <View style={styles.createSheetOptionContent}>
-                    <View style={styles.createSheetTextContainer}>
-                      <Text style={styles.createSheetTitle}>פרסם כעסק</Text>
-                      <Text style={styles.createSheetSubtitle}>
-                        פרסם חדר או אתר נופש עסקי
-                      </Text>
-                    </View>
-                    <Image
-                      source={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                      style={styles.createSheetIcon}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity
-                style={styles.createSheetOption}
-                onPress={() => openCreateListing()}
-                activeOpacity={0.85}>
-                <Text style={styles.createSheetArrow}>‹</Text>
-                <View style={styles.createSheetOptionContent}>
-                  <View style={styles.createSheetTextContainer}>
-                    <Text style={styles.createSheetTitle}>פרסם מודעה</Text>
-                    <Text
+                      source={
+                        isPartnersCategory
+                          ? require('../assets/image22221.png')
+                          : require('../assets/post-office-icon.png')
+                      }
                       style={[
-                        styles.createSheetSubtitle,
-                        isPartnersCategory && styles.createSheetSubtitleSecondary,
-                      ]}>
-                      {isPartnersCategory
-                        ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
-                        : 'צור מודעה חדשה בקטגוריה שנבחרה'}
-                    </Text>
+                        styles.createSheetIcon,
+                        isPartnersCategory && styles.createSheetIconPartners,
+                      ]}
+                      resizeMode="contain"
+                    />
                   </View>
-                  <Image
-                    source={
-                      isPartnersCategory
-                        ? require('../assets/image22221.png')
-                        : require('../assets/post-office-icon.png')
-                    }
-                    style={[
-                      styles.createSheetIcon,
-                      isPartnersCategory && styles.createSheetIconPartners,
-                    ]}
-                    resizeMode="contain"
-                  />
-                </View>
-              </TouchableOpacity>
-            )}
-            <View style={styles.createSheetDivider} />
+                </TouchableOpacity>
+              ))}
+            {showListingCreateInSheet ? (
+              <View style={styles.createSheetDivider} />
+            ) : null}
             <TouchableOpacity
               style={styles.createSheetOption}
               onPress={openCreatePost}

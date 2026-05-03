@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useRef, useEffect} from 'react';
+import React, {useState, useCallback, useEffect, useContext} from 'react';
 import {
   Modal,
   View,
@@ -10,299 +10,1271 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
   Image,
-  Animated,
-  Easing,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, BorderRadius} from '../constants/styles';
-import {getListings} from '../utils/api';
+import {getListings, getReviews, likeListing, unlikeListing} from '../utils/api';
 import {
-  rankListingsByQuery,
-  buildAnswerText,
-} from '../utils/piAiMatchListings';
+  loadTikTokLikedState,
+  persistLikedListingIds,
+} from '../utils/tikTokLikedStorage';
+import {ContextHook} from '../hooks/ContextHook';
+import {rankListingsByQuery} from '../utils/piAiMatchListings';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import ListingGridCardFigma from './ListingGridCardFigma';
+import {
+  HEB_M2,
+  buildCardStats,
+  firstImageUrl,
+  formatApartmentAreaForDisplay,
+  formatApartmentRoomsOrFloorForDisplay,
+  formatPriceHe,
+  isCompanyListing,
+  isPreSaleListing,
+  listingImageUrls,
+  cleanAddress,
+  purposeLabel,
+  brokerPiRatingFromListing,
+  shouldShowListingPiRating,
+  displayPiRatingFromReviews,
+} from '../utils/listingGridCardFigma';
 
-const {width: WIN_W, height: WIN_H} = Dimensions.get('window');
+// Palette mirrored from EditPublishAdScreen so this screen matches the rest
+// of the publishing flow.
+const BG = '#1a1926';
+const HEADER_BG = '#27262F';
+const CARD_BG = '#2B2A39';
+const IMG_PLACEHOLDER_BG = '#1e1d2b';
+const GOLD = '#FFC40A';
+
+// One-time CSS injection on web to hide the native scrollbar inside the
+// Pi-AI results list (Chromium/WebKit). Firefox + Edge legacy are handled by
+// `scrollbarWidth` / `msOverflowStyle` on the ScrollView style.
+if (
+  Platform.OS === 'web' &&
+  typeof document !== 'undefined' &&
+  !document.getElementById('pi-ai-scroll-style')
+) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'pi-ai-scroll-style';
+  styleEl.textContent =
+    '.pi-ai-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }';
+  document.head.appendChild(styleEl);
+}
+
+/** Mirrored from UserProfileScreen: bundled assets (web URI paths 404 on subpaths). */
+const piBadgeSource = require('../assets/pi-badge.png');
+const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
+
+/** Shown next to the grid/list toggle: count of items in the current result set. */
+const formatResultsCountHe = n => {
+  const c = Math.max(0, Math.floor(Number(n)) || 0);
+  if (c === 0) {
+    return 'נמצאו 0 תוצאות';
+  }
+  if (c === 1) {
+    return 'נמצאה תוצאה אחת';
+  }
+  return `נמצאו ${c} תוצאות`;
+};
 
 /**
- * Almost full-screen “Pi AI” modal: describe a property, search all published listings, text answer.
+ * Full-screen Pi AI search: describe a property, search published listings,
+ * results render as grid cards.
  */
-const PiAiSearchModal = ({visible, onClose}) => {
+const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}) => {
+  const insets = useSafeAreaInsets();
+  const {currentUser} = useContext(ContextHook);
   const [query, setQuery] = useState('');
-  const [answer, setAnswer] = useState('');
+  /** Full catalog; used for browse (no filter) and as the pool for search ranking. */
+  const [allListings, setAllListings] = useState([]);
+  const [results, setResults] = useState([]);
+  const [emptyMessage, setEmptyMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const spinAnim = useRef(new Animated.Value(0)).current;
-  const sheetScale = useRef(new Animated.Value(0.94)).current;
+  /**
+   * Until the first non-empty search, we show the welcome state (no listing cards),
+   * even if the catalog is already loaded in `allListings`.
+   */
+  const [hasSearchedWithQuery, setHasSearchedWithQuery] = useState(false);
+  /** Result layout: 2-up grid (default) or compact list rows. */
+  const [resultsLayout, setResultsLayout] = useState('grid');
+  /** Same storage key as TikTokFeedScreen — grid heart shows gold when id is in the set. */
+  const [likedListingIds, setLikedListingIds] = useState(() => new Set());
+  /** `subscription_id` -> same display number as UserProfile (reviews avg or pi_value). */
+  const [piDisplayBySubId, setPiDisplayBySubId] = useState({});
 
   useEffect(() => {
+    const load = async () => {
+      try {
+        const uid =
+          currentUser?.id != null ? String(currentUser.id).trim() : null;
+        const st = await loadTikTokLikedState(uid);
+        setLikedListingIds(st.likedListingIds);
+      } catch (e) {
+        console.warn('Pi AI: load liked ids failed', e);
+      }
+    };
+    load();
+  }, [currentUser?.id]);
+
+  const syncLikesFromListings = useCallback(
+    (listings, uid) => {
+      if (!uid || !listings?.length) return;
+      setLikedListingIds(prev => {
+        const next = new Set(prev);
+        listings.forEach(l => {
+          if (l?.id == null) return;
+          if (l.liked === true) next.add(l.id);
+          else if (l.liked === false) next.delete(l.id);
+        });
+        persistLikedListingIds(uid, next).catch(() => {});
+        return next;
+      });
+    },
+    [],
+  );
+
+  /**
+   * When the surface opens, load all published ads and show them. Search only
+   * filters/ranks from this set when the user submits a query.
+   */
+  useEffect(() => {
     if (!visible) {
-      spinAnim.setValue(0);
-      sheetScale.setValue(0.94);
       return;
     }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      setHasSearchedWithQuery(false);
+      try {
+        const uid = currentUser?.id != null ? String(currentUser.id) : null;
+        const res = await getListings({
+          status: 'published',
+          ...(uid ? {user_id: uid} : {}),
+        });
+        if (cancelled) {
+          return;
+        }
+        const listings = res?.listings || [];
+        setAllListings(listings);
+        setQuery('');
+        setEmptyMessage(
+          listings.length
+            ? ''
+            : 'אין מודעות שפורסמו כרגע.',
+        );
+        setResults([]);
+        if (uid) {
+          syncLikesFromListings(listings, uid);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.');
+          setAllListings([]);
+          setResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, currentUser?.id, syncLikesFromListings]);
 
-    spinAnim.setValue(0);
-    sheetScale.setValue(0.94);
-
-    const spin = Animated.timing(spinAnim, {
-      toValue: 1,
-      duration: 1100,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    });
-
-    const pop = Animated.spring(sheetScale, {
-      toValue: 1,
-      friction: 7,
-      tension: 80,
-      useNativeDriver: true,
-    });
-
-    Animated.parallel([spin, pop]).start();
-  }, [visible, spinAnim, sheetScale]);
-
-  const sheetSpin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  useEffect(() => {
+    if (!results || results.length === 0) {
+      setPiDisplayBySubId({});
+      return;
+    }
+    const subs = [
+      ...new Set(
+        results
+          .map(l => l?.subscription_id)
+          .filter(s => s != null && String(s).trim() !== ''),
+      ),
+    ];
+    if (subs.length === 0) {
+      setPiDisplayBySubId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const parts = await Promise.all(
+        subs.map(async subId => {
+          const idKey = String(subId);
+          const listing = results.find(
+            l => l?.subscription_id != null && String(l.subscription_id) === idKey,
+          ) || {subscription_id: subId};
+          try {
+            const {reviews} = await getReviews(idKey);
+            const v = displayPiRatingFromReviews(
+              Array.isArray(reviews) ? reviews : [],
+              listing,
+            );
+            return [idKey, v];
+          } catch {
+            return [idKey, brokerPiRatingFromListing(listing)];
+          }
+        }),
+      );
+      if (cancelled) return;
+      setPiDisplayBySubId(Object.fromEntries(parts));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [results]);
 
   const runSearch = useCallback(async () => {
     const q = query.trim();
     setError('');
-    setAnswer('');
+    const uid = currentUser?.id != null ? String(currentUser.id) : null;
+
     if (!q) {
-      setAnswer(
-        'תאר בקצרה איזה נכס אתה מחפש (עיר, מחיר, חדרים, סוג נכס), ואז לחץ שוב על חיפוש.',
-      );
+      if (allListings.length === 0) {
+        if (loading) {
+          return;
+        }
+        setEmptyMessage('אין מודעות שפורסמו כרגע.');
+        setResults([]);
+        return;
+      }
+      if (!hasSearchedWithQuery) {
+        setEmptyMessage('');
+        setResults([]);
+        return;
+      }
+      setEmptyMessage('');
+      setResults([...allListings]);
       return;
     }
 
+    setHasSearchedWithQuery(true);
     setLoading(true);
+    setEmptyMessage('');
     try {
-      const result = await getListings({status: 'published'});
-      const listings = result?.listings || [];
-      const rankedResult = rankListingsByQuery(q, listings, {topN: 6});
-      const text = buildAnswerText(q, rankedResult, listings.length);
-      setAnswer(text);
+      let listings = allListings;
+      if (listings.length === 0) {
+        const result = await getListings({
+          status: 'published',
+          ...(uid ? {user_id: uid} : {}),
+        });
+        listings = result?.listings || [];
+        setAllListings(listings);
+        if (uid) {
+          syncLikesFromListings(listings, uid);
+        }
+      }
+
+      const rankedResult = rankListingsByQuery(q, listings, {topN: 20});
+      if (!rankedResult.ranked.length) {
+        setResults([]);
+        setEmptyMessage(
+          `חיפשתי ב-${listings.length} מודעות ולא מצאתי התאמה ברורה. נסה לפרט יותר — שם עיר, טווח מחיר, או מספר חדרים.`,
+        );
+      } else {
+        const rows = rankedResult.ranked.map(r => r.listing);
+        setResults(rows);
+        if (uid) {
+          syncLikesFromListings(rows, uid);
+        }
+      }
     } catch (e) {
       setError(e?.message || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.');
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, allListings, loading, syncLikesFromListings, hasSearchedWithQuery]);
 
   const handleClose = () => {
     setError('');
-    setAnswer('');
+    setAllListings([]);
+    setResults([]);
+    setEmptyMessage('');
+    setHasSearchedWithQuery(false);
     onClose?.();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
+  const handleOpenListing = listing => {
+    onOpenUserProfile?.(listing);
+  };
+
+  const handleToggleGridLike = useCallback(
+    async listing => {
+      const listingId = listing?.id;
+      if (listingId == null) return;
+      const userId =
+        currentUser?.id != null ? String(currentUser.id) : null;
+      if (!userId) return;
+      const isCurrentlyLiked = likedListingIds.has(listingId);
+      const willBeLiked = !isCurrentlyLiked;
+
+      try {
+        if (willBeLiked) await likeListing(listingId, userId);
+        else await unlikeListing(listingId, userId);
+      } catch (e) {
+        console.warn('Pi AI like/unlike failed:', e?.message);
+        return;
+      }
+
+      setLikedListingIds(prev => {
+        const next = new Set(prev);
+        if (next.has(listingId)) next.delete(listingId);
+        else next.add(listingId);
+        persistLikedListingIds(userId, next).catch(() => {});
+        return next;
+      });
+    },
+    [currentUser?.id, likedListingIds],
+  );
+
+  const renderGridCard = listing => {
+    const rowLiked =
+      Boolean(currentUser?.id) && likedListingIds.has(listing.id);
+    const subKey =
+      listing?.subscription_id != null
+        ? String(listing.subscription_id).trim()
+        : '';
+    const displayPi =
+      subKey !== '' && piDisplayBySubId[subKey] !== undefined
+        ? piDisplayBySubId[subKey]
+        : brokerPiRatingFromListing(listing);
+    return (
+      <ListingGridCardFigma
+        key={listing.id}
+        listing={listing}
+        onPress={handleOpenListing}
+        liked={rowLiked}
+        onToggleLike={handleToggleGridLike}
+        displayPi={displayPi}
+      />
+    );
+  };
+
+  /** Compact list row: thumbnail, price/address, Pi + like (EditPublishAd-style toggle). */
+  const renderListCard = listing => {
+    const listRowLiked =
+      Boolean(currentUser?.id) && likedListingIds.has(listing.id);
+    const galleryRaw = listingImageUrls(listing);
+    const primaryUri = galleryRaw[0] || firstImageUrl(listing);
+    const addr = cleanAddress(listing);
+    const isCompany = isCompanyListing(listing);
+    const showPreSaleBadge = isCompany && isPreSaleListing(listing);
+    const cardPriceLabel = isCompany
+      ? String(listing?.project_name || '').trim() || formatPriceHe(listing)
+      : formatPriceHe(listing);
+    const subKey =
+      listing?.subscription_id != null
+        ? String(listing.subscription_id).trim()
+        : '';
+    const displayPi =
+      subKey !== '' && piDisplayBySubId[subKey] !== undefined
+        ? piDisplayBySubId[subKey]
+        : brokerPiRatingFromListing(listing);
+    const piBadgeImage =
+      displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
+    const showPiRating = shouldShowListingPiRating(listing);
+
+    const stats = buildCardStats(listing);
+    const buildingsStat = stats.find(s => s.key === 'buildings');
+    const floorsStat = stats.find(s => s.key === 'floors');
+    const apartmentsStat = stats.find(s => s.key === 'apartments');
+
+    const renderListCompanyStat = s =>
+      s ? (
+        <View key={s.key} style={styles.listResultStatGroup}>
+          <View style={styles.listResultStatIconBox}>
+            <Image
+              source={s.icon}
+              style={styles.listResultStatIcon}
+              resizeMode="contain"
+            />
+          </View>
+          <Text
+            style={[styles.listResultStatText, styles.listResultStatTextCell]}>
+            {s.label}
+          </Text>
+        </View>
+      ) : null;
+
+    const renderListAptStat = key => {
+      const s = stats.find(x => x.key === key);
+      if (!s) return null;
+      const roomsD = formatApartmentRoomsOrFloorForDisplay(listing?.rooms);
+      const areaD = formatApartmentAreaForDisplay(listing?.area);
+      const floorD = formatApartmentRoomsOrFloorForDisplay(listing?.floor);
+      const textRow = [
+        styles.listResultStatTextInline,
+        styles.listResultStatAptTextWrap,
+      ];
+      const floorIconStyle =
+        key === 'floor'
+          ? [styles.listResultStatIcon, styles.listResultStatIconFlipped]
+          : styles.listResultStatIcon;
+      return (
+        <View key={key} style={styles.listResultStatGroup}>
+          <View style={styles.listResultStatIconBox}>
+            <Image
+              source={s.icon}
+              style={floorIconStyle}
+              resizeMode="contain"
+            />
+          </View>
+          {key === 'rooms' && roomsD != null ? (
+            <Text
+              style={[...textRow, styles.listResultStatTextCell]}
+              textAlign="right"
+              writingDirection="rtl">
+              <Text style={styles.listResultStatValueText}>{roomsD}</Text>
+              <Text style={styles.listResultStatLabelText}> חדרים</Text>
+            </Text>
+          ) : key === 'area' && areaD != null ? (
+            <Text
+              style={[...textRow, styles.listResultStatTextCell]}
+              textAlign="right"
+              writingDirection="rtl">
+              <Text style={styles.listResultStatValueText}>{areaD}</Text>
+              <Text style={styles.listResultStatLabelText}> {HEB_M2}</Text>
+            </Text>
+          ) : key === 'floor' && floorD != null ? (
+            <Text
+              style={[...textRow, styles.listResultStatTextCell]}
+              textAlign="right"
+              writingDirection="rtl">
+              <Text style={styles.listResultStatLabelText}>קומה </Text>
+              <Text style={styles.listResultStatValueText}>{floorD}</Text>
+            </Text>
+          ) : (
+            <Text
+              style={[
+                styles.listResultStatText,
+                styles.listResultStatAptTextWrap,
+                styles.listResultStatTextCell,
+              ]}
+              textAlign="right"
+              writingDirection="rtl">
+              {s.label}
+            </Text>
+          )}
+        </View>
+      );
+    };
+
+    return (
+      <TouchableOpacity
+        key={listing.id}
+        style={styles.listResultCard}
+        activeOpacity={0.85}
+        onPress={() => handleOpenListing(listing)}>
+        <View style={styles.listResultThumbCol}>
+          {primaryUri ? (
+            <Image
+              source={{uri: primaryUri}}
+              style={styles.listResultThumb}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.listResultThumb, styles.listResultThumbPlaceholder]}>
+              <Text style={styles.listResultThumbPlaceholderText}>ללא תמונה</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.listResultMid}>
+          <Text style={styles.listResultPrice} numberOfLines={2}>
+            {cardPriceLabel}
+          </Text>
+          <View style={styles.listResultAddressRow}>
+            <Text style={styles.listResultAddress} numberOfLines={2}>
+              {addr}
+            </Text>
+            <Image
+              source={require('../assets/liked-ads/location.png')}
+              style={styles.listResultLocationIcon}
+              resizeMode="contain"
+            />
+          </View>
+          {showPreSaleBadge ? (
+            <View style={styles.listResultPurposeRow}>
+              <TouchableOpacity
+                onPress={e => {
+                  e?.stopPropagation?.();
+                  handleToggleGridLike(listing);
+                }}
+                hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                style={styles.listResultHeartInPurposeRow}
+                activeOpacity={0.75}
+                accessibilityLabel="מועדפים"
+                accessibilityRole="button"
+                accessibilityState={{selected: listRowLiked}}>
+                {listRowLiked ? (
+                  <MaterialCommunityIcons
+                    name="heart"
+                    size={24}
+                    color={GOLD}
+                  />
+                ) : (
+                  <Image
+                    source={require('../assets/liked-ads/like.png')}
+                    style={styles.listResultLoveIcon}
+                    resizeMode="contain"
+                  />
+                )}
+              </TouchableOpacity>
+              <Image
+                source={require('../assets/pre-sale.png')}
+                style={styles.listResultPreSale}
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <View style={styles.listResultPurposeRow}>
+              <TouchableOpacity
+                onPress={e => {
+                  e?.stopPropagation?.();
+                  handleToggleGridLike(listing);
+                }}
+                hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                style={styles.listResultHeartInPurposeRow}
+                activeOpacity={0.75}
+                accessibilityLabel="מועדפים"
+                accessibilityRole="button"
+                accessibilityState={{selected: listRowLiked}}>
+                {listRowLiked ? (
+                  <MaterialCommunityIcons
+                    name="heart"
+                    size={24}
+                    color={GOLD}
+                  />
+                ) : (
+                  <Image
+                    source={require('../assets/liked-ads/like.png')}
+                    style={styles.listResultLoveIcon}
+                    resizeMode="contain"
+                  />
+                )}
+              </TouchableOpacity>
+              <View style={[styles.purposeChip, styles.listResultPurposeChip]}>
+                <Text
+                  style={[styles.purposeChipText, styles.listResultPurposeText]}>
+                  {purposeLabel(listing)}
+                </Text>
+              </View>
+            </View>
+          )}
+          <View style={styles.listResultStatsRow}>
+            {isCompany ? (
+              <>
+                {renderListCompanyStat(apartmentsStat)}
+                <View style={styles.listResultStatsPairGroup}>
+                  {renderListCompanyStat(buildingsStat)}
+                  {renderListCompanyStat(floorsStat)}
+                </View>
+              </>
+            ) : (
+              <>
+                {renderListAptStat('rooms')}
+                <View style={styles.listResultStatsPairGroup}>
+                  {renderListAptStat('area')}
+                  {renderListAptStat('floor')}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+        {showPiRating ? (
+          <View style={styles.listResultActions}>
+            <View style={styles.listResultPiRow} pointerEvents="box-none">
+              <Text style={styles.listResultPiText}>{String(displayPi)}</Text>
+              <Image
+                source={piBadgeImage}
+                style={styles.listResultPiBadge}
+                resizeMode="cover"
+                accessibilityLabel="דירוג Pi"
+              />
+            </View>
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
+
+  const body = (
+    <View
+      style={[
+        styles.fullScreen,
+        {paddingTop: insets.top, paddingBottom: insets.bottom},
+      ]}>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleClose}
+            hitSlop={12}
+            style={styles.closeBtn}
+            accessibilityLabel="סגור">
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={28}
+              color={Colors.white100}
+            />
+          </TouchableOpacity>
+          <View style={styles.topBarLogoWrap} pointerEvents="none">
+            <Image
+              source={require('../assets/home-ai/צילום_מסך_2026-04-26_124946-removebg-preview.png')}
+              style={styles.topBarLogo}
+              resizeMode="contain"
+              accessibilityLabel="Pi AI"
+            />
+          </View>
+        </View>
+
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardWrap}>
-          <Animated.View
-            style={[
-              styles.sheet,
-              {
-                transform: [
-                  {scale: sheetScale},
-                  {rotate: sheetSpin},
-                ],
-              },
-            ]}>
-            <View style={styles.headerRow}>
-              <View style={styles.headerLogoWrap} pointerEvents="none">
-                <Image
-                  source={require('../assets/pi-ai.png')}
-                  style={styles.headerLogo}
-                  resizeMode="contain"
-                  accessibilityLabel="Pi AI"
+          style={styles.kbWrap}>
+          <View style={styles.body}>
+            <View style={styles.searchStack}>
+              <View style={styles.searchFieldWrap}>
+                <View
+                  style={styles.searchFieldLeftArt}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants">
+                  <Image
+                    source={require('../assets/home-ai/צילום_מסך_2026-04-27_124221-removebg-preview.png')}
+                    style={styles.searchFieldLeftArtImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <TextInput
+                  style={styles.searchFieldInput}
+                  placeholder="תמצא לי דירה,משרד,צימר,שותף"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  value={query}
+                  onChangeText={setQuery}
+                  editable={!loading}
+                  textAlign="right"
+                  writingDirection="rtl"
+                  returnKeyType="search"
+                  onSubmitEditing={runSearch}
                 />
+                <TouchableOpacity
+                  onPress={runSearch}
+                  disabled={loading}
+                  style={styles.searchFieldIconBtn}
+                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                  accessibilityLabel="חיפוש"
+                  accessibilityRole="button">
+                  {loading ? (
+                    <ActivityIndicator
+                      color={Colors.blue100}
+                      size="small"
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="magnify"
+                      size={22}
+                      color="rgba(255,255,255,0.55)"
+                    />
+                  )}
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={handleClose}
-                hitSlop={12}
-                style={styles.closeBtn}
-                accessibilityLabel="סגור">
-                <Text style={styles.closeBtnText}>✕</Text>
-              </TouchableOpacity>
+              {hasSearchedWithQuery ? (
+                <View style={styles.layoutToggleRow}>
+                  <View style={styles.layoutToggleEndGroup}>
+                    <Text
+                      style={styles.layoutResultsCount}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.2}>
+                      {formatResultsCountHe(results.length)}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        setResultsLayout(prev => (prev === 'grid' ? 'list' : 'grid'))
+                      }
+                      style={styles.layoutToggleBtn}
+                      activeOpacity={0.85}
+                      accessibilityLabel={
+                        resultsLayout === 'grid'
+                          ? 'מעבר לתצוגת רשימה'
+                          : 'מעבר לתצוגת רשת'
+                      }
+                      accessibilityRole="button">
+                      <Image
+                        source={
+                          resultsLayout === 'grid'
+                            ? require('../assets/swipereight.png')
+                            : require('../assets/swiperleft.png')
+                        }
+                        style={styles.layoutToggleIcon}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
             </View>
-
-            <Text style={styles.subtitle}>
-              תאר איזה נכס אתה מחפש — נחפש בכל המודעות במערכת ונסכם את ההתאמות
-              הקרובות ביותר.
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="לדוגמה: דירת 4 חדרים בתל אביב עד 3 מיליון, למכירה…"
-              placeholderTextColor={Colors.grey200}
-              value={query}
-              onChangeText={setQuery}
-              multiline
-              textAlignVertical="top"
-              editable={!loading}
-            />
-
-            <TouchableOpacity
-              style={[styles.searchBtn, loading && styles.searchBtnDisabled]}
-              onPress={runSearch}
-              disabled={loading}
-              activeOpacity={0.85}>
-              {loading ? (
-                <ActivityIndicator color="#1e1d27" />
-              ) : (
-                <Text style={styles.searchBtnText}>חיפוש</Text>
-              )}
-            </TouchableOpacity>
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <ScrollView
-              style={styles.answerScroll}
-              contentContainerStyle={styles.answerContent}
-              keyboardShouldPersistTaps="handled">
-              {answer ? (
-                <Text style={styles.answerText}>{answer}</Text>
-              ) : (
-                !loading && (
-                  <Text style={styles.hintText}>
-                    התוצאה תופיע כאן לאחר החיפוש (טקסט בלבד, לפי דמיון למילות
-                    מפתח במודעות).
+              style={styles.resultsScroll}
+              contentContainerStyle={[
+                styles.resultsContent,
+                !hasSearchedWithQuery && !loading
+                  ? styles.resultsContentWelcome
+                  : resultsLayout === 'grid'
+                    ? styles.resultsContentGrid
+                    : styles.resultsContentList,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              showsHorizontalScrollIndicator={false}
+              dataSet={
+                Platform.OS === 'web' ? {class: 'pi-ai-scroll'} : undefined
+              }>
+              {loading && results.length === 0 && !emptyMessage ? (
+                <View style={styles.resultsLoadingWrap}>
+                  <ActivityIndicator color={Colors.blue100} size="large" />
+                </View>
+              ) : !hasSearchedWithQuery && !loading ? (
+                <View style={styles.welcomeColumn}>
+                  <Image
+                    source={require('../assets/home-ai/צילום_מסך_2026-04-27_124444-removebg-preview.png')}
+                    style={styles.welcomeHeroImage}
+                    resizeMode="contain"
+                  />
+                  <Text
+                    style={styles.welcomePromptTitle}
+                    maxFontSizeMultiplier={1.35}>
+                    תארו מה אתם מחפשים
                   </Text>
-                )
-              )}
+                  <Text
+                    style={styles.welcomePromptExample}
+                    maxFontSizeMultiplier={1.35}>
+                    דירת 3 חדרים בתל אביב להשכרה עם נוף לים…
+                  </Text>
+                  {emptyMessage ? (
+                    <Text
+                      style={[styles.hintText, styles.welcomeNoCatalogHint]}>
+                      {emptyMessage}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : results.length > 0 ? (
+                <>
+                  {results.map(listing =>
+                    resultsLayout === 'grid'
+                      ? renderGridCard(listing)
+                      : renderListCard(listing),
+                  )}
+                </>
+              ) : emptyMessage ? (
+                <Text style={styles.hintText}>{emptyMessage}</Text>
+              ) : null}
             </ScrollView>
-          </Animated.View>
+          </View>
         </KeyboardAvoidingView>
-      </View>
+    </View>
+  );
+
+  if (embedded) return body;
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      statusBarTranslucent
+      onRequestClose={handleClose}>
+      {body}
     </Modal>
   );
 };
 
-const SHEET_W = Math.min(WIN_W - 24, 520);
-const SHEET_H = Math.min(WIN_H * 0.9, WIN_H - 24);
-
 const styles = StyleSheet.create({
-  backdrop: {
+  fullScreen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'center',
+    backgroundColor: BG,
+    overflow: 'hidden',
+  },
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-  },
-  keyboardWrap: {
-    width: '100%',
-    maxWidth: SHEET_W,
-    maxHeight: SHEET_H,
-  },
-  sheet: {
-    width: '100%',
-    maxHeight: SHEET_H,
-    backgroundColor: '#2a2838',
-    borderRadius: BorderRadius.roundCorner2XL,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,196,10,0.35)',
-  },
-  headerRow: {
-    position: 'relative',
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  headerLogoWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerLogo: {
-    width: 200,
-    height: 48,
-    maxWidth: '85%',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 56,
+    backgroundColor: BG,
   },
   closeBtn: {
-    position: 'absolute',
-    end: 0,
-    top: 0,
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
   },
-  closeBtnText: {
-    color: Colors.white100,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  subtitle: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  input: {
-    minHeight: 100,
-    maxHeight: 140,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.roundCornerXL,
-    padding: 12,
-    color: Colors.white100,
-    fontSize: 15,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    marginBottom: 12,
-  },
-  searchBtn: {
-    backgroundColor: Colors.yellowTextCTA,
-    paddingVertical: 14,
-    borderRadius: BorderRadius.roundCornerXL,
+  topBarLogoWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'center',
   },
-  searchBtnDisabled: {
-    opacity: 0.7,
+  topBarLogo: {
+    width: 160,
+    height: 44,
   },
-  searchBtnText: {
-    color: '#1e1d27',
-    fontSize: 17,
-    fontWeight: '700',
+  kbWrap: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  body: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 12,
+    overflow: 'hidden',
+  },
+  searchStack: {
+    width: '100%',
+    marginBottom: 12,
+    gap: 6,
+  },
+  /** Grid/list control below search field, aligned to the physical right. */
+  layoutToggleRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    writingDirection: 'ltr',
+  },
+  /** Count (RTL) immediately to the left of the view-toggle icon, both on the end side. */
+  layoutToggleEndGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  layoutResultsCount: {
+    flexShrink: 1,
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  /** Icon only — no pill/border; comfortable tap target. */
+  layoutToggleBtn: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    backgroundColor: 'transparent',
+  },
+  layoutToggleIcon: {
+    width: 48,
+    height: 28,
+  },
+  /** Same pattern as ChatScreen add-members / FollowHub search pill (48px, icon right). */
+  searchFieldWrap: {
+    width: '100%',
+    minHeight: 48,
+    height: 48,
+    borderRadius: 1000,
+    borderWidth: 1,
+    borderColor: '#8C85B3',
+    backgroundColor: CARD_BG,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  searchFieldInput: {
+    width: '100%',
+    minHeight: 48,
+    color: Colors.white100,
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    /* Room for left inset art (physical left) + search icon (right) */
+    paddingLeft: 72,
+    paddingRight: 46,
+    paddingVertical: 10,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  searchFieldLeftArt: {
+    position: 'absolute',
+    left: 6,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  searchFieldLeftArtImage: {
+    height: 22,
+    width: 56,
+    ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
+  },
+  searchFieldIconBtn: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
   },
   errorText: {
-    color: '#ff6b6b',
+    color: Colors.grey200,
     fontSize: 14,
     textAlign: 'right',
     marginBottom: 8,
   },
-  answerScroll: {
-    flexGrow: 0,
-    maxHeight: SHEET_H * 0.42,
-    minHeight: 120,
+  resultsScroll: {
+    flex: 1,
+    ...(Platform.OS === 'web'
+      ? {scrollbarWidth: 'none', msOverflowStyle: 'none'}
+      : {}),
   },
-  answerContent: {
-    paddingBottom: 8,
+  resultsContent: {
+    paddingBottom: 16,
+    gap: 12,
   },
-  answerText: {
+  /** Center the welcome art + copy in the remaining scroll area below the search field. */
+  resultsContentWelcome: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    width: '100%',
+    minHeight: 360,
+  },
+  welcomeColumn: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 14,
+  },
+  welcomeHeroImage: {
+    width: 200,
+    maxWidth: '100%',
+    height: 144,
+    ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
+  },
+  welcomePromptTitle: {
     color: Colors.white100,
-    fontSize: 14,
+    fontSize: 20,
+    lineHeight: 28,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  welcomePromptExample: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 15,
     lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    fontStyle: 'italic',
+  },
+  welcomeNoCatalogHint: {
+    marginTop: 4,
+  },
+  resultsContentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+    columnGap: 0,
+    overflow: 'visible',
+  },
+  resultsContentList: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    width: '100%',
+    paddingBottom: 16,
+    gap: 8,
+  },
+  /** Row: heart sits to the left of chip/badge (`justifyContent: 'flex-end'`, `writingDirection: 'ltr'`). */
+  listResultPurposeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 8,
+    rowGap: 6,
+    marginTop: 2,
+    writingDirection: 'ltr',
+  },
+  listResultHeartInPurposeRow: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listResultLoveIcon: {
+    width: 24,
+    height: 24,
+  },
+  listResultCard: {
+    width: '100%',
+    minHeight: 108,
+    flexDirection: 'row-reverse',
+    alignItems: 'stretch',
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    overflow: 'visible',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: {elevation: 3},
+      default: {},
+    }),
+  },
+  /** Fills list row height; 88px thumb is vertically centered. */
+  listResultThumbCol: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listResultThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: 10,
+    backgroundColor: IMG_PLACEHOLDER_BG,
+    flexShrink: 0,
+  },
+  listResultThumbPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listResultThumbPlaceholderText: {
+    color: Colors.grey200,
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  listResultMid: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 4,
+    overflow: 'visible',
+  },
+  listResultPrice: {
+    color: '#F7F3E6',
+    fontSize: 16,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'right',
+    width: '100%',
+    writingDirection: 'rtl',
+  },
+  listResultAddressRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 4,
+  },
+  listResultAddress: {
+    flex: 1,
+    minWidth: 0,
+    color: Colors.white100,
+    fontSize: 16,
+    lineHeight: 21,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'right',
     writingDirection: 'rtl',
+  },
+  listResultLocationIcon: {
+    width: 18,
+    height: 18,
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  listResultPreSale: {
+    width: 80,
+    height: 28,
+    flexShrink: 0,
+  },
+  listResultPurposeChip: {
+    height: 24,
+    minHeight: 24,
+    paddingVertical: 0,
+    paddingHorizontal: 10,
+    flexShrink: 0,
+  },
+  listResultPurposeText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  listResultStatsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 4,
+    width: '100%',
+    marginTop: 6,
+    overflow: 'visible',
+    zIndex: 2,
+    ...Platform.select({
+      android: {elevation: 2},
+      default: {},
+    }),
+  },
+  listResultStatsPairGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  listResultStatGroup: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  listResultStatIconBox: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listResultStatIcon: {
+    width: 16,
+    height: 16,
+    flexShrink: 0,
+  },
+  listResultStatIconFlipped: {
+    width: 16,
+    height: 16,
+    transform: [{scaleX: -1}],
+  },
+  listResultStatText: {
+    color: Colors.white100,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.2,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    flexShrink: 0,
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  listResultStatTextInline: {
+    textAlign: 'right',
+  },
+  listResultStatAptTextWrap: {
+    flexShrink: 0,
+    ...Platform.select({
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  listResultStatValueText: {
+    color: Colors.white100,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  listResultStatLabelText: {
+    color: Colors.white100,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.25,
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  listResultStatTextCell: {
+    alignSelf: 'center',
+  },
+  listResultActions: {
+    width: 76,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
+  },
+  listResultPiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+  },
+  listResultPiText: {
+    color: '#FFD275',
+    fontSize: 17,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    marginRight: -2,
+  },
+  listResultPiBadge: {
+    width: 60,
+    height: 60,
+    marginLeft: -14,
+    marginTop: 0,
+    ...Platform.select({
+      web: {objectFit: 'cover'},
+      default: {},
+    }),
+  },
+  resultsLoadingWrap: {
+    flex: 1,
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+
+  // Shared (list row chips — grid cards use ListingGridCardFigma)
+  purposeChip: {
+    height: 22,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.roundCornerFull,
+    backgroundColor: Colors.white100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  purposeChipText: {
+    color: Colors.blue100,
+    fontSize: 12,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
   },
   hintText: {
     color: Colors.grey200,
@@ -310,6 +1282,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'right',
     writingDirection: 'rtl',
+    width: '100%',
   },
 });
 

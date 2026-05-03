@@ -1,6 +1,14 @@
-import {StyleSheet, Text, View, TouchableOpacity, TextInput} from 'react-native';
-import React, {useEffect, useState} from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  TextInput,
+  Pressable,
+} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
 import {Colors} from '../../constants/styles';
+import {PRICE_COUNTER_STEP_DEFAULT} from '../../utils/priceInput';
 import {Title} from './Title';
 import {FormContainer} from './FormContainer';
 import {Divider} from './Divider';
@@ -13,7 +21,10 @@ export const PriceCount = ({
   isPricePerNight = false,
   hotDeal = false,
   setHotDeal,
+  /** ₪ increment/decrement for − / + buttons */
+  counterStep = PRICE_COUNTER_STEP_DEFAULT,
 }) => {
+  const inputRef = useRef(null);
   const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
 
@@ -35,14 +46,19 @@ export const PriceCount = ({
       <View style={styles.priceInput}>
         <TouchableOpacity
           style={styles.counterButtonLeft}
-          onPress={() => setPrice(Math.max(0, price - 10000))}>
+          onPress={() =>
+            setPrice(Math.max(0, Number(price || 0) - counterStep))
+          }>
           <Text style={styles.counterButtonMinus}>−</Text>
         </TouchableOpacity>
         <View style={styles.counterDivider} />
-        <View style={styles.counterValueContainer}>
+        <Pressable
+          style={styles.counterValueContainer}
+          onPress={() => inputRef.current?.focus?.()}>
           <View style={styles.priceValueRow}>
             <Text style={styles.priceValue}>₪</Text>
             <TextInput
+              ref={inputRef}
               style={[styles.priceValueInput, {width: inputWidth}]}
               value={draftPrice}
               onChangeText={setDraftPrice}
@@ -51,13 +67,16 @@ export const PriceCount = ({
               keyboardType="numeric"
               returnKeyType="done"
               textAlign="center"
+              showSoftInputOnFocus
             />
           </View>
-        </View>
+        </Pressable>
         <View style={styles.counterDivider} />
         <TouchableOpacity
           style={styles.counterButtonRight}
-          onPress={() => setPrice(price + 10000)}>
+          onPress={() =>
+            setPrice(Number(price || 0) + counterStep)
+          }>
           <Text style={styles.counterButtonPlus}>+</Text>
         </TouchableOpacity>
       </View>
@@ -133,7 +152,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   counterButtonLeft: {
-    flex: 1,
+    width: 52,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -141,7 +160,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 32,
   },
   counterButtonRight: {
-    flex: 1,
+    width: 52,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -169,10 +188,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#8C85B3',
   },
   counterValueContainer: {
-    flex: 2,
+    flex: 1,
+    minWidth: 158,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 8,
   },
   hotDealContainer: {
     backgroundColor: Colors.yellowIcons,

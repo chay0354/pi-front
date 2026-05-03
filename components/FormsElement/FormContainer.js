@@ -1,8 +1,8 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 
-export const FormContainer = ({children}) => {
-  return <View style={styles.formContainer}>{children}</View>;
+export const FormContainer = ({children, style}) => {
+  return <View style={[styles.formContainer, style]}>{children}</View>;
 };
 
 const styles = StyleSheet.create({

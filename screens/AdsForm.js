@@ -1,4 +1,11 @@
-import React, {useState, useRef, useEffect, useContext} from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useContext,
+  useMemo,
+  useCallback,
+} from 'react';
 import {
   View,
   ScrollView,
@@ -11,10 +18,9 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, toSubscriptionId} from '../utils/api';
+import {uploadFile, createListing, updateListing, toSubscriptionId} from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   brokerCategoryForm,
@@ -23,6 +29,12 @@ import {
   userCategoryForm,
 } from '../utils/constant';
 import {fonts} from '../utils/fonts';
+import {
+  PRICE_COUNTER_STEP_DEFAULT,
+  PRICE_COUNTER_STEP_PER_NIGHT,
+  PRICE_COUNTER_STEP_ROOMMATE_BUDGET,
+} from '../utils/priceInput';
+import {buildGlobalGroundFieldList} from '../utils/globalGroundAdFields';
 import {
   AccommodationOffers,
   AdditionalDetails,
@@ -55,9 +67,227 @@ import {
   GeneralDetailsWithRadio,
   ConstructionStatus,
   PropertyAddress,
+  PublishValidationModal,
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
 import {ContextHook} from '../hooks/ContextHook';
+
+/** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
+const COMPANY_OFFICE_SIZES_SECTION_TITLE =
+  'הפרוייקט מציע משרדים בגדלים של';
+const COMPANY_WHOLE_FLOOR_SECTION_TITLE = 'הפרוייקט מציע קומה שלמה';
+/** Company commercial (category 8) — `companyCategoryForm[8]` */
+const CAT8_COMMERCIAL_SIZES_SECTION_TITLE =
+  'הפרוייקט מציע שטחי מסחר בגדלים של';
+const CAT8_WHOLE_FLOOR_SECTION_TITLE = 'הפרוייקט מציע קומה שלמה';
+
+function normalizeCompanyLandParcel(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {unit: 'dunam', area: 0, price: 0};
+  }
+  const unit = raw.unit === 'sqm' ? 'sqm' : 'dunam';
+  return {
+    unit,
+    area: Math.max(0, Number(raw.area) || 0),
+    price: Math.max(0, Number(raw.price) || 0),
+  };
+}
+
+function maxRepeatSlotFromProjectOffers(po, keyRe) {
+  if (!po || typeof po !== 'object') {
+    return 0;
+  }
+  let max = 0;
+  for (const key of Object.keys(po)) {
+    const m = key.match(keyRe);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n)) {
+        max = Math.max(max, n);
+      }
+    }
+  }
+  return max;
+}
+
+function buildCompanyOfficeRepeatGroups(count) {
+  const rows = [];
+  for (let i = 1; i <= count; i++) {
+    rows.push({
+      title: `משרד ${i}`,
+      titleRequired: false,
+      isSelected: true,
+      fields: [
+        {
+          type: 'count',
+          key: `office_${i}_area`,
+          isArea: true,
+          subTitle: 'גודל המשרד',
+          subTitleRequired: true,
+        },
+        {
+          type: 'price',
+          key: `office_${i}_price`,
+          subTitle: 'מחיר למטר',
+          subTitleRequired: true,
+        },
+      ],
+    });
+  }
+  rows.push({
+    title: 'הוסף משרד',
+    titleRequired: false,
+    isSelected: true,
+    fields: [],
+    isAddRepeatRow: true,
+  });
+  return rows;
+}
+
+function buildCompanyWholeFloorRepeatGroups(count) {
+  const rows = [];
+  for (let i = 1; i <= count; i++) {
+    rows.push({
+      title: `קומה שלמה ${i}`,
+      titleRequired: false,
+      isSelected: true,
+      fields: [
+        {
+          type: 'count',
+          key: `whole_floor_${i}_area`,
+          isArea: true,
+          subTitle: 'גודל הקומה',
+          subTitleRequired: true,
+        },
+        {
+          type: 'price',
+          key: `whole_floor_${i}_price`,
+          subTitle: 'מחיר למטר',
+          subTitleRequired: true,
+        },
+      ],
+    });
+  }
+  rows.push({
+    title: 'הוסף קומה שלמה',
+    titleRequired: false,
+    isSelected: true,
+    fields: [],
+    isAddRepeatRow: true,
+  });
+  return rows;
+}
+
+function buildCat8CommercialRepeatGroups(count) {
+  const rows = [];
+  for (let i = 1; i <= count; i++) {
+    rows.push({
+      title: `שטח מסחרי ${i}`,
+      titleRequired: true,
+      isSelected: true,
+      fields: [
+        {
+          type: 'count',
+          key: `cat8_commercial_space_${i}_sqm`,
+          isArea: true,
+          subTitle: 'גודל השטח',
+          subTitleRequired: true,
+        },
+        {
+          type: 'price',
+          key: `cat8_commercial_space_${i}_price`,
+          subTitle: 'מחיר למטר',
+          subTitleRequired: true,
+        },
+      ],
+    });
+  }
+  rows.push({
+    title: 'הוסף שטח מסחרי',
+    titleRequired: true,
+    isSelected: true,
+    fields: [],
+    isAddRepeatRow: true,
+  });
+  return rows;
+}
+
+function buildCat8WholeFloorRepeatGroups(count) {
+  const rows = [];
+  for (let i = 1; i <= count; i++) {
+    rows.push({
+      title: `קומה שלמה ${i}`,
+      titleRequired: false,
+      isSelected: true,
+      fields: [
+        {
+          type: 'count',
+          key: `cat8_whole_floor_${i}_sqm`,
+          isArea: true,
+          subTitle: 'גודל הקומה',
+          subTitleRequired: true,
+        },
+        {
+          type: 'price',
+          key: `cat8_whole_floor_${i}_price`,
+          subTitle: 'מחיר למטר',
+          subTitleRequired: true,
+        },
+      ],
+    });
+  }
+  rows.push({
+    title: 'הוסף קומה שלמה',
+    titleRequired: false,
+    isSelected: true,
+    fields: [],
+    isAddRepeatRow: true,
+  });
+  return rows;
+}
+
+/**
+ * Ensure every dynamic slot key exists in the payload (incl. zeros) so the API stores all rows.
+ */
+function padDynamicCompanyProjectOfferSlots(merged, listingCategory, slots) {
+  if (!merged || typeof merged !== 'object') {
+    return;
+  }
+  const {
+    companyOfficeRepeatCount = 0,
+    companyWholeFloorRepeatCount = 0,
+    cat8CommercialRepeatCount = 0,
+    cat8WholeFloorRepeatCount = 0,
+  } = slots;
+  if (listingCategory === 2) {
+    for (let i = 1; i <= companyOfficeRepeatCount; i++) {
+      const a = `office_${i}_area`;
+      const p = `office_${i}_price`;
+      merged[a] = merged[a] ?? 0;
+      merged[p] = merged[p] ?? 0;
+    }
+    for (let i = 1; i <= companyWholeFloorRepeatCount; i++) {
+      const a = `whole_floor_${i}_area`;
+      const p = `whole_floor_${i}_price`;
+      merged[a] = merged[a] ?? 0;
+      merged[p] = merged[p] ?? 0;
+    }
+  }
+  if (listingCategory === 8) {
+    for (let i = 1; i <= cat8CommercialRepeatCount; i++) {
+      const a = `cat8_commercial_space_${i}_sqm`;
+      const p = `cat8_commercial_space_${i}_price`;
+      merged[a] = merged[a] ?? 0;
+      merged[p] = merged[p] ?? 0;
+    }
+    for (let i = 1; i <= cat8WholeFloorRepeatCount; i++) {
+      const a = `cat8_whole_floor_${i}_sqm`;
+      const p = `cat8_whole_floor_${i}_price`;
+      merged[a] = merged[a] ?? 0;
+      merged[p] = merged[p] ?? 0;
+    }
+  }
+}
 
 /**
  * Age Range Slider Component
@@ -214,6 +444,8 @@ const AdsForm = ({
   initialCategory = null,
   initialListing = null,
   initialBnbHostType = null,
+  /** Navigate to post composer for current category; return path is set by App. */
+  onOpenPostEditor = null,
 }) => {
   const [propertyType, setPropertyType] = useState(null);
   const [serviceAndFacilityType, setServiceAndFacilityType] = useState(null);
@@ -241,16 +473,36 @@ const AdsForm = ({
   const [displayOption, setDisplayOption] = useState(null); // 'collage' or 'slideshow'
   const [exposureLevel, setExposureLevel] = useState('medium'); // 'low' | 'medium' | 'high' – how often ad is shown to others
   const {currentUser} = useContext(ContextHook);
-  const formList =
-    currentUser?.subscription_type === subscriptionTypes?.user
-      ? userCategoryForm
-      : currentUser?.subscription_type === subscriptionTypes?.broker
-        ? brokerCategoryForm
-        : companyCategoryForm;
+  const formList = useMemo(() => {
+    const t = String(currentUser?.subscription_type || '').toLowerCase();
+    if (t === subscriptionTypes.user) {
+      return userCategoryForm;
+    }
+    if (t === subscriptionTypes.broker) {
+      return brokerCategoryForm;
+    }
+    // company & professional: `companyCategoryForm` had no key `1` — merge broker’s חדש מקבלן project form
+    return {
+      ...companyCategoryForm,
+      1: {
+        ...brokerCategoryForm[1],
+        role: 'company',
+      },
+    };
+  }, [currentUser?.subscription_type]);
 
   const [category, setCategory] = useState(
     initialCategory ? parseInt(initialCategory) : 1,
   ); // Category 1-11 (default: 1, or use initialCategory if provided)
+
+  /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7), hide irrelevant blocks */
+  const adsFormFields = useMemo(() => {
+    return (
+      buildGlobalGroundFieldList(formList, category, propertyType) ??
+      formList[category]?.fields ??
+      []
+    );
+  }, [formList, category, propertyType]);
 
   // New fields for category 3 (חדש מקבלן)
   const [searchPurpose, setSearchPurpose] = useState(null); // 'enter', 'bring_in', 'partner'
@@ -280,7 +532,131 @@ const AdsForm = ({
 
   useEffect(() => {
     setProjectOfferGroupsOn({});
+    setProjectOfferGroupsExpanded({});
+    if (parseInt(category, 10) !== 7) {
+      setCompanyLandParcels([]);
+    }
   }, [category]);
+
+  // עריכת מודעה: פתח אוטומטית רק שורות שיש בהן נתונים ב-project_offers
+  useEffect(() => {
+    if (!initialListing?.id) {
+      return;
+    }
+    const po = initialListing.project_offers;
+    if (!po || typeof po !== 'object') {
+      return;
+    }
+    const next = {};
+    adsFormFields.forEach((field, fieldIndex) => {
+      if (
+        field.key !== 'generaldetailswithradio' ||
+        field.groups?.title !== 'הפרויקט מציע'
+      ) {
+        return;
+      }
+      (field.groups.groups || []).forEach(grp => {
+        const keys = (grp.fields || []).map(f => f.key).filter(Boolean);
+        const hasData = keys.some(k => {
+          const v = po[k];
+          return v != null && Number(v) > 0;
+        });
+        if (hasData) {
+          next[`${fieldIndex}-${grp.title}`] = true;
+        }
+      });
+    });
+    if (Object.keys(next).length > 0) {
+      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+    }
+  }, [initialListing?.id, adsFormFields]);
+
+  useEffect(() => {
+    if (!initialListing?.id || parseInt(category, 10) !== 2) {
+      return;
+    }
+    const po = initialListing.project_offers;
+    if (!po || typeof po !== 'object') {
+      return;
+    }
+    const next = {};
+    adsFormFields.forEach((field, fieldIndex) => {
+      if (field.key !== 'generaldetailswithradio') {
+        return;
+      }
+      const sectionTitle = field.groups?.title;
+      if (
+        sectionTitle !== COMPANY_OFFICE_SIZES_SECTION_TITLE &&
+        sectionTitle !== COMPANY_WHOLE_FLOOR_SECTION_TITLE
+      ) {
+        return;
+      }
+      const prefix =
+        sectionTitle === COMPANY_OFFICE_SIZES_SECTION_TITLE
+          ? 'office'
+          : 'whole_floor';
+      for (let i = 1; i <= 40; i++) {
+        const ak = `${prefix}_${i}_area`;
+        const pk = `${prefix}_${i}_price`;
+        const has =
+          (po[ak] != null && Number(po[ak]) > 0) ||
+          (po[pk] != null && Number(po[pk]) > 0);
+        if (has) {
+          const rowTitle =
+            prefix === 'office' ? `משרד ${i}` : `קומה שלמה ${i}`;
+          next[`${fieldIndex}-${rowTitle}`] = true;
+        }
+      }
+    });
+    if (Object.keys(next).length > 0) {
+      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+    }
+  }, [initialListing?.id, initialListing?.project_offers, category, adsFormFields]);
+
+  useEffect(() => {
+    if (!initialListing?.id || parseInt(category, 10) !== 8) {
+      return;
+    }
+    const po = initialListing.project_offers;
+    if (!po || typeof po !== 'object') {
+      return;
+    }
+    const next = {};
+    adsFormFields.forEach((field, fieldIndex) => {
+      if (field.key !== 'generaldetailswithradio') {
+        return;
+      }
+      const sectionTitle = field.groups?.title;
+      if (
+        sectionTitle !== CAT8_COMMERCIAL_SIZES_SECTION_TITLE &&
+        sectionTitle !== CAT8_WHOLE_FLOOR_SECTION_TITLE
+      ) {
+        return;
+      }
+      const isCommercial =
+        sectionTitle === CAT8_COMMERCIAL_SIZES_SECTION_TITLE;
+      for (let i = 1; i <= 40; i++) {
+        const ak = isCommercial
+          ? `cat8_commercial_space_${i}_sqm`
+          : `cat8_whole_floor_${i}_sqm`;
+        const pk = isCommercial
+          ? `cat8_commercial_space_${i}_price`
+          : `cat8_whole_floor_${i}_price`;
+        const has =
+          (po[ak] != null && Number(po[ak]) > 0) ||
+          (po[pk] != null && Number(po[pk]) > 0);
+        if (has) {
+          const rowTitle = isCommercial
+            ? `שטח מסחרי ${i}`
+            : `קומה שלמה ${i}`;
+          next[`${fieldIndex}-${rowTitle}`] = true;
+        }
+      }
+    });
+    if (Object.keys(next).length > 0) {
+      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+    }
+  }, [initialListing?.id, initialListing?.project_offers, category, adsFormFields]);
 
   useEffect(() => {
     const fields = formList?.[category]?.fields || [];
@@ -318,6 +694,10 @@ const AdsForm = ({
     if (!initialListing) return;
     const cat = initialListing.category != null ? parseInt(initialListing.category) : null;
     if (cat >= 1 && cat <= 12) setCategory(cat);
+    const ptRaw = initialListing.property_type ?? initialListing.propertyType;
+    if (ptRaw != null && String(ptRaw).trim() !== '') {
+      setPropertyType(String(ptRaw).trim());
+    }
     setDescription(initialListing.description ?? '');
     setProjectName(
       initialListing.project_name != null
@@ -381,6 +761,20 @@ const AdsForm = ({
             ? Number(p)
             : 1000,
       );
+      const amin =
+        initialListing.preferred_age_min ?? initialListing.preferredAgeMin;
+      const amax =
+        initialListing.preferred_age_max ?? initialListing.preferredAgeMax;
+      if (amin != null && String(amin).trim() !== '' && !Number.isNaN(Number(amin))) {
+        setPreferredAgeMin(
+          Math.max(18, Math.min(100, Math.round(Number(amin)))),
+        );
+      }
+      if (amax != null && String(amax).trim() !== '' && !Number.isNaN(Number(amax))) {
+        setPreferredAgeMax(
+          Math.max(18, Math.min(100, Math.round(Number(amax)))),
+        );
+      }
     } else {
       setBudget(initialListing.budget ?? 1000);
     }
@@ -412,11 +806,23 @@ const AdsForm = ({
     }
     if (initialListing.general_details && typeof initialListing.general_details === 'object') {
       const gd = initialListing.general_details;
+      const listingAreaNum =
+        initialListing.area != null && !Number.isNaN(Number(initialListing.area))
+          ? Math.max(0, Math.round(Number(initialListing.area)))
+          : null;
       setGeneralDetailsCounts(prev => ({
         ...prev,
+        sqm_area:
+          gd.sqm_area != null && gd.sqm_area !== ''
+            ? Number(gd.sqm_area)
+            : listingAreaNum != null && listingAreaNum > 0
+              ? listingAreaNum
+              : prev.sqm_area,
         building_count: gd.building_count != null ? Number(gd.building_count) : prev.building_count,
         floor_count: gd.floor_count != null ? Number(gd.floor_count) : prev.floor_count,
         apartment_count: gd.apartment_count != null ? Number(gd.apartment_count) : prev.apartment_count,
+        shop_count:
+          gd.shop_count != null ? Number(gd.shop_count) : prev.shop_count,
       }));
       if (gd.guest_count != null && !Number.isNaN(Number(gd.guest_count))) {
         setGuestCount(Math.max(1, Number(gd.guest_count)));
@@ -427,9 +833,73 @@ const AdsForm = ({
       if (gd.check_out_date) {
         setCheckOutDate(String(gd.check_out_date));
       }
+    } else if (
+      initialListing.area != null &&
+      !Number.isNaN(Number(initialListing.area))
+    ) {
+      const a = Math.max(0, Math.round(Number(initialListing.area)));
+      if (a > 0) {
+        setGeneralDetailsCounts(prev => ({
+          ...prev,
+          sqm_area: prev.sqm_area > 0 ? prev.sqm_area : a,
+        }));
+      }
     }
     if (initialListing.project_offers && typeof initialListing.project_offers === 'object') {
       setProjectOffers(prev => ({ ...prev, ...initialListing.project_offers }));
+    }
+    const subType = String(currentUser?.subscription_type || '').toLowerCase();
+    const isCompanyLike =
+      subType === subscriptionTypes.company ||
+      subType === subscriptionTypes.professional;
+    if (cat === 2 && isCompanyLike) {
+      const po = initialListing.project_offers;
+      if (po && typeof po === 'object') {
+        setCompanyOfficeRepeatCount(
+          maxRepeatSlotFromProjectOffers(po, /^office_(\d+)_/),
+        );
+        setCompanyWholeFloorRepeatCount(
+          maxRepeatSlotFromProjectOffers(po, /^whole_floor_(\d+)_/),
+        );
+      } else {
+        setCompanyOfficeRepeatCount(0);
+        setCompanyWholeFloorRepeatCount(0);
+      }
+    }
+    if (cat === 8 && isCompanyLike) {
+      const po = initialListing.project_offers;
+      if (po && typeof po === 'object') {
+        setCat8CommercialRepeatCount(
+          maxRepeatSlotFromProjectOffers(
+            po,
+            /cat8_commercial_space_(\d+)_/,
+          ),
+        );
+        setCat8WholeFloorRepeatCount(
+          maxRepeatSlotFromProjectOffers(po, /cat8_whole_floor_(\d+)_/),
+        );
+      } else {
+        setCat8CommercialRepeatCount(0);
+        setCat8WholeFloorRepeatCount(0);
+      }
+    }
+    if (cat === 7 && isCompanyLike) {
+      const raw =
+        initialListing.company_offers_land_sizes ??
+        initialListing.companyOffersLandSizes;
+      if (Array.isArray(raw)) {
+        setCompanyLandParcels(raw.map(normalizeCompanyLandParcel));
+      } else if (
+        raw &&
+        typeof raw === 'object' &&
+        Array.isArray(raw.parcels)
+      ) {
+        setCompanyLandParcels(raw.parcels.map(normalizeCompanyLandParcel));
+      } else {
+        setCompanyLandParcels([]);
+      }
+    } else {
+      setCompanyLandParcels([]);
     }
     if (initialListing.sale_at_presale !== undefined) {
       setSaleAtPresale(
@@ -464,7 +934,7 @@ const AdsForm = ({
         initialListing.hot_deal === 't' ||
         initialListing.hot_deal === 1,
     );
-  }, [initialListing?.id]);
+  }, [initialListing?.id, currentUser?.subscription_type]);
 
   // Request camera and media library permissions on mount
   useEffect(() => {
@@ -501,6 +971,8 @@ const AdsForm = ({
   // Loading states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
+  const [publishValidationVisible, setPublishValidationVisible] = useState(false);
+  const [publishValidationMessages, setPublishValidationMessages] = useState([]);
 
   // File input refs for web
   const mainImageInputRef = useRef(null);
@@ -514,10 +986,11 @@ const AdsForm = ({
   const salesImageInputRef = useRef(null);
   const [salesImage, setSalesImage] = useState(null);
   const [salesImageUrl, setSalesImageUrl] = useState(null);
-  // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
+  // Land form radio groups (תב״ע, קרקע במושב, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
   const [generalDetailsCounts, setGeneralDetailsCounts] = useState({
+    sqm_area: 0,
     building_count: 0,
     floor_count: 0,
     apartment_count: 0,
@@ -546,10 +1019,43 @@ const AdsForm = ({
   const [otherFormValues, setOtherFormValues] = useState({});
   // בלעדי (10): הסרת סוגי דירה מ"הפרויקט מציע" — מפתח `${fieldIndex}-${groupTitle}` → false = מוסתר
   const [projectOfferGroupsOn, setProjectOfferGroupsOn] = useState({});
+  /** "הפרויקט מציע": אקורדיון — מפתח `${fieldIndex}-${groupTitle}` → true = שדות פתוחים (ברירת מחדל סגור) */
+  const [projectOfferGroupsExpanded, setProjectOfferGroupsExpanded] = useState({});
+  /** Company category 2 (משרדים): dynamic משרד 1… / קומה שלמה 1… rows; default 0 visible slots */
+  const [companyOfficeRepeatCount, setCompanyOfficeRepeatCount] = useState(0);
+  const [companyWholeFloorRepeatCount, setCompanyWholeFloorRepeatCount] =
+    useState(0);
+  /** Company category 8 (מסחר): dynamic שטח מסחרי / קומה שלמה rows */
+  const [cat8CommercialRepeatCount, setCat8CommercialRepeatCount] =
+    useState(0);
+  const [cat8WholeFloorRepeatCount, setCat8WholeFloorRepeatCount] =
+    useState(0);
+  /** Company category 7 (קרקעות): dynamic קרקע rows — persisted as `company_offers_land_sizes` */
+  const [companyLandParcels, setCompanyLandParcels] = useState([]);
 
   const selectedAdditionalImagesCount = additionalImages.filter(Boolean).length;
   const totalSelectedImages =
     (mainImage ? 1 : 0) + selectedAdditionalImagesCount;
+
+  const isCompanyOfficeUpload = useMemo(() => {
+    if (parseInt(category, 10) !== 2) {
+      return false;
+    }
+    const t = String(currentUser?.subscription_type || '').toLowerCase();
+    return (
+      t === subscriptionTypes.company || t === subscriptionTypes.professional
+    );
+  }, [category, currentUser?.subscription_type]);
+
+  const isCompanyCommercialUpload = useMemo(() => {
+    if (parseInt(category, 10) !== 8) {
+      return false;
+    }
+    const t = String(currentUser?.subscription_type || '').toLowerCase();
+    return (
+      t === subscriptionTypes.company || t === subscriptionTypes.professional
+    );
+  }, [category, currentUser?.subscription_type]);
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
@@ -564,7 +1070,6 @@ const AdsForm = ({
     };
     const setValue = (key, val) => {
       const numVal = key.endsWith('_price') ? Number(val) || 0 : Math.max(0, Number(val) || 0);
-      console.log('[AdsForm.generalDetailsWithRadio.setValue]', {key, val, numVal});
       if (key in generalDetailsCounts) {
         setGeneralDetailsCounts(prev => ({ ...prev, [key]: numVal }));
       } else if (key in projectOffers) {
@@ -573,22 +1078,108 @@ const AdsForm = ({
         setOtherFormValues(prev => ({ ...prev, [key]: numVal }));
       }
     };
+    const mapGroupFields = grp => ({
+      ...grp,
+      fields: (grp.fields || []).map(f => {
+        if ((f.type === 'count' || f.type === 'price') && f.key) {
+          return {
+            ...f,
+            value: getValue(f.key),
+            onChange: (val) => setValue(f.key, val),
+          };
+        }
+        if (f.type === 'boolean_toggle' && f.key) {
+          return {
+            ...f,
+            value: getValue(f.key),
+            onChange: selected => setValue(f.key, selected ? 1 : 0),
+          };
+        }
+        return f;
+      }),
+    });
+    if (isCompanyOfficeUpload) {
+      const t = groups.title;
+      if (t === COMPANY_OFFICE_SIZES_SECTION_TITLE) {
+        return {
+          ...groups,
+          groups: buildCompanyOfficeRepeatGroups(
+            companyOfficeRepeatCount,
+          ).map(mapGroupFields),
+        };
+      }
+      if (t === COMPANY_WHOLE_FLOOR_SECTION_TITLE) {
+        return {
+          ...groups,
+          groups: buildCompanyWholeFloorRepeatGroups(
+            companyWholeFloorRepeatCount,
+          ).map(mapGroupFields),
+        };
+      }
+    }
+    if (isCompanyCommercialUpload) {
+      const t = groups.title;
+      if (t === CAT8_COMMERCIAL_SIZES_SECTION_TITLE) {
+        return {
+          ...groups,
+          groups: buildCat8CommercialRepeatGroups(
+            cat8CommercialRepeatCount,
+          ).map(mapGroupFields),
+        };
+      }
+      if (t === CAT8_WHOLE_FLOOR_SECTION_TITLE) {
+        return {
+          ...groups,
+          groups: buildCat8WholeFloorRepeatGroups(
+            cat8WholeFloorRepeatCount,
+          ).map(mapGroupFields),
+        };
+      }
+    }
     return {
       ...groups,
-      groups: groups.groups.map(grp => ({
-        ...grp,
-        fields: (grp.fields || []).map(f => {
-          if ((f.type === 'count' || f.type === 'price') && f.key) {
-            return {
-              ...f,
-              value: getValue(f.key),
-              onChange: (val) => setValue(f.key, val),
-            };
-          }
-          return f;
-        }),
-      })),
+      groups: groups.groups.map(mapGroupFields),
     };
+  };
+
+  const handleCompanyRepeatRowAdd = useCallback(
+    sectionTitle => {
+      const c = parseInt(category, 10);
+      if (c === 2) {
+        if (sectionTitle === COMPANY_OFFICE_SIZES_SECTION_TITLE) {
+          setCompanyOfficeRepeatCount(x => x + 1);
+        } else if (sectionTitle === COMPANY_WHOLE_FLOOR_SECTION_TITLE) {
+          setCompanyWholeFloorRepeatCount(x => x + 1);
+        }
+      }
+      if (c === 8) {
+        if (sectionTitle === CAT8_COMMERCIAL_SIZES_SECTION_TITLE) {
+          setCat8CommercialRepeatCount(x => x + 1);
+        } else if (sectionTitle === CAT8_WHOLE_FLOOR_SECTION_TITLE) {
+          setCat8WholeFloorRepeatCount(x => x + 1);
+        }
+      }
+    },
+    [category],
+  );
+
+  useEffect(() => {
+    if (parseInt(category, 10) !== 2) {
+      setCompanyOfficeRepeatCount(0);
+      setCompanyWholeFloorRepeatCount(0);
+    }
+    if (parseInt(category, 10) !== 8) {
+      setCat8CommercialRepeatCount(0);
+      setCat8WholeFloorRepeatCount(0);
+    }
+  }, [category]);
+
+  const toggleProjectOfferExpand = fieldIndex => title => {
+    const stateKey = `${fieldIndex}-${title}`;
+    setProjectOfferGroupsExpanded(prev => ({
+      ...prev,
+      [stateKey]: !prev[stateKey],
+    }));
   };
 
   const toggleProjectOfferGroup = (fieldIndex, groupsDef) => title => {
@@ -858,11 +1449,141 @@ const AdsForm = ({
     }
   };
 
+  /** Same rules as handlePublish validation — drives gray vs yellow publish button. */
+  const publishBlockingErrors = useMemo(() => {
+    const fields = adsFormFields;
+    const fieldKeys = fields.map(f => f.key);
+    const publishErrors = [];
+    if (category === 3) {
+      if (!searchPurpose) {
+        publishErrors.push('בחרו מטרת חיפוש');
+      }
+      if (!preferredApartmentType) {
+        publishErrors.push('בחרו סוג דירת שותפים מועדף');
+      }
+      if (!budget || budget <= 0) {
+        publishErrors.push('הזינו תקציב');
+      }
+      if (!String(description || '').trim()) {
+        publishErrors.push('הזינו פרטים נוספים');
+      }
+    } else {
+      if (fieldKeys.includes('propertytype') && !propertyType) {
+        publishErrors.push('בחרו סוג נכס');
+      }
+      const needsAddressPhoneDescription =
+        fieldKeys.includes('address-phone-description') ||
+        fieldKeys.includes('propertyaddress') ||
+        fieldKeys.includes('landaddress');
+      const needsProjectNameAndAddress =
+        fieldKeys.includes('propertyaddress');
+      if (needsAddressPhoneDescription) {
+        if (!String(address || '').trim()) {
+          publishErrors.push('הזינו כתובת');
+        }
+        if (!String(phone || '').trim()) {
+          publishErrors.push('הזינו טלפון');
+        }
+        if (!String(description || '').trim()) {
+          publishErrors.push('הזינו תיאור');
+        }
+      }
+      if (fieldKeys.includes('landaddress')) {
+        if (!String(address || '').trim()) {
+          publishErrors.push('הזינו כתובת קרקע');
+        }
+        if (!String(landParcel || '').trim()) {
+          publishErrors.push('הזינו חלקה');
+        }
+        if (!String(landBlock || '').trim()) {
+          publishErrors.push('הזינו גוש');
+        }
+      }
+      if (needsProjectNameAndAddress) {
+        if (!String(projectName || '').trim()) {
+          publishErrors.push('הזינו שם פרויקט');
+        }
+        if (!String(address || '').trim()) {
+          publishErrors.push('הזינו כתובת פרויקט');
+        }
+      }
+      const needsMainImage =
+        fieldKeys.includes('multiimagewithvideo') &&
+        !fieldKeys.includes('profileverification');
+      if (
+        needsMainImage &&
+        !mainImage &&
+        additionalImages.filter(img => img).length === 0
+      ) {
+        publishErrors.push('העלו לפחות תמונה אחת');
+      }
+      for (let fi = 0; fi < fields.length; fi++) {
+        const f = fields[fi];
+        if (!f.groups?.toggleableOfferGroups) {
+          continue;
+        }
+        const titles = (f.groups.groups || []).map(g => g.title);
+        const anyOn = titles.some(
+          t => projectOfferGroupsOn[`${fi}-${t}`] !== false,
+        );
+        if (!anyOn) {
+          publishErrors.push(
+            'בחרו לפחות סוג דירה אחד ב"הפרויקט מציע", או הפעילו שוב שורה שהוסרה.',
+          );
+          break;
+        }
+      }
+    }
+    return publishErrors;
+  }, [
+    category,
+    adsFormFields,
+    searchPurpose,
+    preferredApartmentType,
+    budget,
+    description,
+    propertyType,
+    address,
+    phone,
+    landParcel,
+    landBlock,
+    projectName,
+    mainImage,
+    additionalImages,
+    projectOfferGroupsOn,
+  ]);
+
+  /** Mandatory fields satisfied — yellow asset + press enabled (still respects uploading). */
+  const formReadyToPublish = publishBlockingErrors.length === 0;
+
+  /** Gray vs yellow PNGs differ in size; one combined ratio caused letterboxing on the other */
+  const publishAspectRatios = useMemo(() => {
+    const fbGray = 1004 / 174;
+    const fbYellow = 990 / 162;
+    try {
+      const gray = Image.resolveAssetSource(
+        require('../assets/ad-uplaud/button-gray.png'),
+      );
+      const yel = Image.resolveAssetSource(
+        require('../assets/ad-uplaud/button-yelow.png'),
+      );
+      return {
+        gray:
+          gray?.width && gray?.height ? gray.width / gray.height : fbGray,
+        yellow:
+          yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
+      };
+    } catch (_) {
+      return {gray: fbGray, yellow: fbYellow};
+    }
+  }, []);
+
   const handlePublish = async () => {
     try {
       setUploading(true);
 
-      const fields = formList[category]?.fields || [];
+      // Must match rendered `adsFormFields` so validation & companion-post logic stay in sync with visible fields (e.g. salesimage).
+      const fields = adsFormFields;
       const fieldKeys = fields.map(f => f.key);
       const generalDetailsField = fields.find(f => f.key === 'generaldetails');
       const selectedOptionSecondValues = {};
@@ -907,95 +1628,12 @@ const AdsForm = ({
             }
           : undefined;
 
-      // Validate only fields that exist in this form
-      if (category === 3) {
-        if (!searchPurpose) {
-          alert('אנא בחר מטרת חיפוש');
-          setUploading(false);
-          return;
-        }
-        if (!preferredApartmentType) {
-          alert('אנא בחר סוג דירת שותפים מועדף');
-          setUploading(false);
-          return;
-        }
-        if (!budget || budget <= 0) {
-          alert('אנא הזן תקציב');
-          setUploading(false);
-          return;
-        }
-        if (!description) {
-          alert('אנא הזן פרטים נוספים');
-          setUploading(false);
-          return;
-        }
-      } else {
-        if (fieldKeys.includes('propertytype') && !propertyType) {
-          alert('אנא בחר סוג נכס');
-          setUploading(false);
-          return;
-        }
-        const needsAddressPhoneDescription =
-          fieldKeys.includes('address-phone-description') ||
-          fieldKeys.includes('propertyaddress') ||
-          fieldKeys.includes('landaddress');
-        const needsProjectNameAndAddress =
-          fieldKeys.includes('propertyaddress');
-        if (
-          needsAddressPhoneDescription &&
-          (!address || !phone || !description)
-        ) {
-          alert('אנא מלא את כל השדות הנדרשים (כתובת, טלפון, תיאור)');
-          setUploading(false);
-          return;
-        }
-        if (
-          fieldKeys.includes('landaddress') &&
-          (!String(address || '').trim() ||
-            !String(landParcel || '').trim() ||
-            !String(landBlock || '').trim())
-        ) {
-          alert('אנא מלא כתובת קרקע, חלקה וגוש');
-          setUploading(false);
-          return;
-        }
-        if (
-          needsProjectNameAndAddress &&
-          (!projectName?.trim() || !address?.trim())
-        ) {
-          alert('אנא מלא שם פרויקט וכתובת פרויקט');
-          setUploading(false);
-          return;
-        }
-        const needsMainImage =
-          fieldKeys.includes('multiimagewithvideo') &&
-          !fieldKeys.includes('profileverification');
-        if (
-          needsMainImage &&
-          !mainImage &&
-          additionalImages.filter(img => img).length === 0
-        ) {
-          alert('אנא העלה לפחות תמונה אחת');
-          setUploading(false);
-          return;
-        }
-        for (let fi = 0; fi < fields.length; fi++) {
-          const f = fields[fi];
-          if (!f.groups?.toggleableOfferGroups) {
-            continue;
-          }
-          const titles = (f.groups.groups || []).map(g => g.title);
-          const anyOn = titles.some(
-            t => projectOfferGroupsOn[`${fi}-${t}`] !== false,
-          );
-          if (!anyOn) {
-            alert(
-              'בחרו לפחות סוג דירה אחד ב"הפרויקט מציע", או הפעילו שוב שורה שהוסרה (לחיצה על הכותרת).',
-            );
-            setUploading(false);
-            return;
-          }
-        }
+      const publishErrors = [...publishBlockingErrors];
+      if (publishErrors.length > 0) {
+        setPublishValidationMessages([...new Set(publishErrors)]);
+        setPublishValidationVisible(true);
+        setUploading(false);
+        return;
       }
 
       // Upload files to Supabase storage (or reuse existing URLs when editing)
@@ -1289,7 +1927,13 @@ const AdsForm = ({
               subscriptionId: toSubscriptionId(currentUser?.id) || null,
               // Standard listing fields for other categories
               propertyType,
-              area: parseInt(area) || 1,
+              area: (() => {
+                const sqm = Number(generalDetailsCounts.sqm_area);
+                if (Number.isFinite(sqm) && sqm > 0) {
+                  return Math.round(sqm);
+                }
+                return parseInt(area, 10) || 1;
+              })(),
               rooms: parseInt(rooms) || 1,
               floor: parseInt(floor) || 1,
               amenities: amenitiesForPayload,
@@ -1316,7 +1960,7 @@ const AdsForm = ({
               category: listingCategory,
               // Land form radio values (when present)
               planApproval: landRadioValues['תב״ע'] || null,
-              landInMortgage: landRadioValues['קרקע במושע'] || null,
+              landInMortgage: landRadioValues['קרקע במושב'] || null,
               permit: landRadioValues['היתר'] || null,
               agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
               landOwnership: landRadioValues['בעלות קרקע'] || null,
@@ -1328,8 +1972,23 @@ const AdsForm = ({
               salesImageUrl: uploadedSalesImageUrl || null,
               projectOffers: (() => {
                 const merged = { ...projectOffers, ...otherFormValues };
-                const hasAny = Object.values(merged).some(v => v !== 0 && v !== undefined && v !== '');
-                return hasAny ? merged : undefined;
+                padDynamicCompanyProjectOfferSlots(merged, listingCategory, {
+                  companyOfficeRepeatCount,
+                  companyWholeFloorRepeatCount,
+                  cat8CommercialRepeatCount,
+                  cat8WholeFloorRepeatCount,
+                });
+                const hasAnyNonZero = Object.values(merged).some(
+                  v => v !== 0 && v !== undefined && v !== '',
+                );
+                const forceDynamicSlots =
+                  (listingCategory === 2 &&
+                    (companyOfficeRepeatCount > 0 ||
+                      companyWholeFloorRepeatCount > 0)) ||
+                  (listingCategory === 8 &&
+                    (cat8CommercialRepeatCount > 0 ||
+                      cat8WholeFloorRepeatCount > 0));
+                return hasAnyNonZero || forceDynamicSlots ? merged : undefined;
               })(),
               constructionStatus: constructionStatus || undefined,
               ...(listingCategory === 5 &&
@@ -1365,10 +2024,64 @@ const AdsForm = ({
                 pricePerNight: parseFloat(price) || 0,
                 hotDeal: !!hotDeal,
               }),
+              ...(listingCategory === 7 && {
+                companyOffersLandSizes: (
+                  Array.isArray(companyLandParcels) ? companyLandParcels : []
+                ).map(p => ({
+                  unit: p.unit === 'sqm' ? 'sqm' : 'dunam',
+                  area: Number(p.area) || 0,
+                  price: Number(p.price) || 0,
+                })),
+              }),
             };
 
-      // Create listing in database
-      const result = await createListing(listingData);
+      const uuidRe =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const rawEditId =
+        initialListing?.id != null && initialListing.id !== ''
+          ? String(initialListing.id).trim()
+          : initialListing?.ad_number != null && initialListing.ad_number !== ''
+            ? String(initialListing.ad_number).trim()
+            : '';
+      const existingListingId = rawEditId && uuidRe.test(rawEditId) ? rawEditId : null;
+
+      const result = existingListingId
+        ? await updateListing(existingListingId, listingData)
+        : await createListing(listingData);
+
+      // Mirror תמונה מכירתית as a feed post (same image, same listing category) — only when user chose a new file this publish (avoid duplicate posts on re-save).
+      const salesImageIsNewUpload = Boolean(salesImage?.file);
+      if (
+        uploadedSalesImageUrl &&
+        fieldKeys.includes('salesimage') &&
+        salesImageIsNewUpload
+      ) {
+        try {
+          const subId = toSubscriptionId(currentUser?.id);
+          if (subId) {
+            await createListing({
+              category: listingCategory,
+              status: 'published',
+              subscriptionId: subId,
+              subscriptionType: currentUser?.subscription_type || null,
+              mainImageUrl: uploadedSalesImageUrl,
+              description: 'פוסט',
+              feedPost: true,
+              feed_post: true,
+              propertyType: 'post',
+              price: 0,
+            });
+            // Drop local file so another "פרסם" without changing the image does not create another companion post.
+            setSalesImage({ uri: uploadedSalesImageUrl });
+            setSalesImageUrl(uploadedSalesImageUrl);
+          }
+        } catch (mirrorErr) {
+          console.warn(
+            '[AdsForm] Companion sales-image post failed:',
+            mirrorErr?.message || mirrorErr,
+          );
+        }
+      }
 
       // Pass to parent with Supabase URLs
       if (onPublish) {
@@ -1418,8 +2131,7 @@ const AdsForm = ({
         {/* For category 3, show new form fields. For other categories, show existing form */}
 
         <>
-          {formList[category] &&
-            formList[category].fields.map((field, index) => {
+          {adsFormFields.map((field, index) => {
               switch (field.key) {
                 case 'profileverification':
                   return (
@@ -1476,6 +2188,11 @@ const AdsForm = ({
                       price={category === 3 ? budget : price}
                       setPrice={category === 3 ? setBudget : setPrice}
                       title={category === 3 ? 'התקציב שלי' : 'מחיר'}
+                      counterStep={
+                        category === 3
+                          ? PRICE_COUNTER_STEP_ROOMMATE_BUDGET
+                          : PRICE_COUNTER_STEP_DEFAULT
+                      }
                     />
                   );
                 case 'pricepernight':
@@ -1488,6 +2205,7 @@ const AdsForm = ({
                       isPricePerNight={true}
                       hotDeal={hotDeal}
                       setHotDeal={setHotDeal}
+                      counterStep={PRICE_COUNTER_STEP_PER_NIGHT}
                     />
                   );
                 case 'contactdetails':
@@ -1547,7 +2265,6 @@ const AdsForm = ({
                       wayToDisplayAd={field.wayToDisplayAd}
                       feedDisplayPriority={feedDisplayPriority}
                       setFeedDisplayPriority={setFeedDisplayPriority}
-                      addMorePhotos={field.addMorePhotos}
                     />
                   );
                 case 'hospitalitynature':
@@ -1763,6 +2480,25 @@ const AdsForm = ({
                       handleSalesImageChange={handleSalesImageChange}
                       salesImageInputRef={salesImageInputRef}
                       uploadProgress={uploadProgress}
+                      onPressCreateSalesImage={
+                        onOpenPostEditor
+                          ? () => {
+                              const fromForm =
+                                parseInt(String(category), 10);
+                              const fromInitial =
+                                initialCategory != null
+                                  ? parseInt(String(initialCategory), 10)
+                                  : NaN;
+                              const listingCat = Number.isFinite(fromForm) &&
+                                fromForm > 0
+                                ? fromForm
+                                : Number.isFinite(fromInitial) && fromInitial > 0
+                                  ? fromInitial
+                                  : null;
+                              onOpenPostEditor(listingCat);
+                            }
+                          : undefined
+                      }
                     />
                   );
                 case 'saleatpresale':
@@ -1776,12 +2512,37 @@ const AdsForm = ({
                 case 'generaldetailswithradio': {
                   const toggleable =
                     field.groups?.toggleableOfferGroups === true;
+                  const companyOfficeGeneralDetailsFigma =
+                    isCompanyOfficeUpload &&
+                    field.groups?.title === 'פרטים כלליים';
+                  /** פרטים כלליים / הפרויקט מציע / כל בלוק דומה — שורות סגורות כברירת מחדל */
+                  const accordionForRadioGroups =
+                    companyOfficeGeneralDetailsFigma
+                      ? false
+                      : !toggleable ||
+                        field.groups?.title === 'הפרויקט מציע';
                   return (
                     <GeneralDetailsWithRadio
                       key={`generaldetailswithradio-${index}`}
                       groups={hydrateGeneralDetailsWithRadio(field.groups)}
                       toggleableOfferGroups={toggleable}
                       offerToggleKeyPrefix={toggleable ? String(index) : ''}
+                      accordionGroups={accordionForRadioGroups}
+                      companyOfficeGeneralDetailsFigma={
+                        companyOfficeGeneralDetailsFigma
+                      }
+                      isOfferGroupExpanded={
+                        accordionForRadioGroups
+                          ? title =>
+                              projectOfferGroupsExpanded[`${index}-${title}`] ===
+                              true
+                          : undefined
+                      }
+                      onToggleOfferExpand={
+                        accordionForRadioGroups
+                          ? toggleProjectOfferExpand(index)
+                          : undefined
+                      }
                       isOfferGroupIncluded={
                         toggleable
                           ? title =>
@@ -1792,6 +2553,11 @@ const AdsForm = ({
                       onToggleOfferGroup={
                         toggleable
                           ? toggleProjectOfferGroup(index, field.groups)
+                          : undefined
+                      }
+                      onAddRepeatableRow={
+                        isCompanyOfficeUpload || isCompanyCommercialUpload
+                          ? handleCompanyRepeatRowAdd
                           : undefined
                       }
                     />
@@ -1809,7 +2575,11 @@ const AdsForm = ({
                   );
                 case 'companyofferslandsizes':
                   return (
-                    <CompanyOffersLandSizes key="companyofferslandsizes" />
+                    <CompanyOffersLandSizes
+                      key="companyofferslandsizes"
+                      lands={companyLandParcels}
+                      setLands={setCompanyLandParcels}
+                    />
                   );
                 default:
                   return null;
@@ -1817,56 +2587,53 @@ const AdsForm = ({
             })}
         </>
 
-        {/* Exposure level: how often this ad is shown to other users */}
-        <FormContainer title="חשיפה בפייד">
-          <View style={styles.exposureRow}>
-            {[
-              { value: 'low', label: 'נמוכה' },
-              { value: 'medium', label: 'בינונית' },
-              { value: 'high', label: 'גבוהה' },
-            ].map(({ value, label }) => (
-              <TouchableOpacity
-                key={value}
-                onPress={() => setExposureLevel(value)}
-                style={[styles.exposureOption, exposureLevel === value && styles.exposureOptionActive]}
-                activeOpacity={0.7}>
-                <Text style={[styles.exposureOptionText, exposureLevel === value && styles.exposureOptionTextActive]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.exposureHint}>
-            {exposureLevel === 'low' && 'המודעה תופיע פחות למשתמשים אחרים'}
-            {exposureLevel === 'medium' && 'חשיפה רגילה'}
-            {exposureLevel === 'high' && 'המודעה תופיע יותר למשתמשים אחרים'}
-          </Text>
-        </FormContainer>
-
-        {/* Publish Button */}
+        {/* Publish Button — full PNG (gray / yellow); aspect ratio from asset */}
         <TouchableOpacity
           onPress={handlePublish}
-          disabled={uploading}
-          style={
-            Platform.OS === 'web' && !uploading
+          disabled={uploading || !formReadyToPublish}
+          accessibilityState={{disabled: uploading || !formReadyToPublish}}
+          accessibilityLabel="פרסם"
+          style={[
+            styles.publishButtonTouchable,
+            Platform.OS === 'web' && !uploading && formReadyToPublish
               ? {cursor: 'pointer'}
-              : undefined
-          }
-          activeOpacity={0.7}>
-          <LinearGradient
-            colors={['#FEE787', '#BD9947', '#9C6522']}
-            locations={[0.0456, 0.5076, 0.8831]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.publishButton}>
+              : Platform.OS === 'web'
+                ? {cursor: 'not-allowed'}
+                : null,
+          ]}
+          activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
+          <View style={styles.publishButtonImageWrap}>
+            <Image
+              source={
+                formReadyToPublish
+                  ? require('../assets/ad-uplaud/button-yelow.png')
+                  : require('../assets/ad-uplaud/button-gray.png')
+              }
+              style={[
+                styles.publishButtonImage,
+                {
+                  aspectRatio: formReadyToPublish
+                    ? publishAspectRatios.yellow
+                    : publishAspectRatios.gray,
+                },
+              ]}
+              resizeMode="contain"
+            />
             {uploading ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <Text style={styles.publishButtonText}>פרסם</Text>
-            )}
-          </LinearGradient>
+              <View
+                style={styles.publishButtonSpinnerOverlay}
+                pointerEvents="none">
+                <ActivityIndicator size="small" color="#000" />
+              </View>
+            ) : null}
+          </View>
         </TouchableOpacity>
       </ScrollView>
+      <PublishValidationModal
+        visible={publishValidationVisible}
+        messages={publishValidationMessages}
+        onClose={() => setPublishValidationVisible(false)}
+      />
     </View>
   );
 };
@@ -1906,7 +2673,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1D27',
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 24,
     backgroundColor: '#1E1D27',
   },
   required: {
@@ -1922,50 +2689,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 25,
   },
-  exposureRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 8,
-  },
-  exposureOption: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-  },
-  exposureOptionActive: {
-    backgroundColor: Colors.yellowIcons || '#D4AF37',
-  },
-  exposureOptionText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  exposureOptionTextActive: {
-    color: '#1a1a2e',
-  },
-  exposureHint: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  publishButton: {
-    borderRadius: 25,
-    paddingVertical: 16,
+  publishButtonTouchable: {
     marginHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 0,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+    paddingVertical: 0,
   },
-  publishButtonText: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: '700',
+  publishButtonImageWrap: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+    ...Platform.select({
+      web: {fontSize: 0, lineHeight: 0},
+      default: {},
+    }),
+  },
+  publishButtonImage: {
+    width: '100%',
+    height: undefined,
+    marginVertical: 0,
+    paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        display: 'block',
+        verticalAlign: 'top',
+      },
+      default: {},
+    }),
+  },
+  publishButtonSpinnerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   preferenceSection: {
     marginBottom: 20,
@@ -2011,11 +2768,18 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     marginLeft: -10,
     marginTop: -8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 3px rgba(0,0,0,0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 5,
+      },
+    }),
   },
 });
 

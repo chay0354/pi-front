@@ -11,11 +11,13 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
+import FeedBottomBar from '../components/FeedBottomBar';
 
 /** Figma palette for מסך מועדפים (Favorites screen). */
 const BG = '#1E1D27';
@@ -23,6 +25,9 @@ const CARD_BG = '#2B2A39';
 const CARD_BORDER = '#373548';
 const BUTTON_BG = '#4D4966';
 const GOLD = '#FFC40A';
+
+/** Same key as TikTokFeedScreen so closing Favorites with heart can reset the feed to pics. */
+const TIKTOK_TOP_BAR_FILTER_STORAGE_KEY = 'tikTokFeedSelectedTopBarFilter';
 
 /** Same icons used in the TikTok feed top bar (kept visually identical on this screen). */
 const TOP_BAR_FILTERS = [
@@ -96,7 +101,27 @@ const listingAddress = item => {
 };
 
 /** מסך מועדפים – matches Figma 8:95135. Shows only ads (no feed posts). */
-const FavoritesScreen = ({onClose, onOpenListing}) => {
+const FavoritesScreen = ({
+  onClose,
+  /** Back chevron only: e.g. go to homepage (top row filters still use `onClose`). */
+  onBack,
+  onOpenListing,
+  onOpenTikTokUserSearch,
+  categoryId = null,
+  /** Same as TikTok feed: drives bottom-bar labels (סוג/מחיר/…) per category. */
+  selectedCategory = null,
+  feedFilters = {},
+  onOpenCityFilter,
+  onOpenApartmentTypeFilter,
+  onOpenTypeFilter,
+  onOpenOfficeFilter,
+  onOpenRoomsFilter,
+  onOpenMeterFilter,
+  onOpenDonamFilter,
+  onOpenPreferencesFilter,
+  onOpenPriceFilter,
+  onOpenEditPublishAdWithCategory,
+}) => {
   const ctx = useContext(ContextHook) || {};
   const currentUser = ctx.currentUser || null;
   const [listings, setListings] = useState([]);
@@ -115,11 +140,18 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
     }
     setLoading(true);
     try {
-      const res = await getListings({
+      const query = {
         status: 'published',
         user_id: userId,
         favorites_only: true,
-      });
+      };
+      if (categoryId != null && String(categoryId).trim() !== '') {
+        const c = parseInt(String(categoryId), 10);
+        if (!Number.isNaN(c) && c > 0) {
+          query.category = c;
+        }
+      }
+      const res = await getListings(query);
       if (res.success && Array.isArray(res.listings)) {
         setListings(res.listings.filter(l => !isFeedPost(l)));
       } else {
@@ -131,7 +163,7 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, categoryId]);
 
   useEffect(() => {
     load();
@@ -175,16 +207,19 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
               <Text style={styles.address} numberOfLines={1}>
                 {listingAddress(item)}
               </Text>
-              <MaterialCommunityIcons
-                name="map-marker-outline"
-                size={18}
-                color="#FFFFFF"
+              <Image
+                source={require('../assets/liked-ads/location.png')}
+                style={styles.locationIcon}
+                resizeMode="contain"
               />
             </View>
             <TouchableOpacity
               activeOpacity={0.85}
               style={styles.ctaBtn}
-              onPress={() => onOpenListing?.(item)}>
+              onPress={e => {
+                e?.stopPropagation?.();
+                onOpenListing?.(item);
+              }}>
               <Text style={styles.ctaText}>צפה במודעה</Text>
             </TouchableOpacity>
           </View>
@@ -225,18 +260,31 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
   return (
     <View style={styles.root}>
       <View style={styles.topBar}>
-        <TouchableOpacity
-          onPress={onClose}
-          style={styles.topBarSideBtn}
-          hitSlop={12}>
+        <Pressable
+          onPress={() => {
+            if (typeof onBack === 'function') {
+              onBack();
+            } else if (typeof onClose === 'function') {
+              onClose();
+            }
+          }}
+          style={({pressed}) => [
+            styles.topBarSideBtn,
+            Platform.OS === 'web' && {cursor: 'pointer'},
+            pressed && Platform.OS !== 'web' && {opacity: 0.75},
+          ]}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="חזרה">
           <MaterialCommunityIcons
             name="chevron-left"
             size={26}
             color="#FFFFFF"
           />
-        </TouchableOpacity>
+        </Pressable>
         <View style={styles.topBarCenter}>
           {TOP_BAR_FILTERS.map(f => {
+            // Same strip as TikTok: heart reflects “favorites / liked context”; return uses `f.id` in storage.
             const isActive = f.id === 'liked';
             return (
               <TouchableOpacity
@@ -244,7 +292,13 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
                 style={styles.topBarFilterBtn}
                 hitSlop={8}
                 onPress={() => {
-                  if (f.id !== 'liked') onClose?.();
+                  // Any icon: persist that top-bar mode, then return to the feed (all categories) so TikTok
+                  // remounts and `useEffect` applies `tikTokFeedSelectedTopBarFilter` from storage.
+                  AsyncStorage.setItem(
+                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                    f.id,
+                  ).catch(() => {});
+                  onClose?.();
                 }}>
                 <Image
                   source={f.icon}
@@ -258,33 +312,56 @@ const FavoritesScreen = ({onClose, onOpenListing}) => {
             );
           })}
         </View>
-        <TouchableOpacity style={styles.topBarSideBtn} hitSlop={12}>
+        <TouchableOpacity
+          style={styles.topBarSideBtn}
+          hitSlop={12}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="חיפוש משתמש"
+          onPress={() => onOpenTikTokUserSearch?.()}>
           <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {!userId ? (
-        <View style={styles.centerMsg}>
-          <Text style={styles.msgText}>התחבר כדי לראות מודעות שאהבת</Text>
-        </View>
-      ) : loading ? (
-        <View style={styles.centerMsg}>
-          <ActivityIndicator size="large" color={GOLD} />
-        </View>
-      ) : listings.length === 0 ? (
-        <View style={styles.centerMsg}>
-          <Text style={styles.msgText}>עדיין אין מועדפים</Text>
-          <Text style={styles.msgSub}>לחץ על הלב בפיד כדי לשמור מודעות</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={listings}
-          keyExtractor={item => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <View style={styles.main}>
+        {!userId ? (
+          <View style={styles.centerMsg}>
+            <Text style={styles.msgText}>התחבר כדי לראות מודעות שאהבת</Text>
+          </View>
+        ) : loading ? (
+          <View style={styles.centerMsg}>
+            <ActivityIndicator size="large" color={GOLD} />
+          </View>
+        ) : listings.length === 0 ? (
+          <View style={styles.centerMsg}>
+            <Text style={styles.msgText}>עדיין אין מועדפים</Text>
+            <Text style={styles.msgSub}>לחץ על הלב בפיד כדי לשמור מודעות</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={listings}
+            keyExtractor={item => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
+
+      <FeedBottomBar
+        selectedCategory={selectedCategory}
+        feedFilters={feedFilters}
+        onOpenCityFilter={onOpenCityFilter}
+        onOpenApartmentTypeFilter={onOpenApartmentTypeFilter}
+        onOpenTypeFilter={onOpenTypeFilter}
+        onOpenOfficeFilter={onOpenOfficeFilter}
+        onOpenRoomsFilter={onOpenRoomsFilter}
+        onOpenMeterFilter={onOpenMeterFilter}
+        onOpenDonamFilter={onOpenDonamFilter}
+        onOpenPreferencesFilter={onOpenPreferencesFilter}
+        onOpenPriceFilter={onOpenPriceFilter}
+        onOpenEditPublishAdWithCategory={onOpenEditPublishAdWithCategory}
+      />
 
       <Modal
         visible={confirmUnlikeListing != null}
@@ -340,6 +417,10 @@ const styles = StyleSheet.create({
     maxWidth: 414,
     alignSelf: 'center',
   },
+  main: {
+    flex: 1,
+    minHeight: 0,
+  },
   topBar: {
     height: 52,
     flexDirection: 'row',
@@ -378,7 +459,7 @@ const styles = StyleSheet.create({
     tintColor: GOLD,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: CARD_BG,
@@ -445,6 +526,11 @@ const styles = StyleSheet.create({
     gap: 4,
     width: '100%',
   },
+  /** Same asset + size as TikTokFeedScreen list mode (listCardLocationIcon). */
+  locationIcon: {
+    width: 18,
+    height: 18,
+  },
   address: {
     color: '#FFFFFF',
     fontSize: 14,
@@ -482,6 +568,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+    paddingBottom: 100,
   },
   msgText: {
     color: '#FFFFFF',

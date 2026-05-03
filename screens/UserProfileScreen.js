@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useCallback} from 'react';
 import {
   View,
   ScrollView,
@@ -12,8 +12,10 @@ import {
   FlatList,
   Platform,
   Alert,
+  Share,
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
+import {SvgXml} from 'react-native-svg';
 import {Colors} from '../constants/styles';
 import {
   getSubscription,
@@ -26,14 +28,41 @@ import {
   getFollowStats,
   sendFollowRequest,
   toSubscriptionId,
+  likeListing,
+  unlikeListing,
 } from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  loadTikTokLikedState,
+  persistLikedListingIds,
+  persistUnseenLikedCount,
+} from '../utils/tikTokLikedStorage';
+import {LinearGradient} from 'expo-linear-gradient';
 import {Divider} from '../components';
+import LocationMap from '../components/LocationMap';
+import RatingImprovePicker from '../components/RatingImprovePicker';
 import {isAdsListingRecord} from '../utils/listingShape';
+import {
+  formatCompanyApartmentsLabel,
+  formatCompanyBuildingsLabel,
+  formatCompanyFloorsLabel,
+} from '../utils/listingGridCardFigma';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {
+  HERO_NAV_BACK_XML,
+  HERO_NAV_HEART_LIKED_XML,
+  HERO_NAV_HEART_XML,
+  HERO_NAV_SHARE_XML,
+} from '../utils/heroNavFigmaIcons';
+import ProfileAvatar from '../components/ProfileAvatar';
+import BnbListingProfileContent from '../components/BnbListingProfileContent';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
 const CARD_BG = '#252436';
+/** Preview on profile: first N cards; full list opens via קרא עוד (Figma 10:31152). */
+const MAX_VISIBLE_REVIEWS = 5;
 const CONSTRUCTION_STATUS_STEPS = [
   {name: 'on_paper', title: 'על הנייר'},
   {name: 'beginning_of_construction', title: 'תחילת בנייה'},
@@ -45,8 +74,8 @@ const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const LAST_AD_IMAGE_HEIGHT = 320;
 const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padding 24*2, gap 10
 
-/** Bundled placeholder when specific PNGs are not in repo (add assets under /public for web). */
-const bundledImg = require('../assets/image-7.png');
+/** Last-ad hero when no gallery images: fallback if remote logo/avatar URL fails to load (common on web). */
+const lastAdImageEndPlaceholder = require('../assets/improve/end.png');
 /** Pi badge: always bundle — web `{ uri: origin + '/pi-badge.png' }` often 404s or breaks on subpaths. */
 const piBadgeSource = require('../assets/pi-badge.png');
 const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
@@ -63,24 +92,22 @@ const contactEmailIconSource =
   isWeb && typeof window !== 'undefined'
     ? {uri: `${baseUrl}/conections-icons/image%20copy.png`}
     : require('../assets/email-icon.png');
-const rateButtonImageSource =
-  isWeb && typeof window !== 'undefined'
-    ? {uri: `${baseUrl}/starts/image.png`}
-    : require('../assets/starts/image.png');
+/** `index` 0…4 = rating 1…5 — use `../assets/starts/1.png` … `5.png` (web: same paths under /starts/). */
 const ratingStarSources =
   isWeb && typeof window !== 'undefined'
     ? [1, 2, 3, 4, 5].map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
     : [
-        require('../assets/starts/5.png'),
-        require('../assets/starts/4.png'),
-        require('../assets/starts/3.png'),
-        require('../assets/starts/2.png'),
         require('../assets/starts/1.png'),
+        require('../assets/starts/2.png'),
+        require('../assets/starts/3.png'),
+        require('../assets/starts/4.png'),
+        require('../assets/starts/5.png'),
       ];
 function getStarSource(index) {
   const i = Math.min(4, Math.max(0, index));
   return ratingStarSources[i];
 }
+
 const buttonSources = isWeb
   ? [1, 2, 3, 4, 5, 6, 7, 8].map(i => ({uri: `${baseUrl}/ai-icon-${i}.png`}))
   : [
@@ -181,10 +208,10 @@ function getProjectOfferIconName(key) {
     key === '3rooms' || key === '4rooms' || key === '5rooms'
       ? '3-5rooms'
       : key || '3-5rooms';
-  if (k === 'garden') return require('../assets/garden_icon.png');
-  if (k === 'penthouses') return require('../assets/pettenhaus_icon.png');
-  if (k === 'private') return require('../assets/private_house_icon.png');
-  return require('../assets/apartment_icon.png');
+  if (k === 'garden') return require('../assets/company/garden-house.png');
+  if (k === 'penthouses') return require('../assets/company/penthouse.png');
+  if (k === 'private') return require('../assets/company/private-house.png');
+  return require('../assets/company/rooms.png');
 }
 
 const UserProfileScreen = ({
@@ -197,12 +224,17 @@ const UserProfileScreen = ({
   onOpenUserRegistration = null,
   onOpenAllListings = null,
   onOpenFollowHub = null,
+  onOpenCompanyReport = null,
+  onOpenAllReviews = null,
+  /** Same as Settings Pi Chat row: server unread + 1 until Pi welcome message was opened once */
+  unreadChatCount = 0,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
   const bottom = insets.bottom;
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
-  const isListingFromFeed = user && isAdsListingRecord(user);
+  const isListingFromFeed =
+    user && (isAdsListingRecord(user) || isPostListingRecord(user));
   const profile =
     !isListingFromFeed && user
       ? user
@@ -355,6 +387,18 @@ const UserProfileScreen = ({
         setResolvedCreator({
           name: name || null,
           email: s.email || null,
+          business_address:
+            s.business_address && String(s.business_address).trim()
+              ? String(s.business_address).trim()
+              : null,
+          company_logo_url:
+            s.company_logo_url && String(s.company_logo_url).trim()
+              ? String(s.company_logo_url).trim()
+              : null,
+          companyLogoUrl:
+            s.company_logo_url && String(s.company_logo_url).trim()
+              ? String(s.company_logo_url).trim()
+              : null,
           profilePictureUrl: s.profile_picture_url || null,
           activity_regions:
             activityRegions && activityRegions.length > 0
@@ -531,6 +575,13 @@ const UserProfileScreen = ({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const reviewerSubscriptionId =
       rawId && uuidRegex.test(rawId) ? rawId : null;
+    const reviewListingId =
+      user?.id != null &&
+      isAdsListingRecord(user) &&
+      !isPostListingRecord(user) &&
+      uuidRegex.test(String(user.id).trim())
+        ? String(user.id).trim()
+        : null;
     setSubmitReviewLoading(true);
     try {
       const result = await submitReview(
@@ -540,6 +591,7 @@ const UserProfileScreen = ({
         reviewerName,
         reviewerImageUrl,
         reviewerSubscriptionId,
+        reviewListingId,
       );
       setSubmitReviewLoading(false);
       if (result.success) {
@@ -632,15 +684,38 @@ const UserProfileScreen = ({
   const displayImage =
     typeof displayImageRaw === 'string' ? displayImageRaw.trim() : '';
   const displayImageSource = displayImage ? {uri: displayImage} : null;
+  const logoImageRaw =
+    user?.company_logo_url ||
+    user?.companyLogoUrl ||
+    user?.logo_url ||
+    user?.business_logo_url ||
+    user?.bnb_business_logo_url ||
+    resolvedCreator?.company_logo_url ||
+    resolvedCreator?.companyLogoUrl ||
+    profile?.company_logo_url;
+  const logoImage =
+    typeof logoImageRaw === 'string' ? logoImageRaw.trim() : '';
+  // Hero avatar: for listings opened from the feed, use the same URL order as TikTok
+  // (getUserProfileImageUrl: personal / creator before company logo). Otherwise company
+  // logo wins here and looks different from the feed/list card.
+  const displayLogoSource = (() => {
+    if (isListingFromFeed) {
+      const unified = getUserProfileImageUrl(user);
+      if (unified) return {uri: unified};
+    }
+    if (logoImage) return {uri: logoImage};
+    return displayImageSource;
+  })();
   const contactLogoRaw =
     user?.company_logo_url ||
     user?.companyLogoUrl ||
+    user?.logo_url ||
+    user?.business_logo_url ||
     resolvedCreator?.company_logo_url ||
     resolvedCreator?.companyLogoUrl ||
     profile?.company_logo_url;
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
-  const contactLogoSource = contactLogo ? {uri: contactLogo} : null;
   const contactPhones =
     resolvedCreator?.phones && resolvedCreator.phones.length > 0
       ? resolvedCreator.phones
@@ -675,7 +750,54 @@ const UserProfileScreen = ({
     if (typeof onCall === 'function') onCall();
   };
   const handleReportPress = () => {
+    const st = String(
+      resolvedCreator?.subscription_type || user?.subscription_type || '',
+    ).toLowerCase();
+    const canReport =
+      st === 'company' ||
+      st === 'professional' ||
+      st === 'broker';
+    if (canReport && typeof onOpenCompanyReport === 'function') {
+      onOpenCompanyReport();
+      return;
+    }
     Alert.alert('דיווח', 'הדיווח נשלח בהצלחה.');
+  };
+  const handleProfileShare = () => {
+    const title = String(displayName || '').trim() || 'פרופיל';
+    if (
+      Platform.OS === 'web' &&
+      typeof navigator !== 'undefined' &&
+      navigator.share
+    ) {
+      const url =
+        typeof window !== 'undefined' && window.location?.href
+          ? window.location.href
+          : '';
+      navigator.share({title, text: title, url}).catch(() => {});
+      return;
+    }
+    if (
+      Platform.OS === 'web' &&
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard?.writeText
+    ) {
+      const url =
+        typeof window !== 'undefined' && window.location?.href
+          ? window.location.href
+          : '';
+      if (url) {
+        navigator.clipboard.writeText(url);
+        return;
+      }
+    }
+    const url =
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : '';
+    Share.share(
+      url ? {message: `${title}\n${url}`, title} : {message: title, title},
+    ).catch(() => {});
   };
 
   if (__DEV__ && isListingFromFeed) {
@@ -722,20 +844,42 @@ const UserProfileScreen = ({
     return null;
   })();
 
+  /** Profile ad hero: still images only (slideshow); never use listing video URLs on profile. */
   const lastAdImages = (() => {
     if (!lastAd) return [];
-    if (lastAd.images && lastAd.images.length > 0)
-      return lastAd.images.map(img =>
-        typeof img === 'string' ? {uri: img} : img,
-      );
-    if (lastAd.listing_images && lastAd.listing_images.length > 0)
-      return lastAd.listing_images.map(img =>
-        img && typeof img === 'object' && img.image_url
-          ? {uri: img.image_url}
-          : typeof img === 'string'
-            ? {uri: img}
-            : img,
-      );
+    const isVideoLikeUrl = u => {
+      const s = String(u || '').trim().toLowerCase();
+      if (!s) return true;
+      if (/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(s)) return true;
+      if (/\/videos?\//i.test(s)) return true;
+      return false;
+    };
+    const pushStill = (arr, u) => {
+      const s = String(u || '').trim();
+      if (!s || /^text-post-placeholder$/i.test(s) || isVideoLikeUrl(s)) return;
+      arr.push({uri: s});
+    };
+    const fromRows = rows => {
+      const out = [];
+      for (const img of rows) {
+        const u =
+          img && typeof img === 'object'
+            ? img.uri || img.image_url
+            : typeof img === 'string'
+              ? img
+              : null;
+        if (u) pushStill(out, u);
+      }
+      return out;
+    };
+    if (lastAd.listing_images && lastAd.listing_images.length > 0) {
+      const x = fromRows(lastAd.listing_images);
+      if (x.length > 0) return x;
+    }
+    if (lastAd.images && lastAd.images.length > 0) {
+      const x = fromRows(lastAd.images);
+      if (x.length > 0) return x;
+    }
     return [];
   })();
   const openedFromPost = isPostListingRecord(user);
@@ -759,6 +903,8 @@ const UserProfileScreen = ({
       const tb = new Date(b?.created_at || b?.createdAt || 0).getTime();
       return tb - ta;
     });
+    const isPlaceholderUri = u =>
+      !u || /^text-post-placeholder$/i.test(String(u).trim());
     const firstImageFor = item => {
       const listingImgs = Array.isArray(item?.listing_images) ? item.listing_images : [];
       for (const img of listingImgs) {
@@ -766,7 +912,7 @@ const UserProfileScreen = ({
           img && typeof img === 'object'
             ? String(img.image_url || img.uri || '').trim()
             : String(img || '').trim();
-        if (uri) return {uri};
+        if (!isPlaceholderUri(uri)) return {uri};
       }
       const directImgs = Array.isArray(item?.images) ? item.images : [];
       for (const img of directImgs) {
@@ -774,14 +920,38 @@ const UserProfileScreen = ({
           img && typeof img === 'object'
             ? String(img.uri || img.image_url || '').trim()
             : String(img || '').trim();
-        if (uri) return {uri};
+        if (!isPlaceholderUri(uri)) return {uri};
       }
       const directUri = String(item?.main_image_url || item?.image_url || '').trim();
-      if (directUri) return {uri: directUri};
+      if (!isPlaceholderUri(directUri)) return {uri: directUri};
+      const videoUri = (() => {
+        if (item?.video && typeof item.video === 'object') {
+          return (
+            String(item.video.uri || item.video.url || '').trim() ||
+            null
+          );
+        }
+        if (typeof item?.video === 'string') return String(item.video).trim() || null;
+        if (item?.video_url) return String(item.video_url).trim() || null;
+        const lv = Array.isArray(item?.listing_videos) ? item.listing_videos : [];
+        for (const v of lv) {
+          if (v && typeof v === 'object' && v.video_url) {
+            return String(v.video_url).trim();
+          }
+        }
+        return null;
+      })();
+      if (videoUri) return {uri: videoUri, isVideo: true};
       return null;
     };
-    return uniquePostRows.map(firstImageFor).filter(Boolean).slice(0, 6);
+    return uniquePostRows.map(firstImageFor).filter(Boolean);
   })();
+
+  /** >6: show all tiles (page ScrollView scrolls). ≤6: keep 2×3 grid with empty placeholders. */
+  const postGridDisplayItems =
+    recentPostGridImages.length > 6
+      ? recentPostGridImages
+      : Array.from({length: 6}, (_, i) => recentPostGridImages[i] || null);
 
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
@@ -811,6 +981,8 @@ const UserProfileScreen = ({
     isFollowing: false,
     hasPendingRequest: false,
   });
+  /** False only after we know follow state (avoids showing + for one frame, then hiding when already following). */
+  const [followStatusLoading, setFollowStatusLoading] = useState(true);
   const [followStats, setFollowStats] = useState({
     likes: null,
     followers: null,
@@ -819,6 +991,11 @@ const UserProfileScreen = ({
   });
   const [followStatsLoading, setFollowStatsLoading] = useState(true);
   const [sendingFollowRequest, setSendingFollowRequest] = useState(false);
+  const [lastAdHeroImageFailed, setLastAdHeroImageFailed] = useState(false);
+
+  useEffect(() => {
+    setLastAdHeroImageFailed(false);
+  }, [displayImage, logoImage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -858,8 +1035,10 @@ const UserProfileScreen = ({
     let cancelled = false;
     if (!viewedSubscriptionId || !currentSubscriptionId || viewedSubscriptionId === currentSubscriptionId) {
       setFollowStatus({isFollowing: false, hasPendingRequest: false});
+      setFollowStatusLoading(false);
       return undefined;
     }
+    setFollowStatusLoading(true);
     getFollowStatus(currentSubscriptionId, viewedSubscriptionId)
       .then(data => {
         if (cancelled) return;
@@ -871,6 +1050,11 @@ const UserProfileScreen = ({
       .catch(() => {
         if (cancelled) return;
         setFollowStatus({isFollowing: false, hasPendingRequest: false});
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setFollowStatusLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -882,14 +1066,28 @@ const UserProfileScreen = ({
   const followingCount = followStats.following;
   const formatStatCount = value =>
     followStatsLoading || value == null ? '—' : String(value);
+  const viewerLoggedIn = !!(
+    currentUser &&
+    String(currentUser.email || '')
+      .trim()
+  );
   const shouldShowFollowPlus =
-    !!currentSubscriptionId &&
     !!viewedSubscriptionId &&
     !isOwnProfile &&
-    !followStatus.isFollowing &&
-    !followStatus.hasPendingRequest;
+    (viewerLoggedIn
+      ? !followStatusLoading &&
+        !!currentSubscriptionId &&
+        !followStatus.isFollowing &&
+        !followStatus.hasPendingRequest
+      : true);
 
   const handleSendFollowRequest = async () => {
+    if (!viewerLoggedIn) {
+      if (typeof onOpenUserRegistration === 'function') {
+        onOpenUserRegistration();
+      }
+      return;
+    }
     if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest) return;
     setSendingFollowRequest(true);
     try {
@@ -909,13 +1107,36 @@ const UserProfileScreen = ({
   // Broker profile card data (real user details with fallbacks)
   const brokerProfession =
     user?.profession ?? user?.title ?? profile.profession ?? 'מתווך נדל״ן';
-  const brokerAddress =
-    user?.address ??
-    user?.location ??
-    lastAd?.address ??
-    lastAd?.location ??
-    profile.address ??
-    'אבן גבירול 104, תל אביב';
+  // Resolve a non-empty address from a chain of candidates.
+  // Treats null/undefined, empty strings, and known placeholder copy
+  // ("מיקום לא זמין") as falsy so the chain falls through to a real value.
+  const ADDRESS_PLACEHOLDERS = new Set(['', 'מיקום לא זמין', 'מיקום לא צוין']);
+  const firstNonEmpty = (...values) => {
+    for (const v of values) {
+      const s = v == null ? '' : String(v).trim();
+      if (s && !ADDRESS_PLACEHOLDERS.has(s)) return s;
+    }
+    return '';
+  };
+  const brokerAddress = user?._fromTikTokPost
+    ? firstNonEmpty(
+        resolvedCreator?.business_address,
+        user?.creator_business_address,
+        user?.business_address,
+        user?.address,
+        user?.location,
+        lastAd?.address,
+        lastAd?.location,
+        profile.address,
+      )
+    : firstNonEmpty(
+        resolvedCreator?.business_address,
+        user?.address,
+        user?.location,
+        lastAd?.address,
+        lastAd?.location,
+        profile.address,
+      );
   const profileSubscriptionType = (
     resolvedCreator?.subscription_type ||
     user?.subscription_type ||
@@ -927,8 +1148,115 @@ const UserProfileScreen = ({
   const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
   const isRegularUserAdView =
     isRegularUserAccount && isListingFromFeed && !openedFromPost;
-  // Professionals should use broker profile structure but without listings section.
-  const hideMyPropertiesSection = isProfessional || (openedFromPost && isProfessional);
+  /** BnB ad from feed (category 5, not a post) — dedicated Figma 5:413003 layout only for this case */
+  const listingCategoryNum = Number(user?.category ?? lastAd?.category ?? 0);
+  const isBnbListingAdProfile =
+    isListingFromFeed && !openedFromPost && listingCategoryNum === 5;
+  const showLocationMap = isListingFromFeed && !openedFromPost;
+  const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
+  /** Company profile opened from Selected Projects (פרויקטים נבחרים) → company listing → profile. */
+  const openedFromCompaniesDirectory = Boolean(user?._fromCompanyProjects);
+  /** Same flow + listing record (hero nav, favorite on listing id). */
+  const fromCompanyProjects = Boolean(
+    isListingFromFeed && openedFromCompaniesDirectory,
+  );
+  const companyListingId =
+    fromCompanyProjects && user?.id != null ? String(user.id) : null;
+  const [companyHeroFavorited, setCompanyHeroFavorited] = useState(false);
+  const companyHeroLikePendingRef = useRef(false);
+  useEffect(() => {
+    if (!companyListingId || !currentUser?.id) {
+      setCompanyHeroFavorited(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const st = await loadTikTokLikedState(String(currentUser.id));
+        if (!cancelled) {
+          setCompanyHeroFavorited(
+            st.likedListingIds.has(companyListingId),
+          );
+        }
+      } catch {
+        if (!cancelled) setCompanyHeroFavorited(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyListingId, currentUser?.id]);
+  const handleCompanyHeroToggleFavorite = useCallback(async () => {
+    if (!companyListingId) return;
+    if (!currentUser?.id) {
+      if (typeof onOpenUserRegistration === 'function') {
+        onOpenUserRegistration();
+      }
+      return;
+    }
+    if (companyHeroLikePendingRef.current) return;
+    const userId = String(currentUser.id);
+    const willFav = !companyHeroFavorited;
+    companyHeroLikePendingRef.current = true;
+
+    const readLikedSet = async () => {
+      const st = await loadTikTokLikedState(userId);
+      return new Set(
+        [...st.likedListingIds].map(x => String(x)),
+      );
+    };
+    const writeLikedSet = async set => {
+      await persistLikedListingIds(userId, set);
+    };
+
+    setCompanyHeroFavorited(willFav);
+    try {
+      const s = await readLikedSet();
+      if (willFav) s.add(companyListingId);
+      else s.delete(companyListingId);
+      await writeLikedSet(s);
+      const stU = await loadTikTokLikedState(userId);
+      const prevU = stU.unseenLikedCount;
+      const nextU = willFav ? prevU + 1 : Math.max(0, prevU - 1);
+      await persistUnseenLikedCount(userId, nextU);
+
+      if (willFav) await likeListing(companyListingId, userId);
+      else await unlikeListing(companyListingId, userId);
+    } catch (e) {
+      console.warn('Company profile favorite failed', e?.message);
+      setCompanyHeroFavorited(!willFav);
+      try {
+        const s = await readLikedSet();
+        if (willFav) s.delete(companyListingId);
+        else s.add(companyListingId);
+        await writeLikedSet(s);
+        const stU = await loadTikTokLikedState(userId);
+        const u = stU.unseenLikedCount;
+        const backU = willFav ? Math.max(0, u - 1) : u + 1;
+        await persistUnseenLikedCount(userId, backU);
+      } catch {
+        // ignore
+      }
+    } finally {
+      companyHeroLikePendingRef.current = false;
+    }
+  }, [
+    companyListingId,
+    companyHeroFavorited,
+    currentUser?.id,
+    onOpenUserRegistration,
+  ]);
+  const hideCompanyPostSpecialtiesBlock = user?._fromTikTokPost && isCompany;
+  /** Company: show פרוייקטים נבחרים after אודות (strip is between bio and פרטי התקשרות) when from companies directory or TikTok company post. */
+  const showCompanySelectedProjectsStrip =
+    isCompany &&
+    (openedFromCompaniesDirectory ||
+      (user?._fromTikTokPost && openedFromPost));
+  // Professionals: no listings section.
+  const hideMyPropertiesSection =
+    isProfessional ||
+    (openedFromPost && isProfessional) ||
+    (isCompany && !showCompanySelectedProjectsStrip);
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -1022,12 +1350,17 @@ const UserProfileScreen = ({
   const brokerPiRating =
     user?.pi_value ?? lastAd?.pi_value ?? profile?.pi_value ?? 5;
 
-  // Average of star ratings from reviews (1–5); fallback to brokerPiRating when no reviews
+  // Average of star ratings from reviews (1–5), always whole number; fallback to rounded broker Pi
   const displayPiRating = React.useMemo(() => {
-    if (!reviews || reviews.length === 0) return brokerPiRating;
+    const clampPi = n => {
+      const x = Math.round(Number(n));
+      if (Number.isNaN(x) || !Number.isFinite(x)) return 5;
+      return Math.min(5, Math.max(1, x));
+    };
+    if (!reviews || reviews.length === 0) return clampPi(brokerPiRating);
     const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
     const avg = sum / reviews.length;
-    return Math.round(avg * 10) / 10; // 1 decimal (e.g. 4.3)
+    return clampPi(avg);
   }, [reviews, brokerPiRating]);
 
   // Filter out display name from tags so it doesn't appear as a specialty/region
@@ -1218,6 +1551,11 @@ const UserProfileScreen = ({
     return () => clearInterval(t);
   }, [lastAdImages.length, lastAdCardWidth]);
 
+  const visibleReviews =
+    reviews.length > MAX_VISIBLE_REVIEWS
+      ? reviews.slice(0, MAX_VISIBLE_REVIEWS)
+      : reviews;
+
   const renderPiRating = () => {
     if (isRegularUserAdView) return null;
     return (
@@ -1232,13 +1570,45 @@ const UserProfileScreen = ({
       </View>
     );
   };
+
+  /** Pinned top nav for any open-from–TikTok-feed / listing: inner hero + scroll back used to move away while scrolling. */
+  const showFixedCompanyHero = Boolean(
+    isListingFromFeed && fromCompanyProjects && lastAd,
+  );
+  const showFixedProHero = Boolean(
+    isListingFromFeed &&
+      lastAd &&
+      isProfessional &&
+      !showTikTokProfessionalHeader &&
+      !fromCompanyProjects,
+  );
+  const showFixedBackOnly = Boolean(
+    isListingFromFeed &&
+      !fromCompanyProjects &&
+      (!isProfessional || showTikTokProfessionalHeader) &&
+      !showFixedProHero,
+  );
+  const useFixedListingTopNav =
+    showFixedCompanyHero || showFixedProHero || showFixedBackOnly;
+
+  const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
+
   return (
-    <View style={[styles.container, {paddingTop: top + 10}]}>
+    <View
+      style={[
+        styles.container,
+        {paddingTop: useFixedListingTopNav ? 0 : top + 10},
+      ]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingBottom: Math.max(80, bottom + 32)},
+        ]}
         showsVerticalScrollIndicator={false}>
-        {!isProfessional && (
+        {(!isProfessional || showTikTokProfessionalHeader) &&
+          !fromCompanyProjects &&
+          !useFixedListingTopNav && (
           <TouchableOpacity
             onPress={onClose}
             style={styles.backBtn}
@@ -1247,26 +1617,18 @@ const UserProfileScreen = ({
           </TouchableOpacity>
         )}
 
-        {!isProfessional && (
+        {(!isProfessional || showTikTokProfessionalHeader) &&
+          !fromCompanyProjects && (
         <View style={styles.profileBlock}>
           <View style={styles.avatarWrap}>
-            {displayImageSource ? (
-              <View style={styles.avatarImageWrap}>
-                <Image
-                  source={displayImageSource}
-                  style={styles.avatar}
-                  resizeMode="cover"
-                />
-              </View>
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <MaterialCommunityIcons
-                  name="account"
-                  size={48}
-                  color="rgba(255,255,255,0.6)"
-                />
-              </View>
-            )}
+            <ProfileAvatar
+              uri={displayLogoSource?.uri}
+              name={displayName}
+              size={78}
+              imageStyle={
+                Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+              }
+            />
             {shouldShowFollowPlus ? (
               <TouchableOpacity
                 onPress={handleSendFollowRequest}
@@ -1285,42 +1647,45 @@ const UserProfileScreen = ({
           {displayEmail != null && displayEmail !== '' ? (
             <Text style={styles.userEmail}>{displayEmail}</Text>
           ) : null}
-          <View style={styles.statsRow}>
-            <TouchableOpacity
-              style={styles.stat}
-              activeOpacity={0.8}
-              onPress={() =>
-                typeof onOpenFollowHub === 'function' &&
-                onOpenFollowHub('requests')
-              }>
-              <Text style={styles.statNumber}>{formatStatCount(likesCount)}</Text>
-              <Text style={styles.statLabel}>לייקים</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.stat}
-              activeOpacity={0.8}
-              onPress={() =>
-                typeof onOpenFollowHub === 'function' &&
-                onOpenFollowHub('followers')
-              }>
-              <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
-              <Text style={styles.statLabel}>עוקבים</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.stat}
-              activeOpacity={0.8}
-              onPress={() =>
-                typeof onOpenFollowHub === 'function' &&
-                onOpenFollowHub('following')
-              }>
-              <Text style={styles.statNumber}>{formatStatCount(followingCount)}</Text>
-              <Text style={styles.statLabel}>עוקב</Text>
-            </TouchableOpacity>
-          </View>
+          {!isBnbListingAdProfile ? (
+            <View style={styles.statsRow}>
+              <TouchableOpacity
+                style={styles.stat}
+                activeOpacity={0.8}
+                onPress={() =>
+                  typeof onOpenFollowHub === 'function' &&
+                  onOpenFollowHub('requests')
+                }>
+                <Text style={styles.statNumber}>{formatStatCount(likesCount)}</Text>
+                <Text style={styles.statLabel}>לייקים</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.stat}
+                activeOpacity={0.8}
+                onPress={() =>
+                  typeof onOpenFollowHub === 'function' &&
+                  onOpenFollowHub('followers')
+                }>
+                <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
+                <Text style={styles.statLabel}>עוקבים</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.stat}
+                activeOpacity={0.8}
+                onPress={() =>
+                  typeof onOpenFollowHub === 'function' &&
+                  onOpenFollowHub('following')
+                }>
+                <Text style={styles.statNumber}>{formatStatCount(followingCount)}</Text>
+                <Text style={styles.statLabel}>עוקב</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
         )}
 
-        {!isProfessional && (
+        {(!isProfessional || showTikTokProfessionalHeader) &&
+          !fromCompanyProjects && (
         <View style={styles.actionRow}>
           <TouchableOpacity
             onPress={() => typeof onCall === 'function' && onCall()}
@@ -1361,67 +1726,56 @@ const UserProfileScreen = ({
               style={
                 openedFromPost ? styles.lastAdImageWrapGridMode : styles.lastAdImageWrap
               }>
-              {isProfessional && (
-                <View style={styles.heroTopBarOverlay} pointerEvents="box-none">
-                  <TouchableOpacity
-                    onPress={onClose}
-                    activeOpacity={0.8}
-                    style={styles.heroCircleBtn}
-                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <MaterialCommunityIcons
-                      name="chevron-left"
-                      size={22}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
-                        navigator.share({title: displayName || '', url: typeof window !== 'undefined' ? window.location.href : ''}).catch(() => {});
-                      }
-                    }}
-                    activeOpacity={0.8}
-                    style={styles.heroCircleBtn}
-                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <MaterialCommunityIcons
-                      name="share-variant"
-                      size={20}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
               {openedFromPost ? (
                 <View style={styles.lastAdGrid}>
-                  {Array.from({length: 6}, (_, i) => recentPostGridImages[i] || null).map(
-                    (item, i) =>
-                      item ? (
+                  {postGridDisplayItems.map((item, i) => {
+                      if (!item) {
+                        return (
+                          <View
+                            key={`post-grid-ph-${i}`}
+                            style={[
+                              styles.lastAdGridItem,
+                              styles.lastAdGridPlaceholderCell,
+                            ]}>
+                            <MaterialCommunityIcons
+                              name="camera-outline"
+                              size={24}
+                              color="rgba(255,255,255,0.45)"
+                            />
+                          </View>
+                        );
+                      }
+                      if (item.isVideo) {
+                        return (
+                          <TouchableOpacity
+                            key={`post-grid-v-${item.uri || i}-${i}`}
+                            style={styles.lastAdGridItem}
+                            activeOpacity={0.85}
+                            onPress={() => {}}>
+                            <View style={[styles.lastAdGridImage, styles.lastAdGridVideoCell]}>
+                              <MaterialCommunityIcons
+                                name="play-circle"
+                                size={36}
+                                color="rgba(255,255,255,0.85)"
+                              />
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }
+                      return (
                         <TouchableOpacity
-                          key={i}
+                          key={`post-grid-img-${item.uri}-${i}`}
                           style={styles.lastAdGridItem}
                           activeOpacity={0.85}
                           onPress={() => {}}>
                           <Image
-                            source={item}
+                            source={{uri: item.uri}}
                             style={styles.lastAdGridImage}
                             resizeMode="cover"
                           />
                         </TouchableOpacity>
-                      ) : (
-                        <View
-                          key={i}
-                          style={[
-                            styles.lastAdGridItem,
-                            styles.lastAdGridPlaceholderCell,
-                          ]}>
-                          <MaterialCommunityIcons
-                            name="camera-outline"
-                            size={24}
-                            color="rgba(255,255,255,0.45)"
-                          />
-                        </View>
-                      ),
-                  )}
+                      );
+                    })}
                 </View>
               ) : lastAdImages.length > 0 ? (
                 <>
@@ -1476,27 +1830,41 @@ const UserProfileScreen = ({
               ) : (
                 <View
                   style={[styles.lastAdImage, styles.lastAdImagePlaceholder]}>
-                  {displayImageSource ? (
+                  {displayLogoSource && !lastAdHeroImageFailed ? (
                     <Image
-                      source={displayImageSource}
+                      source={displayLogoSource}
                       style={[styles.lastAdImage, {width: lastAdCardWidth}]}
                       resizeMode="cover"
+                      onError={() => setLastAdHeroImageFailed(true)}
                     />
                   ) : (
-                    <MaterialCommunityIcons
-                      name="image-outline"
-                      size={64}
-                      color="rgba(255,255,255,0.3)"
+                    <Image
+                      source={lastAdImageEndPlaceholder}
+                      style={[styles.lastAdImage, {width: lastAdCardWidth}]}
+                      resizeMode="cover"
                     />
                   )}
                 </View>
               )}
             </View>
 
-            {!openedFromPost && !isProfessional && (
+            {!openedFromPost && (isBnbListingAdProfile || !isProfessional) && (
             <View style={styles.lastAdBody}>
+              {isBnbListingAdProfile ? (
+                <BnbListingProfileContent
+                  listing={lastAd}
+                  mapAddress={firstNonEmpty(
+                    lastAd?.address,
+                    lastAd?.location,
+                    user?.address,
+                    brokerAddress,
+                  )}
+                  onReportPress={handleReportPress}
+                />
+              ) : (
+              <>
               <View style={styles.lastAdPiAndPurposeRow}>
-                {renderPiRating()}
+                {renderPiRating() || <View />}
                 {isCompany ? (
                   <Image
                     source={require('../assets/pre-sale.png')}
@@ -1522,19 +1890,28 @@ const UserProfileScreen = ({
                   </Text>
                 </View>
               )}
-              <View style={styles.lastAdLocationRow}>
-                <Text style={styles.lastAdLocationText}>
-                  {lastAd.address ||
-                    lastAd.location ||
-                    'תל אביב, אבן גבירול 104'}
-                </Text>
-                <SimpleLineIcons
-                  name="location-pin"
-                  size={18}
-                  color="rgba(255,255,255,0.9)"
-                />
-              </View>
-              {!isCompany && <View style={styles.lastAdDivider} />}
+              {(() => {
+                const addr = firstNonEmpty(
+                  user?._fromTikTokPost ? user?.creator_business_address : null,
+                  user?._fromTikTokPost ? user?.business_address : null,
+                  lastAd.address,
+                  lastAd.location,
+                );
+                if (!addr) return null;
+                return (
+                  <View style={styles.lastAdLocationRow}>
+                    <Text style={styles.lastAdLocationText}>{addr}</Text>
+                    <SimpleLineIcons
+                      name="location-pin"
+                      size={18}
+                      color="rgba(255,255,255,0.9)"
+                    />
+                  </View>
+                );
+              })()}
+              {isBroker && (
+                <View style={styles.lastAdDivider} />
+              )}
               {isCompany && (
                 <View style={styles.companyStatsRow}>
                   <View style={styles.companyStatItem}>
@@ -1544,7 +1921,7 @@ const UserProfileScreen = ({
                       resizeMode="contain"
                     />
                     <Text style={styles.companyStatText}>
-                      {companyBuildingCount} בניין
+                      {formatCompanyBuildingsLabel(companyBuildingCount)}
                     </Text>
                   </View>
                   <View style={styles.companyStatItem}>
@@ -1554,7 +1931,7 @@ const UserProfileScreen = ({
                       resizeMode="contain"
                     />
                     <Text style={styles.companyStatText}>
-                      {companyFloorCount} קומות
+                      {formatCompanyFloorsLabel(companyFloorCount)}
                     </Text>
                   </View>
                   <View style={styles.companyStatItem}>
@@ -1564,16 +1941,19 @@ const UserProfileScreen = ({
                       resizeMode="contain"
                     />
                     <Text style={styles.companyStatText}>
-                      {companyApartmentCount} דירות
+                      {formatCompanyApartmentsLabel(companyApartmentCount)}
                     </Text>
                   </View>
                 </View>
               )}
               {isCompany && <View style={styles.lastAdDivider} />}
               {isRegularUserAdView ? (
-                <Text style={styles.lastAdDescription} numberOfLines={6}>
-                  {String(lastAd.description || '').trim() || 'אין תיאור'}
-                </Text>
+                <>
+                  <View style={styles.lastAdDivider} />
+                  <Text style={styles.lastAdDescription} numberOfLines={6}>
+                    {String(lastAd.description || '').trim() || 'אין תיאור'}
+                  </Text>
+                </>
               ) : (
                 <>
                   <View style={styles.lastAdPostedBy}>
@@ -1688,20 +2068,15 @@ const UserProfileScreen = ({
                         return (
                           <React.Fragment key={step.name}>
                             <View style={styles.constructionStatusStep}>
-                              <View
-                                style={[
-                                  styles.constructionStatusCircle,
-                                  isSelected &&
-                                    styles.constructionStatusCircleActive,
-                                ]}>
-                                {isSelected ? (
-                                  <MaterialCommunityIcons
-                                    name="check"
-                                    size={12}
-                                    color={GOLD}
-                                  />
-                                ) : null}
-                              </View>
+                              {isSelected ? (
+                                <Image
+                                  source={require('../assets/profile/check.png')}
+                                  style={styles.constructionStatusCheckImage}
+                                  resizeMode="contain"
+                                />
+                              ) : (
+                                <View style={styles.constructionStatusCircle} />
+                              )}
                               <Text
                                 style={[
                                   styles.constructionStatusLabel,
@@ -1743,20 +2118,17 @@ const UserProfileScreen = ({
                             return (
                               <React.Fragment key={step.name}>
                                 <View style={styles.constructionStatusStep}>
-                                  <View
-                                    style={[
-                                      styles.constructionStatusCircle,
-                                      isSelected &&
-                                        styles.constructionStatusCircleActive,
-                                    ]}>
-                                    {isSelected ? (
-                                      <MaterialCommunityIcons
-                                        name="check"
-                                        size={12}
-                                        color={GOLD}
-                                      />
-                                    ) : null}
-                                  </View>
+                                  {isSelected ? (
+                                    <Image
+                                      source={require('../assets/profile/check.png')}
+                                      style={styles.constructionStatusCheckImage}
+                                      resizeMode="contain"
+                                    />
+                                  ) : (
+                                    <View
+                                      style={styles.constructionStatusCircle}
+                                    />
+                                  )}
                                   <Text
                                     style={[
                                       styles.constructionStatusLabel,
@@ -1822,12 +2194,20 @@ const UserProfileScreen = ({
               {!isBroker && !isCompany && !isRegularUserAdView ? (
                 <View style={styles.lastAdDividerWhite} />
               ) : null}
+              {showLocationMap ? (
+                <LocationMap
+                  address={lastAd.address || lastAd.location || brokerAddress}
+                  containerStyle={styles.locationMapContainer}
+                />
+              ) : null}
+              </>
+              )}
             </View>
             )}
           </View>
         )}
 
-        {!openedFromPost && !isProfessional && (
+        {!openedFromPost && !isProfessional && !isBnbListingAdProfile && (
           <>
             <View style={styles.profileDivider} />
             {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
@@ -1888,10 +2268,13 @@ const UserProfileScreen = ({
         )}
 
         {/* Broker block + My Properties – same scroll as whole screen */}
-        {!isRegularUserAdView && !openedFromPost && !isProfessional && (
+        {!isRegularUserAdView &&
+          !openedFromPost &&
+          !isProfessional &&
+          !isBnbListingAdProfile && (
           <View style={styles.brokerCardOverlayLine} />
         )}
-        {!isRegularUserAdView && (
+        {!isRegularUserAdView && !isBnbListingAdProfile && (
         <View style={styles.brokerCardBottom}>
           {!isCompany || showCompanyPostSpecialties ? (
             <>
@@ -1901,40 +2284,58 @@ const UserProfileScreen = ({
                   <Text style={styles.brokerCardBottomName}>{displayName}</Text>
                 </View>
               </View>
-              <View style={styles.brokerCardBottomLocationRow}>
-                <Text style={styles.brokerCardBottomAddress}>
-                  {brokerAddress}
-                </Text>
-                <SimpleLineIcons
-                  name="location-pin"
-                  size={16}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View style={styles.brokerCardBottomSectionDivider} />
-              <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
-              <View style={styles.brokerCardBottomTags}>
-                {overlayActivityRegions.length > 0 ? (
-                  overlayActivityRegions.map((s, i) => (
-                    <View key={i} style={styles.brokerCardBottomTag}>
-                      <Text style={styles.brokerCardBottomTagText}>
-                        {typeof s === 'string'
-                          ? s
-                          : (s?.label ?? s?.name ?? String(s))}
-                      </Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.brokerCardBottomTagEmpty}>
-                    אין התמחויות
+              {brokerAddress ? (
+                <View style={styles.brokerCardBottomLocationRow}>
+                  <Text style={styles.brokerCardBottomAddress}>
+                    {brokerAddress}
                   </Text>
-                )}
-              </View>
-              <View style={styles.brokerCardBottomContentDivider} />
+                  <SimpleLineIcons
+                    name="location-pin"
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                </View>
+              ) : null}
+              {user?._fromTikTokPost && isBroker && openedFromPost ? (
+                <View style={styles.brokerCardBottomSectionDivider} />
+              ) : null}
+              {!user?._fromTikTokPost && !isBroker && (
+                <View style={styles.brokerCardBottomSectionDivider} />
+              )}
+              {!hideCompanyPostSpecialtiesBlock && (
+                <>
+                  <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
+                  <View style={styles.brokerCardBottomTags}>
+                    {overlayActivityRegions.length > 0 ? (
+                      overlayActivityRegions.map((s, i) => (
+                        <View key={i} style={styles.brokerCardBottomTag}>
+                          <Text style={styles.brokerCardBottomTagText}>
+                            {typeof s === 'string'
+                              ? s
+                              : (s?.label ?? s?.name ?? String(s))}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.brokerCardBottomTagEmpty}>
+                        אין התמחויות
+                      </Text>
+                    )}
+                  </View>
+                </>
+              )}
+              {!user?._fromTikTokPost && (
+                <View style={styles.brokerCardBottomContentDivider} />
+              )}
             </>
           ) : null}
-          {isCompany && !showCompanyPostSpecialties ? (
-            <Text style={styles.brokerCardBottomSectionTitle}>אודות החברה</Text>
+          {isCompany && (!showCompanyPostSpecialties || user?._fromTikTokPost) ? (
+            <>
+              {showCompanyPostSpecialties ? (
+                <View style={styles.brokerCardBottomContentDivider} />
+              ) : null}
+              <Text style={styles.brokerCardBottomAboutTitle}>אודות החברה</Text>
+            </>
           ) : null}
           <Text style={styles.brokerCardBottomBio}>
             {brokerBio && String(brokerBio).trim() ? brokerBio : 'אין תיאור'}
@@ -1943,23 +2344,55 @@ const UserProfileScreen = ({
         </View>
         )}
 
-        {!isRegularUserAdView && !hideMyPropertiesSection && (
+        {!isRegularUserAdView &&
+          !hideMyPropertiesSection &&
+          !isBnbListingAdProfile && (
         <View style={styles.myPropertiesSection}>
           <View style={styles.myPropertiesHeader}>
             <Text style={styles.myPropertiesTitle}>
               {isCompany ? 'פרוייקטים נבחרים' : 'הנכסים שלי'}
             </Text>
-            <TouchableOpacity
-              onPress={() =>
-                typeof onOpenAllListings === 'function' && creatorId
-                  ? onOpenAllListings(creatorId)
-                  : undefined
-              }
-              activeOpacity={0.7}>
-              <Text style={styles.myPropertiesSeeAllText}>
-                {isCompany ? 'לכל הפרוייקטים שלנו' : 'לכל הנכסים שלי'}
-              </Text>
-            </TouchableOpacity>
+            {isCompany ? (
+              openedFromCompaniesDirectory ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    typeof onClose === 'function' ? onClose() : undefined
+                  }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="לכל הפרוייקטים שלנו">
+                  <Text style={styles.myPropertiesSeeAllText}>
+                    לכל הפרוייקטים שלנו
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() =>
+                    typeof onOpenAllListings === 'function' && creatorId
+                      ? onOpenAllListings(creatorId)
+                      : undefined
+                  }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="לכל הפרוייקטים שלנו">
+                  <Text style={styles.myPropertiesSeeAllText}>
+                    לכל הפרוייקטים שלנו
+                  </Text>
+                </TouchableOpacity>
+              )
+            ) : (
+              <TouchableOpacity
+                onPress={() =>
+                  typeof onOpenAllListings === 'function' && creatorId
+                    ? onOpenAllListings(creatorId)
+                    : undefined
+                }
+                activeOpacity={0.7}>
+                <Text style={styles.myPropertiesSeeAllText}>
+                  לכל הנכסים שלי
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           {userListingsLoading ? (
             <View style={styles.myPropertiesListPlaceholder}>
@@ -2060,32 +2493,23 @@ const UserProfileScreen = ({
         )}
 
         {/* Contact Details – פרטי התקשרות */}
-        {!isRegularUserAdView && <View style={styles.contactDetailsDivider} />}
-        {!isRegularUserAdView && (
+        {!isRegularUserAdView && !isBnbListingAdProfile && (
+          <View style={styles.contactDetailsDivider} />
+        )}
+        {!isRegularUserAdView && !isBnbListingAdProfile && (
         <View style={styles.contactDetailsSection}>
           <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
           <View style={styles.contactDetailsContent}>
             <View style={styles.contactDetailsRight}>
-              <View style={styles.contactDetailsLogoWrap}>
-                {contactLogoSource ? (
-                  <Image
-                    source={contactLogoSource}
-                    style={styles.contactDetailsLogo}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.contactDetailsLogoPlaceholder}>
-                    <MaterialCommunityIcons
-                      name="domain"
-                      size={32}
-                      color={GOLD}
-                    />
-                    <Text style={styles.contactDetailsLogoText}>
-                      REAL ESTATE
-                    </Text>
-                  </View>
-                )}
-              </View>
+              <ProfileAvatar
+                uri={contactLogo || undefined}
+                name={displayName}
+                size={100}
+                style={styles.contactDetailsProfileAvatar}
+                imageStyle={
+                  Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                }
+              />
               <Text style={styles.contactDetailsAgencyName}>{displayName}</Text>
               {isCompany && (
                 <TouchableOpacity
@@ -2139,69 +2563,60 @@ const UserProfileScreen = ({
           </View>
         </View>
         )}
-        {!isRegularUserAdView && <View style={styles.contactDetailsDivider} />}
+        {!isRegularUserAdView && !isBnbListingAdProfile && (
+          <View style={styles.contactDetailsDivider} />
+        )}
 
-        {/* Rating & Reviews – כמות כוכבי פאי / ביקורות */}
-        {!isRegularUserAdView ? (
+        {/* Rating & Reviews – כמות כוכבי פאי / ביקורות (לא מציגים דירוג עצמי בפרופיל שלך) */}
+        {!isRegularUserAdView && !isBnbListingAdProfile ? (
         <View style={styles.reviewsSection}>
-          <Text style={styles.reviewsPiTitle}>
-            כמה כוכבי פאי היית נותן על השירות שקיבלת?
-          </Text>
-          <View style={styles.reviewsStarsRow}>
-            {[1, 2, 3, 4, 5].map(star => {
-              return (
-                <TouchableOpacity
-                  key={star}
-                  style={[
-                    styles.reviewsStarBox,
-                    selectedRating === star && styles.reviewsStarBoxSelected,
-                  ]}
-                  onPress={() => setSelectedRating(star)}
-                  activeOpacity={0.8}>
-                  <Image
-                    source={getStarSource(star - 1)}
-                    style={[
-                      star === 1
-                        ? styles.reviewsStarImage
-                        : styles.reviewsStarImageSmall,
-                    ]}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <Pressable
-            onPress={() => {
-              handleRate();
-            }}
-            disabled={submitReviewLoading}
-            style={({pressed}) => [
-              styles.reviewsRateBtnWrap,
-              pressed && styles.reviewsRateBtnPressed,
-            ]}>
-            <Image
-              source={rateButtonImageSource}
-              style={styles.reviewsRateBtnImage}
-              resizeMode="contain"
-              pointerEvents="none"
-            />
-          </Pressable>
+          {!isOwnProfile ? (
+            <>
+              <Text style={styles.reviewsPiTitle}>
+                כמה כוכבי פאי היית נותן על השירות שקיבלת?
+              </Text>
+              <RatingImprovePicker
+                value={selectedRating}
+                onChange={setSelectedRating}
+              />
+              <Pressable
+                onPress={() => {
+                  handleRate();
+                }}
+                disabled={submitReviewLoading}
+                style={({pressed}) => [
+                  styles.reviewsRateBtnWrap,
+                  pressed && styles.reviewsRateBtnPressed,
+                ]}>
+                <LinearGradient
+                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  locations={[0.04, 0.51, 0.88]}
+                  start={{x: 0.4, y: 0}}
+                  end={{x: 0.4, y: 1}}
+                  style={styles.reviewsRateBtnGradient}
+                >
+                  <Text style={styles.reviewsRateBtnLabel}>דרג</Text>
+                </LinearGradient>
+              </Pressable>
+            </>
+          ) : null}
 
           <Text style={styles.reviewsListTitle}>ביקורות</Text>
-          <TextInput
-            style={styles.reviewsInput}
-            value={reviewComment}
-            onChangeText={setReviewComment}
-            placeholder="הוסף ביקורת"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-          />
+          {!isOwnProfile ? (
+            <TextInput
+              style={styles.reviewsInput}
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="הוסף ביקורת"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+            />
+          ) : null}
           {reviewsLoading ? (
             <Text style={styles.reviewsPlaceholder}>טוען ביקורות...</Text>
           ) : reviews.length === 0 ? (
             <Text style={styles.reviewsPlaceholder}>אין עדיין ביקורות</Text>
           ) : (
-            reviews.map(r => (
+            visibleReviews.map(r => (
               <View key={r.id} style={styles.reviewCard}>
                 <View style={styles.reviewCardHeader}>
                   <View style={styles.reviewCardAvatarWrap}>
@@ -2232,7 +2647,9 @@ const UserProfileScreen = ({
                       style={[
                         r.rating === 1
                           ? styles.reviewCardStarBadgeImage1
-                          : styles.reviewCardStarBadgeImage,
+                          : Number(r.rating) === 5
+                            ? styles.reviewCardStarBadgeImage5
+                            : styles.reviewCardStarBadgeImage,
                       ]}
                       resizeMode="contain"
                     />
@@ -2252,10 +2669,21 @@ const UserProfileScreen = ({
               </View>
             ))
           )}
-          <View style={styles.readMoreWrap}>
-            <Text style={styles.readMoreText}>קרא עוד</Text>
-            <View style={styles.contactDetailsDivider} />
-          </View>
+          {!reviewsLoading && reviews.length > 0 ? (
+            <View style={styles.readMoreWrap}>
+              <Pressable
+                onPress={() => {
+                  if (typeof onOpenAllReviews === 'function') {
+                    onOpenAllReviews(reviews);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="כל הביקורות">
+                <Text style={styles.readMoreText}>קרא עוד</Text>
+              </Pressable>
+              <View style={styles.contactDetailsDivider} />
+            </View>
+          ) : null}
           <View style={styles.profileCtaSection}>
             <TouchableOpacity
               style={styles.profileCtaWarningBtn}
@@ -2268,24 +2696,40 @@ const UserProfileScreen = ({
                 color="#F7F3E6"
               />
             </TouchableOpacity>
-            {(isCompany || isProfessional) && (
+            {(isCompany || isProfessional) && !user?._fromTikTokPost && (
               <>
-                <TouchableOpacity
-                  style={styles.profileCtaChatImageOnlyBtn}
-                  onPress={handleChatPress}
-                  activeOpacity={0.85}>
-                  <Image
-                    source={require('../assets/menu/pichat.png')}
-                    style={styles.profileCtaChatImageOnlyAsset}
-                    resizeMode="stretch"
-                  />
-                </TouchableOpacity>
+                <View style={styles.profilePiChatWrap}>
+                  <TouchableOpacity
+                    style={styles.profileCtaChatImageOnlyBtn}
+                    onPress={handleChatPress}
+                    activeOpacity={0.85}>
+                    <Image
+                      source={require('../assets/menu/pichat.png')}
+                      style={styles.profileCtaChatImageOnlyAsset}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                  {unreadChatCount > 0 ? (
+                    <View
+                      style={styles.profilePiChatBadge}
+                      pointerEvents="none"
+                      accessibilityRole="text"
+                      accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+                      <Text style={styles.profilePiChatBadgeText} numberOfLines={1}>
+                        {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
 
                 <TouchableOpacity
                   style={styles.profileCtaPhoneBtn}
                   onPress={handleCallPress}
                   activeOpacity={0.85}>
-                  <Text style={styles.profileCtaPhoneText}>
+                  <Text
+                    style={styles.profileCtaPhoneText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail">
                     פנייה בטלפון {primaryContactPhone}
                   </Text>
                   <Image
@@ -2298,7 +2742,7 @@ const UserProfileScreen = ({
             )}
           </View>
         </View>
-        ) : (
+        ) : isRegularUserAdView && !isBnbListingAdProfile ? (
           <View style={styles.profileCtaSection}>
             <TouchableOpacity
               style={styles.profileCtaWarningBtn}
@@ -2312,8 +2756,107 @@ const UserProfileScreen = ({
               />
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </ScrollView>
+
+      {useFixedListingTopNav && (
+        <View
+          style={[
+            styles.listingHeroNavFixed,
+            showFixedBackOnly && styles.listingHeroNavBackOnly,
+            {paddingTop: heroNavPaddingTop},
+          ]}
+          pointerEvents="box-none"
+          collapsable={false}>
+          {showFixedCompanyHero ? (
+            <>
+              <TouchableOpacity
+                onPress={onClose}
+                activeOpacity={0.8}
+                style={styles.heroCircleBtn}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <SvgXml xml={HERO_NAV_BACK_XML} width={11} height={16} />
+              </TouchableOpacity>
+              <View style={styles.heroTopBarRight}>
+                <TouchableOpacity
+                  onPress={handleCompanyHeroToggleFavorite}
+                  activeOpacity={0.8}
+                  style={styles.heroCircleBtn}
+                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                  <SvgXml
+                    xml={
+                      companyHeroFavorited
+                        ? HERO_NAV_HEART_LIKED_XML
+                        : HERO_NAV_HEART_XML
+                    }
+                    width={20}
+                    height={19}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleProfileShare}
+                  activeOpacity={0.8}
+                  style={styles.heroCircleBtn}
+                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                  <SvgXml xml={HERO_NAV_SHARE_XML} width={24} height={24} />
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : showFixedProHero ? (
+            <>
+              <TouchableOpacity
+                onPress={onClose}
+                activeOpacity={0.8}
+                style={styles.heroCircleBtn}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={22}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (
+                    Platform.OS === 'web' &&
+                    typeof navigator !== 'undefined' &&
+                    navigator.share
+                  ) {
+                    navigator
+                      .share({
+                        title: displayName || '',
+                        url:
+                          typeof window !== 'undefined'
+                            ? window.location.href
+                            : '',
+                      })
+                      .catch(() => {});
+                  }
+                }}
+                activeOpacity={0.8}
+                style={styles.heroCircleBtn}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <MaterialCommunityIcons
+                  name="share-variant"
+                  size={20}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.backBtn}
+              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={28}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Full-screen image slider modal */}
       {fullScreenImageModalVisible && lastAdImages.length > 0 && (
@@ -2401,8 +2944,19 @@ const UserProfileScreen = ({
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.mainDeepBlue},
-  scroll: {flex: 1},
+  container: {
+    flex: 1,
+    backgroundColor: Colors.mainDeepBlue,
+    position: 'relative',
+    ...Platform.select({
+      web: {
+        minHeight: '100%',
+        width: '100%',
+      },
+      default: {},
+    }),
+  },
+  scroll: {flex: 1, zIndex: 0},
   scrollContent: {paddingBottom: 80},
   backBtn: {
     padding: 4,
@@ -2419,23 +2973,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  avatarImageWrap: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    borderWidth: 3,
-    borderColor: GOLD,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   avatarWrap: {
     position: 'relative',
     marginBottom: 12,
-  },
-  avatar: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
   },
   avatarPlaceholder: {
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -2726,9 +3266,16 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomSectionTitle: {
     color: '#D2D0DC',
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    marginBottom: 10,
+    marginBottom: 24,
+    textAlign: 'right',
+  },
+  brokerCardBottomAboutTitle: {
+    color: '#D2D0DC',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    marginBottom: 6,
     textAlign: 'right',
   },
   brokerCardBottomTags: {
@@ -2758,7 +3305,8 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomBio: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
+    lineHeight: 32,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
   },
@@ -2799,32 +3347,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   contactDetailsRight: {flex: 1, alignItems: 'flex-end'},
-  contactDetailsLogoWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: GOLD,
-    overflow: 'hidden',
-    marginBottom: 12,
+  contactDetailsProfileAvatar: {
     alignSelf: 'flex-end',
-  },
-  contactDetailsLogo: {
-    width: '100%',
-    height: '100%',
-  },
-  contactDetailsLogoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: CARD_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactDetailsLogoText: {
-    color: GOLD,
-    fontSize: 8,
-    fontWeight: '600',
-    marginTop: 4,
+    marginBottom: 12,
   },
   contactDetailsAgencyName: {
     color: '#fff',
@@ -2908,19 +3433,62 @@ const styles = StyleSheet.create({
     width: 85,
     height: 38,
   },
+  profilePiChatWrap: {
+    width: '100%',
+    position: 'relative',
+    alignSelf: 'stretch',
+    overflow: 'visible',
+  },
+  profilePiChatBadge: {
+    position: 'absolute',
+    top: -2,
+    right: 2,
+    minWidth: 24,
+    height: 24,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: '#5EEAD4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 7,
+    zIndex: 10,
+    elevation: 6,
+    shadowColor: '#5EEAD4',
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    borderWidth: 2,
+    borderColor: '#1E1D27',
+  },
+  profilePiChatBadgeText: {
+    color: '#1a1a2e',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'Rubik-Medium',
+    includeFontPadding: false,
+    textAlign: 'center',
+  },
   profileCtaChatImageOnlyBtn: {
     width: '100%',
     height: 52,
+    minHeight: 52,
+    maxHeight: 52,
     alignSelf: 'stretch',
     borderRadius: 28,
     overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   profileCtaChatImageOnlyAsset: {
     width: '100%',
-    height: '100%',
+    height: 52,
+    maxHeight: 52,
   },
   profileCtaPhoneBtn: {
+    width: '100%',
     height: 52,
+    minHeight: 52,
+    maxHeight: 52,
     borderRadius: 28,
     borderWidth: 1,
     borderColor: '#00F5FF',
@@ -2929,39 +3497,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    ...(Platform.OS === 'web' ? {boxSizing: 'border-box'} : {}),
   },
   profileCtaPhoneText: {
     color: '#FFFFFF',
     fontSize: 18,
+    lineHeight: 22,
     fontFamily: 'Rubik-Medium',
+    flexShrink: 1,
   },
   profileCtaPhoneIcon: {
-    width: 30,
-    height: 30,
+    width: 26,
+    height: 26,
   },
-  reviewsStarsRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-around',
-    marginBottom: 5,
+  reviewsRateBtnWrap: {
+    marginTop: 28,
+    marginBottom: 24,
+    alignSelf: 'center',
+    width: '80%',
+    alignItems: 'center',
   },
-  reviewsStarBox: {
-    width: 44,
+  reviewsRateBtnPressed: {opacity: 0.85},
+  reviewsRateBtnGradient: {
     height: 44,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 846,
+    width: '100%',
+    maxWidth: 320,
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reviewsStarBoxSelected: {backgroundColor: 'rgba(255,196,10,0.25)'},
-  reviewsStarImageSmall: {width: 30, height: 30},
-  reviewsStarImage: {width: 43, height: 43},
-  reviewsRateBtnWrap: {marginTop: 12, marginBottom: 24, alignSelf: 'stretch'},
-  reviewsRateBtnPressed: {opacity: 0.85},
-  reviewsRateBtnImage: {
-    width: '86%',
-    height: 36,
-    borderRadius: 10,
-    alignSelf: 'center',
+  reviewsRateBtnLabel: {
+    color: '#1E1D27',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.2,
   },
   reviewsListTitle: {
     color: '#D2D0DC',
@@ -3002,7 +3576,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  reviewCardAvatarWrap: {position: 'relative', marginLeft: 12},
+  reviewCardAvatarWrap: {
+    position: 'relative',
+    marginLeft: 12,
+    width: 60,
+    alignItems: 'center',
+  },
   reviewCardAvatar: {
     width: 60,
     height: 60,
@@ -3013,14 +3592,25 @@ const styles = StyleSheet.create({
     height: 35,
     position: 'absolute',
     bottom: -12,
-    alignSelf: 'center',
+    left: '50%',
+    marginLeft: -17.5,
+  },
+  /** 5★ in ביקורות only — larger than 2–4★ badge. */
+  reviewCardStarBadgeImage5: {
+    width: 36,
+    height: 36,
+    position: 'absolute',
+    bottom: -10,
+    left: '50%',
+    marginLeft: -18,
   },
   reviewCardStarBadgeImage: {
     width: 25,
     height: 25,
     position: 'absolute',
     bottom: -7,
-    alignSelf: 'center',
+    left: '50%',
+    marginLeft: -12.5,
   },
   reviewCardName: {
     color: '#F7F3E6',
@@ -3064,6 +3654,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 20,
   },
+  /**
+   * Pinned over ScrollView (sibling, rendered after ScrollView so it always stacks on top).
+   * Use `absolute` on web+native so the bar is not in the document scroll; `fixed` breaks when
+   * any ancestor uses transform (common in RN Web).
+   */
+  listingHeroNavFixed: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    minHeight: 48,
+    zIndex: 10000,
+    elevation: 24,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...Platform.select({
+      web: {
+        pointerEvents: 'box-none',
+      },
+      default: {},
+    }),
+  },
+  listingHeroNavBackOnly: {
+    justifyContent: 'flex-start',
+  },
   heroCircleBtn: {
     width: 40,
     height: 40,
@@ -3071,6 +3688,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(39,38,47,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  heroTopBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   lastAdImageWrapGridMode: {
     width: SCREEN_WIDTH,
@@ -3082,10 +3704,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
+  // aspectRatio = width/height; below 1 yields taller cells than 1:1 (opened-from-post grid).
   lastAdGridItem: {
     width: '33.3333%',
-    aspectRatio: 1,
-    padding: 4,
+    aspectRatio: 0.78,
+    // Tight gutter: was 4 — smaller gaps between tiles and less inset on left/right of the grid.
+    paddingVertical: 2,
+    paddingHorizontal: 1,
   },
   lastAdGridPlaceholderCell: {
     alignItems: 'center',
@@ -3095,6 +3720,11 @@ const styles = StyleSheet.create({
   lastAdGridImage: {
     width: '100%',
     height: '100%',
+  },
+  lastAdGridVideoCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1D27',
   },
   lastAdImagePlaceholder: {alignItems: 'center', justifyContent: 'center'},
   lastAdPiAndPurposeRow: {
@@ -3249,10 +3879,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
-  constructionStatusCircleActive: {
-    borderColor: GOLD,
-    borderWidth: 1,
-    backgroundColor: Colors.mainDeepBlue,
+  constructionStatusCheckImage: {
+    width: 24,
+    height: 24,
   },
   constructionStatusLabel: {
     color: 'rgba(255,255,255,0.6)',
@@ -3375,7 +4004,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
+    zIndex: 20000,
   },
   fullScreenImageCloseBtn: {
     position: 'absolute',

@@ -310,13 +310,16 @@ const SettingsScreen = ({
           onPress={onOpenChat}
           style={styles.buttonsImageWrap}>
           <Image source={PI_CHAT_BAR} style={styles.buttonsImage} resizeMode="contain" />
-          {unreadChatCount > 0 && (
-            <View style={styles.chatBadge}>
-              <Text style={styles.chatBadgeText}>
+          {unreadChatCount > 0 ? (
+            <View
+              style={styles.chatBadge}
+              accessibilityRole="text"
+              accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+              <Text style={styles.chatBadgeText} numberOfLines={1}>
                 {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
               </Text>
             </View>
-          )}
+          ) : null}
         </TouchableOpacity>
         {isLoggedRegular ? (
           <TouchableOpacity
@@ -621,26 +624,32 @@ const styles = StyleSheet.create({
   },
   chatBadge: {
     position: 'absolute',
-    top: 0,
-    right: 4,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -2,
+    right: 2,
+    minWidth: 24,
+    height: 24,
+    minHeight: 24,
+    borderRadius: 12,
     backgroundColor: '#5EEAD4',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     zIndex: 10,
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#5EEAD4',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 4,
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    borderWidth: 2,
+    borderColor: '#1E1D27',
   },
   chatBadgeText: {
     color: '#1a1a2e',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
+    fontFamily: 'Rubik-Medium',
+    includeFontPadding: false,
+    textAlign: 'center',
   },
   card: {
     backgroundColor: '#2b2a39',

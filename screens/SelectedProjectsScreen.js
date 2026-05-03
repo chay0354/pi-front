@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     textAlign: 'right',
     writingDirection: 'rtl',
-    direction: 'rtl',
   },
   searchIcon: {
     marginRight: 8,

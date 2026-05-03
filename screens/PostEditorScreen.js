@@ -417,6 +417,8 @@ const PostEditorScreen = ({
   onPublish,
   currentUser,
   selectedCategory,
+  /** Explicit listing category for this editor session (from navigation); overrides stale global feed category */
+  publishCategoryId = null,
   publishTarget = 'post',
 }) => {
   const insets = useSafeAreaInsets();
@@ -459,6 +461,23 @@ const PostEditorScreen = ({
     ],
     [],
   );
+
+  const resolvedPublishCategory = useMemo(() => {
+    const fromNav =
+      publishCategoryId != null && String(publishCategoryId).trim() !== ''
+        ? parseInt(String(publishCategoryId).trim(), 10)
+        : NaN;
+    if (Number.isFinite(fromNav) && fromNav > 0) {
+      return fromNav;
+    }
+    if (selectedCategory != null && String(selectedCategory).trim() !== '') {
+      const fromFeed = parseInt(String(selectedCategory).trim(), 10);
+      if (Number.isFinite(fromFeed) && fromFeed > 0) {
+        return fromFeed;
+      }
+    }
+    return 8;
+  }, [publishCategoryId, selectedCategory]);
 
   const hasTextBlockContent = textBlocks.some(
     b => (b.text && String(b.text).trim().length > 0),
@@ -549,14 +568,17 @@ const PostEditorScreen = ({
       if (publishTarget === 'story') {
         await createStory({subscription_id: subId, media_url: url});
       } else {
-        const cat = parseInt(String(selectedCategory ?? '8'), 10);
         await createListing({
-          category: Number.isFinite(cat) ? cat : 8,
+          category: resolvedPublishCategory,
           status: 'published',
           subscriptionId: subId,
           subscriptionType: currentUser?.subscription_type || null,
           mainImageUrl: url,
           description: 'פוסט',
+          feedPost: true,
+          feed_post: true,
+          propertyType: 'post',
+          price: 0,
         });
       }
 

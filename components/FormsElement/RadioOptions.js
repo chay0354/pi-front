@@ -16,7 +16,8 @@ export const RadioOptions = ({
       <Title text={title} required />
       <View style={styles.optionsContainer}>
         {data.map((item, index) => {
-          const value = item.value ?? item.title;
+          // Prefer `name` (API / filter codes, e.g. land form) over `value`, then `title` (Hebrew label).
+          const value = item.name ?? item.value ?? item.title;
           return (
             <RadioWithText
               key={index}

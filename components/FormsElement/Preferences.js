@@ -38,9 +38,12 @@ export const Preferences = ({
       />
       <Divider style={{marginVertical: 20}} />
 
-      {/* Age Range */}
-      {/* TODO */}
-      <AgeRangeSlider />
+      <AgeRangeSlider
+        minValue={preferredAgeMin}
+        maxValue={preferredAgeMax}
+        onMinChange={setPreferredAgeMin}
+        onMaxChange={setPreferredAgeMax}
+      />
 
       {/* Checkboxes */}
       <View style={styles.preferenceSection}>

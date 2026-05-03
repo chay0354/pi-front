@@ -1,0 +1,642 @@
+/**
+ * Figma grid listing card (shared by Pi AI search and "הנכסים שלי").
+ * Company vs non-company stats follow `buildCardStats` in utils/listingGridCardFigma.
+ */
+import React, {useMemo} from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {LinearGradient} from 'expo-linear-gradient';
+import {Colors, BorderRadius} from '../constants/styles';
+import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import ProfileAvatar from './ProfileAvatar';
+import {
+  HEB_M2,
+  buildCardStats,
+  firstImageUrl,
+  formatApartmentAreaForDisplay,
+  formatApartmentRoomsOrFloorForDisplay,
+  formatPriceHe,
+  isCompanyListing,
+  isPreSaleListing,
+  listingImageUrls,
+  cleanAddress,
+  purposeLabel,
+  shouldShowListingPiRating,
+} from '../utils/listingGridCardFigma';
+
+const CARD_BG = '#2B2A39';
+const IMG_PLACEHOLDER_BG = '#1e1d2b';
+const GOLD = '#FFC40A';
+
+const piBadgeSource = require('../assets/pi-badge.png');
+const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
+
+const ListingGridCardFigma = ({
+  listing,
+  onPress,
+  liked,
+  onToggleLike,
+  displayPi,
+  style,
+}) => {
+  const {
+    primaryUri,
+    addr,
+    stats,
+    isCompany,
+    showPreSaleBadge,
+    cardPriceLabel,
+    profileUri,
+    showPiRating,
+    piBadgeImage,
+    dotCount,
+    buildingsStat,
+    floorsStat,
+    apartmentsStat,
+  } = useMemo(() => {
+    const galleryRaw = listingImageUrls(listing);
+    const primary = galleryRaw[0] || firstImageUrl(listing);
+    const g =
+      galleryRaw.length > 0
+        ? galleryRaw
+        : primary
+          ? [primary]
+          : [];
+    const a = cleanAddress(listing);
+    const st = buildCardStats(listing);
+    const company = isCompanyListing(listing);
+    const preSale = company && isPreSaleListing(listing);
+    const priceLabel = company
+      ? String(listing?.project_name || '').trim() || formatPriceHe(listing)
+      : formatPriceHe(listing);
+    const pUri = getUserProfileImageUrl(listing);
+    const showPi = shouldShowListingPiRating(listing);
+    const badgeImg =
+      displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
+    const dCount =
+      g.length > 0 ? Math.min(5, g.length) : primary ? 1 : 0;
+    const b = st.find(s => s.key === 'buildings');
+    const f = st.find(s => s.key === 'floors');
+    const ap = st.find(s => s.key === 'apartments');
+    return {
+      primaryUri: primary,
+      addr: a,
+      stats: st,
+      isCompany: company,
+      showPreSaleBadge: preSale,
+      cardPriceLabel: priceLabel,
+      profileUri: pUri,
+      showPiRating: showPi,
+      piBadgeImage: badgeImg,
+      dotCount: dCount,
+      buildingsStat: b,
+      floorsStat: f,
+      apartmentsStat: ap,
+    };
+  }, [listing, displayPi]);
+
+  const renderGridStat = s =>
+    s ? (
+      <View key={s.key} style={styles.gridCardStatGroup}>
+        <View style={styles.gridCardStatIconBox}>
+          <Image
+            source={s.icon}
+            style={styles.gridCardStatIconFigma}
+            resizeMode="contain"
+          />
+        </View>
+        <Text
+          style={[styles.gridCardStatTextFigma, styles.gridCardStatTextCell]}>
+          {s.label}
+        </Text>
+      </View>
+    ) : null;
+
+  const renderApartmentGridStat = key => {
+    const s = stats.find(x => x.key === key);
+    if (!s) return null;
+    const roomsD = formatApartmentRoomsOrFloorForDisplay(listing?.rooms);
+    const areaD = formatApartmentAreaForDisplay(listing?.area);
+    const floorD = formatApartmentRoomsOrFloorForDisplay(listing?.floor);
+    const textRow = [styles.gridCardStatTextInline, styles.gridCardApartmentStatTextWrap];
+    const floorIconStyle =
+      key === 'floor'
+        ? [styles.gridCardStatIconFigma, styles.gridCardStatIconFlipped]
+        : styles.gridCardStatIconFigma;
+    return (
+      <View key={key} style={styles.gridCardStatGroup}>
+        <View style={styles.gridCardStatIconBox}>
+          <Image
+            source={s.icon}
+            style={floorIconStyle}
+            resizeMode="contain"
+          />
+        </View>
+        {key === 'rooms' && roomsD != null ? (
+          <Text
+            style={[...textRow, styles.gridCardStatTextCell]}
+            textAlign="right"
+            writingDirection="rtl">
+            <Text style={styles.gridCardStatValueFigma}>{roomsD}</Text>
+            <Text style={styles.gridCardStatLabelFigma}> חדרים</Text>
+          </Text>
+        ) : key === 'area' && areaD != null ? (
+          <Text
+            style={[...textRow, styles.gridCardStatTextCell]}
+            textAlign="right"
+            writingDirection="rtl">
+            <Text style={styles.gridCardStatValueFigma}>{areaD}</Text>
+            <Text style={styles.gridCardStatLabelFigma}> {HEB_M2}</Text>
+          </Text>
+        ) : key === 'floor' && floorD != null ? (
+          <Text
+            style={[...textRow, styles.gridCardStatTextCell]}
+            textAlign="right"
+            writingDirection="rtl">
+            <Text style={styles.gridCardStatLabelFigma}>קומה </Text>
+            <Text style={styles.gridCardStatValueFigma}>{floorD}</Text>
+          </Text>
+        ) : (
+          <Text
+            style={[
+              styles.gridCardStatTextFigma,
+              styles.gridCardApartmentStatTextWrap,
+              styles.gridCardStatTextCell,
+            ]}
+            textAlign="right"
+            writingDirection="rtl">
+            {s.label}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.gridCard, style]}
+      activeOpacity={0.85}
+      onPress={() => onPress?.(listing)}
+      disabled={!onPress}>
+      <View style={styles.gridCardImageSection}>
+        {primaryUri ? (
+          <Image
+            source={{uri: primaryUri}}
+            style={styles.gridCardHeroImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.gridCardHeroImage, styles.cardImagePlaceholder]}>
+            <Text style={styles.cardImagePlaceholderText}>ללא תמונה</Text>
+          </View>
+        )}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.3)']}
+          locations={[0.45, 1]}
+          style={styles.gridCardImageGradient}
+        />
+        <View style={styles.gridCardPriceOverlay} pointerEvents="box-none">
+          <Text
+            style={styles.gridCardPriceOnImage}
+            numberOfLines={2}
+            maxFontSizeMultiplier={1.4}>
+            {cardPriceLabel}
+          </Text>
+        </View>
+        {profileUri ? (
+          <View
+            style={styles.gridCardAvatarWrap}
+            accessible
+            accessibilityLabel="מפרסם"
+            pointerEvents="box-none">
+            <ProfileAvatar
+              uri={profileUri}
+              size={38}
+              imageStyle={Platform.OS === 'web' ? {objectFit: 'cover'} : undefined}
+            />
+          </View>
+        ) : null}
+        {dotCount > 0 ? (
+          <View style={styles.gridCardDots} pointerEvents="none">
+            {Array.from({length: dotCount}, (_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.gridCardDot,
+                  i === 0
+                    ? styles.gridCardDotActive
+                    : styles.gridCardDotInactive,
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.gridCardBodyFigma}>
+        <View
+          style={[
+            styles.gridCardTopRowFigma,
+            !showPiRating && styles.gridCardTopRowFigmaNoPi,
+          ]}>
+          {showPiRating ? (
+            <View style={styles.gridCardPiBadge} pointerEvents="box-none">
+              <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
+              <Image
+                source={piBadgeImage}
+                style={styles.gridCardPiBadgeImage}
+                resizeMode="cover"
+                accessibilityLabel="דירוג Pi"
+              />
+            </View>
+          ) : null}
+          <View style={styles.gridCardTopRowEnd}>
+            <TouchableOpacity
+              onPress={e => {
+                e?.stopPropagation?.();
+                onToggleLike?.(listing);
+              }}
+              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+              style={styles.gridCardHeartWrap}
+              activeOpacity={0.75}
+              accessibilityLabel="מועדפים"
+              accessibilityRole="button"
+              accessibilityState={{selected: !!liked}}>
+              {liked ? (
+                <MaterialCommunityIcons name="heart" size={22} color={GOLD} />
+              ) : (
+                <Image
+                  source={require('../assets/liked-ads/like.png')}
+                  style={styles.gridCardHeartImage}
+                  resizeMode="contain"
+                />
+              )}
+            </TouchableOpacity>
+            {showPreSaleBadge ? (
+              <Image
+                source={require('../assets/pre-sale.png')}
+                style={styles.gridCardPreSaleBadge}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={[styles.purposeChip, styles.gridCardPurposeChip]}>
+                <Text
+                  style={[styles.purposeChipText, styles.gridCardPurposeChipText]}>
+                  {purposeLabel(listing)}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.gridCardAddressRowFigma}>
+          <Text style={styles.gridCardAddressTextFigma} numberOfLines={1}>
+            {addr}
+          </Text>
+          <Image
+            source={require('../assets/liked-ads/location.png')}
+            style={styles.gridCardAddressIconFigma}
+            resizeMode="contain"
+            accessibilityLabel="מיקום"
+          />
+        </View>
+
+        <View style={styles.gridCardStatsRowFigma}>
+          {isCompany ? (
+            <>
+              {renderGridStat(apartmentsStat)}
+              <View style={styles.gridCardStatsPairGroup}>
+                {renderGridStat(buildingsStat)}
+                {renderGridStat(floorsStat)}
+              </View>
+            </>
+          ) : (
+            <>
+              {renderApartmentGridStat('rooms')}
+              <View style={styles.gridCardStatsPairGroup}>
+                {renderApartmentGridStat('area')}
+                {renderApartmentGridStat('floor')}
+              </View>
+            </>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+const styles = StyleSheet.create({
+  cardImagePlaceholder: {
+    backgroundColor: IMG_PLACEHOLDER_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardImagePlaceholderText: {
+    color: Colors.grey200,
+    fontSize: 11,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  purposeChip: {
+    height: 22,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.roundCornerFull,
+    backgroundColor: Colors.white100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  purposeChipText: {
+    color: Colors.blue100,
+    fontSize: 12,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+  },
+  gridCard: {
+    width: '100%',
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    overflow: 'visible',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 3.5},
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+      },
+      android: {elevation: 6},
+      default: {},
+    }),
+  },
+  gridCardImageSection: {
+    position: 'relative',
+    width: '100%',
+    height: 150,
+    overflow: 'hidden',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  gridCardHeroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridCardImageGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 88,
+  },
+  gridCardPriceOverlay: {
+    position: 'absolute',
+    right: 10,
+    bottom: 8,
+    left: 40,
+    zIndex: 2,
+    alignItems: 'flex-end',
+  },
+  gridCardPriceOnImage: {
+    color: '#F7F3E6',
+    fontSize: 17,
+    lineHeight: 21,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 6,
+  },
+  gridCardAvatarWrap: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 38,
+    height: 38,
+  },
+  gridCardDots: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 6,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+  },
+  gridCardDot: {borderRadius: 999},
+  gridCardDotActive: {
+    width: 6,
+    height: 6,
+    backgroundColor: GOLD,
+  },
+  gridCardDotInactive: {
+    width: 5,
+    height: 5,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  gridCardBodyFigma: {
+    paddingTop: 6,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    alignItems: 'flex-end',
+    gap: 8,
+    overflow: 'visible',
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+  },
+  gridCardTopRowFigma: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    minHeight: 40,
+    paddingVertical: 2,
+    overflow: 'visible',
+    zIndex: 2,
+    writingDirection: 'ltr',
+  },
+  gridCardTopRowFigmaNoPi: {
+    justifyContent: 'flex-end',
+  },
+  gridCardTopRowEnd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 0,
+  },
+  gridCardPiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    position: 'relative',
+  },
+  gridCardPiText: {
+    color: '#FFD275',
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+  },
+  gridCardPiBadgeImage: {
+    width: 60,
+    height: 60,
+    position: 'absolute',
+    left: -6,
+    top: -22,
+    ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
+  },
+  gridCardPurposeChip: {
+    height: 20,
+    minHeight: 20,
+    paddingVertical: 0,
+    paddingHorizontal: 6,
+  },
+  gridCardPurposeChipText: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.35,
+  },
+  gridCardHeartWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridCardHeartImage: {
+    width: 22,
+    height: 22,
+  },
+  gridCardPreSaleBadge: {
+    width: 70,
+    height: 24,
+  },
+  gridCardAddressRowFigma: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 6,
+    width: '100%',
+  },
+  gridCardAddressTextFigma: {
+    flex: 1,
+    minWidth: 0,
+    color: Colors.white100,
+    fontSize: 15,
+    lineHeight: 21,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.54,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  gridCardAddressIconFigma: {
+    width: 18,
+    height: 18,
+    flexShrink: 0,
+  },
+  gridCardStatsRowFigma: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 6,
+    width: '100%',
+    marginTop: 4,
+    overflow: 'visible',
+    zIndex: 2,
+    ...Platform.select({
+      android: {elevation: 2},
+      default: {},
+    }),
+  },
+  gridCardApartmentStatTextWrap: {
+    flexShrink: 0,
+    ...Platform.select({
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  gridCardStatTextInline: {
+    textAlign: 'right',
+  },
+  gridCardStatValueFigma: {
+    color: Colors.white100,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: 'Rubik-Regular',
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  gridCardStatLabelFigma: {
+    color: Colors.white100,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.45,
+    transform: [{translateY: -1}],
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  gridCardStatsPairGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  gridCardStatGroup: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+  },
+  gridCardStatTextFigma: {
+    color: Colors.white100,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.45,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    flexShrink: 0,
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      web: {whiteSpace: 'nowrap'},
+      default: {},
+    }),
+  },
+  gridCardStatIconBox: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  gridCardStatIconFlipped: {
+    width: 20,
+    height: 20,
+    transform: [{scaleX: -1}],
+  },
+  gridCardStatTextCell: {
+    alignSelf: 'center',
+  },
+  gridCardStatIconFigma: {
+    width: 20,
+    height: 20,
+    flexShrink: 0,
+  },
+});
+
+export default ListingGridCardFigma;

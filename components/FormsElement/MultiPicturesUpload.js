@@ -21,7 +21,6 @@ export const MultiPicturesUpload = ({
   handleAdditionalImageChange,
   mainImageInputRef,
   additionalImageInputRefs,
-  addMorePhotos,
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
 
@@ -116,8 +115,9 @@ export const MultiPicturesUpload = ({
           </Text>
         </TouchableOpacity>
       )}
-      {addMorePhotos && showAdditionalImages && MoreImagesRender([4, 5])}
-      {addMorePhotos && showAdditionalImages && MoreImagesRender([6, 7])}
+      {showAdditionalImages && MoreImagesRender([4, 5])}
+      {showAdditionalImages && MoreImagesRender([6, 7])}
+      {showAdditionalImages && MoreImagesRender([8, 9])}
     </>
   );
 };

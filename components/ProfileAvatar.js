@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {View, Image, Text, StyleSheet} from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Svg, {
@@ -21,6 +21,8 @@ import Svg, {
  *   consistent at any size.
  * - Use `ringColors` to override the gradient if a screen ever needs a
  *   different ring.
+ * - Optional `placeholderImage` (e.g. require('...png')) when there is no
+ *   `uri` or the remote image failed, instead of the default letter/icon.
  */
 const RING_RATIO = 3.5 / 82; // gold band thickness
 const GAP_RATIO = 2 / 82; // transparent space between ring and photo
@@ -41,9 +43,14 @@ export const ProfileAvatar = ({
   style,
   imageStyle,
   placeholderLabel,
+  placeholderImage,
 }) => {
   const [failed, setFailed] = useState(false);
   const [gradientId] = useState(nextGradientId);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
 
   const ringWidth = Math.max(1, size * RING_RATIO);
   const gap = Math.max(0, size * GAP_RATIO);
@@ -62,6 +69,12 @@ export const ProfileAvatar = ({
       style={[styles.image, imageStyle]}
       resizeMode="cover"
       onError={() => setFailed(true)}
+    />
+  ) : placeholderImage != null ? (
+    <Image
+      source={placeholderImage}
+      style={[styles.image, imageStyle]}
+      resizeMode="cover"
     />
   ) : (
     <View style={[styles.image, styles.placeholder]}>

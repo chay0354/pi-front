@@ -12,12 +12,13 @@ import {
   Modal,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {Colors} from '../constants/styles';
+import {LinearGradient} from 'expo-linear-gradient';
 import {
   getFollowHubRows,
   getFollowStats,
   respondToFollowRequest,
   sendFollowRequest,
+  cancelFollowRequest,
   unfollowUser,
   toSubscriptionId,
 } from '../utils/api';
@@ -26,16 +27,52 @@ const TAB_REQUESTS = 'requests';
 const TAB_FOLLOWERS = 'followers';
 const TAB_FOLLOWING = 'following';
 
+/** Same art as TikTokFeedScreen user-search rating row. */
+const RATING_STAR_ONE_TO_FOUR = require('../assets/tiktok/1-4hurt.png');
+const RATING_STAR_FIVE = require('../assets/tiktok/5stars.png');
+
+/** Figma node 8:86865 — gold pill (עקוב / primary). */
+const GOLD_CTA = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_CTA_LOCS = [0.0456, 0.5076, 0.8831];
+const GOLD_TEXT = '#1E1D27';
+
+const GoldPillButton = ({onPress, disabled, minWidth = 58, style, textStyle, label}) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.85}
+    style={[{minWidth, borderRadius: 1000, overflow: 'hidden', alignSelf: 'center'}, style]}>
+    <LinearGradient
+      colors={GOLD_CTA}
+      locations={GOLD_CTA_LOCS}
+      start={{x: 0, y: 0}}
+      end={{x: 1, y: 1}}
+      style={{
+        minHeight: 30,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <Text style={textStyle} numberOfLines={1}>
+        {label}
+      </Text>
+    </LinearGradient>
+  </TouchableOpacity>
+);
+
 const FollowHubScreen = ({
   onClose,
   currentUser = null,
   profileUser = null,
   initialTab = TAB_FOLLOWERS,
+  onOpenUserProfile = null,
 }) => {
   const profileId = toSubscriptionId(
     profileUser?.subscription_id || profileUser?.owner_id || profileUser?.id,
   );
-  const viewerId = toSubscriptionId(currentUser?.id);
+  const viewerId = toSubscriptionId(
+    currentUser?.subscription_id || currentUser?.owner_id || currentUser?.id,
+  );
   const isOwnProfile = !!profileId && !!viewerId && profileId === viewerId;
   const displayName =
     profileUser?.creator_name ||
@@ -63,6 +100,7 @@ const FollowHubScreen = ({
 
   const [activeTab, setActiveTab] = useState(safeInitialTab);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [rows, setRows] = useState([]);
   const [loadingRows, setLoadingRows] = useState(false);
   const [actioningId, setActioningId] = useState(null);
@@ -77,6 +115,11 @@ const FollowHubScreen = ({
   useEffect(() => {
     setActiveTab(safeInitialTab);
   }, [safeInitialTab]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 320);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const loadCounts = useCallback(async () => {
     if (!profileId) return;
@@ -99,7 +142,7 @@ const FollowHubScreen = ({
         userId: profileId,
         viewerId,
         tab: activeTab,
-        q: search,
+        q: debouncedSearch,
       });
       setRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (e) {
@@ -107,7 +150,12 @@ const FollowHubScreen = ({
     } finally {
       setLoadingRows(false);
     }
-  }, [profileId, viewerId, activeTab, search]);
+  }, [profileId, viewerId, activeTab, debouncedSearch]);
+
+  /** Keep tab label counts in sync with the list after any follow action (parallel + no cached stats). */
+  const refreshRowsAndCounts = useCallback(async () => {
+    await Promise.all([loadRows(), loadCounts()]);
+  }, [loadRows, loadCounts]);
 
   useEffect(() => {
     loadCounts();
@@ -123,15 +171,14 @@ const FollowHubScreen = ({
       setActioningId(row.id);
       try {
         await sendFollowRequest(viewerId, row.id);
-        await loadRows();
-        await loadCounts();
+        await refreshRowsAndCounts();
       } catch (e) {
         Alert.alert('', e?.message || 'לא הצלחנו לשלוח בקשת מעקב');
       } finally {
         setActioningId(null);
       }
     },
-    [viewerId, loadRows, loadCounts],
+    [viewerId, refreshRowsAndCounts],
   );
 
   const handleAcceptRequest = useCallback(
@@ -140,56 +187,216 @@ const FollowHubScreen = ({
       setActioningId(row.id || row.request_id);
       try {
         await respondToFollowRequest(row.request_id, viewerId, 'accept');
-        await loadRows();
-        await loadCounts();
+        await refreshRowsAndCounts();
       } catch (e) {
         Alert.alert('', e?.message || 'לא הצלחנו לאשר את הבקשה');
       } finally {
         setActioningId(null);
       }
     },
-    [viewerId, loadRows, loadCounts],
+    [viewerId, refreshRowsAndCounts],
+  );
+
+  const handleRejectRequest = useCallback(
+    async row => {
+      if (!viewerId || !row?.request_id) return;
+      setActioningId(row.id || row.request_id);
+      try {
+        await respondToFollowRequest(row.request_id, viewerId, 'reject');
+        await refreshRowsAndCounts();
+      } catch (e) {
+        Alert.alert('', e?.message || 'לא הצלחנו לדחות את הבקשה');
+      } finally {
+        setActioningId(null);
+      }
+    },
+    [viewerId, refreshRowsAndCounts],
+  );
+
+  const handleCancelOutgoingRequest = useCallback(
+    async row => {
+      if (!viewerId || !row?.id || row?.is_self) return;
+      setActioningId(row.id);
+      try {
+        await cancelFollowRequest(viewerId, row.id);
+        await refreshRowsAndCounts();
+      } catch (e) {
+        Alert.alert('', e?.message || 'לא הצלחנו לבטל את בקשת המעקב');
+      } finally {
+        setActioningId(null);
+      }
+    },
+    [viewerId, refreshRowsAndCounts],
   );
 
   const handleUnfollow = useCallback(
     row => {
       if (!viewerId || !row?.id || actioningId === row.id) return;
-      setConfirmUnfollowRow(row);
+      setConfirmUnfollowRow({...row, _action: 'unfollow'});
     },
-    [viewerId, actioningId, loadRows, loadCounts],
+    [viewerId, actioningId],
+  );
+
+  /** On own "followers" tab: remove the row user's follow of this profile (they stop following you). */
+  const handleRemoveFollower = useCallback(
+    row => {
+      if (!isOwnProfile || !profileId || !row?.id || actioningId === row.id) return;
+      setConfirmUnfollowRow({...row, _action: 'removeFollower'});
+    },
+    [isOwnProfile, profileId, actioningId],
   );
 
   const confirmUnfollow = useCallback(async () => {
     const row = confirmUnfollowRow;
-    if (!row?.id || !viewerId) return;
+    if (!row?.id) return;
+    const isRemoveFollower = row?._action === 'removeFollower';
+    if (isRemoveFollower) {
+      if (!profileId) return;
+    } else if (!viewerId) {
+      return;
+    }
     setConfirmUnfollowRow(null);
     setActioningId(row.id);
     try {
-      await unfollowUser(viewerId, row.id);
-      await loadRows();
-      await loadCounts();
+      if (isRemoveFollower) {
+        await unfollowUser(row.id, profileId);
+      } else {
+        await unfollowUser(viewerId, row.id);
+      }
+      await refreshRowsAndCounts();
     } catch (e) {
-      Alert.alert('', e?.message || 'לא הצלחנו לבטל מעקב');
+      Alert.alert(
+        '',
+        e?.message ||
+          (isRemoveFollower
+            ? 'לא הצלחנו להסיר את המעקב'
+            : 'לא הצלחנו לבטל מעקב'),
+      );
     } finally {
       setActioningId(null);
     }
-  }, [confirmUnfollowRow, viewerId, loadRows, loadCounts]);
+  }, [confirmUnfollowRow, viewerId, profileId, refreshRowsAndCounts]);
+
+  /**
+   * Full-row gold + gold "עוקב" only for reciprocal follow, own hub, no pending.
+   * Followers: must actually follow the row user back (API flag can be wrong; never gold otherwise).
+   * Following: you already follow; is_mutual means they also follow you.
+   */
+  const isMutualGoldRow = row => {
+    if (!isOwnProfile) return false;
+    if (activeTab !== TAB_FOLLOWERS && activeTab !== TAB_FOLLOWING) return false;
+    if (row?.is_mutual_follow !== true) return false;
+    if (!row?.is_following_by_viewer) return false;
+    if (row?.has_pending_request_by_viewer) return false;
+    if (row?.outgoing_follow_pending) return false;
+    return true;
+  };
 
   const renderActionButton = row => {
     const busy = actioningId === row?.id;
     if (activeTab === TAB_REQUESTS && isOwnProfile) {
       return (
+        <View style={styles.rowActionCluster}>
+          <TouchableOpacity
+            onPress={() => handleRejectRequest(row)}
+            disabled={busy}
+            style={[styles.rowActionBtn, styles.rowActionBtnGhost]}
+            activeOpacity={0.8}>
+            <Text style={styles.rowActionText}>{busy ? '...' : 'דחה'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleAcceptRequest(row)}
+            disabled={busy}
+            style={[styles.rowActionBtn, styles.rowActionBtnFollowing]}
+            activeOpacity={0.8}>
+            <Text style={styles.rowActionText}>{busy ? '...' : 'אשר'}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (row?.is_self) {
+      return <View style={styles.rowActionPlaceholder} />;
+    }
+
+    /** Own hub only — "עוקבים": only X to remove this user from your followers. */
+    if (isOwnProfile && activeTab === TAB_FOLLOWERS) {
+      return (
         <TouchableOpacity
-          onPress={() => handleAcceptRequest(row)}
-          style={styles.rowActionBtn}
-          disabled={busy}>
-          <Text style={styles.rowActionText}>{busy ? '...' : 'אשר'}</Text>
+          onPress={() => handleRemoveFollower(row)}
+          disabled={busy}
+          style={styles.rowActionXBtn}
+          activeOpacity={0.8}
+          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+          <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
         </TouchableOpacity>
       );
     }
 
-    if (row?.is_self) return <View style={styles.rowActionPlaceholder} />;
+    /**
+     * Own hub only — "עוקב": if request still pending, ממתין לאישור + X to cancel;
+     * if they accepted and you follow, only X (unfollow). Otherwise עקוב.
+     */
+    if (isOwnProfile && activeTab === TAB_FOLLOWING) {
+      if (row?.has_pending_request_by_viewer) {
+        return (
+          <View style={styles.rowActionClusterEnd}>
+            <View
+              style={[
+                styles.rowActionBtn,
+                styles.rowActionBtnDisabled,
+                styles.rowActionBtnPendingWide,
+              ]}>
+              <Text style={styles.rowActionTextPending} numberOfLines={1}>
+                ממתין לאישור
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleCancelOutgoingRequest(row)}
+              disabled={busy}
+              style={styles.rowActionXBtn}
+              activeOpacity={0.8}
+              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+              <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
+            </TouchableOpacity>
+          </View>
+        );
+      }
+      if (row?.is_following_by_viewer) {
+        return (
+          <TouchableOpacity
+            onPress={() => handleUnfollow(row)}
+            disabled={busy}
+            style={styles.rowActionXBtn}
+            activeOpacity={0.8}
+            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+            <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
+          </TouchableOpacity>
+        );
+      }
+      return (
+        <GoldPillButton
+          onPress={() => handleFollow(row)}
+          disabled={busy}
+          minWidth={64}
+          label={busy ? '...' : 'עקוב'}
+          textStyle={styles.goldCtaText}
+        />
+      );
+    }
+
     if (row?.is_following_by_viewer) {
+      if (isMutualGoldRow(row)) {
+        return (
+          <GoldPillButton
+            onPress={() => handleUnfollow(row)}
+            disabled={busy}
+            minWidth={64}
+            label={busy ? '...' : 'עוקב'}
+            textStyle={styles.goldCtaText}
+          />
+        );
+      }
       return (
         <TouchableOpacity
           onPress={() => handleUnfollow(row)}
@@ -202,23 +409,33 @@ const FollowHubScreen = ({
     }
     if (row?.has_pending_request_by_viewer) {
       return (
-        <View style={[styles.rowActionBtn, styles.rowActionBtnDisabled]}>
-          <Text style={styles.rowActionText}>נשלח</Text>
+        <View
+          style={[
+            styles.rowActionBtn,
+            styles.rowActionBtnDisabled,
+            styles.rowActionBtnPendingWide,
+          ]}>
+          <Text style={styles.rowActionTextPending} numberOfLines={1}>
+            ממתין לאישור
+          </Text>
         </View>
       );
     }
     return (
-      <TouchableOpacity onPress={() => handleFollow(row)} style={styles.rowActionBtn} disabled={busy}>
-        <Text style={styles.rowActionText}>{busy ? '...' : 'עקוב'}</Text>
-      </TouchableOpacity>
+      <GoldPillButton
+        onPress={() => handleFollow(row)}
+        disabled={busy}
+        minWidth={64}
+        label={busy ? '...' : 'עקוב'}
+        textStyle={styles.goldCtaText}
+      />
     );
   };
 
   const formatViewerAvg = value => {
     const n = Number(value);
     if (!Number.isFinite(n)) return '';
-    if (Math.abs(n - Math.round(n)) < 0.05) return String(Math.round(n));
-    return n.toFixed(1);
+    return String(Math.round(n));
   };
 
   const labelWithCount = tabId => {
@@ -226,6 +443,12 @@ const FollowHubScreen = ({
     if (tabId === TAB_FOLLOWERS) return `עוקבים ${counts.followers}`;
     return `עוקב ${counts.following}`;
   };
+
+  /** On someone else's hub, don't list people where your follow is still pending (ממתין לאישור). */
+  const displayRows = useMemo(() => {
+    if (isOwnProfile) return rows;
+    return (rows || []).filter(r => !r?.has_pending_request_by_viewer);
+  }, [rows, isOwnProfile]);
 
   return (
     <View style={styles.root}>
@@ -276,42 +499,74 @@ const FollowHubScreen = ({
           <View style={styles.loaderWrap}>
             <ActivityIndicator color="#FFC40A" />
           </View>
-        ) : rows.length === 0 ? (
+        ) : displayRows.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyText}>אין נתונים להצגה</Text>
           </View>
         ) : (
-          rows.map(row => (
-            <View key={`${activeTab}-${row.id}`} style={styles.row}>
+          displayRows.map(row => (
+            <View
+              key={`${activeTab}-${row.id}`}
+              style={[
+                styles.row,
+                isMutualGoldRow(row) ? styles.rowMutual : null,
+              ]}>
               {renderActionButton(row)}
-              <View style={styles.rowInfo}>
-                <Text style={styles.rowName}>{row.name}</Text>
-                <View style={styles.rowMetaRow}>
-                  {row?.viewer_rating_avg != null ? (
-                    <View style={styles.rowRatingWrap}>
-                      <Text style={styles.rowRatingValue}>
-                        {formatViewerAvg(row.viewer_rating_avg)}
-                      </Text>
-                      <MaterialCommunityIcons
-                        name="star"
-                        size={16}
-                        color="#FFC40A"
-                        style={styles.rowRatingStar}
-                      />
-                    </View>
-                  ) : null}
-                  <Text style={styles.rowSub}>{row.subtitle}</Text>
-                </View>
-              </View>
-              <View style={styles.avatarRing}>
-                {row.image_url ? (
-                  <Image source={{uri: row.image_url}} style={styles.avatar} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <MaterialCommunityIcons name="account" size={18} color="rgba(255,255,255,0.6)" />
+              <TouchableOpacity
+                style={styles.rowBodyPress}
+                activeOpacity={0.85}
+                disabled={!onOpenUserProfile || row.is_self}
+                onPress={() => onOpenUserProfile && onOpenUserProfile(row)}>
+                <View style={styles.rowInfo}>
+                  <Text
+                    style={[
+                      styles.rowName,
+                      isMutualGoldRow(row) ? styles.rowNameMutual : null,
+                    ]}>
+                    {row.name}
+                  </Text>
+                  <View style={styles.rowMetaRow}>
+                    {row?.viewer_rating_avg != null ? (
+                      <View style={styles.rowRatingWrap}>
+                        <Text style={styles.rowRatingValue}>
+                          {formatViewerAvg(row.viewer_rating_avg)}
+                        </Text>
+                        {Math.round(Number(row.viewer_rating_avg)) >= 5 ? (
+                          <View
+                            style={styles.rowRatingFiveStarWrap}
+                            pointerEvents="none">
+                            <Image
+                              source={RATING_STAR_FIVE}
+                              style={styles.rowRatingFiveStarImage}
+                              resizeMode="contain"
+                            />
+                          </View>
+                        ) : (
+                          <Image
+                            source={RATING_STAR_ONE_TO_FOUR}
+                            style={styles.rowRatingStarIcon}
+                            resizeMode="contain"
+                          />
+                        )}
+                      </View>
+                    ) : null}
+                    <Text style={styles.rowSub}>{row.subtitle}</Text>
                   </View>
-                )}
-              </View>
+                </View>
+                <View
+                  style={[
+                    styles.avatarRing,
+                    isMutualGoldRow(row) ? styles.avatarRingMutual : null,
+                  ]}>
+                  {row.image_url ? (
+                    <Image source={{uri: row.image_url}} style={styles.avatar} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                      <MaterialCommunityIcons name="account" size={18} color="rgba(255,255,255,0.6)" />
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -324,9 +579,13 @@ const FollowHubScreen = ({
         onRequestClose={() => setConfirmUnfollowRow(null)}>
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>ביטול מעקב</Text>
+            <Text style={styles.confirmTitle}>
+              {confirmUnfollowRow?._action === 'removeFollower' ? 'הסרת עוקב' : 'ביטול מעקב'}
+            </Text>
             <Text style={styles.confirmText}>
-              {`להפסיק לעקוב אחרי ${confirmUnfollowRow?.name || 'המשתמש'}?`}
+              {confirmUnfollowRow?._action === 'removeFollower'
+                ? `להסיר את ${confirmUnfollowRow?.name || 'המשתמש'} מרשימת העוקבים?`
+                : `להפסיק לעקוב אחרי ${confirmUnfollowRow?.name || 'המשתמש'}?`}
             </Text>
             <View style={styles.confirmActions}>
               <TouchableOpacity
@@ -339,7 +598,9 @@ const FollowHubScreen = ({
                 style={[styles.confirmBtn, styles.confirmBtnDanger]}
                 onPress={confirmUnfollow}
                 activeOpacity={0.8}>
-                <Text style={styles.confirmBtnText}>הפסק מעקב</Text>
+                <Text style={styles.confirmBtnText}>
+                  {confirmUnfollowRow?._action === 'removeFollower' ? 'הסר' : 'הפסק מעקב'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -452,20 +713,56 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#2b2a39',
   },
+  rowBodyPress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 56,
+  },
+  rowMutual: {
+    backgroundColor: 'rgba(254, 231, 135, 0.06)',
+  },
   rowActionBtn: {
     backgroundColor: '#4d4966',
-    borderRadius: 846,
+    borderRadius: 1000,
     minWidth: 58,
     height: 30,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  goldCtaText: {
+    color: GOLD_TEXT,
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
+    fontFamily: 'Rubik-Medium',
+  },
   rowActionBtnDisabled: {
     opacity: 0.7,
   },
+  rowActionBtnPendingWide: {
+    minWidth: 118,
+    maxWidth: 140,
+    paddingHorizontal: 8,
+    minHeight: 30,
+  },
+  rowActionTextPending: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
   rowActionBtnFollowing: {
     opacity: 1,
+  },
+  rowActionBtnGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   rowActionText: {
     color: '#fff',
@@ -477,6 +774,39 @@ const styles = StyleSheet.create({
   rowActionPlaceholder: {
     minWidth: 58,
     height: 30,
+  },
+  rowActionCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 280,
+  },
+  /** Main pill first, X to the right (e.g. cancel request next to remove). */
+  rowActionClusterEnd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 220,
+  },
+  rowActionXBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowActionFollowBackBtn: {
+    minWidth: 100,
+    maxWidth: 152,
+    paddingHorizontal: 8,
+  },
+  rowActionTextFollowBack: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
   },
   rowInfo: {
     flex: 1,
@@ -491,6 +821,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
     textAlign: 'right',
+  },
+  rowNameMutual: {
+    color: '#FEE787',
   },
   rowSub: {
     color: 'rgba(255,255,255,0.8)',
@@ -517,8 +850,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
   },
-  rowRatingStar: {
-    marginTop: 1,
+  rowRatingStarIcon: {
+    width: 16,
+    height: 16,
+  },
+  rowRatingFiveStarWrap: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  rowRatingFiveStarImage: {
+    width: 40,
+    height: 40,
   },
   avatarRing: {
     width: 52,
@@ -528,6 +873,15 @@ const styles = StyleSheet.create({
     borderColor: '#FFC40A',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarRingMutual: {
+    borderWidth: 3,
+    borderColor: '#FEE787',
+    shadowColor: '#FEE787',
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    elevation: 4,
   },
   avatar: {
     width: 46,

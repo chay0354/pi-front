@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -20,24 +21,26 @@ const GOLD = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 const MENU_ICON = require('../assets/buttom-bar/rooms_number.png');
+const FILTER_CHECK = require('../assets/filter-check.png');
 
 const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
+
   const [area, setArea] = useState(initialFilter?.area ?? 60);
   const [rooms, setRooms] = useState(initialFilter?.rooms ?? 2);
   const [floor, setFloor] = useState(initialFilter?.floor ?? 2);
   const [parkingEnabled, setParkingEnabled] = useState(
-    initialFilter == null ? true : initialFilter.parking != null,
+    initialFilter != null && initialFilter.parking != null,
   );
   const [parkingValue, setParkingValue] = useState(initialFilter?.parking ?? 1);
   const [balconyEnabled, setBalconyEnabled] = useState(
-    initialFilter == null ? true : initialFilter.balcony != null,
+    initialFilter != null && initialFilter.balcony != null,
   );
   const [balconyValue, setBalconyValue] = useState(initialFilter?.balcony ?? 1);
-  const [elevator, setElevator] = useState(initialFilter?.elevator ?? true);
+  const [elevator, setElevator] = useState(initialFilter?.elevator ?? false);
   const [mamad, setMamad] = useState(initialFilter?.mamad ?? false);
   const [freeParking, setFreeParking] = useState(initialFilter?.freeParking ?? false);
   const bottomInset = Math.max(insets.bottom, 8);
@@ -51,9 +54,9 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           floor,
           parking: parkingEnabled ? parkingValue : null,
           balcony: null,
-          elevator,
+          elevator: elevator || null,
           mamad: null,
-          freeParking,
+          freeParking: freeParking || null,
         });
       } else {
         onSave({
@@ -62,8 +65,8 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           floor,
           parking: parkingEnabled ? parkingValue : null,
           balcony: balconyEnabled ? balconyValue : null,
-          elevator,
-          mamad,
+          elevator: elevator || null,
+          mamad: mamad || null,
           freeParking: null,
         });
       }
@@ -72,18 +75,8 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   };
 
   const handleClear = () => {
-    setRooms(2);
-    setFloor(2);
-    setParkingEnabled(false);
-    setParkingValue(1);
-    setElevator(false);
-    setFreeParking(false);
-    if (!isBnb) {
-      setArea(60);
-      setBalconyEnabled(false);
-      setBalconyValue(1);
-      setMamad(false);
-    }
+    if (onSave) onSave(null);
+    onClose?.();
   };
 
   const StepperRow = ({
@@ -150,18 +143,16 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
     <TouchableOpacity style={styles.amenityOption} onPress={onToggle} activeOpacity={0.8}>
       <Text style={styles.amenityText}>{label}</Text>
       <View style={styles.checkboxWrap}>
-        <View
-          style={[
-            styles.checkboxCircle,
-            checked && styles.checkboxCircleChecked,
-          ]}>
-          {checked ? (
-            <View style={styles.checkMarkWrap}>
-              <View style={styles.checkMarkShort} />
-              <View style={styles.checkMarkLong} />
-            </View>
-          ) : null}
-        </View>
+        {checked ? (
+          <Image
+            source={FILTER_CHECK}
+            style={styles.filterCheckImage}
+            resizeMode="contain"
+            accessibilityLabel="מסומן"
+          />
+        ) : (
+          <View style={styles.checkboxCircle} />
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -219,7 +210,7 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           styles.scrollContent,
           {
             paddingTop: compact ? 16 : 24,
-            paddingBottom: bottomInset + (compact ? 20 : 52),
+            paddingBottom: compact ? 16 : 24,
           },
         ]}
         scrollEnabled
@@ -234,9 +225,9 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
             label="שטח הנכס"
             value={area}
             suffix='מ"ר'
-            onMinus={() => setArea(Math.max(10, area - 10))}
-            onPlus={() => setArea(area + 10)}
-            onCommitValue={next => setArea(Math.max(10, next))}
+            onMinus={() => setArea(v => Math.max(1, v - 1))}
+            onPlus={() => setArea(v => v + 1)}
+            onCommitValue={next => setArea(Math.max(1, next))}
           />
         )}
         <StepperRow
@@ -260,7 +251,10 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           onToggle={() => setParkingEnabled(!parkingEnabled)}
         />
         {parkingEnabled && (
-          <OptionPills selected={parkingValue} onSelect={setParkingValue} />
+          <OptionPills
+            selected={parkingValue}
+            onSelect={setParkingValue}
+          />
         )}
         <View style={styles.divider} />
 
@@ -301,27 +295,19 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
             <View style={styles.divider} />
           </>
         )}
-
-        <View style={[styles.footer, compact && styles.footerCompact]}>
-          <TouchableOpacity
-            style={styles.saveBtnWrap}
-            onPress={handleSave}
-            activeOpacity={0.9}>
-            <LinearGradient
-              colors={GOLD}
-              locations={GOLD_LOCATIONS}
-              start={{x: 0.5, y: 0}}
-              end={{x: 0.5, y: 1}}
-              style={styles.saveBtnGradient}>
-              <Text style={styles.saveBtnText}>שמור</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
+      <View
+        style={[
+          styles.footer,
+          compact && styles.footerCompact,
+          {paddingBottom: bottomInset + 8},
+        ]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
+        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+          <Text style={styles.clearText}>נקה</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -354,7 +340,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#464646',
   },
   scroll: {flex: 1},
-  scrollContent: {paddingHorizontal: 24, paddingTop: 24, flexGrow: 1},
+  scrollContent: {paddingHorizontal: 24, paddingTop: 24},
   header: {alignItems: 'center', marginBottom: 24},
   headerCompact: {marginBottom: 16},
   headerIcon: {width: 24, height: 24},
@@ -453,33 +439,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxCircleChecked: {
-    borderColor: '#FFC140',
-  },
-  checkMarkWrap: {
-    width: 11,
-    height: 8,
-    position: 'relative',
-  },
-  checkMarkShort: {
-    position: 'absolute',
-    left: 1,
-    bottom: 1,
-    width: 4,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#FFC140',
-    transform: [{rotate: '42deg'}],
-  },
-  checkMarkLong: {
-    position: 'absolute',
-    left: 3,
-    bottom: 1,
-    width: 8,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#FFC140',
-    transform: [{rotate: '-45deg'}],
+  /** Full control: golden ring + check from `filter-check.png` (checked state only). */
+  filterCheckImage: {
+    width: 22,
+    height: 22,
   },
   amenityQuantitySelector: {
     flexDirection: 'row',
@@ -542,22 +505,16 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
   },
-  footer: {marginTop: 'auto', alignItems: 'center'},
-  footerCompact: {marginTop: 10},
-  saveBtnWrap: {marginBottom: 12, width: '100%'},
-  saveBtnGradient: {
-    width: '100%',
-    height: 44,
-    borderRadius: 999,
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
     alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
-  saveBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.2,
-  },
+  footerCompact: {paddingTop: 8},
+  saveBtnWrap: {marginBottom: 12, width: '100%'},
   clearWrap: {alignItems: 'center'},
   clearText: {
     color: '#FFFFFF',

@@ -9,23 +9,35 @@ import {
   Image,
   ActivityIndicator,
   SafeAreaView,
+  Platform,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
 import {ProfileAvatar} from '../components';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const imgBackArrow = 'https://www.figma.com/api/mcp/asset/7f09ed22-4005-48ed-88bc-b516005535ca';
 const imgSearchOutline = 'https://www.figma.com/api/mcp/asset/64d5a467-13ce-4fb9-ac0f-e97f15e3998f';
 const imgSearchFill = 'https://www.figma.com/api/mcp/asset/ef9a7923-13e3-4c40-87a5-ed642b1040cd';
 const imgViewToggleLeftIcon = require('../assets/swiperleft.png');
 const imgViewToggleRightIcon = require('../assets/swipereight.png');
-const imgRatingFilter = 'https://www.figma.com/api/mcp/asset/37507831-2364-49c7-a50d-8425ce3fc533';
+
+/** Neutral sort (לא ממוין לפי דירוג): שני חיצים + דירוג */
+const imgSortTwoArrows = require('../assets/profile/2-arows.png');
+/** גבוה→נמוך (desc) / נמוך→גבוה (asc) */
+const imgSortArrowUp = require('../assets/profile/arow-up.png');
+const imgSortArrowDown = require('../assets/profile/arow-down.png');
 const imgStarBig = require('../assets/pros/star-big.png');
 const imgLocationPro = require('../assets/pros/location-pro.png');
 const imgProfileRing = 'https://www.figma.com/api/mcp/asset/9daf687f-169f-43ec-baf8-8539b1ebca51';
-const imgSettingsBack = 'https://www.figma.com/api/mcp/asset/2ab2b8e8-8841-48b5-8a85-1f42910663ce';
 const imgProMessagesButton = require('../assets/pros/pro-messges.png');
+/** Same gold bar asset pattern as filter sheets (`FilterSaveButton`); replace PNG if artwork should read חפש not שמור */
+const SEARCH_BUTTON_PNG = require('../assets/buy-rent/search.png');
+
+/** Reserve scroll padding so chips aren’t hidden under the pinned footer (~נקה + חפש strip). */
+const SETTINGS_FOOTER_SCROLL_PADDING = 162;
 
 const collectTags = professional =>
   [
@@ -39,8 +51,7 @@ const collectTags = professional =>
 const formatRating = value => {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return '5';
-  const rounded = Math.round(num * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return String(Math.round(num));
 };
 const getRatingValue = value => {
   const num = Number(value);
@@ -176,6 +187,10 @@ const ProfessionalListCard = ({professional, onPress}) => {
 };
 
 const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessageProfessional}) => {
+  const insets = useSafeAreaInsets();
+  const settingsScrollBottomPad =
+    SETTINGS_FOOTER_SCROLL_PADDING + Math.max(0, insets.bottom);
+
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [professionals, setProfessionals] = useState([]);
@@ -273,9 +288,6 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
       prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none',
     );
   };
-  const ratingSortIndicator =
-    ratingSortMode === 'none' ? '↕' : ratingSortMode === 'desc' ? '↑' : '↓';
-
   const typeOptions = useMemo(() => {
     const preferred = ['תיווך', 'עו״ד', 'עיצוב פנים', 'יועץ משכנתאות', 'שמאות', 'אדריכלות'];
     const seen = new Set();
@@ -392,11 +404,28 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
 
         <View style={styles.controlsRow}>
           <TouchableOpacity
-            style={styles.sortPill}
+            style={[styles.sortPill, styles.sortPillImageOnly]}
             onPress={toggleRatingSort}
-            activeOpacity={0.85}>
-            <Image source={{uri: imgRatingFilter}} style={styles.sortIcon} resizeMode="contain" />
-            <Text style={styles.sortText}>דירוג</Text>
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={
+              ratingSortMode === 'none'
+                ? 'מיין לפי דירוג'
+                : ratingSortMode === 'desc'
+                  ? 'ממוין לפי דירוג גבוה לנמוך'
+                  : 'ממוין לפי דירוג נמוך לגבוה'
+            }>
+            <Image
+              source={
+                ratingSortMode === 'none'
+                  ? imgSortTwoArrows
+                  : ratingSortMode === 'desc'
+                    ? imgSortArrowUp
+                    : imgSortArrowDown
+              }
+              style={styles.sortPillFullImage}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
           <View style={styles.viewToggle}>
             <View style={styles.viewToggleRightInactive}>
@@ -458,116 +487,117 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
 
       {showSearchSettings ? (
         <View style={styles.settingsOverlay}>
-          <View style={styles.settingsTop}>
-            <View style={styles.settingsTitleRow}>
-              <TouchableOpacity
-                onPress={() => setShowSearchSettings(false)}
-                activeOpacity={0.85}
-                style={styles.settingsBackBtn}>
-                <Image source={{uri: imgSettingsBack}} style={styles.settingsBackIcon} resizeMode="contain" />
-              </TouchableOpacity>
-              <Text style={styles.settingsTitle}>הגדרות חיפוש</Text>
-              <View style={styles.titleRightSpacer} />
+          <View style={styles.settingsMain}>
+            <View style={styles.settingsTop}>
+              <View style={styles.settingsTitleRow}>
+                <TouchableOpacity
+                  onPress={() => setShowSearchSettings(false)}
+                  activeOpacity={0.85}
+                  style={styles.settingsBackBtn}
+                  hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                  accessibilityRole="button"
+                  accessibilityLabel="חזרה">
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={28}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
+                <Text style={styles.settingsTitle}>הגדרות חיפוש</Text>
+                <View style={styles.titleRightSpacer} />
+              </View>
             </View>
+
+            <ScrollView
+              style={styles.settingsScrollFlex}
+              contentContainerStyle={[
+                styles.settingsContent,
+                {paddingBottom: settingsScrollBottomPad},
+              ]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled">
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>מיקום</Text>
+                <View style={styles.settingsInputWrap}>
+                  <TextInput
+                    value={draftLocation}
+                    onChangeText={setDraftLocation}
+                    placeholder=""
+                    placeholderTextColor="#FFFFFF"
+                    style={styles.settingsInput}
+                    textAlign="right"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>סוג</Text>
+                <View style={styles.settingsChipWrap}>
+                  {typeOptions.map(tag => {
+                    const active = draftTypeFilters.includes(tag);
+                    return (
+                      <TouchableOpacity
+                        key={`type-${tag}`}
+                        style={[styles.settingsChip, active && styles.settingsChipActive]}
+                        onPress={() => toggleDraftFilter(tag, 'type')}
+                        activeOpacity={0.85}>
+                        <Text
+                          style={[
+                            styles.settingsChipText,
+                            active && styles.settingsChipTextActive,
+                          ]}>
+                          {tag}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>התמחות</Text>
+                <View style={styles.settingsChipWrap}>
+                  {expertiseOptions.map(tag => {
+                    const active = draftExpertiseFilters.includes(tag);
+                    return (
+                      <TouchableOpacity
+                        key={`expertise-${tag}`}
+                        style={[styles.settingsChip, active && styles.settingsChipActive]}
+                        onPress={() => toggleDraftFilter(tag, 'expertise')}
+                        activeOpacity={0.85}>
+                        <Text
+                          style={[
+                            styles.settingsChipText,
+                            active && styles.settingsChipTextActive,
+                          ]}>
+                          {tag}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
           </View>
 
-          <ScrollView
-            style={styles.settingsScroll}
-            contentContainerStyle={styles.settingsContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled">
-            <View style={styles.settingsSection}>
-              <Text style={styles.settingsSectionTitle}>מיקום</Text>
-              <View style={styles.settingsInputWrap}>
-                <TextInput
-                  value={draftLocation}
-                  onChangeText={setDraftLocation}
-                  placeholder=""
-                  placeholderTextColor="#FFFFFF"
-                  style={styles.settingsInput}
-                  textAlign="right"
-                />
-              </View>
-            </View>
-
-            <View style={styles.settingsSection}>
-              <Text style={styles.settingsSectionTitle}>סוג</Text>
-              <View style={styles.settingsChipWrap}>
-                {typeOptions.map(tag => {
-                  const active = draftTypeFilters.includes(tag);
-                  return (
-                    <TouchableOpacity
-                      key={`type-${tag}`}
-                      style={[styles.settingsChip, active && styles.settingsChipActive]}
-                      onPress={() => toggleDraftFilter(tag, 'type')}
-                      activeOpacity={0.85}>
-                      <Text
-                        style={[
-                          styles.settingsChipText,
-                          active && styles.settingsChipTextActive,
-                        ]}>
-                        {tag}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={styles.settingsSection}>
-              <Text style={styles.settingsSectionTitle}>התמחות</Text>
-              <View style={styles.settingsChipWrap}>
-                {expertiseOptions.map(tag => {
-                  const active = draftExpertiseFilters.includes(tag);
-                  return (
-                    <TouchableOpacity
-                      key={`expertise-${tag}`}
-                      style={[styles.settingsChip, active && styles.settingsChipActive]}
-                      onPress={() => toggleDraftFilter(tag, 'expertise')}
-                      activeOpacity={0.85}>
-                      <Text
-                        style={[
-                          styles.settingsChipText,
-                          active && styles.settingsChipTextActive,
-                        ]}>
-                        {tag}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </ScrollView>
-
-          <View style={styles.settingsBottom}>
+          <View
+            style={[
+              styles.settingsBottom,
+              {paddingBottom: Math.max(8, insets.bottom + 4)},
+            ]}>
             <TouchableOpacity style={styles.clearBtn} onPress={clearSearchSettings} activeOpacity={0.9}>
               <Text style={styles.clearBtnText}>נקה תוצאות</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.searchBtnWrap}
+            <FilterSaveButton
+              source={SEARCH_BUTTON_PNG}
+              accessibilityLabel="חפש"
               onPress={applySearchSettings}
-              activeOpacity={0.9}>
-              <LinearGradient
-                colors={['#FEE787', '#BD9947', '#9C6522']}
-                locations={[0.0456, 0.5076, 0.8831]}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 1}}
-                style={styles.searchBtn}>
-                <Text style={styles.searchBtnText}>חפש</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <View style={styles.homeIndicator} />
+              style={styles.searchBtnWrap}
+            />
           </View>
         </View>
       ) : null}
 
-      <LinearGradient
-        colors={['rgba(39,38,47,0)', 'rgba(39,38,47,0.5)']}
-        start={{x: 0.5, y: 0}}
-        end={{x: 0.5, y: 1}}
-        style={styles.homeIndicatorArea}>
-        <View style={styles.homeIndicator} />
-      </LinearGradient>
     </SafeAreaView>
   );
 };
@@ -579,6 +609,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 414,
     alignSelf: 'center',
+    ...Platform.select({
+      web: {
+        minHeight: '100vh',
+      },
+      default: {},
+    }),
   },
   topNav: {
     backgroundColor: '#1E1D27',
@@ -656,7 +692,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'right',
     writingDirection: 'rtl',
-    direction: 'rtl',
   },
   controlsRow: {
     width: '100%',
@@ -665,31 +700,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sortPill: {
-    width: 56,
-    paddingHorizontal: 0,
-    paddingVertical: 5,
+    minWidth: 56,
     borderRadius: 6,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
   },
-  sortIcon: {
-    width: 8,
-    height: 9,
+  /** Full-bleed PNG (2 arrows / up / down + דירוג) */
+  sortPillImageOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 2,
+    minWidth: 56,
+    minHeight: 32,
   },
-  sortText: {
-    color: '#D2D0DC',
-    fontSize: 16,
-    lineHeight: 22,
-    fontFamily: 'Rubik-Regular',
-  },
-  sortDirectionText: {
-    color: '#D2D0DC',
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: 'Rubik-Regular',
-    marginTop: 1,
+  sortPillFullImage: {
+    width: 56,
+    height: 28,
   },
   viewToggle: {
     flexDirection: 'row',
@@ -719,7 +744,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 70,
     paddingTop: 10,
-    gap: 44,
+    gap: 16,
   },
   cardShell: {
     borderRadius: 16,
@@ -1005,30 +1030,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
   },
-  homeIndicatorArea: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 10,
-    paddingTop: 32,
-    paddingBottom: 8,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  homeIndicator: {
-    width: 138,
-    height: 5,
-    borderRadius: 3.123,
-    backgroundColor: '#FFFFFF',
-  },
   settingsOverlay: {
-    position: 'absolute',
+    /** Web: `fixed` + `100vh` pins to the viewport; `absolute` was tied to a short parent so the footer sat off-screen until page scroll. */
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex: 500,
+    width: '100%',
+    zIndex: 5000,
+    backgroundColor: '#1F1E27',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    ...Platform.select({
+      web: {
+        height: '100vh',
+        maxHeight: '100vh',
+      },
+      default: {},
+    }),
+  },
+  settingsMain: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: '#1F1E27',
   },
   settingsTop: {
@@ -1037,20 +1061,16 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   settingsTitleRow: {
-    height: 40,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   settingsBackBtn: {
-    width: 24,
-    height: 24,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  settingsBackIcon: {
-    width: 5.257,
-    height: 10.513,
   },
   settingsTitle: {
     flex: 1,
@@ -1059,16 +1079,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
   },
-  settingsScroll: {
+  settingsScrollFlex: {
     flex: 1,
+    minHeight: 0,
   },
   settingsContent: {
     paddingHorizontal: 24,
-    gap: 28,
-    paddingBottom: 16,
+    gap: 16,
+    flexGrow: 0,
   },
   settingsSection: {
-    gap: 24,
+    gap: 12,
     alignItems: 'flex-end',
   },
   settingsSectionTitle: {
@@ -1123,16 +1144,20 @@ const styles = StyleSheet.create({
     color: '#FFC40A',
   },
   settingsBottom: {
-    paddingTop: 24,
-    paddingBottom: 9,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    paddingTop: 8,
     paddingHorizontal: 24,
-    gap: 22,
+    gap: 7,
     alignItems: 'center',
-    backgroundColor: '#1E1D27',
+    backgroundColor: '#1F1E27',
   },
   clearBtn: {
     width: '100%',
-    height: 52,
+    height: 44,
     borderRadius: 1000,
     backgroundColor: '#4D4966',
     alignItems: 'center',
@@ -1140,25 +1165,12 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 18,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Medium',
-  },
-  searchBtn: {
-    width: '100%',
-    height: 52,
-    borderRadius: 1000,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   searchBtnWrap: {
     width: '100%',
-  },
-  searchBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    letterSpacing: 0.2,
-    fontFamily: 'Rubik-Medium',
   },
 });
 

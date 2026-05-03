@@ -13,7 +13,7 @@ import {TERMS_OF_USE_HEBREW} from './termsOfUseContent';
  */
 const TermsOfUseScreen = ({onClose}) => {
   return (
-    <View style={[styles.root, {direction: 'rtl'}]}>
+    <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

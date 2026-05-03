@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import FilterSaveButton from '../components/FilterSaveButton';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 
 const BG = '#2B2A39';
@@ -20,7 +21,6 @@ const DIVIDER = '#373548';
 const INPUT_BORDER = '#8C85B3';
 const TEXT_SECONDARY = '#D2D0DC';
 const TEXT_CLUE = 'rgba(255,255,255,0.35)';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
 
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
@@ -34,7 +34,12 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   const compact = screenHeight < 760;
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
   const isPartners = selectedCategory === 3 || selectedCategory === '3';
-  const [purpose, setPurpose] = useState(initialFilter?.purpose ?? 'rent'); // 'rent' | 'sale'
+  // null = do not filter by rent/sale (מחיר/עיר style "no filter" until user picks a purpose)
+  const [purpose, setPurpose] = useState(
+    initialFilter != null && (initialFilter.purpose === 'rent' || initialFilter.purpose === 'sale')
+      ? initialFilter.purpose
+      : null,
+  ); // null | 'rent' | 'sale'
   const [city, setCity] = useState(initialFilter?.city ?? '');
   const [street, setStreet] = useState(initialFilter?.street ?? '');
   const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
@@ -64,15 +69,8 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   };
 
   const handleClear = () => {
-    if (!hidePurpose) {
-      setPurpose('rent');
-    }
-    setCity('');
-    setStreet('');
-    setDistanceKm(20);
-    if (!isBnb) {
-      setImmediateEntry(false);
-    }
+    if (onSave) onSave(null);
+    if (onClose) onClose();
   };
   const bottomInset = Math.max(insets.bottom, 8);
   const CheckCircle = ({checked}) => <FigmaCheckbox checked={checked} />;
@@ -94,7 +92,7 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
           styles.scrollContent,
           {
             paddingTop: compact ? 16 : 24,
-            paddingBottom: bottomInset + (compact ? 20 : 52),
+            paddingBottom: compact ? 16 : 24,
           },
         ]}
         scrollEnabled
@@ -222,23 +220,19 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
             </View>
           </TouchableOpacity>
         )}
-
-        <View style={[styles.footer, compact && styles.footerCompact]}>
-          <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-            <LinearGradient
-              colors={GOLD_GRADIENT}
-              start={{x: 0.5, y: 0}}
-              end={{x: 0.5, y: 1}}
-              style={styles.saveBtnGradient}>
-              <Text style={styles.saveBtnText}>שמור</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
+      <View
+        style={[
+          styles.footer,
+          compact && styles.footerCompact,
+          {paddingBottom: bottomInset + 8},
+        ]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
+        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+          <Text style={styles.clearText}>נקה</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -276,7 +270,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 24,
-    flexGrow: 1,
   },
   header: {
     alignItems: 'center',
@@ -420,28 +413,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   footer: {
-    marginTop: 'auto',
+    paddingHorizontal: 24,
+    paddingTop: 12,
     alignItems: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
   footerCompact: {
-    marginTop: 12,
+    paddingTop: 8,
   },
   saveBtnWrap: {
     marginBottom: 12,
     width: '100%',
-  },
-  saveBtnGradient: {
-    width: '100%',
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.2,
   },
   clearWrap: {
     alignItems: 'center',

@@ -79,6 +79,24 @@ function bucketGroupListByFirstLetter(rows) {
   return letters.map((letter) => ({letter, rows: map.get(letter)}));
 }
 
+/** Resolves subscription type from user + nested subscription (API shapes vary). */
+function getUserSubscriptionTypeLower(user) {
+  if (!user || typeof user !== 'object') return '';
+  const subObj =
+    user.subscription && typeof user.subscription === 'object'
+      ? user.subscription
+      : null;
+  const raw =
+    user.subscription_type ??
+    user.subscriptionType ??
+    user.type ??
+    subObj?.subscription_type ??
+    subObj?.subscriptionType ??
+    subObj?.type ??
+    '';
+  return String(raw).trim().toLowerCase();
+}
+
 const GROUP_PICK_INITIAL = {selected: {}, meta: {}};
 
 function groupPickReducer(state, action) {
@@ -359,12 +377,9 @@ const ChatListScreen = ({
   const [groupCreating, setGroupCreating] = useState(false);
   const groupPickSeq = useRef(0);
   const groupMetaLookupInFlight = useRef(new Set());
-  const currentUserType = String(
-    currentUser?.subscription_type || currentUser?.subscriptionType || currentUser?.type || '',
-  )
-    .trim()
-    .toLowerCase();
-  const canOpenGroups = !currentUserType || currentUserType === 'broker';
+  const currentUserType = getUserSubscriptionTypeLower(currentUser);
+  const isBrokerUser = currentUserType === 'broker';
+  const canOpenGroups = !currentUserType || isBrokerUser;
 
   useEffect(() => {
     if (!showNewChat) {
@@ -729,6 +744,7 @@ const ChatListScreen = ({
         listingId: c.listingId || null,
         listingDisplayNumber: c.listingDisplayNumber != null ? Number(c.listingDisplayNumber) : null,
         listingCategoryLabel: c.listingCategoryLabel || null,
+        exclusiveOfferStatus: c.exclusiveOfferStatus || null,
       }));
       const cu = currentUserRef.current;
       logProfilePic('ChatListScreen.fetchConversations', {
@@ -774,20 +790,31 @@ const ChatListScreen = ({
         (c) =>
           (c.name || '').toLowerCase().includes(q) ||
           (c.preview || '').toLowerCase().includes(q) ||
-          (c.listingCategoryLabel || '').toLowerCase().includes(q),
+          (c.listingCategoryLabel || '').toLowerCase().includes(q) ||
+          (c.exclusiveOfferStatus != null &&
+            q.length >= 2 &&
+            /בלע|ממתין|נדחה/i.test(q)),
       )
     : conversations;
 
   const renderRowMeta = (conv) => {
     const isPi = conv.id === '1';
     const rel = formatRelativeTimeHebrew(conv.lastMessageAt) || conv.time || '';
-    const showListing = !isPi && !!conv.listingId;
-    const showCategory = !isPi && !!conv.listingCategoryLabel;
+    const isGroup = conv.isGroup === true;
+    const exStatus = conv.exclusiveOfferStatus != null ? String(conv.exclusiveOfferStatus).trim().toLowerCase() : '';
+    const showExclusiveRow =
+      !isPi && !isGroup && (exStatus === 'pending' || exStatus === 'accepted' || exStatus === 'rejected');
+    const showListing = !isPi && !isGroup && !!conv.listingId && !showExclusiveRow;
+    const showCategory = !isPi && !isGroup && !!conv.listingCategoryLabel && !showExclusiveRow;
 
     if (isPi) {
       return (
         <View style={styles.metaRow}>
-          {rel ? <Text style={styles.metaTime}>{rel}</Text> : null}
+          {rel ? (
+            <Text style={styles.metaTime} numberOfLines={1}>
+              {rel}
+            </Text>
+          ) : null}
         </View>
       );
     }
@@ -795,10 +822,27 @@ const ChatListScreen = ({
     /* LTR row + flex-end: cluster sits toward avatar; visual order R→L is category | ad | time (time left of badges). */
     return (
       <View style={styles.metaRow}>
-        {rel ? <Text style={styles.metaTime}>{rel}</Text> : null}
+        {rel ? (
+          <Text style={styles.metaTime} numberOfLines={1} ellipsizeMode="tail">
+            {rel}
+          </Text>
+        ) : null}
+        {showExclusiveRow ? (
+          <View style={[styles.chatListCategoryPill, styles.chatListCategoryPillFlexible]}>
+            <Text style={styles.badgeYellowText} numberOfLines={1} ellipsizeMode="tail">
+              {exStatus === 'accepted'
+                ? 'בלעדיות'
+                : exStatus === 'pending'
+                  ? 'בלעדיות - ממתין לאישור'
+                  : exStatus === 'rejected'
+                    ? 'בלעדיות - נדחה'
+                    : ''}
+            </Text>
+          </View>
+        ) : null}
         {showListing ? (
           <View style={styles.badgeGrey}>
-            <Text style={styles.badgeGreyText}>
+            <Text style={styles.badgeGreyText} numberOfLines={1}>
               {conv.listingDisplayNumber != null && !Number.isNaN(conv.listingDisplayNumber)
                 ? `מודעה מס ${conv.listingDisplayNumber}`
                 : 'מודעה'}
@@ -806,8 +850,10 @@ const ChatListScreen = ({
           </View>
         ) : null}
         {showCategory ? (
-          <View style={styles.badgeYellow}>
-            <Text style={styles.badgeYellowText}>{conv.listingCategoryLabel}</Text>
+          <View style={styles.chatListCategoryPill}>
+            <Text style={styles.badgeYellowText} numberOfLines={1} ellipsizeMode="tail">
+              {conv.listingCategoryLabel}
+            </Text>
           </View>
         ) : null}
       </View>
@@ -818,13 +864,22 @@ const ChatListScreen = ({
     <View style={styles.container}>
       <View style={styles.topSection}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBackBtn} activeOpacity={0.7} hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+          <Pressable
+            onPress={() => (typeof onClose === 'function' ? onClose() : undefined)}
+            style={({pressed}) => [
+              styles.headerBackBtn,
+              Platform.OS === 'web' && {cursor: 'pointer'},
+              pressed && Platform.OS !== 'web' && {opacity: 0.7},
+            ]}
+            hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
+            accessibilityRole="button"
+            accessibilityLabel="חזרה">
             <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
-          </TouchableOpacity>
+          </Pressable>
           <View style={styles.logoWrap}>
             <Image source={require('../assets/image-copy-9.png')} style={styles.logoImage} resizeMode="contain" />
           </View>
-          {currentUserType === 'broker' ? (
+          {isBrokerUser ? (
             <TouchableOpacity
               style={styles.headerBtn}
               activeOpacity={0.7}
@@ -1468,27 +1523,40 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 7,
     marginBottom: 18,
     width: '100%',
+    minHeight: 22,
+    overflow: 'hidden',
   },
   metaTime: {
     color: '#D2D0DC',
     fontSize: 14,
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
+    flexShrink: 1,
+    minWidth: 0,
   },
-  badgeYellow: {
+  /** Same fill + radius + padding as category chip ("דירות"); used for exclusivity + listing category */
+  chatListCategoryPill: {
     backgroundColor: CATEGORY_BADGE_BG,
     paddingHorizontal: 10,
     minHeight: 22,
     borderRadius: 1000,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
     maxWidth: '100%',
+    borderWidth: 0,
+  },
+  /** Layout-only: longer exclusivity labels may shrink; does not change pill color */
+  chatListCategoryPillFlexible: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '92%',
   },
   badgeYellowText: {
     color: '#1E1D27',
@@ -1505,6 +1573,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   badgeGreyText: {
     color: '#FFFFFF',

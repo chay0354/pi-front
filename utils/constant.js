@@ -32,6 +32,34 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
+/**
+ * DB `ads.category` values where a **regular** (`subscription_type === 'user'`) user may
+ * open "פרסם מודעה" from the create sheet. Other categories (e.g. 1 חדש מקבלן) show
+ * post-only for regular users; brokers/companies keep both actions.
+ */
+export const regularUserAdListingCategoryIds = new Set([
+  2, 3, 4, 5, 6, 7, 8, 10, 12,
+]);
+
+/**
+ * DB `ads.category` values where a **broker** sees "פרסם מודעה" in the create sheet
+ * (ערוך/פרסם מודעה). Same strip subset: חדש מקבלן, דירות, משרדים, מסחר, קרקעות, יוקרה, מגזר דתי, גלובל.
+ * Excludes e.g. BnB (5), שותפים (3) — those show פוסט only for brokers.
+ */
+export const brokerSheetAdListingCategoryIds = new Set([
+  1, 2, 4, 6, 7, 8, 10, 12,
+]);
+
+/**
+ * DB `ads.category` values where **company** (not professional) users see "פרסם מודעה"
+ * (ערוך/פרסם מודעה sheet + TikTok feed compose row).
+ * Matches product tabs: גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7), מסחר (8),
+ * משרדים (2), דירות / בלעדי (10). Professional accounts never get this listing row.
+ */
+export const companySheetAdListingCategoryIds = new Set([
+  2, 4, 6, 7, 8, 10, 12,
+]);
+
 /** Requires backend ALLOW_SKIP_EMAIL_VERIFICATION=1. Also enable via EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY=1 for non-__DEV__ builds. */
 export const showSkipEmailVerificationTest =
   (typeof __DEV__ !== 'undefined' && __DEV__) ||
@@ -124,6 +152,12 @@ export const categoriesEditProfile = [
     name: 'BNB',
     image: require('../assets/category_2.png'),
     selectedImage: require('../assets/category_selected_2.png'),
+  },
+  {
+    id: 10,
+    name: 'שותפים',
+    image: require('../assets/category_10.png'),
+    selectedImage: require('../assets/category_10.png'),
   },
   {
     id: 3,
@@ -235,65 +269,8 @@ export const brokerCategories = [
   },
 ];
 
-export const companyCategories = [
-  // {id: 1, name: 'חדש מקבלן', image: require('../assets/category1.png')},
-  {
-    id: 6,
-    name: 'מגזר דתי',
-    image: require('../assets/category6.png'),
-    imageLeft: require('../assets/category6Left.png'),
-    imageRight: require('../assets/category6Right.png'),
-  },
-  {
-    id: 4,
-    name: 'גלובל',
-    image: require('../assets/category4.png'),
-    imageLeft: require('../assets/category4Left.png'),
-    imageRight: require('../assets/category4Right.png'),
-  },
-  {
-    id: 5,
-    name: 'BNB',
-    image: require('../assets/category5.png'),
-    imageLeft: require('../assets/category5Left.png'),
-    imageRight: require('../assets/category5Right.png'),
-  },
-  {
-    id: 10,
-    name: 'דירות',
-    image: require('../assets/category10.png'),
-    imageLeft: require('../assets/category10Left.png'),
-    imageRight: require('../assets/category10Right.png'),
-  },
-  {
-    id: 2,
-    name: 'משרדים',
-    image: require('../assets/category2.png'),
-    imageLeft: require('../assets/category2Left.png'),
-    imageRight: require('../assets/category2Right.png'),
-  },
-  {
-    id: 12,
-    name: 'יוקרה',
-    image: require('../assets/category12.png'),
-    imageLeft: require('../assets/category12Left.png'),
-    imageRight: require('../assets/category12Right.png'),
-  },
-  {
-    id: 7,
-    name: 'קרקעות',
-    image: require('../assets/category7.png'),
-    imageLeft: require('../assets/category7Left.png'),
-    imageRight: require('../assets/category7Right.png'),
-  },
-  {
-    id: 8,
-    name: 'מסחר',
-    image: require('../assets/category8.png'),
-    imageLeft: require('../assets/category8Left.png'),
-    imageRight: require('../assets/category8Right.png'),
-  },
-];
+/** Kept aligned with `userCategories` for any screen that branches on company vs user. Home uses `userCategories` for everyone. */
+export const companyCategories = userCategories;
 
 export const getHeaderTitle = subscriptionType => {
   switch (subscriptionType) {
@@ -609,7 +586,7 @@ export const userCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושע',
+        title: 'קרקע במושב',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},
@@ -1332,7 +1309,7 @@ export const brokerCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושע',
+        title: 'קרקע במושב',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},
@@ -1620,9 +1597,14 @@ export const companyCategoryForm = {
             },
             {
               title: 'כולל מרכז מסחרי',
-              titleRequired: true,
+              titleRequired: false,
               isSelected: true,
-              fields: [],
+              fields: [
+                {
+                  type: 'boolean_toggle',
+                  key: 'shop_count',
+                },
+              ],
             },
           ],
         },
@@ -1632,58 +1614,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרוייקט מציע משרדים בגדלים של',
           titleRequired: true,
-          groups: [
-            {
-              title: 'משרד 1',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'office_1_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל המשרד',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'office_1_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'משרד 2',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'office_2_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל המשרד',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'office_2_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'הוסף משרד',
-              titleRequired: false,
-              isSelected: true,
-              fields: [],
-            },
-          ],
+          groups: [],
         },
       },
       {
@@ -1691,58 +1622,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרוייקט מציע קומה שלמה',
           titleRequired: true,
-          groups: [
-            {
-              title: 'קומה שלמה 1',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'whole_floor_1_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל הקומה',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'whole_floor_1_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'קומה שלמה 2',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'whole_floor_2_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל הקומה',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'whole_floor_2_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'הוסף קומה שלמה',
-              titleRequired: false,
-              isSelected: true,
-              fields: [],
-            },
-          ],
+          groups: [],
         },
       },
       {
@@ -2353,7 +2233,7 @@ export const companyCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושע',
+        title: 'קרקע במושב',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},
@@ -2400,36 +2280,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרוייקט מציע שטחי מסחר בגדלים של',
           titleRequired: false,
-          groups: [
-            {
-              title: 'שטח מסחרי 1',
-              titleRequired: true,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'cat8_commercial_space_1_sqm',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל השטח',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'cat8_commercial_space_1_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'הוסף שטח מסחרי',
-              titleRequired: true,
-              isSelected: true,
-              fields: [],
-            },
-          ],
+          groups: [],
         },
       },
       {
@@ -2437,36 +2288,7 @@ export const companyCategoryForm = {
         groups: {
           title: 'הפרוייקט מציע קומה שלמה',
           titleRequired: true,
-          groups: [
-            {
-              title: 'קומה שלמה 1',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'cat8_whole_floor_1_sqm',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל הקומה',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'cat8_whole_floor_1_price',
-                  value: 0,
-                  subTitle: 'מחיר למטר',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'הוסף קומה שלמה',
-              titleRequired: false,
-              isSelected: true,
-              fields: [],
-            },
-          ],
+          groups: [],
         },
       },
       {
@@ -2605,6 +2427,21 @@ export const companyCategoryForm = {
           title: 'פרטים כלליים',
           titleRequired: false,
           groups: [
+            {
+              title: 'שטח הנכס',
+              titleRequired: true,
+              subTitle: '',
+              subTitleRequired: false,
+              isSelected: true,
+              fields: [
+                {
+                  type: 'count',
+                  key: 'sqm_area',
+                  isArea: true,
+                  value: 0,
+                },
+              ],
+            },
             {
               title: 'כמות מבנים',
               titleRequired: true,

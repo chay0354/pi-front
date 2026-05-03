@@ -13,7 +13,7 @@ import {ACCESSIBILITY_STATEMENT_HEBREW} from './accessibilityStatementContent';
  */
 const AccessibilityStatementScreen = ({onClose}) => {
   return (
-    <View style={[styles.root, {direction: 'rtl'}]}>
+    <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

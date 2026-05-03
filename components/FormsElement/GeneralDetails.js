@@ -1,4 +1,4 @@
-import {StyleSheet, Text, View, Image, TextInput} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import React from 'react';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
@@ -8,6 +8,7 @@ import {RadioButton} from './RadioButton';
 import {TouchableOpacity} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../../constants/styles';
+import {Divider} from './Divider';
 
 export const GeneralDetails = ({
   area,
@@ -31,21 +32,37 @@ export const GeneralDetails = ({
   const safeSetOptionSecondValue =
     typeof setOptionSecondValue === 'function' ? setOptionSecondValue : () => {};
 
+  const hasCounterFields = Array.isArray(counterData) && counterData.length > 0;
+
   return (
     <FormContainer>
-      <Title text={'פרטים כלליים'} />
-      {counterData.map(counter => {
-        return (
-          <CountUpdate
-            title={counter.title}
-            count={counter.value ?? counter.count ?? 0}
-            setCount={counter.setCount}
-            isLast={counter.isLast}
-            isArea={counter.isArea}
-            key={counter.title}
-          />
-        );
-      })}
+      {hasCounterFields ? (
+        <>
+          <Text style={styles.sectionHeading}>פרטים כלליים</Text>
+          {counterData.map((counter, index) => (
+            <View key={counter.title || String(index)}>
+              <CountUpdate
+                title={counter.title}
+                count={counter.value ?? counter.count ?? 0}
+                setCount={counter.setCount}
+                isLast
+                isDivider={false}
+                isArea={counter.isArea}
+                min={counter.min}
+                containerStyle={{marginBottom: 0}}
+              />
+              {index < counterData.length - 1 ? (
+                <Divider style={styles.counterSeparator} />
+              ) : null}
+            </View>
+          ))}
+          {amenitiesData.length > 0 ? (
+            <Divider style={styles.beforeAmenities} />
+          ) : null}
+        </>
+      ) : (
+        <Title text={'פרטים כלליים'} />
+      )}
 
       {/* Amenities */}
       {amenitiesData.map((amenity, index) => {
@@ -69,6 +86,7 @@ export const GeneralDetails = ({
               setName={toggleAmenity}
               index={index}
               isSelected={isSelected}
+              useFigmaStyleIcon
               styleDevider={{marginTop: 20}}>
               {/* Quantity selector for amenities that need it - below the amenity row */}
               {hasOption && isSelected && (
@@ -149,6 +167,24 @@ export const GeneralDetails = ({
 };
 
 const styles = StyleSheet.create({
+  sectionHeading: {
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: 'rgba(210, 208, 220, 0.98)',
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  counterSeparator: {
+    height: 1,
+    backgroundColor: '#343243',
+    marginVertical: 20,
+  },
+  beforeAmenities: {
+    height: 1,
+    backgroundColor: '#343243',
+    marginTop: 4,
+    marginBottom: 12,
+  },
   amenityQuantitySelector: {
     flexDirection: 'row',
     alignItems: 'center',

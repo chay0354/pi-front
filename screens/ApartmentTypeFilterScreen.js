@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,12 @@ import {
   Pressable,
   useWindowDimensions,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
 const MENU_ICON = require('../assets/buttom-bar/appartment_type.png');
 
 const APARTMENT_TYPES = [
@@ -27,21 +26,50 @@ const APARTMENT_TYPES = [
   {id: 'penthouse', label: 'פנטהאוז'},
 ];
 
-const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
+/** יוקרה (category 12) — Figma: דירה, בית פרטי, וילה, פנטהאוז only. */
+const APARTMENT_TYPES_LUXURY = [
+  {id: 'apartment', label: 'דירה'},
+  {id: 'private_house', label: 'בית פרטי'},
+  {id: 'villa', label: 'וילה'},
+  {id: 'penthouse', label: 'פנטהאוז'},
+];
+
+function getApartmentTypeOptions(selectedCategory) {
+  const n = Number(selectedCategory);
+  return n === 12 ? APARTMENT_TYPES_LUXURY : APARTMENT_TYPES;
+}
+
+function normalizeApartmentTypeInitial(v) {
+  if (v == null || v === '') return [];
+  if (Array.isArray(v)) {
+    return v.map(x => String(x || '').trim()).filter(Boolean);
+  }
+  return [String(v).trim()].filter(Boolean);
+}
+
+const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
-  const [selectedId, setSelectedId] = useState(initialFilter ?? null);
+  const apartmentTypeOptions = useMemo(
+    () => getApartmentTypeOptions(selectedCategory),
+    [selectedCategory],
+  );
+  const [selectedIds, setSelectedIds] = useState(() => {
+    const allowed = new Set(apartmentTypeOptions.map(o => o.id));
+    return normalizeApartmentTypeInitial(initialFilter).filter(id => allowed.has(id));
+  });
 
   const handleSave = () => {
-    if (onSave && selectedId) {
-      onSave({apartmentType: selectedId});
+    if (onSave) {
+      onSave({apartmentType: selectedIds.length > 0 ? selectedIds : null});
     }
     if (onClose) onClose();
   };
 
   const handleClear = () => {
-    setSelectedId(null);
+    if (onSave) onSave(null);
+    if (onClose) onClose();
   };
   const bottomInset = Math.max(insets.bottom, 8);
 
@@ -62,7 +90,7 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
           styles.scrollContent,
           {
             paddingTop: compact ? 16 : 24,
-            paddingBottom: bottomInset + (compact ? 20 : 52),
+            paddingBottom: compact ? 16 : 24,
           },
         ]}
         scrollEnabled={false}
@@ -74,38 +102,40 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave}) => {
           </View>
 
           <View style={[styles.radioList, compact && styles.radioListCompact]}>
-            {APARTMENT_TYPES.map((option) => {
-              const checked = selectedId === option.id;
+            {apartmentTypeOptions.map((option) => {
+              const checked = selectedIds.includes(option.id);
               return (
                 <TouchableOpacity
                   key={option.id}
                   style={styles.radioRow}
-                  onPress={() => setSelectedId(option.id)}
+                  onPress={() => {
+                    setSelectedIds(prev =>
+                      prev.includes(option.id)
+                        ? prev.filter(x => x !== option.id)
+                        : [...prev, option.id],
+                    );
+                  }}
                   activeOpacity={0.8}>
                   <Text style={styles.radioLabel}>{option.label}</Text>
-                  <FigmaCheckbox checked={checked} />
+                  <FigmaCheckbox checked={checked} variant="dot" />
                 </TouchableOpacity>
               );
             })}
           </View>
         </View>
-
-        <View style={[styles.footer, compact && styles.footerCompact]}>
-          <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-            <LinearGradient
-              colors={GOLD_GRADIENT}
-              start={{x: 0.5, y: 0}}
-              end={{x: 0.5, y: 1}}
-              style={styles.saveBtnGradient}>
-              <Text style={styles.saveBtnText}>שמור</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
+
+      <View
+        style={[
+          styles.footer,
+          compact && styles.footerCompact,
+          {paddingBottom: bottomInset + 8},
+        ]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
+        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+          <Text style={styles.clearText}>נקה</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -143,8 +173,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 24,
-    flexGrow: 1,
-    justifyContent: 'space-between',
   },
   topGroup: {
     width: '100%',
@@ -192,25 +220,17 @@ const styles = StyleSheet.create({
   },
   footer: {
     width: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 12,
     alignItems: 'center',
+    backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: DIVIDER,
   },
-  footerCompact: {},
+  footerCompact: {paddingTop: 8},
   saveBtnWrap: {
     marginBottom: 12,
     width: '100%',
-  },
-  saveBtnGradient: {
-    width: '100%',
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {
-    color: '#1E1D27',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.2,
   },
   clearWrap: {
     alignItems: 'center',

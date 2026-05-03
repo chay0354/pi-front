@@ -18,6 +18,8 @@ export const SalesImage = ({
   handleSalesImageChange,
   salesImageInputRef,
   uploadProgress,
+  /** Opens Post editor for this category (גלובל / company flows). */
+  onPressCreateSalesImage,
 }) => {
   const uploading = !!(uploadProgress && uploadProgress.salesImage);
   return (
@@ -65,7 +67,10 @@ export const SalesImage = ({
         )}
       </TouchableOpacity>
       <Text style={[styles.subTitle, {textAlign: 'center'}]}>או</Text>
-      <TouchableOpacity style={styles.createImageContainer} onPress={() => {}}>
+      <TouchableOpacity
+        style={styles.createImageContainer}
+        onPress={() => onPressCreateSalesImage?.()}
+        disabled={!onPressCreateSalesImage}>
         <Text style={styles.createImageText}>צור תמונה מכירתית</Text>
       </TouchableOpacity>
     </FormContainer>

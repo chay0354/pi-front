@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React from 'react';
 import {StyleSheet, Text, View, TouchableOpacity} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
@@ -12,23 +12,36 @@ import {RadioIcon} from './RadioIcon';
 
 const createEmptyLand = () => ({
   unit: 'dunam',
-  area: 1,
-  price: 2000000,
+  area: 0,
+  price: 0,
 });
 
-export const CompanyOffersLandSizes = () => {
-  const [lands, setLands] = useState([createEmptyLand(), createEmptyLand()]);
+/** Controlled by AdsForm (company category 7); parcels persist as `companyOffersLandSizes`. */
+export const CompanyOffersLandSizes = ({lands, setLands}) => {
+  const list = Array.isArray(lands) ? lands : [];
 
   const updateLand = (index, patch) => {
-    setLands(prev => prev.map((l, i) => (i === index ? {...l, ...patch} : l)));
+    if (typeof setLands !== 'function') {
+      return;
+    }
+    setLands(prev =>
+      (Array.isArray(prev) ? prev : []).map((l, i) =>
+        i === index ? {...l, ...patch} : l,
+      ),
+    );
   };
 
-  const addLand = () => setLands(prev => [...prev, createEmptyLand()]);
+  const addLand = () => {
+    if (typeof setLands !== 'function') {
+      return;
+    }
+    setLands(prev => [...(Array.isArray(prev) ? prev : []), createEmptyLand()]);
+  };
 
   return (
     <FormContainer>
       <Title text="החברה מציעה קרקעות בגדלים של" required />
-      {lands.map((land, idx) => (
+      {list.map((land, idx) => (
         <View key={idx}>
           <RadioWithText
             title={`קרקע ${idx + 1}`}
@@ -67,7 +80,6 @@ export const CompanyOffersLandSizes = () => {
           </View>
 
           <CountUpdate
-            title={''}
             count={land.area}
             setCount={value => updateLand(idx, {area: value})}
             isArea={true}

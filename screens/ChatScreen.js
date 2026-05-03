@@ -13,16 +13,20 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Linking,
+  AppState,
 } from 'react-native';
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import {Audio} from 'expo-av';
+import {LinearGradient} from 'expo-linear-gradient';
 
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {DEFAULT_WELCOME_MESSAGE} from '../utils/chatDefaults';
 import {
   getChatMessages,
   getChatParticipantDisplay,
+  getListingPreview,
   sendChatMessage,
   uploadChatMedia,
   getGroupChatMessages,
@@ -31,8 +35,17 @@ import {
   getListings,
   getUsersForGroupPicker,
   addMembersToChatGroup,
+  updateGroupTitle,
+  removeMemberFromChatGroup,
+  updateGroupMemberRole,
+  respondToExclusiveOffer,
 } from '../utils/api';
 import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
+import {ProfileAvatar} from '../components';
+import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
+import ChatGroupManageModal from '../components/ChatGroupManageModal';
+import ExclusiveOfferResponseCard, {formatPrice} from '../components/ExclusiveOfferResponseCard';
+import {usePresence} from '../hooks/PresenceContext';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -77,6 +90,41 @@ const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_CHAT_AVATAR = require('../assets/image-copy-10.png');
 const WELCOME_PI_AVATAR = require('../assets/chat/welcome-pi-avatar.png');
+/** Matches SharePostSheet fallback body — hide under bubble when post card is shown. */
+const SHARE_POST_DEFAULT_CAPTION = 'פוסט משותף';
+/** Many feed posts use description `'פוסט'` (PostEditor); SharePostSheet sends that as caption → must still open rich card. */
+const isSharePlaceholderCaption = (raw) => {
+  const t = String(raw || '').trim();
+  if (!t) return true;
+  if (t === SHARE_POST_DEFAULT_CAPTION) return true;
+  if (t === 'פוסט') return true;
+  if (/^פוסט\s*$/u.test(t)) return true;
+  return false;
+};
+
+/** Readable line for shared-post card footer / text-only preview (not generic "פוסט"). */
+const sharedPostPreviewText = (cachedListing, bodyTrim) => {
+  const fromCache =
+    cachedListing?.description != null
+      ? String(cachedListing.description).trim()
+      : '';
+  if (fromCache && !isSharePlaceholderCaption(fromCache)) return fromCache;
+  if (bodyTrim && !isSharePlaceholderCaption(bodyTrim)) return bodyTrim;
+  return '';
+};
+
+/** Substring used in broker exclusive-offer messages and to detect them in history. */
+const EXCLUSIVE_OFFER_BODY_MARKER = 'להציע בלעדיות על הנכס';
+
+const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
+  if (!meta || typeof meta !== 'object') return meta;
+  const fromMeta =
+    meta.conversationId != null ? String(meta.conversationId).trim() : '';
+  const fromRes =
+    conversationIdFromResponse != null ? String(conversationIdFromResponse).trim() : '';
+  const cid = fromMeta || fromRes;
+  return cid ? {...meta, conversationId: cid} : {...meta};
+};
 
 /** Prefer API otherUserEmail; else id if it looks like an email, not a conversation UUID. */
 const resolveOtherPartyEmail = (conv) => {
@@ -114,7 +162,63 @@ const normalizeAvatarUrl = (value) => {
   return raw;
 };
 
-const ChatScreen = ({onClose, sharedListing = null, conversation = null, currentUser = null, onMessageSent, onPiWelcomeOpened}) => {
+/** Strip formatting for `tel:` — keeps leading + and digits. */
+const toTelUrl = (raw) => {
+  if (raw == null || !String(raw).trim()) return null;
+  const cleaned = String(raw).replace(/[^\d+]/g, '');
+  if (!cleaned || cleaned === '+') return null;
+  return `tel:${cleaned}`;
+};
+
+/** API + realtime may use camelCase or snake_case; keeps chat bubbles (image/audio) rendering reliably. */
+const normalizeChatMessage = (m) => {
+  if (!m || typeof m !== 'object') return m;
+  const mediaUrl =
+    m.mediaUrl != null && String(m.mediaUrl).trim() !== ''
+      ? String(m.mediaUrl).trim()
+      : m.media_url != null && String(m.media_url).trim() !== ''
+        ? String(m.media_url).trim()
+        : null;
+  const rawType = m.mediaType ?? m.media_type;
+  let mediaType = null;
+  if (rawType != null && String(rawType).trim() !== '') {
+    const t = String(rawType).trim().toLowerCase();
+    if (t === 'image' || t === 'audio') mediaType = t;
+  }
+  const lid = m.listingId ?? m.listing_id;
+  const listingId =
+    lid != null && String(lid).trim() !== '' ? String(lid).trim() : null;
+  const lsRaw = m.listingShare ?? m.listing_share ?? m.is_listing_share;
+  const listingShare =
+    lsRaw === true || lsRaw === 'true' || lsRaw === 1 || lsRaw === '1'
+      ? true
+      : lsRaw === false || lsRaw === 'false' || lsRaw === 0 || lsRaw === '0'
+        ? false
+        : undefined;
+  return {
+    ...m,
+    mediaUrl,
+    mediaType,
+    listingId,
+    listingShare,
+  };
+};
+
+/** Broker message: marker in body + sender is not the viewer (handles missing `isMe` on some payloads). */
+const isExclusiveOfferFromPeerForViewer = (m, viewerEmail) => {
+  const nm = normalizeChatMessage(m);
+  const body = typeof nm.body === 'string' ? nm.body : '';
+  if (!body.includes(EXCLUSIVE_OFFER_BODY_MARKER)) return false;
+  const me = (viewerEmail || '').trim().toLowerCase();
+  const sidRaw = nm.senderId ?? nm.sender_id;
+  const sid = sidRaw != null ? String(sidRaw).trim().toLowerCase() : '';
+  if (me && sid && sid !== me) return true;
+  if (nm.isMe === false) return true;
+  if (nm.isMe === true) return false;
+  return false;
+};
+
+const ChatScreen = ({onClose, sharedListing = null, conversation = null, currentUser = null, onMessageSent, onPiWelcomeOpened, onOpenPost}) => {
   const msg = DEFAULT_WELCOME_MESSAGE;
   const isWelcome = isWelcomeConversation(conversation);
   const isUser = isUserConversation(conversation);
@@ -150,12 +254,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       : null);
 
   const [messages, setMessages] = useState([]);
+  const [listingPreviewCache, setListingPreviewCache] = useState({});
   const [conversationId, setConversationId] = useState(null);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
-  const [headerAvatarFailed, setHeaderAvatarFailed] = useState(false);
   const [senderAvatarFailed, setSenderAvatarFailed] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
@@ -165,6 +269,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const [groupMemberAvatarOverrides, setGroupMemberAvatarOverrides] = useState({});
   const [showGroupDescModal, setShowGroupDescModal] = useState(false);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [showPeerContactDetails, setShowPeerContactDetails] = useState(false);
+  const [showGroupManageModal, setShowGroupManageModal] = useState(false);
+  const [groupManageBusy, setGroupManageBusy] = useState(false);
   const [addMembersSearch, setAddMembersSearch] = useState('');
   const [addMembersLoading, setAddMembersLoading] = useState(false);
   const [addMembersSubmitting, setAddMembersSubmitting] = useState(false);
@@ -175,6 +282,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const [exclusiveListingData, setExclusiveListingData] = useState(null);
   const [exclusiveLoadingListing, setExclusiveLoadingListing] = useState(false);
   const [exclusiveMessage, setExclusiveMessage] = useState('');
+  const [exclusiveOfferMeta, setExclusiveOfferMeta] = useState(null);
+  const [exclusiveOfferListingPreview, setExclusiveOfferListingPreview] = useState(null);
+  const [exclusiveRespondLoading, setExclusiveRespondLoading] = useState(false);
   const [groupDescDraft, setGroupDescDraft] = useState('');
   const [savingGroupDesc, setSavingGroupDesc] = useState(false);
   const scrollRef = useRef(null);
@@ -190,14 +300,35 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const profileImageUrl =
     getUserProfileImageUrl(resolvedDisplay) || getUserProfileImageUrl(conversation);
   const profileAvatarUrl = normalizeAvatarUrl(profileImageUrl);
-  const headerAvatarSource =
-    !headerAvatarFailed && profileAvatarUrl
-      ? {uri: profileAvatarUrl}
-      : DEFAULT_CHAT_AVATAR;
   const senderAvatarSource =
     !senderAvatarFailed && profileAvatarUrl
       ? {uri: profileAvatarUrl}
       : DEFAULT_CHAT_AVATAR;
+
+  const peerPhone =
+    resolvedDisplay?.phone != null && String(resolvedDisplay.phone).trim() !== ''
+      ? String(resolvedDisplay.phone).trim()
+      : null;
+
+  const handleCallPeer = useCallback(async () => {
+    if (!peerPhone) return;
+    const url = toTelUrl(peerPhone);
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch (_) {
+      Alert.alert('', 'לא ניתן לחייג כעת');
+    }
+  }, [peerPhone]);
+
+  const showPeerPhoneIcon =
+    isDirectPeer && peerPhone && !!toTelUrl(peerPhone);
+
+  const {isEmailOnline} = usePresence();
+  const showPeerOnlineSubtitle =
+    isDirectPeer &&
+    otherUserEmail &&
+    isEmailOnline(otherUserEmail);
 
   const groupTitleResolved =
     (groupDetail?.title != null && String(groupDetail.title).trim()) || displayName;
@@ -336,16 +467,18 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       getGroupChatMessages(myEmail, groupConversationId)
         .then((res) => {
           console.log('[ChatScreen.fetchMessages] group res', { count: res?.messages?.length || 0 });
-          if (res.messages) setMessages(res.messages);
+          if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
           if (res.conversation_id) setConversationId(res.conversation_id);
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
+          setExclusiveOfferMeta(null);
         })
         .catch((e) => {
           console.error('[ChatScreen.fetchMessages] group fetch failed', e);
           setMessages([]);
           setGroupDetail(null);
           setGroupMembersList([]);
+          setExclusiveOfferMeta(null);
         });
       return;
     }
@@ -359,21 +492,39 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     getChatMessages(myEmail, otherUserEmail)
       .then((res) => {
         console.log('[ChatScreen.fetchMessages] direct res', { count: res?.messages?.length || 0 });
-        if (res.messages) setMessages(res.messages);
+        if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (res.conversation_id) setConversationId(res.conversation_id);
+        setExclusiveOfferMeta((prev) => {
+          const cid =
+            res.conversation_id != null ? String(res.conversation_id).trim() : '';
+          const incoming = res.exclusiveOffer;
+          if (incoming != null) return enrichExclusiveOfferMeta(incoming, cid);
+          if (prev) {
+            const pst = String(prev.status || '').trim().toLowerCase();
+            const keep =
+              pst === 'pending' || pst === 'rejected' || pst === 'accepted';
+            if (!keep) return null;
+            return cid ? enrichExclusiveOfferMeta(prev, cid) : prev;
+          }
+          return null;
+        });
       })
       .catch((e) => {
         console.error('[ChatScreen.fetchMessages] direct fetch failed', e);
         setMessages([]);
+        setExclusiveOfferMeta(null);
       });
   }, [isGroupThread, groupConversationId, isDirectPeer, myEmail, otherUserEmail]);
 
+  const fetchMessagesRef = useRef(fetchMessages);
+  fetchMessagesRef.current = fetchMessages;
+
+  useEffect(() => {
+    setResolvedDisplay(null);
+  }, [otherUserRef]);
+
   useEffect(() => {
     if (!isUser || !otherUserRef) return;
-    const hasName =
-      conversation?.name != null && String(conversation.name).trim() !== '';
-    const hasRealImage = !!normalizeAvatarUrl(getUserProfileImageUrl(conversation));
-    if (hasName && hasRealImage) return;
     let cancelled = false;
     getChatParticipantDisplay(otherUserRef)
       .then((res) => {
@@ -383,20 +534,28 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           name: res?.name,
           profile_picture_url: res?.profile_picture_url,
           profileImageUrl: res?.profileImageUrl,
+          phone: res?.phone,
           resolvedPic: getUserProfileImageUrl(res),
         });
-        if (!cancelled && res.success && (res.name || getUserProfileImageUrl(res)))
-          setResolvedDisplay({
-            name: res.name || null,
-            profileImageUrl: getUserProfileImageUrl(res) || null,
-          });
+        if (cancelled || !res.success) return;
+        const name =
+          res.name != null && String(res.name).trim() !== '' ? res.name : null;
+        const profileImageUrl = getUserProfileImageUrl(res) || null;
+        const phone =
+          res.phone != null && String(res.phone).trim() !== ''
+            ? String(res.phone).trim()
+            : null;
+        if (name || profileImageUrl || phone) {
+          setResolvedDisplay({name, profileImageUrl, phone});
+        }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isUser, otherUserRef, conversation?.name, conversation?.profileImageUrl]);
 
   useEffect(() => {
-    setHeaderAvatarFailed(false);
     setSenderAvatarFailed(false);
   }, [profileAvatarUrl]);
 
@@ -431,11 +590,20 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           count: res?.messages?.length || 0,
           conversation_id: res?.conversation_id,
         });
-        if (!cancelled && res.messages) setMessages(res.messages);
+        if (!cancelled && res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (!cancelled && res.conversation_id) setConversationId(res.conversation_id);
         if (!cancelled && isGroupThread) {
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
+          setExclusiveOfferMeta(null);
+        }
+        if (!cancelled && !isGroupThread && res.exclusiveOffer !== undefined) {
+          const cid = res.conversation_id != null ? String(res.conversation_id).trim() : '';
+          setExclusiveOfferMeta(
+            res.exclusiveOffer
+              ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
+              : null,
+          );
         }
       })
       .catch((e) => {
@@ -445,6 +613,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           setGroupDetail(null);
           setGroupMembersList([]);
         }
+        if (!cancelled && !isGroupThread) setExclusiveOfferMeta(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -453,11 +622,19 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       if (!cancelled && myEmail && (isGroupThread ? groupConversationId : otherUserEmail)) {
         load().then((res) => {
           if (!cancelled && res.messages && res.messages.length > 0) {
-            setMessages(res.messages);
+            setMessages(res.messages.map(normalizeChatMessage));
             if (res.conversation_id) setConversationId(res.conversation_id);
             if (isGroupThread) {
               if (res.group) setGroupDetail(res.group);
               if (Array.isArray(res.members)) setGroupMembersList(res.members);
+            }
+            if (!isGroupThread && res.exclusiveOffer !== undefined) {
+              const cid = res.conversation_id != null ? String(res.conversation_id).trim() : '';
+              setExclusiveOfferMeta(
+                res.exclusiveOffer
+                  ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
+                  : null,
+              );
             }
           }
         }).catch(() => {});
@@ -467,11 +644,35 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [isDirectPeer, isGroupThread, groupConversationId, myEmail, otherUserEmail]);
 
   useEffect(() => {
+    if (!isDirectPeer) {
+      setExclusiveOfferMeta(null);
+      setExclusiveOfferListingPreview(null);
+    }
+  }, [isDirectPeer, otherUserEmail]);
+
+  useEffect(() => {
+    const lid = exclusiveOfferMeta?.listingId;
+    const st = exclusiveOfferMeta?.status != null ? String(exclusiveOfferMeta.status).trim().toLowerCase() : '';
+    if (!lid || !['pending', 'rejected'].includes(st)) {
+      setExclusiveOfferListingPreview(null);
+      return;
+    }
+    let cancelled = false;
+    getListingPreview(lid).then((listing) => {
+      if (!cancelled) setExclusiveOfferListingPreview(listing || null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [exclusiveOfferMeta?.listingId, exclusiveOfferMeta?.status]);
+
+  useEffect(() => {
     if (!isGroupThread) {
       setGroupDetail(null);
       setGroupMembersList([]);
       setShowGroupDescModal(false);
       setGroupDescDraft('');
+      setShowGroupManageModal(false);
     }
   }, [isGroupThread, groupConversationId]);
 
@@ -545,6 +746,58 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     }
   }, [addMembersSelected, myEmail, groupConversationId, addMembersSubmitting, fetchMessages]);
 
+  const refreshGroupFromServer = useCallback(() => {
+    fetchMessages();
+  }, [fetchMessages]);
+
+  const handleSaveGroupTitleModal = useCallback(
+    async (nextTitle) => {
+      if (!myEmail || !groupConversationId) return;
+      setGroupManageBusy(true);
+      try {
+        await updateGroupTitle({
+          userEmail: myEmail,
+          conversationId: groupConversationId,
+          title: nextTitle,
+        });
+      } finally {
+        setGroupManageBusy(false);
+      }
+    },
+    [myEmail, groupConversationId],
+  );
+
+  const handleRemoveMemberModal = useCallback(
+    (memberEmail) =>
+      removeMemberFromChatGroup({
+        userEmail: myEmail,
+        conversationId: groupConversationId,
+        memberEmail,
+      }),
+    [myEmail, groupConversationId],
+  );
+
+  const handleLeaveGroupModal = useCallback(
+    () =>
+      removeMemberFromChatGroup({
+        userEmail: myEmail,
+        conversationId: groupConversationId,
+        memberEmail: myEmail,
+      }),
+    [myEmail, groupConversationId],
+  );
+
+  const handleSetMemberRoleModal = useCallback(
+    (targetEmail, role) =>
+      updateGroupMemberRole({
+        userEmail: myEmail,
+        conversationId: groupConversationId,
+        targetEmail,
+        role,
+      }),
+    [myEmail, groupConversationId],
+  );
+
   useEffect(() => {
     if (!conversationId || !myEmail || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -561,34 +814,107 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         (payload) => {
           const row = payload?.new;
           if (!row || !row.id) return;
+          /** Replica payloads sometimes omit columns — full fetch keeps UI consistent */
+          if (row.sender_id == null && row.body === undefined) {
+            fetchMessagesRef.current();
+            return;
+          }
           const senderEmail = row.sender_id != null ? String(row.sender_id).trim().toLowerCase() : '';
-          const newMsg = {
+          const newMsg = normalizeChatMessage({
             id: row.id,
             senderId: row.sender_id,
             body: row.body || '',
             mediaType: row.media_type || null,
             mediaUrl: row.media_url || null,
+            listingId: row.listing_id != null ? String(row.listing_id) : null,
+            listingShare: row.is_listing_share === true,
             createdAt: row.created_at,
             isMe: senderEmail === myEmail,
-          };
+          });
           setMessages((prev) => {
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[ChatScreen] realtime channel:', status);
+        }
+      });
     return () => {
       supabase.removeChannel(channel);
     };
   }, [conversationId, myEmail]);
 
   useEffect(() => {
+    const pending = [];
+    const seen = new Set();
+    (messages || []).forEach(m => {
+      const lid = m?.listingId;
+      if (!lid) return;
+      if (seen.has(lid)) return;
+      seen.add(lid);
+      if (Object.prototype.hasOwnProperty.call(listingPreviewCache, lid)) return;
+      pending.push(lid);
+    });
+    if (pending.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        pending.map(async lid => {
+          try {
+            const res = await getListingPreview(lid);
+            return [lid, res || null];
+          } catch (_) {
+            return [lid, null];
+          }
+        }),
+      );
+      if (cancelled) return;
+      setListingPreviewCache(prev => {
+        const next = {...prev};
+        entries.forEach(([lid, val]) => {
+          if (!Object.prototype.hasOwnProperty.call(next, lid)) next[lid] = val;
+        });
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, listingPreviewCache]);
+
+  /** Fallback polling while chat is open — catches messages if Realtime is unavailable (RLS/publication). */
+  useEffect(() => {
     if (!myEmail) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
-    const interval = setInterval(fetchMessages, 15000);
+    const POLL_MS = 3500;
+    const interval = setInterval(() => fetchMessagesRef.current(), POLL_MS);
     return () => clearInterval(interval);
-  }, [isDirectPeer, isGroupThread, groupConversationId, myEmail, fetchMessages]);
+  }, [isDirectPeer, isGroupThread, groupConversationId, myEmail]);
+
+  useEffect(() => {
+    if (!myEmail) return;
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    const onAppState = (next) => {
+      if (next === 'active') fetchMessagesRef.current();
+    };
+    const sub = AppState.addEventListener('change', onAppState);
+    return () => sub.remove();
+  }, [myEmail, isDirectPeer, isGroupThread, groupConversationId]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (typeof document === 'undefined') return;
+    if (!myEmail) return;
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') fetchMessagesRef.current();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [myEmail, isDirectPeer, isGroupThread, groupConversationId]);
 
   // Mark Pi welcome as "read" when user opens that conversation so badge goes from 1 to 0
   useEffect(() => {
@@ -612,7 +938,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const handleSend = async () => {
     const text = (inputText || '').trim();
     if (!text) return;
-    if (isAwaitingExclusiveResponse) return;
+    if (composerBlockedExclusive) return;
     if (isWelcome) {
       setInputText('');
       return;
@@ -625,7 +951,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       try {
         const res = await sendGroupChatMessage(groupConversationId, myEmail, text, null);
         if (res.message) {
-          setMessages((prev) => [...prev, {...res.message, id: res.message.id || Date.now()}]);
+          const nm = normalizeChatMessage(res.message);
+          setMessages((prev) => [...prev, {...nm, id: nm.id || Date.now()}]);
           if (onMessageSent) onMessageSent();
         }
       } catch (e) {
@@ -641,9 +968,22 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     setInputText('');
     try {
       const {receiverDisplay, senderDisplay} = getChatDisplays();
-      const res = await sendChatMessage(myEmail, otherUserEmail, text, receiverDisplay, senderDisplay, null, contextListingId);
+      // Only tag listing_id on the first outbound message when opening chat from a listing — not every text,
+      // or each line renders as a "shared post" card and plain body is hidden.
+      const listingForSend =
+        contextListingId && messages.length === 0 ? contextListingId : null;
+      const res = await sendChatMessage(
+        myEmail,
+        otherUserEmail,
+        text,
+        receiverDisplay,
+        senderDisplay,
+        null,
+        listingForSend,
+      );
       if (res.message) {
-        setMessages((prev) => [...prev, {...res.message, id: res.message.id || Date.now()}]);
+        const nm = normalizeChatMessage(res.message);
+        setMessages((prev) => [...prev, {...nm, id: nm.id || Date.now()}]);
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
@@ -691,10 +1031,10 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       if (!res || res.success === false || !res.message) {
         throw new Error(res?.error || 'שליחת ההצעה נכשלה');
       }
-      setMessages(prev => [
-        ...prev,
-        {...res.message, id: res.message.id || Date.now()},
-      ]);
+      setMessages(prev => {
+        const nm = normalizeChatMessage(res.message);
+        return [...prev, {...nm, id: nm.id || Date.now()}];
+      });
       if (onMessageSent) onMessageSent();
       setShowExclusiveOfferModal(false);
       Alert.alert('', 'הצעת בלעדיות נשלחה');
@@ -754,7 +1094,16 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         });
       }
       if (res.message) {
-        setMessages((prev) => [...prev, {...res.message, id: res.message.id || Date.now()}]);
+        const nm = normalizeChatMessage(res.message);
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...nm,
+            id: nm.id || Date.now(),
+            mediaType: nm.mediaType || 'image',
+            mediaUrl: nm.mediaUrl || up.url,
+          },
+        ]);
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
@@ -818,15 +1167,26 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         res = await sendGroupChatMessage(groupConversationId, myEmail, '', {type: 'audio', url: up.url});
       } else if (otherUserEmail) {
         const {receiverDisplay, senderDisplay} = getChatDisplays();
+        const listingForVoice =
+          contextListingId && messages.length === 0 ? contextListingId : null;
         res = await sendChatMessage(myEmail, otherUserEmail, '', receiverDisplay, senderDisplay, {
           type: 'audio',
           url: up.url,
-        }, contextListingId);
+        }, listingForVoice);
       } else {
         return;
       }
       if (res.message) {
-        setMessages((prev) => [...prev, {...res.message, id: res.message.id || Date.now()}]);
+        const nm = normalizeChatMessage(res.message);
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...nm,
+            id: nm.id || Date.now(),
+            mediaType: nm.mediaType || 'audio',
+            mediaUrl: nm.mediaUrl || up.url,
+          },
+        ]);
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
@@ -868,6 +1228,33 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       Alert.alert('', e?.message || 'לא ניתן להשמיע');
     }
   };
+
+  const lastExclusiveBrokerMessageIndex = useMemo(() => {
+    if (!messages?.length || !myEmail) return -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (isExclusiveOfferFromPeerForViewer(messages[i], myEmail)) return i;
+    }
+    return -1;
+  }, [messages, myEmail]);
+
+  const exclusiveRespondConversationId = useMemo(() => {
+    const fromState =
+      conversationId != null ? String(conversationId).trim() : '';
+    const fromMeta =
+      exclusiveOfferMeta?.conversationId != null
+        ? String(exclusiveOfferMeta.conversationId).trim()
+        : '';
+    return fromState || fromMeta || '';
+  }, [conversationId, exclusiveOfferMeta?.conversationId]);
+
+  const showExclusiveOwnerCard = useMemo(() => {
+    if (!isDirectPeer || !exclusiveOfferMeta || !exclusiveRespondConversationId) return false;
+    const st = String(exclusiveOfferMeta.status || '').toLowerCase();
+    if (st !== 'pending' && st !== 'rejected') return false;
+    const me = (myEmail || '').trim().toLowerCase();
+    const ow = (exclusiveOfferMeta.ownerEmail || '').trim().toLowerCase();
+    return !!me && !!ow && me === ow;
+  }, [isDirectPeer, exclusiveRespondConversationId, exclusiveOfferMeta, myEmail]);
 
   const renderMessages = () => {
     if (isWelcome) {
@@ -912,7 +1299,25 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     if (messages.length === 0) {
       return <Text style={styles.emptyChatText}>אין הודעות עדיין. שלח/י הודעה להתחיל.</Text>;
     }
-    return messages.map((m) => {
+    return messages.map((m, idx) => {
+      const msg = normalizeChatMessage(m);
+      const bodyTrim = String(msg.body || '').trim();
+      const hasAudio = msg.mediaType === 'audio' && msg.mediaUrl;
+      const hasImage = msg.mediaType === 'image' && msg.mediaUrl;
+      /** True for SharePostSheet (`listing_share`); false stored for normal text with listing_id; undefined = legacy rows. */
+      const legacyInferredShare =
+        !!msg.listingId &&
+        !hasAudio &&
+        (hasImage || isSharePlaceholderCaption(bodyTrim));
+      /**
+       * Explicit share (`listing_share`): always use post card — never plain bubble for body "פוסט".
+       * Legacy: listing_id + (attached image or placeholder body).
+       * Fallback inserts used to drop listing_id/media but kept is_listing_share → needed listingId||hasImage and showed text only.
+       */
+      const showSharedPostCard =
+        !hasAudio &&
+        (msg.listingShare === true ||
+          (!!msg.listingId && legacyInferredShare));
       const sid = m.senderId != null ? String(m.senderId).trim().toLowerCase() : '';
       const peerPic =
         isGroupThread && sid
@@ -921,7 +1326,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             )
           : null;
       const isExclusiveOffer =
-        typeof m.body === 'string' && m.body.includes('להציע בלעדיות על הנכס');
+        typeof msg.body === 'string' && msg.body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
       return (
       <React.Fragment key={m.id}>
       <View
@@ -946,13 +1351,120 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         )}
         <View style={[styles.bubbleWrap, m.isMe && styles.bubbleWrapMe]}>
           <View style={[styles.bubble, m.isMe ? styles.bubbleMe : styles.bubbleThem]}>
-            {m.mediaType === 'image' && m.mediaUrl ? (
-              <Image source={{uri: m.mediaUrl}} style={styles.bubbleImage} resizeMode="cover" />
+            {showSharedPostCard ? (() => {
+              const lid = msg.listingId ? String(msg.listingId).trim() : '';
+              const cached = lid ? listingPreviewCache[lid] : null;
+              const ownImage =
+                msg.mediaType === 'image' && msg.mediaUrl ? msg.mediaUrl : null;
+              const sharedImage = (() => {
+                if (!sharedListing) return null;
+                const sid =
+                  sharedListing.id != null ? String(sharedListing.id).trim() : '';
+                if (!sid || sid !== String(msg.listingId).trim()) return null;
+                const imgs = Array.isArray(sharedListing.images)
+                  ? sharedListing.images
+                  : Array.isArray(sharedListing.listing_images)
+                    ? sharedListing.listing_images
+                    : [];
+                for (const it of imgs) {
+                  if (!it) continue;
+                  if (typeof it === 'string' && it.trim()) return it.trim();
+                  const u =
+                    (typeof it.uri === 'string' && it.uri.trim()) ||
+                    (typeof it.image_url === 'string' && it.image_url.trim()) ||
+                    (typeof it.url === 'string' && it.url.trim()) ||
+                    null;
+                  if (u && !/^text-post-placeholder$/i.test(u)) return u;
+                }
+                return (
+                  sharedListing.main_image_url ||
+                  sharedListing.mainImageUrl ||
+                  sharedListing.image_url ||
+                  sharedListing.cover_url ||
+                  null
+                );
+              })();
+              const resolvedMediaUrl =
+                ownImage || sharedImage || (cached && cached.mediaUrl) || null;
+              const previewLines = sharedPostPreviewText(cached, bodyTrim);
+              return (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (typeof onOpenPost === 'function') {
+                    onOpenPost({
+                      id: msg.listingId,
+                      mediaUrl: resolvedMediaUrl,
+                      body: m.body,
+                    });
+                  }
+                }}
+                style={styles.sharedPostCard}>
+                <View style={styles.sharedPostImageWrap}>
+                  {resolvedMediaUrl ? (
+                    <Image
+                      source={{uri: resolvedMediaUrl}}
+                      style={styles.sharedPostImage}
+                      resizeMode="cover"
+                    />
+                  ) : previewLines ? (
+                    <View style={styles.sharedPostImagePlaceholder}>
+                      <Text
+                        style={styles.sharedPostPlaceholderBody}
+                        numberOfLines={8}>
+                        {previewLines}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.sharedPostImagePlaceholder}>
+                      <MaterialCommunityIcons
+                        name="image-outline"
+                        size={36}
+                        color="rgba(255,255,255,0.6)"
+                      />
+                    </View>
+                  )}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.55)']}
+                    style={styles.sharedPostGradient}
+                    pointerEvents="none"
+                  />
+                  <View style={styles.sharedPostBadge}>
+                    <MaterialCommunityIcons
+                      name="play-circle"
+                      size={12}
+                      color="#1E1D27"
+                    />
+                    <Text style={styles.sharedPostBadgeText}>פוסט</Text>
+                  </View>
+                </View>
+                <View style={styles.sharedPostFooter}>
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={18}
+                    color="rgba(255,255,255,0.85)"
+                  />
+                  <Text
+                    style={styles.sharedPostFooterText}
+                    numberOfLines={resolvedMediaUrl && previewLines ? 2 : 1}>
+                    {resolvedMediaUrl && previewLines
+                      ? previewLines
+                      : 'צפייה בפוסט'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              );
+            })() : msg.mediaType === 'image' && msg.mediaUrl ? (
+              <Image
+                source={{uri: msg.mediaUrl}}
+                style={styles.bubbleImage}
+                resizeMode="cover"
+              />
             ) : null}
-            {m.mediaType === 'audio' && m.mediaUrl ? (
+            {msg.mediaType === 'audio' && msg.mediaUrl ? (
               <TouchableOpacity
                 style={[styles.voiceRow, m.isMe && styles.voiceRowMe]}
-                onPress={() => toggleVoicePlayback(m.id, m.mediaUrl)}
+                onPress={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
                 activeOpacity={0.7}>
                 <MaterialCommunityIcons
                   name={playingMessageId === m.id ? 'pause' : 'play'}
@@ -967,7 +1479,10 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 {senderNameByEmail.get(String(m.senderId).trim().toLowerCase()) || String(m.senderId)}
               </Text>
             ) : null}
-            {m.body ? <Text style={styles.bubbleText}>{String(m.body)}</Text> : null}
+            {bodyTrim &&
+            !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) ? (
+              <Text style={styles.bubbleText}>{bodyTrim}</Text>
+            ) : null}
             <Text style={styles.bubbleTime}>
               {m.createdAt
                 ? new Date(m.createdAt).toLocaleTimeString('he-IL', {hour: '2-digit', minute: '2-digit'})
@@ -976,11 +1491,33 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           </View>
         </View>
       </View>
-      {isExclusiveOffer ? (
+      {isExclusiveOffer && m.isMe ? (
         <View style={styles.exclusiveStatusBanner}>
           <Text style={styles.exclusiveStatusText}>
             הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה
           </Text>
+        </View>
+      ) : null}
+      {showExclusiveOwnerCard &&
+      idx === lastExclusiveBrokerMessageIndex &&
+      isExclusiveOffer &&
+      isExclusiveOfferFromPeerForViewer(m, myEmail) ? (
+        <View style={styles.exclusiveOfferOwnerAnchor}>
+          <ExclusiveOfferResponseCard
+            purposeLabel={exclusiveOfferListingPreview?.purposeLabel}
+            priceFormatted={formatPrice(exclusiveOfferListingPreview?.price)}
+            addressLine={exclusiveOfferListingPreview?.address}
+            imageUri={
+              exclusiveOfferListingPreview?.mediaUrl
+                ? normalizeAvatarUrl(exclusiveOfferListingPreview.mediaUrl)
+                : null
+            }
+            monthsCommitted={exclusiveOfferMeta?.monthsCommitted}
+            decisionStatus={exclusiveOfferMeta?.status}
+            loading={exclusiveRespondLoading}
+            onAccept={() => handleExclusiveRespond(true)}
+            onReject={() => handleExclusiveRespond(false)}
+          />
         </View>
       ) : null}
       </React.Fragment>
@@ -993,7 +1530,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     let pending = false;
     for (const m of messages) {
       const body = typeof m?.body === 'string' ? m.body : '';
-      const isExclusive = body.includes('להציע בלעדיות על הנכס');
+      const isExclusive = body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
       if (isExclusive && m?.isMe) {
         pending = true;
       } else if (!m?.isMe) {
@@ -1003,12 +1540,74 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     return pending;
   }, [messages]);
 
+  /** After one exclusive offer is sent to this peer, hide the CTA (still show history / banner). */
+  const hasSentExclusiveOfferInThread = useMemo(() => {
+    if (!messages || messages.length === 0) return false;
+    return messages.some(
+      (m) =>
+        m?.isMe &&
+        typeof m?.body === 'string' &&
+        m.body.includes(EXCLUSIVE_OFFER_BODY_MARKER),
+    );
+  }, [messages]);
+
+  const composerBlockedExclusive = useMemo(() => {
+    if (!isDirectPeer) return false;
+    if (exclusiveOfferMeta && exclusiveOfferMeta.status) {
+      const st = String(exclusiveOfferMeta.status).toLowerCase();
+      if (st === 'accepted') return false;
+      if (st === 'rejected') return true;
+      const me = (myEmail || '').trim().toLowerCase();
+      const br = (exclusiveOfferMeta.brokerEmail || '').trim().toLowerCase();
+      const ow = (exclusiveOfferMeta.ownerEmail || '').trim().toLowerCase();
+      if (st === 'pending' && (me === br || me === ow)) return true;
+    }
+    return isAwaitingExclusiveResponse;
+  }, [isDirectPeer, exclusiveOfferMeta, myEmail, isAwaitingExclusiveResponse]);
+
+  const handleExclusiveRespond = useCallback(
+    async (accept) => {
+      const conv = exclusiveRespondConversationId;
+      if (!myEmail || !conv || exclusiveRespondLoading) return;
+      try {
+        setExclusiveRespondLoading(true);
+        const data = await respondToExclusiveOffer({
+          userEmail: myEmail,
+          conversationId: conv,
+          accept,
+        });
+        const nextSt =
+          data?.status != null
+            ? String(data.status).trim().toLowerCase()
+            : accept
+              ? 'accepted'
+              : 'rejected';
+        setExclusiveOfferMeta((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: nextSt,
+                conversationId: prev.conversationId || conv,
+              }
+            : prev,
+        );
+        fetchMessages();
+        Alert.alert('', accept ? 'הבקשה אושרה' : 'הבקשה נדחתה');
+      } catch (e) {
+        Alert.alert('', e?.message ? String(e.message) : 'פעולה נכשלה');
+      } finally {
+        setExclusiveRespondLoading(false);
+      }
+    },
+    [myEmail, exclusiveRespondConversationId, exclusiveRespondLoading, fetchMessages],
+  );
+
   const composerActive =
     (isWelcome || (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
-    !isAwaitingExclusiveResponse;
+    !composerBlockedExclusive;
   const canSubmitMessage =
     !sending &&
-    !isAwaitingExclusiveResponse &&
+    !composerBlockedExclusive &&
     (inputText || '').trim().length > 0 &&
     (isWelcome || (isDirectPeer || (isGroupThread && groupConversationId)));
 
@@ -1162,37 +1761,76 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             </View>
             <TouchableOpacity
               style={styles.headerIconBtn}
-              onPress={() => Alert.alert('', 'פרטי הקבוצה — בקרוב')}
+              onPress={() => setShowGroupManageModal(true)}
               accessibilityRole="button"
               accessibilityLabel="מידע">
-              <MaterialCommunityIcons name="information-outline" size={26} color="#fff" />
+              <Image
+                source={require('../assets/chat/info.png')}
+                style={styles.headerInfoIcon}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
             </TouchableOpacity>
           </>
         ) : (
-          <>
-            <TouchableOpacity onPress={onClose} style={styles.headerLeft} activeOpacity={0.7} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
+          <View style={styles.headerDirectRow}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.headerBackBtn}
+              activeOpacity={0.7}
+              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
+              accessibilityRole="button"
+              accessibilityLabel="חזור">
               <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
-              <Image
-                source={headerAvatarSource}
-                style={styles.headerAvatarImage}
-                resizeMode="cover"
-                onError={() => setHeaderAvatarFailed(true)}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.headerIdentityTap}
+              activeOpacity={0.85}>
+              <ProfileAvatar
+                uri={profileAvatarUrl || null}
+                name={displayName}
+                size={40}
+                placeholderImage={DEFAULT_CHAT_AVATAR}
               />
               <View style={styles.headerTitleWrap}>
                 <Text style={styles.headerTitle}>{displayName}</Text>
-                <Text style={styles.headerSubtitle}>מחובר/ת</Text>
+                {showPeerOnlineSubtitle ? (
+                  <Text style={styles.headerSubtitle}>מחובר/ת</Text>
+                ) : null}
               </View>
             </TouchableOpacity>
-            <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.headerIconBtn}>
-                <Image
-                  source={require('../assets/pi-chat/phone.png')}
-                  style={styles.headerPhoneIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            </View>
-          </>
+            {isDirectPeer ? (
+              <View style={styles.headerRight}>
+                {showPeerPhoneIcon ? (
+                  <TouchableOpacity
+                    style={styles.headerIconBtn}
+                    onPress={handleCallPeer}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="התקשר">
+                    <Image
+                      source={require('../assets/pi-chat/phone.png')}
+                      style={styles.headerPhoneIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  onPress={() => setShowPeerContactDetails(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="פרטי קשר">
+                  <Image
+                    source={require('../assets/chat/info.png')}
+                    style={styles.headerInfoIcon}
+                    resizeMode="contain"
+                    accessibilityIgnoresInvertColors
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
         )}
       </View>
 
@@ -1212,7 +1850,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
-            {isDirectPeer && isBrokerUser ? (
+            {isDirectPeer && isBrokerUser && !hasSentExclusiveOfferInThread ? (
               <View style={styles.exclusiveCtaWrap}>
                 <TouchableOpacity
                   activeOpacity={0.82}
@@ -1583,6 +2221,43 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         </View>
       </Modal>
 
+      <ChatPeerContactDetailsModal
+        visible={showPeerContactDetails}
+        onClose={() => setShowPeerContactDetails(false)}
+        displayName={displayName}
+        avatarUri={profileAvatarUrl}
+        phone={peerPhone}
+      />
+
+      <ChatGroupManageModal
+        visible={showGroupManageModal}
+        onClose={() => setShowGroupManageModal(false)}
+        title={groupTitleResolved}
+        avatarUri={normalizeAvatarUrl(groupAvatarResolved) || null}
+        description={savedGroupDescription}
+        members={groupMembersList}
+        myEmail={myEmail}
+        isBrokerUser={isBrokerUser}
+        busy={groupManageBusy}
+        onRefresh={refreshGroupFromServer}
+        onEditDescription={() => {
+          setShowGroupManageModal(false);
+          openGroupDescModal();
+        }}
+        onAddMembers={() => {
+          setShowGroupManageModal(false);
+          openAddMembersModal();
+        }}
+        onSaveTitle={handleSaveGroupTitleModal}
+        onRemoveMember={handleRemoveMemberModal}
+        onSetMemberRole={handleSetMemberRoleModal}
+        onLeaveGroup={handleLeaveGroupModal}
+        onConversationDeleted={() => {
+          setShowGroupManageModal(false);
+          if (typeof onClose === 'function') onClose();
+        }}
+      />
+
       <Modal
         visible={showGroupDescModal}
         animationType="slide"
@@ -1674,13 +2349,58 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 4,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
-  headerAvatarImage: { width: 40, height: 40, borderRadius: 20 },
-  headerTitleWrap: { justifyContent: 'center' },
-  headerTitle: { color: '#fff', fontSize: 16, fontFamily: 'Rubik-Medium' },
-  headerSubtitle: { color: TEXT_LIGHT, fontSize: 12, marginTop: 2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  /** LTR row so title stays visually left and action icons right (matches design). */
+  headerDirectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    gap: 8,
+    direction: 'ltr',
+  },
+  headerBackBtn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  headerIdentityTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  headerTitleWrap: {
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    flex: 1,
+    minWidth: 0,
+    direction: 'ltr',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'left',
+    alignSelf: 'stretch',
+  },
+  headerSubtitle: {
+    color: TEXT_LIGHT,
+    fontSize: 12,
+    marginTop: 2,
+    textAlign: 'left',
+    alignSelf: 'stretch',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+    marginLeft: 4,
+  },
   headerIconBtn: { padding: 6 },
+  headerInfoIcon: { width: 26, height: 26 },
   headerPhoneIcon: { width: 24, height: 24 },
   groupHeaderBack: {
     width: 44,
@@ -2381,6 +3101,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
   },
+  exclusiveOfferOwnerAnchor: {
+    alignSelf: 'stretch',
+    marginTop: 6,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
   welcomeBubble: {
     width: 268,
     backgroundColor: FIGMA_WELCOME_BUBBLE_BG,
@@ -2431,6 +3157,76 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  sharedPostCard: {
+    width: 236,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  sharedPostImageWrap: {
+    width: '100%',
+    aspectRatio: 9 / 12,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    position: 'relative',
+  },
+  sharedPostImage: {width: '100%', height: '100%'},
+  sharedPostImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2B2A39',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sharedPostPlaceholderBody: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 14,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    fontFamily: 'Rubik-Regular',
+    width: '100%',
+  },
+  sharedPostGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '55%',
+  },
+  sharedPostBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: '#F4AD39',
+  },
+  sharedPostBadgeText: {
+    color: '#1E1D27',
+    fontSize: 11,
+    fontFamily: 'Rubik-Medium',
+  },
+  sharedPostFooter: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sharedPostFooterText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 13,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   voiceRow: {
     flexDirection: 'row',

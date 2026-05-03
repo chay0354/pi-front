@@ -1,10 +1,11 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useMemo} from 'react';
 import {
   View,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Image,
   Platform,
@@ -12,11 +13,13 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
 import {categoryImages} from '../utils/constant';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import {RadioIcon} from '../components/FormsElement/RadioIcon';
+import PublishValidationModal from '../components/PublishValidationModal';
+import {PRICE_COUNTER_STEP_DEFAULT} from '../utils/priceInput';
 
 /**
  * Age Range Slider Component
@@ -203,6 +206,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const areaInputWidth = Math.max(20, String(areaDraft || '').length * 11);
   const roomsInputWidth = Math.max(20, String(roomsDraft || '').length * 11);
   const floorInputWidth = Math.max(20, String(floorDraft || '').length * 11);
+  const budgetInputRef = useRef(null);
+  const priceInputRef = useRef(null);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -285,6 +290,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
   // Loading states
   const [uploading, setUploading] = useState(false);
+  const [publishValidationVisible, setPublishValidationVisible] =
+    useState(false);
+  const [publishValidationMessages, setPublishValidationMessages] =
+    useState([]);
   const [uploadProgress, setUploadProgress] = useState({});
 
   // File input refs for web
@@ -377,50 +386,85 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
+  const publishBlockingErrors = useMemo(() => {
+    const publishErrors = [];
+    if (category === 3) {
+      if (!searchPurpose) {
+        publishErrors.push('בחרו מטרת חיפוש');
+      }
+      if (!preferredApartmentType) {
+        publishErrors.push('בחרו סוג דירת שותפים מועדף');
+      }
+      if (!budget || budget <= 0) {
+        publishErrors.push('הזינו תקציב');
+      }
+      if (!String(description || '').trim()) {
+        publishErrors.push('הזינו פרטים נוספים');
+      }
+    } else {
+      if (!propertyType) {
+        publishErrors.push('בחרו סוג נכס');
+      }
+      if (!String(address || '').trim()) {
+        publishErrors.push('הזינו כתובת');
+      }
+      if (!String(phone || '').trim()) {
+        publishErrors.push('הזינו טלפון');
+      }
+      if (!String(description || '').trim()) {
+        publishErrors.push('הזינו תיאור');
+      }
+      if (!mainImage && additionalImages.filter(img => img).length === 0) {
+        publishErrors.push('העלו לפחות תמונה אחת');
+      }
+    }
+    return publishErrors;
+  }, [
+    category,
+    searchPurpose,
+    preferredApartmentType,
+    budget,
+    description,
+    propertyType,
+    address,
+    phone,
+    mainImage,
+    additionalImages,
+  ]);
+
+  const formReadyToPublish = publishBlockingErrors.length === 0;
+
+  const publishAspectRatios = useMemo(() => {
+    const fbGray = 1004 / 174;
+    const fbYellow = 990 / 162;
+    try {
+      const gray = Image.resolveAssetSource(
+        require('../assets/ad-uplaud/button-gray.png'),
+      );
+      const yel = Image.resolveAssetSource(
+        require('../assets/ad-uplaud/button-yelow.png'),
+      );
+      return {
+        gray:
+          gray?.width && gray?.height ? gray.width / gray.height : fbGray,
+        yellow:
+          yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
+      };
+    } catch (_) {
+      return {gray: fbGray, yellow: fbYellow};
+    }
+  }, []);
+
   const handlePublish = async () => {
     try {
       setUploading(true);
 
-      // Validate required fields based on category
-      if (category === 3) {
-        // Validation for category 3 (חדש מקבלן)
-        if (!searchPurpose) {
-          alert('אנא בחר מטרת חיפוש');
-          setUploading(false);
-          return;
-        }
-        if (!preferredApartmentType) {
-          alert('אנא בחר סוג דירת שותפים מועדף');
-          setUploading(false);
-          return;
-        }
-        if (!budget || budget <= 0) {
-          alert('אנא הזן תקציב');
-          setUploading(false);
-          return;
-        }
-        if (!description) {
-          alert('אנא הזן פרטים נוספים');
-          setUploading(false);
-          return;
-        }
-      } else {
-        // Validation for other categories
-        if (!propertyType) {
-          alert('אנא בחר סוג נכס');
-          setUploading(false);
-          return;
-        }
-        if (!address || !phone || !description) {
-          alert('אנא מלא את כל השדות הנדרשים');
-          setUploading(false);
-          return;
-        }
-        if (!mainImage && additionalImages.filter(img => img).length === 0) {
-          alert('אנא העלה לפחות תמונה אחת');
-          setUploading(false);
-          return;
-        }
+      const publishErrors = [...publishBlockingErrors];
+      if (publishErrors.length > 0) {
+        setPublishValidationMessages([...new Set(publishErrors)]);
+        setPublishValidationVisible(true);
+        setUploading(false);
+        return;
       }
 
       // Upload files to Supabase storage
@@ -820,24 +864,9 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             <TouchableOpacity
               style={styles.videoOption}
               onPress={() => setHasVideo(!hasVideo)}>
-              <View style={styles.radioButton}>
-                {hasVideo && (
-                  <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
-                    locations={[0.0456, 0.5076, 0.8831]}
-                    start={{x: 0, y: 0}}
-                    end={{x: 1, y: 1}}
-                    style={styles.radioButtonGradient}>
-                    <Image
-                      source={require('../assets/checkbox-selected.png')}
-                      style={styles.radioButtonSelected}
-                      resizeMode="contain"
-                    />
-                  </LinearGradient>
-                )}
-              </View>
-              <View style={styles.radioSpacer} />
               <Text style={styles.videoOptionText}>הוסף סרטון</Text>
+              <View style={styles.radioSpacer} />
+              <RadioIcon isSelected={hasVideo} useFigmaStyle />
             </TouchableOpacity>
 
             {/* Video Upload Section - shown when checkbox is selected */}
@@ -962,24 +991,9 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             <TouchableOpacity
               style={styles.videoOption}
               onPress={() => setHasVideo(!hasVideo)}>
-              <View style={styles.radioButton}>
-                {hasVideo && (
-                  <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
-                    locations={[0.0456, 0.5076, 0.8831]}
-                    start={{x: 0, y: 0}}
-                    end={{x: 1, y: 1}}
-                    style={styles.radioButtonGradient}>
-                    <Image
-                      source={require('../assets/checkbox-selected.png')}
-                      style={styles.radioButtonSelected}
-                      resizeMode="contain"
-                    />
-                  </LinearGradient>
-                )}
-              </View>
-              <View style={styles.radioSpacer} />
               <Text style={styles.videoOptionText}>הוסף סרטון</Text>
+              <View style={styles.radioSpacer} />
+              <RadioIcon isSelected={hasVideo} useFigmaStyle />
             </TouchableOpacity>
 
             {/* Video Upload Section - shown when checkbox is selected */}
@@ -1283,14 +1297,17 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               <View style={styles.priceInput}>
                 <TouchableOpacity
                   style={styles.counterButtonLeft}
-                  onPress={() => setBudget(Math.max(0, budget - 100))}>
+                  onPress={() => setBudget(Math.max(0, budget - 1000))}>
                   <Text style={styles.counterButton}>+</Text>
                 </TouchableOpacity>
                 <View style={styles.counterDivider} />
-                <View style={styles.counterValueContainer}>
+                <Pressable
+                  style={styles.counterValueContainer}
+                  onPress={() => budgetInputRef.current?.focus?.()}>
                   <View style={styles.valueRow}>
                     <Text style={styles.priceValue}>₪</Text>
                     <TextInput
+                      ref={budgetInputRef}
                       style={[styles.valueInput, {width: budgetInputWidth}]}
                       value={budgetDraft}
                       onChangeText={setBudgetDraft}
@@ -1298,13 +1315,14 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       onSubmitEditing={commitBudgetDraft}
                       keyboardType="numeric"
                       returnKeyType="done"
+                      showSoftInputOnFocus
                     />
                   </View>
-                </View>
+                </Pressable>
                 <View style={styles.counterDivider} />
                 <TouchableOpacity
                   style={styles.counterButtonRight}
-                  onPress={() => setBudget(budget + 100)}>
+                  onPress={() => setBudget(budget + 1000)}>
                   <Text style={styles.counterButton}>-</Text>
                 </TouchableOpacity>
               </View>
@@ -1764,14 +1782,19 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               <View style={styles.priceInput}>
                 <TouchableOpacity
                   style={styles.counterButtonLeft}
-                  onPress={() => setPrice(Math.max(0, price - 10000))}>
+                  onPress={() =>
+                    setPrice(Math.max(0, price - PRICE_COUNTER_STEP_DEFAULT))
+                  }>
                   <Text style={styles.counterButton}>+</Text>
                 </TouchableOpacity>
                 <View style={styles.counterDivider} />
-                <View style={styles.counterValueContainer}>
+                <Pressable
+                  style={styles.counterValueContainer}
+                  onPress={() => priceInputRef.current?.focus?.()}>
                   <View style={styles.valueRow}>
                     <Text style={styles.priceValue}>₪</Text>
                     <TextInput
+                      ref={priceInputRef}
                       style={[styles.valueInput, {width: priceInputWidth}]}
                       value={priceDraft}
                       onChangeText={setPriceDraft}
@@ -1779,13 +1802,14 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       onSubmitEditing={commitPriceDraft}
                       keyboardType="numeric"
                       returnKeyType="done"
+                      showSoftInputOnFocus
                     />
                   </View>
-                </View>
+                </Pressable>
                 <View style={styles.counterDivider} />
                 <TouchableOpacity
                   style={styles.counterButtonRight}
-                  onPress={() => setPrice(price + 10000)}>
+                  onPress={() => setPrice(price + PRICE_COUNTER_STEP_DEFAULT)}>
                   <Text style={styles.counterButton}>-</Text>
                 </TouchableOpacity>
               </View>
@@ -1812,9 +1836,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                 טלפון<Text style={styles.required}>*</Text>
               </Text>
               <View style={styles.phoneInput}>
-                <TouchableOpacity>
-                  <Text style={styles.phoneDropdown}>▼</Text>
-                </TouchableOpacity>
                 <TextInput
                   style={styles.phoneTextInput}
                   placeholder="00 000 0000"
@@ -1844,22 +1865,53 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           </>
         )}
 
-        {/* Publish Button */}
-        <TouchableOpacity onPress={handlePublish} disabled={uploading}>
-          <LinearGradient
-            colors={['#FEE787', '#BD9947', '#9C6522']}
-            locations={[0.0456, 0.5076, 0.8831]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.publishButton}>
+        {/* Publish Button — full PNG; aspect ratio from asset */}
+        <TouchableOpacity
+          onPress={handlePublish}
+          disabled={uploading || !formReadyToPublish}
+          accessibilityState={{disabled: uploading || !formReadyToPublish}}
+          accessibilityLabel="פרסם"
+          style={[
+            styles.publishButtonTouchable,
+            Platform.OS === 'web' && !uploading && formReadyToPublish
+              ? {cursor: 'pointer'}
+              : Platform.OS === 'web'
+                ? {cursor: 'not-allowed'}
+                : null,
+          ]}
+          activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
+          <View style={styles.publishButtonImageWrap}>
+            <Image
+              source={
+                formReadyToPublish
+                  ? require('../assets/ad-uplaud/button-yelow.png')
+                  : require('../assets/ad-uplaud/button-gray.png')
+              }
+              style={[
+                styles.publishButtonImage,
+                {
+                  aspectRatio: formReadyToPublish
+                    ? publishAspectRatios.yellow
+                    : publishAspectRatios.gray,
+                },
+              ]}
+              resizeMode="contain"
+            />
             {uploading ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <Text style={styles.publishButtonText}>פרסם</Text>
-            )}
-          </LinearGradient>
+              <View
+                style={styles.publishButtonSpinnerOverlay}
+                pointerEvents="none">
+                <ActivityIndicator size="small" color="#000" />
+              </View>
+            ) : null}
+          </View>
         </TouchableOpacity>
       </ScrollView>
+      <PublishValidationModal
+        visible={publishValidationVisible}
+        messages={publishValidationMessages}
+        onClose={() => setPublishValidationVisible(false)}
+      />
     </View>
   );
 };
@@ -2046,9 +2098,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   displayOptionImage: {
-    width: '100%',
-    height: 80,
-    borderRadius: 20,
+    width: 104,
+    height: 68,
+    alignSelf: 'center',
+    borderRadius: 12,
     marginBottom: 8,
   },
   displayOptionSubtitle: {
@@ -2324,11 +2377,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 10,
   },
-  phoneDropdown: {
-    color: '#fff',
-    fontSize: 16,
-    marginRight: 10,
-  },
   phoneTextInput: {
     flex: 1,
     color: '#fff',
@@ -2347,19 +2395,40 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  publishButton: {
-    borderRadius: 25,
-    paddingVertical: 16,
+  publishButtonTouchable: {
     marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 0,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+    paddingVertical: 0,
   },
-  publishButtonText: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: '700',
+  publishButtonImageWrap: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+    ...Platform.select({
+      web: {fontSize: 0, lineHeight: 0},
+      default: {},
+    }),
+  },
+  publishButtonImage: {
+    width: '100%',
+    height: undefined,
+    marginVertical: 0,
+    paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        display: 'block',
+        verticalAlign: 'top',
+      },
+      default: {},
+    }),
+  },
+  publishButtonSpinnerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   uploadingContainer: {
     width: '100%',

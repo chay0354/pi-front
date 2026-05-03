@@ -1,6 +1,5 @@
 import {StyleSheet, Text, View, TouchableOpacity, Image} from 'react-native';
 import {FormContainer} from './FormContainer';
-import {RadioIcon} from './RadioIcon';
 import {Title} from './Title';
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';

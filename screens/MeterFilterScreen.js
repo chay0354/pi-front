@@ -9,31 +9,43 @@ import {
   Pressable,
   TextInput,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import FilterSaveButton from '../components/FilterSaveButton';
 
 const BG = '#1a1926';
-const BORDER = 'rgba(255,255,255,0.2)';
-const MIN_METER = 10;
-const MAX_METER = 1000;
+const INPUT_BORDER = '#8C85B3';
+const COUNTER_DIVIDER = '#343243';
+const METER_STEP = 1;
+const MIN_METER = 1;
+const MAX_METER = 999999;
+const DEFAULT_METER = 50;
 
 const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
   const [meterValue, setMeterValue] = useState(
-    initialFilter?.meter != null ? Number(initialFilter.meter) : null,
+    initialFilter?.meter != null
+      ? Number(initialFilter.meter)
+      : DEFAULT_METER,
   );
   const [meterDraft, setMeterDraft] = useState(
-    initialFilter?.meter != null ? String(Number(initialFilter.meter)) : '',
+    initialFilter?.meter != null
+      ? String(Number(initialFilter.meter))
+      : String(DEFAULT_METER),
   );
   const meterInputWidth = Math.max(20, String(meterDraft || '').length * 11);
 
   useEffect(() => {
     const next =
       initialFilter?.meter != null ? Number(initialFilter.meter) : null;
-    setMeterValue(next);
-    setMeterDraft(next != null ? String(next) : '');
+    if (next != null) {
+      setMeterValue(next);
+      setMeterDraft(String(next));
+    } else {
+      setMeterValue(DEFAULT_METER);
+      setMeterDraft(String(DEFAULT_METER));
+    }
   }, [initialFilter]);
-
-  useEffect(() => {
-    setMeterDraft(meterValue != null ? String(meterValue) : '');
-  }, [meterValue]);
 
   const commitMeterDraft = () => {
     const normalized = String(meterDraft ?? '').replace(/[^\d]/g, '');
@@ -53,15 +65,23 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
   };
 
   const handleSave = () => {
-    if (onSave) {
-      onSave({
-        meter:
-          meterValue != null && Number.isFinite(Number(meterValue))
-            ? Number(meterValue)
-            : null,
-      });
+    const normalized = String(meterDraft ?? '').replace(/[^\d]/g, '');
+    if (!normalized) {
+      onSave?.({meter: null});
+      onClose?.();
+      return;
     }
-    if (onClose) onClose();
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isFinite(parsed)) {
+      onSave?.({meter: null});
+      onClose?.();
+      return;
+    }
+    const clamped = Math.max(MIN_METER, Math.min(MAX_METER, parsed));
+    setMeterValue(clamped);
+    setMeterDraft(String(clamped));
+    onSave?.({meter: clamped});
+    onClose?.();
   };
 
   const handleClear = () => {
@@ -89,26 +109,27 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Image
-            source={require('../assets/meter.png')}
+            source={require('../assets/tiktok/meter-new.png')}
             style={styles.headerIcon}
             resizeMode="contain"
           />
           <Text style={styles.title}>מטר</Text>
         </View>
 
-        {/* Pill stepper: -  |  value מ"ר  |  + */}
+        {/* Same layout as Rooms StepperRow: +  |  value מ"ר  |  − */}
         <View style={styles.meterRow}>
           <View style={styles.counterInput}>
             <TouchableOpacity
               style={styles.counterButtonLeft}
               onPress={() =>
                 setMeterValue(v => {
-                  if (v == null) return null;
-                  const next = v - 10;
-                  return next < MIN_METER ? null : next;
+                  const base = v == null ? MIN_METER : v;
+                  const next = Math.min(MAX_METER, base + METER_STEP);
+                  setMeterDraft(String(next));
+                  return next;
                 })
               }>
-              <Text style={styles.counterButton}>-</Text>
+              <Text style={styles.counterButton}>+</Text>
             </TouchableOpacity>
             <View style={styles.counterDivider} />
             <View style={styles.counterValueContainer}>
@@ -131,26 +152,24 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
               style={styles.counterButtonRight}
               onPress={() =>
                 setMeterValue(v => {
-                  const base = v == null ? MIN_METER - 10 : v;
-                  const next = Math.min(MAX_METER, base + 10);
+                  if (v == null) return null;
+                  const next = v - METER_STEP;
+                  if (next < MIN_METER) {
+                    setMeterDraft('');
+                    return null;
+                  }
                   setMeterDraft(String(next));
                   return next;
                 })
               }>
-              <Text style={styles.counterButton}>+</Text>
+              <Text style={styles.counterButton}>−</Text>
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.saveBtnWrap} onPress={handleSave} activeOpacity={0.9}>
-          <Image
-            source={require('../assets/buy-rent/save.png')}
-            style={styles.saveBtnImage}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+      <View style={[styles.footer, {paddingBottom: bottomInset + 8}]}>
+        <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
         <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
           <Text style={styles.clearText}>נקה</Text>
         </TouchableOpacity>
@@ -185,8 +204,9 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 40,
     backgroundColor: BG,
+    borderTopWidth: 1,
+    borderTopColor: '#373548',
   },
   handleBar: {
     width: 40,
@@ -198,14 +218,14 @@ const styles = StyleSheet.create({
   headerIcon: { width: 36, height: 36 },
   title: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium', marginTop: 8 },
   meterRow: { marginBottom: 32 },
+  /** Matches `RoomsFilterScreen` StepperRow counter (height 52, pill border, no fill). */
   counterInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 64,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
+    height: 52,
+    borderRadius: 1000,
     borderWidth: 1,
-    borderColor: '#8C85B3',
+    borderColor: INPUT_BORDER,
     overflow: 'hidden',
   },
   counterButtonLeft: {
@@ -220,18 +240,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  counterButton: { color: '#fff', fontSize: 24, fontWeight: '600' },
-  counterDivider: { width: 1, height: '100%', backgroundColor: '#8C85B3' },
+  counterButton: {
+    color: '#fff',
+    fontSize: 30,
+    fontFamily: 'Rubik-Regular',
+    lineHeight: 30,
+  },
+  counterDivider: {width: 1, height: '100%', backgroundColor: COUNTER_DIVIDER},
   counterValueContainer: {
     flex: 2,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   counterValueInput: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: 'Rubik-Medium',
     minWidth: 0,
     paddingVertical: 0,
     paddingHorizontal: 0,
@@ -240,11 +267,9 @@ const styles = StyleSheet.create({
   counterValueSuffix: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
-    marginStart: 4,
+    fontFamily: 'Rubik-Medium',
   },
-  saveBtnWrap: { marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
-  saveBtnImage: { width: '100%', height: 54 },
+  saveBtnWrap: { marginBottom: 12, width: '100%' },
   clearWrap: { alignItems: 'center' },
   clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
 });

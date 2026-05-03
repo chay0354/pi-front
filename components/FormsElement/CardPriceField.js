@@ -1,9 +1,22 @@
-import {StyleSheet, Text, View, TouchableOpacity, TextInput} from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  TextInput,
+  Pressable,
+} from 'react-native';
 import {Colors} from '../../constants/styles';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import {PRICE_COUNTER_STEP_DEFAULT} from '../../utils/priceInput';
 
-export const CardPriceField = ({price = 0, setPrice}) => {
+export const CardPriceField = ({
+  price = 0,
+  setPrice,
+  counterStep = PRICE_COUNTER_STEP_DEFAULT,
+}) => {
   const safeSetPrice = typeof setPrice === 'function' ? setPrice : () => {};
+  const inputRef = useRef(null);
   const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
 
@@ -23,14 +36,19 @@ export const CardPriceField = ({price = 0, setPrice}) => {
     <View style={styles.priceInput}>
       <TouchableOpacity
         style={styles.counterButtonLeft}
-        onPress={() => safeSetPrice(Math.max(0, (price || 0) - 10000))}>
+        onPress={() =>
+          safeSetPrice(Math.max(0, (price || 0) - counterStep))
+        }>
         <Text style={styles.counterButtonMinus}>−</Text>
       </TouchableOpacity>
       <View style={styles.counterDivider} />
-      <View style={styles.counterValueContainer}>
+      <Pressable
+        style={styles.counterValueContainer}
+        onPress={() => inputRef.current?.focus?.()}>
         <View style={styles.priceValueRow}>
           <Text style={styles.priceValue}>₪</Text>
           <TextInput
+            ref={inputRef}
             style={[styles.priceValueInput, {width: inputWidth}]}
             value={draftPrice}
             onChangeText={setDraftPrice}
@@ -39,13 +57,14 @@ export const CardPriceField = ({price = 0, setPrice}) => {
             keyboardType="numeric"
             returnKeyType="done"
             textAlign="center"
+            showSoftInputOnFocus
           />
         </View>
-      </View>
+      </Pressable>
       <View style={styles.counterDivider} />
       <TouchableOpacity
         style={styles.counterButtonRight}
-        onPress={() => safeSetPrice((price || 0) + 10000)}>
+        onPress={() => safeSetPrice((price || 0) + counterStep)}>
         <Text style={styles.counterButtonPlus}>+</Text>
       </TouchableOpacity>
     </View>

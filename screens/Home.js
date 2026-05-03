@@ -6,32 +6,34 @@ import {
   View,
   Image,
   ScrollView,
+  Animated,
+  Platform,
 } from 'react-native';
-import React, {useContext, useCallback, useEffect, useState} from 'react';
+import React, {useContext, useCallback, useEffect, useRef, useState} from 'react';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
+import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getStoriesFeed} from '../utils/api';
-import {ContextHook} from '../hooks/ContextHook';
-import {
-  brokerCategories,
-  companyCategories,
-  subscriptionTypes,
-  userCategories,
-} from '../utils/constant';
+
+import {userCategories} from '../utils/constant';
 
 const Home = ({
   onOpenSettings,
   onOpenTikTokFeed,
   onOpenSelectedProjects,
   onOpenProfessionalsDirectory,
+  onOpenUserProfile,
 }) => {
-  const {currentUser} = useContext(ContextHook);
   const [storyRings, setStoryRings] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [viewerRing, setViewerRing] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const flipProgress = useRef(new Animated.Value(0)).current;
+  const flippedRef = useRef(false);
+  const [flipped, setFlipped] = useState(false);
+  const flipAnimRef = useRef(null);
 
   const loadStories = useCallback(async () => {
     setStoriesLoading(true);
@@ -49,17 +51,39 @@ const Home = ({
     loadStories();
   }, [loadStories]);
 
+  const toggleFlip = useCallback(() => {
+    if (flipAnimRef.current) flipAnimRef.current.stop();
+    const target = flippedRef.current ? 0 : 1;
+    flippedRef.current = !flippedRef.current;
+    setFlipped(flippedRef.current);
+    flipAnimRef.current = Animated.timing(flipProgress, {
+      toValue: target,
+      duration: 650,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    flipAnimRef.current.start();
+  }, [flipProgress]);
+
   const onLogoPress = useCallback(() => {
-    const now = Date.now();
-    logoTapTimesRef.current = logoTapTimesRef.current.filter(
-      t => now - t < TRIPLE_TAP_WINDOW_MS,
-    );
-    logoTapTimesRef.current.push(now);
-    if (logoTapTimesRef.current.length >= 3) {
-      logoTapTimesRef.current = [];
-      setPiAiVisible(true);
-    }
-  }, []);
+    toggleFlip();
+  }, [toggleFlip]);
+
+  const frontRotate = flipProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const backRotate = flipProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+  const frontOpacity = flipProgress.interpolate({
+    inputRange: [0, 0.499, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = flipProgress.interpolate({
+    inputRange: [0, 0.499, 0.5, 1],
+    outputRange: [0, 0, 1, 1],
+  });
 
   const handleOpenRing = useCallback(ring => {
     if (!ring?.slides?.length) return;
@@ -73,59 +97,123 @@ const Home = ({
     loadStories();
   }, [loadStories]);
 
-  const categoriesList =
-    currentUser?.subscription_type === subscriptionTypes.user
-      ? userCategories
-      : currentUser?.subscription_type === subscriptionTypes.broker
-        ? brokerCategories
-        : companyCategories;
+  const categoriesList = userCategories;
+
+  const frontFace = (
+    <>
+      <TouchableOpacity onPress={onOpenSettings}>
+        <Image source={require('../assets/menu.png')} style={styles.menu} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={onLogoPress}
+        accessibilityRole="button"
+        accessibilityLabel="Pi AI">
+        <Image
+          source={require('../assets/homeLogo.png')}
+          style={styles.logo}
+        />
+      </TouchableOpacity>
+
+      <View style={styles.content}>
+        <Carusel
+          categoriesList={categoriesList}
+          onCategorySelect={category => {
+            if (onOpenTikTokFeed) {
+              onOpenTikTokFeed(category);
+            }
+          }}
+        />
+        <View style={[styles.profileBarHeader, {marginTop: 20}]}>
+          <TouchableOpacity
+            onPress={() => onOpenSelectedProjects?.()}
+            style={styles.profileBarHeaderButton}>
+            <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
+          </TouchableOpacity>
+          <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
+        </View>
+        <View style={styles.projectCardWrap}>
+          <View style={styles.videoContainer}>
+            <Image
+              source={require('../assets/project_image.gif')}
+              style={styles.projectImage}
+              resizeMode="cover"
+            />
+            <Image
+              source={require('../assets/videoLogo.png')}
+              style={styles.videoLogo}
+              resizeMode="contain"
+            />
+          </View>
+          <Image
+            source={require('../assets/popular.png')}
+            style={styles.popularLogo}
+            resizeMode="contain"
+          />
+        </View>
+      </View>
+
+      <View style={styles.profileBar}>
+        <View style={styles.profileBarHeader}>
+          <TouchableOpacity
+            onPress={() => onOpenProfessionalsDirectory?.()}
+            style={styles.profileBarHeaderButton}>
+            <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
+          </TouchableOpacity>
+          <Text style={styles.profileBarHeaderText}>
+            בעלי מקצוע בתחום הנדל״ן
+          </Text>
+        </View>
+        <HomeStoryStrip
+          rings={storyRings}
+          loading={storiesLoading}
+          onRingPress={handleOpenRing}
+        />
+      </View>
+    </>
+  );
+
+  const backFace = (
+    <PiAiSearchModal
+      embedded
+      visible={flipped}
+      onClose={toggleFlip}
+      onOpenUserProfile={listing => {
+        toggleFlip();
+        onOpenUserProfile?.(listing);
+      }}
+    />
+  );
 
   return (
     <ImageBackground
       source={require('../assets/background.png')}
       style={styles.background}>
+      <View style={styles.backgroundClip}>
       <SafeAreaView style={styles.safeArea}>
-        <TouchableOpacity onPress={onOpenSettings}>
-          <Image source={require('../assets/menu.png')} style={styles.menu} />
-        </TouchableOpacity>
-        <Image source={require('../assets/homeLogo.png')} style={styles.logo} />
-
-        <View style={styles.content}>
-          <Carusel
-            categoriesList={categoriesList}
-            onCategorySelect={category => {
-              if (onOpenTikTokFeed) {
-                onOpenTikTokFeed(category);
-              }
-            }}
-          />
-          <View style={[styles.profileBarHeader, {marginTop: 20}]}>
-            <TouchableOpacity
-              onPress={() => onOpenSelectedProjects?.()}
-              style={styles.profileBarHeaderButton}>
-              <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
-            </TouchableOpacity>
-            <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
-          </View>
-          <View style={styles.projectCardWrap}>
-            <View style={styles.videoContainer}>
-              <Image
-                source={require('../assets/project_image.gif')}
-                style={styles.projectImage}
-                resizeMode="cover"
-              />
-              <Image
-                source={require('../assets/videoLogo.png')}
-                style={styles.videoLogo}
-                resizeMode="contain"
-              />
-            </View>
-            <Image
-              source={require('../assets/popular.png')}
-              style={styles.popularLogo}
-              resizeMode="contain"
-            />
-          </View>
+        <View style={styles.flipRoot}>
+          <Animated.View
+            pointerEvents={flipped ? 'none' : 'auto'}
+            style={[
+              styles.flipFace,
+              {
+                opacity: frontOpacity,
+                transform: [{perspective: 1200}, {rotateY: frontRotate}],
+              },
+            ]}>
+            {frontFace}
+          </Animated.View>
+          <Animated.View
+            pointerEvents={flipped ? 'auto' : 'none'}
+            style={[
+              styles.flipFace,
+              {
+                opacity: backOpacity,
+                transform: [{perspective: 1200}, {rotateY: backRotate}],
+              },
+            ]}>
+            {backFace}
+          </Animated.View>
         </View>
 
         <StoryViewerModal
@@ -133,26 +221,8 @@ const Home = ({
           ring={viewerRing}
           onClose={handleCloseViewer}
         />
-
-        {/* Keep this strip behavior exactly as current implementation */}
-        <View style={styles.profileBar}>
-          <View style={styles.profileBarHeader}>
-            <TouchableOpacity
-              onPress={() => onOpenProfessionalsDirectory?.()}
-              style={styles.profileBarHeaderButton}>
-              <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
-            </TouchableOpacity>
-            <Text style={styles.profileBarHeaderText}>
-              בעלי מקצוע בתחום הנדל״ן
-            </Text>
-          </View>
-          <HomeStoryStrip
-            rings={storyRings}
-            loading={storiesLoading}
-            onRingPress={handleOpenRing}
-          />
-        </View>
       </SafeAreaView>
+      </View>
     </ImageBackground>
   );
 };
@@ -164,6 +234,12 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
+    overflow: 'hidden',
+  },
+  backgroundClip: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
   },
   menu: {
     alignSelf: 'flex-end',
@@ -174,6 +250,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    overflow: 'hidden',
   },
   logo: {
     alignSelf: 'center',
@@ -243,5 +320,38 @@ const styles = StyleSheet.create({
   profileListContentContainer: {
     gap: 17,
     paddingHorizontal: 20,
+  },
+  flipRoot: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  flipFace: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backfaceVisibility: 'hidden',
+    overflow: 'hidden',
+  },
+  backContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  backTitle: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontFamily: 'Rubik-Medium',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  backSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
   },
 });

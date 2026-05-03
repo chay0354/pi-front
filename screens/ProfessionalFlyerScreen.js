@@ -12,6 +12,7 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getReviews, submitReview} from '../utils/api';
+import RatingImprovePicker from '../components/RatingImprovePicker';
 
 const imgBack = 'https://www.figma.com/api/mcp/asset/a65e2691-fd86-48b9-9865-87c80bdc1758';
 const imgShare = 'https://www.figma.com/api/mcp/asset/ce257c8c-ba69-4114-85be-89c8f9f942a1';
@@ -26,15 +27,7 @@ const imgChatBadge = 'https://www.figma.com/api/mcp/asset/280b12e8-92d9-4c49-a5a
 const imgCallWhite = 'https://www.figma.com/api/mcp/asset/9b9c4fea-832d-4ec7-8670-5539e677e104';
 const imgRatingFive = 'https://www.figma.com/api/mcp/asset/6c9fb3d5-d761-41d4-865b-0306074701f3';
 const imgRatingOne = 'https://www.figma.com/api/mcp/asset/c17ace7a-d891-430d-9a02-cd97ff0196cc';
-const imgStar1 = 'https://www.figma.com/api/mcp/asset/37f6257c-0b96-4f19-a2fd-ace699545cc7';
-const imgStar2 = 'https://www.figma.com/api/mcp/asset/219d9945-4432-480a-874c-30e576000e52';
-const imgStar3 = 'https://www.figma.com/api/mcp/asset/3f408610-dac1-484e-98ea-391956bdb2c1';
-const imgStar4 = 'https://www.figma.com/api/mcp/asset/b3a44ff0-a2b8-4100-82a8-2d690ce1c3d7';
-const imgStar5 = 'https://www.figma.com/api/mcp/asset/d8c830bf-d15f-4717-9539-34518c5a59a9';
-
 const fallbackExpertImage = require('../assets/image-7.png');
-
-const starSources = [imgStar1, imgStar2, imgStar3, imgStar4, imgStar5];
 
 const collectPhones = professional =>
   [
@@ -107,7 +100,7 @@ const ProfessionalFlyerScreen = ({
   currentUser,
 }) => {
   const insets = useSafeAreaInsets();
-  const [selectedRating, setSelectedRating] = useState(5);
+  const [selectedRating, setSelectedRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -161,6 +154,10 @@ const ProfessionalFlyerScreen = ({
   const submitRating = async () => {
     if (!currentUser) {
       Alert.alert('נדרשת התחברות', 'יש להתחבר כדי לדרג משתמשים');
+      return;
+    }
+    if (selectedRating < 1 || selectedRating > 5) {
+      Alert.alert('בחר דירוג', 'נא לבחור כוכבים (1–5) לפני שליחה.');
       return;
     }
     if (!subscriptionId) return;
@@ -281,20 +278,11 @@ const ProfessionalFlyerScreen = ({
 
         <View style={styles.section}>
           <Text style={styles.sectionTitleCenter}>כמה כוכבי פאי היית נותן על השירות שקיבלת?</Text>
-          <View style={styles.ratingRow}>
-            {[1, 2, 3, 4, 5].map(star => (
-              <TouchableOpacity
-                key={star}
-                style={[
-                  styles.rateBox,
-                  selectedRating === star && styles.rateBoxSelected,
-                ]}
-                onPress={() => setSelectedRating(star)}
-                activeOpacity={0.85}>
-                <Image source={{uri: starSources[star - 1]}} style={styles.rateStar} resizeMode="contain" />
-              </TouchableOpacity>
-            ))}
-          </View>
+          <RatingImprovePicker
+            value={selectedRating}
+            onChange={setSelectedRating}
+            style={{marginBottom: 24}}
+          />
           <TouchableOpacity onPress={submitRating} activeOpacity={0.85} disabled={submitLoading}>
             <LinearGradient
               colors={['#FEE787', '#BD9947', '#9C6522']}
@@ -485,17 +473,6 @@ const styles = StyleSheet.create({
   contactIcon: {width: 28, height: 28},
   copyBtn: {position: 'absolute', left: 0, bottom: 34},
   copyIcon: {width: 24, height: 24},
-  ratingRow: {width: '100%', flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 24},
-  rateBox: {
-    width: 54,
-    height: 54,
-    borderRadius: 12,
-    backgroundColor: '#2B2A39',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rateBoxSelected: {backgroundColor: '#4D4966'},
-  rateStar: {width: 34.892, height: 34.892},
   rateBtn: {width: '100%', height: 44, borderRadius: 846, alignItems: 'center', justifyContent: 'center', marginBottom: 31},
   rateBtnText: {color: '#1E1D27', fontSize: 20, letterSpacing: 0.2, fontFamily: 'Rubik-Medium'},
   reviewInput: {

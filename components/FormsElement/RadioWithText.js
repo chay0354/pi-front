@@ -17,6 +17,9 @@ export const RadioWithText = ({
   containerStyle,
   radioSpacerStyle,
   isRequired,
+  onLongPress,
+  /** Figma/TikTok-style check — only פרטים כלליים / הפרויקט מציע accordions */
+  useFigmaStyleIcon = false,
 }) => {
   return (
     <View key={index} style={containerStyle}>
@@ -28,13 +31,18 @@ export const RadioWithText = ({
           Platform.OS === 'web' && { cursor: 'pointer' },
         ]}
         onPress={() => setName(name)}
+        onLongPress={onLongPress}
+        delayLongPress={450}
         activeOpacity={0.7}>
         <Text style={styles.radioOptionText}>
           {title}
           {isRequired && <Text style={styles.requiredStar}>*</Text>}
         </Text>
         <View style={[styles.radioSpacer, radioSpacerStyle]} />
-        <RadioIcon isSelected={isSelected} />
+        <RadioIcon
+          isSelected={isSelected}
+          useFigmaStyle={useFigmaStyleIcon}
+        />
       </TouchableOpacity>
       {children}
       {isNotLastIndex && <Divider style={styleDevider} />}

@@ -13,7 +13,7 @@ const AVATAR = 66;
 const OUTER = 78;
 
 /**
- * Profile rings (yellow border): users with a profile intro video; tap opens viewer.
+ * Story rings (yellow border): users with at least one story slide (profile video and/or video posts); tap opens viewer.
  */
 const HomeStoryStrip = ({
   rings = [],
@@ -37,7 +37,7 @@ const HomeStoryStrip = ({
           style={styles.item}
           onPress={() => onRingPress(ring)}
           activeOpacity={0.85}
-          accessibilityLabel={`סרטון פרופיל של ${ring.display_name || 'משתמש'}`}>
+          accessibilityLabel={`סטוריז של ${ring.display_name || 'משתמש'}`}>
           <View style={styles.storyRingOuter}>
             {ring.profile_image_url ? (
               <View style={styles.avatarClip}>

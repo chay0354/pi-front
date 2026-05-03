@@ -5,53 +5,57 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Image,
   StyleSheet,
   Platform,
   Alert,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
-import Svg, {Defs, LinearGradient as SvgLinearGradient, Path, Stop} from 'react-native-svg';
 import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {submitImprovementFeedback, toSubscriptionId} from '../utils/api';
+import RatingImprovePicker from '../components/RatingImprovePicker';
+import {resolveBundledAssetSource} from '../utils/bundledAsset';
 
-const TEAL = '#2DD4BF';
+const thanksEndImage = require('../assets/improve/end.png');
+const sendButtonImage = require('../assets/improve/send-button.png');
 
-// Local SVG rating stars — instant state changes, identical sizing, no remote fetch.
-const STAR_PATH =
-  'M13.5449 0.760714C14.2554 -0.25357 15.7446 -0.253572 16.4551 0.760712L20.4041 7.29935C20.6303 7.62228 20.9553 7.86099 21.3291 7.97861L28.7463 10.0321C29.9203 10.4015 30.3805 11.8329 29.6456 12.8292L24.669 18.367C24.435 18.6842 24.3109 19.0704 24.3157 19.4661L25.2912 28.1747C25.3063 29.4173 24.1015 30.3019 22.9369 29.9034L15.5717 27.6881C15.2009 27.5612 14.7991 27.5612 14.4283 27.6881L7.06314 29.9034C5.89846 30.3019 4.69366 29.4173 4.7088 28.1747L5.68432 19.4661C5.68914 19.0704 5.56497 18.6842 5.33097 18.367L0.354447 12.8292C-0.380505 11.8329 0.079687 10.4015 1.25372 10.0321L8.67086 7.97861C9.04466 7.86099 9.36975 7.62228 9.59594 7.29935L13.5449 0.760714Z';
-/** Gold gradient used across the Figma design system (ratings, gold pills, rings). */
-const STAR_GRADIENT_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
-const STAR_OUTLINE_COLOR = '#8C85B3';
-const STAR_SIZE = 34.892;
-
-const RatingStar = ({active}) => {
-  const gradientId = 'rating-star-grad-active';
-  return (
-    <Svg width={STAR_SIZE} height={STAR_SIZE} viewBox="-2 -2 34 34">
-      {active ? (
-        <Defs>
-          <SvgLinearGradient
-            id={gradientId}
-            x1="0"
-            y1="0"
-            x2="30"
-            y2="30"
-            gradientUnits="userSpaceOnUse">
-            <Stop offset="0.0456" stopColor={STAR_GRADIENT_COLORS[0]} />
-            <Stop offset="0.5076" stopColor={STAR_GRADIENT_COLORS[1]} />
-            <Stop offset="0.8831" stopColor={STAR_GRADIENT_COLORS[2]} />
-          </SvgLinearGradient>
-        </Defs>
-      ) : null}
-      <Path
-        d={STAR_PATH}
-        fill={active ? `url(#${gradientId})` : 'transparent'}
-        stroke={active ? 'transparent' : STAR_OUTLINE_COLOR}
-        strokeWidth={active ? 0 : 1.5}
+/**
+ * On web, RN's Image (background-based div) often does not paint inside touchables;
+ * a plain <img> with the bundled URI is reliable.
+ */
+const BundledPng = ({source, style, resizeMode = 'contain'}) => {
+  if (Platform.OS === 'web') {
+    const flat = StyleSheet.flatten(style) || {};
+    const resolved = resolveBundledAssetSource(source) || {};
+    const {uri, width: iw, height: ih} = resolved;
+    if (!uri) {
+      return <Image source={source} style={style} resizeMode={resizeMode} />;
+    }
+    const objectFit = resizeMode === 'cover' ? 'cover' : 'contain';
+    const boxHeight = flat.height != null ? flat.height : flat.minHeight;
+    return (
+      <img
+        alt=""
+        src={uri}
+        width={typeof iw === 'number' ? iw : undefined}
+        height={typeof ih === 'number' ? ih : undefined}
+        draggable={false}
+        style={{
+          display: 'block',
+          boxSizing: 'border-box',
+          width: flat.width ?? '100%',
+          height: boxHeight,
+          minHeight: flat.minHeight,
+          maxWidth: flat.maxWidth,
+          objectFit,
+          userSelect: 'none',
+          pointerEvents: 'none',
+          opacity: flat.opacity == null ? 1 : flat.opacity,
+        }}
       />
-    </Svg>
-  );
+    );
+  }
+  return <Image source={source} style={style} resizeMode={resizeMode} />;
 };
 
 /**
@@ -93,6 +97,10 @@ const FeedbackSuggestionScreen = ({onClose}) => {
     setStep('thanks');
   };
 
+  const hasFeedbackText = message.trim() !== '';
+  const showImageSendButton = hasFeedbackText && rating >= 1;
+  const sendDisabled = submitting || rating < 1 || !hasFeedbackText;
+
   if (step === 'thanks') {
     return (
       <View style={styles.root}>
@@ -107,25 +115,20 @@ const FeedbackSuggestionScreen = ({onClose}) => {
             <View style={styles.headerSpacer} />
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.successIconWrap}>
-              <Text style={styles.successCheck}>✓</Text>
+          <TouchableOpacity
+            activeOpacity={0.92}
+            onPress={onClose}
+            style={styles.thanksEndTap}
+            accessibilityRole="button"
+            accessibilityLabel="חזור">
+            <View style={styles.thanksEndImageShell}>
+              <BundledPng
+                source={thanksEndImage}
+                style={styles.thanksEndImage}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.thanksTitle}>!תודה רבה</Text>
-            <Text style={styles.thanksSub}>
-              המשוב שלך חשוב לנו ועוזר לנו להשתפר
-            </Text>
-
-            <TouchableOpacity activeOpacity={0.85} onPress={onClose} style={styles.btnWrap}>
-              <LinearGradient
-                colors={['#c9a227', '#8b6914']}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 1}}
-                style={styles.btnGradientGold}>
-                <Text style={styles.btnTextGold}>חזור</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
@@ -149,32 +152,11 @@ const FeedbackSuggestionScreen = ({onClose}) => {
           <Text style={styles.question}>נהנית מהחוויה?</Text>
           <Text style={styles.rateHint}>דרג את החווייה שלך</Text>
 
-          <View style={styles.starsSection}>
-            <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map(star => {
-              const active = rating >= star;
-              return (
-                <TouchableOpacity
-                  key={star}
-                  onPressIn={() => setRating(star)}
-                  onPress={() => setRating(star)}
-                  style={styles.starHit}
-                  hitSlop={8}
-                  activeOpacity={0.8}>
-                  <View style={styles.starStack}>
-                    <RatingStar rank={star} active={active} />
-                    <View style={styles.starNumberWrap} pointerEvents="none">
-                      <Text
-                        style={[styles.starNumber, active && styles.starNumberActive]}>
-                        {star}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-            </View>
-          </View>
+          <RatingImprovePicker
+            value={rating}
+            onChange={setRating}
+            style={styles.ratingPicker}
+          />
 
           <Text style={styles.feedbackHint}>
             נשמח לשמוע מה חשבת ואיך נוכל להשתפר.
@@ -192,14 +174,34 @@ const FeedbackSuggestionScreen = ({onClose}) => {
           />
 
           <TouchableOpacity
-            activeOpacity={0.85}
+            activeOpacity={0.88}
             onPress={handleSubmit}
-            disabled={submitting || rating < 1 || !message.trim()}
-            style={[
-              styles.submitBtn,
-              (submitting || rating < 1 || !message.trim()) && styles.submitBtnDisabled,
-            ]}>
-            <Text style={styles.submitBtnText}>שלח משוב</Text>
+            disabled={sendDisabled}
+            style={styles.submitBtnOuter}
+            accessibilityRole="button"
+            accessibilityLabel="שלח משוב"
+            accessibilityState={{disabled: sendDisabled}}>
+            {showImageSendButton ? (
+              <View style={styles.sendButtonImageShell}>
+                <BundledPng
+                  source={sendButtonImage}
+                  style={[
+                    styles.sendButtonImage,
+                    submitting && styles.sendButtonImageDisabled,
+                  ]}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.submitBtn,
+                  (submitting || rating < 1 || !hasFeedbackText) &&
+                    styles.submitBtnDisabled,
+                ]}>
+                <Text style={styles.submitBtnText}>שלח משוב</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -268,50 +270,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  starsSection: {
-    paddingHorizontal: 0,
-    marginBottom: 24,
-    alignItems: 'center',
-  },
-  starsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  /** Single bar image (improve/0..5); matches profile review picker. */
+  ratingPicker: {
     width: 270,
-  },
-  starHit: {
-    width: 54.892,
-    height: 54.892,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starStack: {
-    width: 34.892,
-    height: 34.892,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starNumberWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starNumber: {
-    color: '#E0B040',
-    fontSize: 16,
-    lineHeight: 18,
-    textAlign: 'center',
-    fontFamily: 'Rubik-Regular',
-    includeFontPadding: false,
-  },
-  starNumberActive: {
-    color: '#1e1d27',
-    fontFamily: 'Rubik-Medium',
+    maxWidth: '100%',
+    alignSelf: 'center',
+    marginBottom: 24,
   },
   feedbackHint: {
     color: '#FFFFFF',
@@ -334,6 +298,28 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     letterSpacing: 0.2,
   },
+  submitBtnOuter: {
+    width: '100%',
+  },
+  /** Fixed box so web does not collapse the CTA under TouchableOpacity. */
+  sendButtonImageShell: {
+    width: '100%',
+    height: 56,
+    position: 'relative',
+  },
+  sendButtonImage: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    width: '100%',
+    height: 56,
+    zIndex: 0,
+    ...Platform.select({web: {display: 'block', userSelect: 'none'}, default: {}}),
+  },
+  sendButtonImageDisabled: {
+    opacity: 0.45,
+  },
   submitBtn: {
     backgroundColor: '#4d4966',
     borderRadius: 1000,
@@ -350,50 +336,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     letterSpacing: 0.2,
   },
-  successIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: TEAL,
+  /** Thanks step: no card — image sits on root (blue) background. */
+  thanksEndTap: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  thanksEndImageShell: {
+    width: '100%',
+    maxWidth: 330,
+    minHeight: 280,
     alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
   },
-  successCheck: {
-    color: '#1e1d27',
-    fontSize: 36,
-    fontWeight: '700',
-  },
-  thanksTitle: {
-    color: Colors.white100,
-    fontSize: 24,
-    fontFamily: 'Rubik-Bold',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  thanksSub: {
-    color: Colors.white100,
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
-    marginBottom: 28,
-    paddingHorizontal: 8,
-  },
-  btnWrap: {
-    borderRadius: 28,
-    overflow: 'hidden',
-  },
-  btnGradientGold: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 28,
-  },
-  btnTextGold: {
-    color: '#1e1d27',
-    fontSize: 18,
-    fontFamily: 'Rubik-Bold',
+  thanksEndImage: {
+    width: '100%',
+    minHeight: 280,
   },
 });
 

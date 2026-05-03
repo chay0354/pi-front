@@ -1,10 +1,4 @@
-import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  TouchableOpacity,
-} from 'react-native';
+import {StyleSheet, View, TextInput} from 'react-native';
 import {Colors} from '../../constants/styles';
 import {Title} from './Title';
 
@@ -18,9 +12,6 @@ export const PhoneInput = ({phone, setPhone}) => {
         starStyle={{color: Colors.textSecondary}}
       />
       <View style={styles.phoneInput}>
-        <TouchableOpacity>
-          <Text style={styles.phoneDropdown}>▼</Text>
-        </TouchableOpacity>
         <TextInput
           style={styles.phoneTextInput}
           placeholder="00 000 0000"
@@ -54,11 +45,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
     marginBottom: 0,
     color: '#D2D0DC',
-  },
-  phoneDropdown: {
-    color: Colors.whiteGeneral,
-    fontSize: 16,
-    marginRight: 10,
   },
   phoneTextInput: {
     flex: 1,

@@ -1,23 +1,24 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback, useContext} from 'react';
 import {
   View,
-  Image,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors} from '../constants/styles';
-import {getListings} from '../utils/api';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {
+  loadTikTokLikedState,
+  persistLikedListingIds,
+} from '../utils/tikTokLikedStorage';
+import {getListings, likeListing, unlikeListing} from '../utils/api';
+import {ContextHook} from '../hooks/ContextHook';
+import ListingGridCardFigma from '../components/ListingGridCardFigma';
+import {brokerPiRatingFromListing} from '../utils/listingGridCardFigma';
 
 const GOLD = '#ffc40a';
-const CARD_BG = '#252436';
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const CARD_IMAGE_HEIGHT = 200;
 
 /** Detect feed-post entries so we can exclude them from the ads list. */
 function isPostListingRecord(item) {
@@ -62,9 +63,39 @@ function isPostListingRecord(item) {
   return urls.some(u => /post_\d/i.test(String(u)));
 }
 
-const UserListingsScreen = ({creatorId, displayName = '', onClose}) => {
+const UserListingsScreen = ({creatorId, displayName = '', onClose, onOpenListing}) => {
+  const {currentUser} = useContext(ContextHook);
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [likedListingIds, setLikedListingIds] = useState(() => new Set());
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const uid =
+          currentUser?.id != null ? String(currentUser.id).trim() : null;
+        const st = await loadTikTokLikedState(uid);
+        setLikedListingIds(st.likedListingIds);
+      } catch (e) {
+        console.warn('UserListings: load liked ids failed', e);
+      }
+    };
+    load();
+  }, [currentUser?.id]);
+
+  const syncLikesFromListings = useCallback((list, uid) => {
+    if (!uid || !list?.length) return;
+    setLikedListingIds(prev => {
+      const next = new Set(prev);
+      list.forEach(l => {
+        if (l?.id == null) return;
+        if (l.liked === true) next.add(l.id);
+        else if (l.liked === false) next.delete(l.id);
+      });
+      persistLikedListingIds(uid, next).catch(() => {});
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!creatorId) {
@@ -73,117 +104,77 @@ const UserListingsScreen = ({creatorId, displayName = '', onClose}) => {
       return;
     }
     setLoading(true);
-    getListings({subscription_id: creatorId})
+    const uid = currentUser?.id != null ? String(currentUser.id) : null;
+    getListings({
+      subscription_id: creatorId,
+      ...(uid ? {user_id: uid} : {}),
+    })
       .then(result => {
         if (result.success && Array.isArray(result.listings)) {
-          // Exclude feed posts – this screen shows ads only.
-          setListings(result.listings.filter(l => !isPostListingRecord(l)));
+          const rows = result.listings.filter(l => !isPostListingRecord(l));
+          setListings(rows);
+          if (uid) {
+            syncLikesFromListings(rows, uid);
+          }
         } else {
           setListings([]);
         }
       })
       .catch(() => setListings([]))
       .finally(() => setLoading(false));
-  }, [creatorId]);
+  }, [creatorId, currentUser?.id, syncLikesFromListings]);
 
-  const renderCard = ({item}) => {
-    const imgs = item.listing_images || [];
-    const firstImg = imgs[0]?.image_url;
-    const purposeRaw = item.purpose || item.search_purpose || '';
-    const purposeLabel =
-      purposeRaw === 'sale' ||
-      String(purposeRaw).toLowerCase() === 'sale' ||
-      purposeRaw === 'מכירה'
-        ? 'למכירה'
-        : 'להשכרה';
-    const priceNum = item.price != null ? Number(item.price) : null;
-    const priceStr =
-      priceNum != null && !isNaN(priceNum)
-        ? `₪${Math.round(priceNum).toLocaleString('he-IL')}`
-        : '—';
-    const locBase = (
-      item.address ||
-      item.land_address ||
-      item.search_address ||
-      ''
-    ).trim();
-    const parcel =
-      item.land_parcel != null && String(item.land_parcel).trim()
-        ? `חלקה ${String(item.land_parcel).trim()}`
-        : '';
-    const block =
-      item.land_block != null && String(item.land_block).trim()
-        ? `גוש ${String(item.land_block).trim()}`
-        : '';
-    const location =
-      [locBase, parcel, block].filter(Boolean).join(' · ') || '—';
-    const creatorImage = getUserProfileImageUrl(item);
+  const handleToggleLike = useCallback(
+    async listing => {
+      const listingId = listing?.id;
+      if (listingId == null) return;
+      const userId =
+        currentUser?.id != null ? String(currentUser.id) : null;
+      if (!userId) return;
+      const isCurrentlyLiked = likedListingIds.has(listingId);
+      const willBeLiked = !isCurrentlyLiked;
 
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardImageWrap}>
-          {firstImg ? (
-            <Image
-              source={{uri: firstImg}}
-              style={styles.cardImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
-              <MaterialCommunityIcons
-                name="image-outline"
-                size={48}
-                color="rgba(255,255,255,0.4)"
-              />
-            </View>
-          )}
-          {imgs.length > 1 && (
-            <View style={styles.dots}>
-              {imgs.slice(0, 5).map((_, i) => (
-                <View
-                  key={i}
-                  style={[styles.dot, i === 0 && styles.dotActive]}
-                />
-              ))}
-            </View>
-          )}
-          {/* {creatorImage && (
-            <View style={styles.avatarWrap}>
-              <Image
-                source={{uri: creatorImage}}
-                style={styles.avatar}
-                resizeMode="cover"
-              />
-            </View>
-          )} */}
-        </View>
-        <View style={styles.cardBottom}>
-          {/* Level 3: heart + למכירה/להשכרה */}
-          <View style={styles.cardBottomLevel3}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{purposeLabel}</Text>
-            </View>
-            <View style={styles.heartWrap}>
-              <MaterialCommunityIcons
-                name="heart-outline"
-                size={26}
-                color="#fff"
-              />
-            </View>
-          </View>
-          {/* Level 2: price */}
-          <Text style={styles.price}>{priceStr}</Text>
-          {/* Level 1: address */}
-          <View style={styles.cardBottomLevel1}>
-            <SimpleLineIcons name="location-pin" size={16} color="#fff" />
-            <Text style={styles.location} numberOfLines={1}>
-              {location}
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
+      try {
+        if (willBeLiked) {
+          await likeListing(listingId, userId);
+        } else {
+          await unlikeListing(listingId, userId);
+        }
+      } catch (e) {
+        console.warn('UserListings like/unlike failed:', e?.message);
+        return;
+      }
+
+      setLikedListingIds(prev => {
+        const next = new Set(prev);
+        if (next.has(listingId)) {
+          next.delete(listingId);
+        } else {
+          next.add(listingId);
+        }
+        persistLikedListingIds(userId, next).catch(() => {});
+        return next;
+      });
+    },
+    [currentUser?.id, likedListingIds],
+  );
+
+  const renderCard = useCallback(
+    ({item}) => {
+      const displayPi = brokerPiRatingFromListing(item);
+      return (
+        <ListingGridCardFigma
+          listing={item}
+          onPress={onOpenListing}
+          liked={Boolean(currentUser?.id) && likedListingIds.has(item.id)}
+          onToggleLike={handleToggleLike}
+          displayPi={displayPi}
+          style={styles.cardMargin}
+        />
+      );
+    },
+    [onOpenListing, likedListingIds, handleToggleLike],
+  );
 
   return (
     <View style={styles.container}>
@@ -214,6 +205,7 @@ const UserListingsScreen = ({creatorId, displayName = '', onClose}) => {
       ) : (
         <FlatList
           data={listings}
+          extraData={likedListingIds}
           keyExtractor={item => String(item.id)}
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
@@ -257,107 +249,12 @@ const styles = StyleSheet.create({
   },
   loadingText: {color: Colors.grey200, fontSize: 14, marginTop: 12},
   emptyText: {color: Colors.grey200, fontSize: 16, marginTop: 12},
-  listContent: {padding: 24, paddingBottom: 48},
-  card: {
-    width: '100%',
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#2B2A39',
-    marginBottom: 14,
+  listContent: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 48,
   },
-  cardImageWrap: {
-    position: 'relative',
-    width: '100%',
-    height: 220,
-  },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  cardImagePlaceholder: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dots: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-  dotActive: {backgroundColor: GOLD, width: 8, height: 8, borderRadius: 4},
-  avatarWrap: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: GOLD,
-    overflow: 'hidden',
-  },
-  avatar: {width: '100%', height: '100%'},
-  cardBottom: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    alignItems: 'flex-end',
-  },
-  cardBottomLevel3: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
-  },
-  heartWrap: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heartImage: {width: 24, height: 25},
-  badge: {
-    backgroundColor: '#fff',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-  },
-  badgeText: {
-    color: '#1a1a1a',
-    fontSize: 13,
-    fontFamily: 'Rubik-Medium',
-  },
-  price: {
-    color: '#fff',
-    fontSize: 22,
-    fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
-    marginBottom: 10,
-    width: '100%',
-  },
-  cardBottomLevel1: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 6,
-  },
-  location: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'right',
-    fontFamily: 'Rubik-Regular',
-    flex: 1,
-  },
+  cardMargin: {marginBottom: 10},
 });
 
 export default UserListingsScreen;
