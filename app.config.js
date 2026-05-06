@@ -14,6 +14,7 @@ module.exports = {
     },
     assetBundlePatterns: ['**/*'],
     ios: {
+      bundleIdentifier: 'com.pi.frontend',
       supportsTablet: true,
       infoPlist: {
         NSCameraUsageDescription: 'אנחנו צריכים גישה למצלמה כדי להעלות תמונות',
@@ -22,11 +23,19 @@ module.exports = {
       },
     },
     android: {
+      package: 'com.pi.frontend',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
       },
-      permissions: ['CAMERA', 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'],
+      permissions: [
+        'CAMERA',
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+        'READ_MEDIA_IMAGES',
+        'READ_MEDIA_VIDEO',
+        'RECORD_AUDIO',
+      ],
     },
     web: {
       favicon: './assets/logo.png',

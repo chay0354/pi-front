@@ -13,7 +13,8 @@
     "web:dev": "node scripts/start-web-dev.js",
     "web:lan": "expo start --web --port 8084",
     "web:fresh": "powershell -ExecutionPolicy Bypass -File scripts/start-web-fresh.ps1",
-    "open-web": "start http://localhost:8084"
+    "open-web": "start http://localhost:8084",
+    "build:apk": "eas build --platform android --profile preview"
   },
   "dependencies": {
     "@expo/webpack-config": "^19.0.1",
@@ -39,7 +40,8 @@
     "react-native-webview": "^13.2.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "eas-cli": "^16.28.0"
   },
   "private": true
 }
