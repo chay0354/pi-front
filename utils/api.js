@@ -7,19 +7,25 @@ import { Platform } from 'react-native';
 
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
+/** Strip trailing slashes so `${base}/api/...` never becomes `//api` (Vercel 308 + CORS issues). */
+export function normalizeApiBaseUrl(url) {
+  const s = String(url || '').trim().replace(/\/+$/, '');
+  return s || 'http://localhost:3000';
+}
+
 // On web: when opened via network IP (e.g. http://192.168.1.5:8084), use same host for API so it works from other devices
 export function getApiUrl() {
   if (isWeb && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return `${window.location.protocol}//${window.location.hostname}:3000`;
+    return normalizeApiBaseUrl(`${window.location.protocol}//${window.location.hostname}:3000`);
   }
-  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  return normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
 }
 
 /**
  * On a physical device, localhost points at the phone — use the machine running Metro (LAN IP) or Android emulator host.
  */
 function getNativeApiUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  const fromEnv = normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
   const looksLocal = /localhost|127\.0\.0\.1/i.test(fromEnv);
   if (!looksLocal) return fromEnv;
 
@@ -30,16 +36,16 @@ function getNativeApiUrl() {
   if (debuggerHost) {
     const host = String(debuggerHost).split(':')[0];
     if (host && !/^localhost$/i.test(host) && host !== '127.0.0.1') {
-      return `http://${host}:3000`;
+      return normalizeApiBaseUrl(`http://${host}:3000`);
     }
   }
   if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3000';
+    return normalizeApiBaseUrl('http://10.0.2.2:3000');
   }
   return fromEnv;
 }
 
-const API_URL = isWeb ? getApiUrl() : getNativeApiUrl();
+const API_URL = normalizeApiBaseUrl(isWeb ? getApiUrl() : getNativeApiUrl());
 
 /** Resolved API base URL (for debugging broker search / connectivity). */
 export function getResolvedApiUrl() {

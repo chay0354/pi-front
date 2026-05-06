@@ -20,7 +20,13 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, updateListing, toSubscriptionId} from '../utils/api';
+import {
+  uploadFile,
+  createListing,
+  updateListing,
+  toSubscriptionId,
+  getResolvedApiUrl,
+} from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   brokerCategoryForm,
@@ -1662,7 +1668,7 @@ const AdsForm = ({
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getResolvedApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -1706,7 +1712,7 @@ const AdsForm = ({
               formData.append('folder', 'listings/images');
 
               const uploadResponse = await fetch(
-                `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+                `${getResolvedApiUrl()}/api/upload`,
                 {
                   method: 'POST',
                   body: formData,
@@ -1743,7 +1749,7 @@ const AdsForm = ({
           formData.append('folder', 'listings/images');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getResolvedApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -1778,7 +1784,7 @@ const AdsForm = ({
             formData.append('folder', 'listings/images');
 
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getResolvedApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
@@ -1809,7 +1815,7 @@ const AdsForm = ({
           formData.append('folder', 'listings/videos');
 
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getResolvedApiUrl()}/api/upload`,
             {
               method: 'POST',
               body: formData,
@@ -1837,7 +1843,7 @@ const AdsForm = ({
           formData.append('file', salesImage.file);
           formData.append('folder', 'listings/images');
           const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+            `${getResolvedApiUrl()}/api/upload`,
             {method: 'POST', body: formData},
           );
           const data = await response.json();
@@ -1863,7 +1869,7 @@ const AdsForm = ({
             formData.append('file', bnbBusinessLogo.file);
             formData.append('folder', 'listings/images');
             const response = await fetch(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/upload`,
+              `${getResolvedApiUrl()}/api/upload`,
               {
                 method: 'POST',
                 body: formData,
