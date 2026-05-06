@@ -42,6 +42,9 @@ module.exports = {
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
     extra: {
+      eas: {
+        projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
+      },
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://opxeruasowoaybceskyp.supabase.co',
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w',
     },
