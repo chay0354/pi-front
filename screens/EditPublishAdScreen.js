@@ -1318,7 +1318,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionImage: {width: 24, height: 24},
-  headerTitle: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium'},
+  headerTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+  },
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 20, paddingBottom: 40},
   topPanel: {
@@ -1334,8 +1338,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   sectionLabel: {
-    color: '#fff',
-    fontSize: 15,
+    color: '#D2D0DC',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
     marginTop: 5,
     marginBottom: 12,
     textAlign: 'right',
@@ -1346,7 +1351,7 @@ const styles = StyleSheet.create({
   },
   categoryScrollContent: {
     // flexDirection: 'row-reverse',
-    gap: 16,
+    gap: 22,
     paddingHorizontal: 20,
   },
   categoryItem: {
@@ -1386,7 +1391,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#3d3b52',
+    backgroundColor: '#4D4966',
     // paddingVertical: 6,
     // paddingHorizontal: 20,
     borderRadius: 26,
@@ -1540,7 +1545,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#3d3b52',
+    backgroundColor: '#4D4966',
     paddingVertical: 10,
     borderRadius: 18,
   },
