@@ -16,6 +16,7 @@ npm-debug.*
 web-build/
 .env
 .env.*
+!.env.example
 .DS_Store
 react-native-*.tgz
 

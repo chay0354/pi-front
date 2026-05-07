@@ -1,9 +1,11 @@
+// Single source of truth for Expo (also update app.json if you keep it, to avoid drift).
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues with app.json)
 module.exports = {
   expo: {
     name: 'PI Frontend',
     slug: 'pi-frontend',
     version: '1.0.0',
+    scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
@@ -16,14 +18,24 @@ module.exports = {
     ios: {
       bundleIdentifier: 'com.pi.frontend',
       supportsTablet: true,
+      ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY
+        ? {
+            config: {
+              googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY,
+            },
+          }
+        : {}),
+      buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: 'אנחנו צריכים גישה למצלמה כדי להעלות תמונות',
         NSPhotoLibraryUsageDescription: 'אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים',
         NSPhotoLibraryAddOnlyUsageDescription: 'אנחנו צריכים גישה לספריית התמונות כדי להוסיף תמונות',
+        NSMicrophoneUsageDescription: 'אנחנו צריכים גישה למיקרופון כדי לשלוח הודעות קול',
       },
     },
     android: {
       package: 'com.pi.frontend',
+      versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -36,6 +48,15 @@ module.exports = {
         'READ_MEDIA_VIDEO',
         'RECORD_AUDIO',
       ],
+      ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY
+        ? {
+            config: {
+              googleMaps: {
+                apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY,
+              },
+            },
+          }
+        : {}),
     },
     web: {
       favicon: './assets/logo.png',
