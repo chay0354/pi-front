@@ -8,6 +8,9 @@
       "distribution": "internal",
       "environment": "preview",
       "node": "20.18.1",
+      "env": {
+        "_JAVA_OPTIONS": "-Xmx6144m -XX:MaxMetaspaceSize=512m"
+      },
       "android": {
         "buildType": "apk"
       }
