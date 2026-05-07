@@ -1371,6 +1371,11 @@ export default function App() {
               // Favorites top bar writes `tikTokFeedSelectedTopBarFilter` for pics/list/video/liked.
               setCurrentScreen(favoritesReturnScreen);
             }}
+            onNavigateToTikTokAfterTopBarFilter={() => {
+              setTikTokUserSearchOpenTrigger(0);
+              setTikTokFeedRefreshKey(k => k + 1);
+              setCurrentScreen(screenName.tikTokFeed);
+            }}
             onOpenTikTokUserSearch={() => {
               setTikTokUserSearchOpenTrigger(n => n + 1);
               setCurrentScreen(screenName.tikTokFeed);

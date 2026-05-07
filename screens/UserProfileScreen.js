@@ -1688,9 +1688,13 @@ const UserProfileScreen = ({
           !fromCompanyProjects && (
         <View style={styles.actionRow}>
           <TouchableOpacity
-            onPress={() => typeof onCall === 'function' && onCall()}
+            onPress={() => {
+              if (isOwnProfile) return;
+              typeof onCall === 'function' && onCall();
+            }}
             activeOpacity={0.8}
-            style={styles.actionBtnTouch}>
+            disabled={isOwnProfile}
+            style={[styles.actionBtnTouch, isOwnProfile && styles.actionBtnDisabled]}>
             <Image
               source={require('../assets/callWithText.png')}
               style={styles.actionBtnImage}
@@ -1699,6 +1703,7 @@ const UserProfileScreen = ({
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
+              if (isOwnProfile) return;
               if (
                 !currentUser &&
                 typeof onOpenUserRegistration === 'function'
@@ -1709,7 +1714,8 @@ const UserProfileScreen = ({
               }
             }}
             activeOpacity={0.8}
-            style={styles.actionBtnTouch}>
+            disabled={isOwnProfile}
+            style={[styles.actionBtnTouch, isOwnProfile && styles.actionBtnDisabled]}>
             <Image
               source={require('../assets/chatWithText.png')}
               style={styles.actionBtnImage}
@@ -3038,7 +3044,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.mainDeepBlue,
     marginBottom: 26,
   },
+  actionBtnTouch: {},
   actionBtnImage: {width: 107, height: 59},
+  actionBtnDisabled: {opacity: 0.45},
   profileDivider: {
     height: 1,
     backgroundColor: '#373548',

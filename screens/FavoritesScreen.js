@@ -121,6 +121,8 @@ const FavoritesScreen = ({
   onOpenPreferencesFilter,
   onOpenPriceFilter,
   onOpenEditPublishAdWithCategory,
+  /** After pics/list/video/liked tap: open TikTok feed with that mode (storage already written). */
+  onNavigateToTikTokAfterTopBarFilter,
 }) => {
   const ctx = useContext(ContextHook) || {};
   const currentUser = ctx.currentUser || null;
@@ -292,13 +294,16 @@ const FavoritesScreen = ({
                 style={styles.topBarFilterBtn}
                 hitSlop={8}
                 onPress={() => {
-                  // Any icon: persist that top-bar mode, then return to the feed (all categories) so TikTok
-                  // remounts and `useEffect` applies `tikTokFeedSelectedTopBarFilter` from storage.
+                  // Persist mode; TikTok remount reads `tikTokFeedSelectedTopBarFilter` from storage.
                   AsyncStorage.setItem(
                     TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
                     f.id,
                   ).catch(() => {});
-                  onClose?.();
+                  if (typeof onNavigateToTikTokAfterTopBarFilter === 'function') {
+                    onNavigateToTikTokAfterTopBarFilter();
+                  } else {
+                    onClose?.();
+                  }
                 }}>
                 <Image
                   source={f.icon}
