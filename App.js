@@ -109,6 +109,7 @@ const screenName = {
   secretCodeRecovery: 'secretCodeRecovery',
   secretCodeRecoverySent: 'secretCodeRecoverySent',
   favorites: 'favorites',
+  feedbackSuggestion: 'feedbackSuggestion',
   termsOfUse: 'termsOfUse',
   accessibilityStatement: 'accessibilityStatement',
   selectedProjects: 'selectedProjects',
