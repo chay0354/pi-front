@@ -35,7 +35,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 3,
+      versionCode: 4,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',

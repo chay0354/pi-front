@@ -14,7 +14,7 @@
     "web:lan": "expo start --web --port 8084",
     "web:fresh": "powershell -ExecutionPolicy Bypass -File scripts/start-web-fresh.ps1",
     "open-web": "start http://localhost:8084",
-    "build:apk": "npx eas-cli@latest build --platform android --profile preview",
+    "build:apk": "node scripts/clean-dist-for-eas.js && npx eas-cli@latest build --platform android --profile preview --non-interactive",
     "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1"
   },
   "dependencies": {

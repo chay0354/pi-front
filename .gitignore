@@ -6,6 +6,9 @@ node_modules/
 .expo/
 .expo-shared/
 dist/
+
+# Local EAS archive inspection output (never commit)
+inspect-archive/
 npm-debug.*
 *.jks
 *.p8

@@ -9,6 +9,8 @@ node_modules/
 .expo/
 .expo-shared/
 dist/
+dist
+**/dist/**
 npm-debug.*
 *.jks
 *.p8
