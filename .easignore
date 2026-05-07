@@ -2,6 +2,9 @@
 # https://expo.fyi/eas-build-archive
 
 # --- Mirror of .gitignore (keep in sync when you change .gitignore) ---
+android/
+ios/
+
 node_modules/
 .expo/
 .expo-shared/

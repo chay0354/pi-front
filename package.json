@@ -14,7 +14,8 @@
     "web:lan": "expo start --web --port 8084",
     "web:fresh": "powershell -ExecutionPolicy Bypass -File scripts/start-web-fresh.ps1",
     "open-web": "start http://localhost:8084",
-    "build:apk": "npx eas-cli@latest build --platform android --profile preview"
+    "build:apk": "npx eas-cli@latest build --platform android --profile preview",
+    "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1"
   },
   "dependencies": {
     "@expo/webpack-config": "^19.0.1",
@@ -38,7 +39,8 @@
     "react-native-view-shot": "3.7.0",
     "react-native-web": "^0.19.13",
     "react-native-webview": "^13.2.2",
-    "expo-build-properties": "~0.8.3"
+    "expo-splash-screen": "~0.20.5",
+    "expo-status-bar": "~1.6.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

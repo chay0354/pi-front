@@ -35,7 +35,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 1,
+      versionCode: 2,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -62,19 +62,6 @@ module.exports = {
       favicon: './assets/logo.png',
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
-    plugins: [
-      [
-        'expo-build-properties',
-        {
-          android: {
-            // Match RN 0.72 template / Expo SDK 49 defaults — API 34 forces newer AGP and often breaks RN 0.72 Gradle on EAS.
-            compileSdkVersion: 33,
-            targetSdkVersion: 33,
-            minSdkVersion: 23,
-          },
-        },
-      ],
-    ],
     extra: {
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
