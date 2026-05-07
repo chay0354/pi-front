@@ -35,7 +35,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 4,
+      versionCode: 5,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -62,7 +62,20 @@ module.exports = {
       favicon: './assets/logo.png',
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
-    plugins: ['expo-font'],
+    plugins: [
+      'expo-font',
+      [
+        'expo-build-properties',
+        {
+          android: {
+            compileSdkVersion: 34,
+            targetSdkVersion: 34,
+            minSdkVersion: 23,
+            kotlinVersion: '1.9.24',
+          },
+        },
+      ],
+    ],
     extra: {
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
