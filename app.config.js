@@ -46,11 +46,10 @@ module.exports = {
         'expo-build-properties',
         {
           android: {
-            compileSdkVersion: 34,
-            targetSdkVersion: 34,
+            // Match RN 0.72 template / Expo SDK 49 defaults — API 34 forces newer AGP and often breaks RN 0.72 Gradle on EAS.
+            compileSdkVersion: 33,
+            targetSdkVersion: 33,
             minSdkVersion: 23,
-            buildToolsVersion: '34.0.0',
-            kotlinVersion: '1.8.22',
           },
         },
       ],
