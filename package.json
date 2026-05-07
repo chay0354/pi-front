@@ -6,6 +6,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "android:device": "expo run:android",
+    "android:emu": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-emu.ps1",
     "ios": "expo start --ios",
     "web": "expo start --web --port 8084",
     "web:9000": "expo start --web --port 9000",
