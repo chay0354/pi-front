@@ -41,6 +41,20 @@ module.exports = {
       favicon: './assets/logo.png',
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
+    plugins: [
+      [
+        'expo-build-properties',
+        {
+          android: {
+            compileSdkVersion: 34,
+            targetSdkVersion: 34,
+            minSdkVersion: 23,
+            buildToolsVersion: '34.0.0',
+            kotlinVersion: '1.8.22',
+          },
+        },
+      ],
+    ],
     extra: {
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',

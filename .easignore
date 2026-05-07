@@ -1,4 +1,35 @@
-# Smaller EAS uploads — https://expo.fyi/eas-build-archive
-*.tgz
+# CRITICAL: If this file exists, EAS does NOT apply .gitignore — all ignore rules must be listed here.
+# https://expo.fyi/eas-build-archive
+
+# --- Mirror of .gitignore (keep in sync when you change .gitignore) ---
+node_modules/
+.expo/
+.expo-shared/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+.env
+.env.*
+.DS_Store
 react-native-*.tgz
-**/.DS_Store
+
+# --- Extra: shrink archive / speed upload (not needed to compile the native app) ---
+.git/
+.idea/
+.vscode/
+*.log
+coverage/
+**/__tests__/
+Thumbs.db
+
+# Design-only or huge local folders (add paths here if you keep large Figma exports in-repo)
+# Example: assets/profile-company-office/
+
+# Windows reserved-name junk if it ever gets created in the tree
+nul
