@@ -12,3 +12,6 @@ npm-debug.*
 web-build/
 .env
 .DS_Store
+
+# Local tarball caches — huge; never commit or upload in builds
+react-native-*.tgz

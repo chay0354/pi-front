@@ -1,0 +1,4 @@
+# Smaller EAS uploads — https://expo.fyi/eas-build-archive
+*.tgz
+react-native-*.tgz
+**/.DS_Store
