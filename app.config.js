@@ -1,5 +1,21 @@
 // Single source of truth for Expo (static app.json removed — avoid drift).
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
+const { withMainApplication } = require('@expo/config-plugins');
+
+/** Dev client loads /index.bundle — avoids Metro rewrite of .expo/.virtual-metro-entry if RN CLI drops it. */
+function withAndroidIndexDevEntry(config) {
+  return withMainApplication(config, async (c) => {
+    const contents = c.modResults.contents;
+    if (typeof contents === 'string') {
+      c.modResults.contents = contents.replace(
+        /getJSMainModuleName\(\)\s*:\s*String\s*=\s*"\.expo\/\.virtual-metro-entry"/,
+        'getJSMainModuleName(): String = "index"',
+      );
+    }
+    return c;
+  });
+}
+
 module.exports = {
   expo: {
     name: 'PI Frontend',
@@ -77,6 +93,7 @@ module.exports = {
           },
         },
       ],
+      withAndroidIndexDevEntry,
     ],
     extra: {
       eas: {
