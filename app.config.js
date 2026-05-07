@@ -1,5 +1,5 @@
-// Single source of truth for Expo (also update app.json if you keep it, to avoid drift).
-// Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues with app.json)
+// Single source of truth for Expo (static app.json removed — avoid drift).
+// Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
 module.exports = {
   expo: {
     name: 'PI Frontend',
@@ -35,7 +35,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 2,
+      versionCode: 3,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -62,6 +62,7 @@ module.exports = {
       favicon: './assets/logo.png',
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
+    plugins: ['expo-font'],
     extra: {
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
