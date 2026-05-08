@@ -18,7 +18,7 @@ const SectionName = ({style, text = 'פרוייקטים נבחרים'}) => {
       </View>
       <View style={styles.icons}>
         <Image
-          source={require('../assets/Rectangle-34624980.svg')}
+          source={require('../assets/Rectangle-34624980.png')}
           style={styles.iconsChild}
           resizeMode="contain"
         />

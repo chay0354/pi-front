@@ -9,7 +9,7 @@ const Menu1 = ({style}) => {
   return (
     <View style={[styles.menu, style]}>
       <Image
-        source={require('../assets/material-symbols-menu.svg')}
+        source={require('../assets/material-symbols-menu.png')}
         style={styles.materialSymbolsmenuIcon}
         resizeMode="contain"
       />

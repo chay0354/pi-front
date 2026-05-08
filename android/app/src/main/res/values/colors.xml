@@ -1,6 +1,7 @@
 <resources>
-  <color name="splashscreen_background">#ffffff</color>
+  <!-- Match splash art (dark) so letterboxing / system bar regions never flash white -->
+  <color name="splashscreen_background">#252525</color>
   <color name="iconBackground">#ffffff</color>
   <color name="colorPrimary">#023c69</color>
-  <color name="colorPrimaryDark">#ffffff</color>
+  <color name="colorPrimaryDark">#252525</color>
 </resources>

@@ -1,10 +1,10 @@
 // Single source of truth for Expo (static app.json removed — avoid drift).
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
-const { withMainApplication } = require('@expo/config-plugins');
+const {withMainApplication} = require('@expo/config-plugins');
 
 /** Dev client loads /index.bundle — avoids Metro rewrite of .expo/.virtual-metro-entry if RN CLI drops it. */
 function withAndroidIndexDevEntry(config) {
-  return withMainApplication(config, async (c) => {
+  return withMainApplication(config, async c => {
     const contents = c.modResults.contents;
     if (typeof contents === 'string') {
       c.modResults.contents = contents.replace(
@@ -26,9 +26,9 @@ module.exports = {
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
     splash: {
-      image: './assets/splash.png',
-      resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      image: './assets/SplashScreen.png',
+      resizeMode: 'cover',
+      backgroundColor: '#252525',
     },
     assetBundlePatterns: ['**/*'],
     ios: {
@@ -44,9 +44,12 @@ module.exports = {
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: 'אנחנו צריכים גישה למצלמה כדי להעלות תמונות',
-        NSPhotoLibraryUsageDescription: 'אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים',
-        NSPhotoLibraryAddOnlyUsageDescription: 'אנחנו צריכים גישה לספריית התמונות כדי להוסיף תמונות',
-        NSMicrophoneUsageDescription: 'אנחנו צריכים גישה למיקרופון כדי לשלוח הודעות קול',
+        NSPhotoLibraryUsageDescription:
+          'אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים',
+        NSPhotoLibraryAddOnlyUsageDescription:
+          'אנחנו צריכים גישה לספריית התמונות כדי להוסיף תמונות',
+        NSMicrophoneUsageDescription:
+          'אנחנו צריכים גישה למיקרופון כדי לשלוח הודעות קול',
       },
     },
     android: {
@@ -99,8 +102,12 @@ module.exports = {
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
       },
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://opxeruasowoaybceskyp.supabase.co',
-      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w',
+      supabaseUrl:
+        process.env.EXPO_PUBLIC_SUPABASE_URL ||
+        'https://opxeruasowoaybceskyp.supabase.co',
+      supabaseAnonKey:
+        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w',
     },
   },
 };

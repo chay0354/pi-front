@@ -33,12 +33,12 @@ const CategoryFrame = ({
         <Component5 category={category} />
         <View style={styles.checkbox}>
           <Image
-            source={require('../assets/Ellipse-650.svg')}
+            source={require('../assets/Ellipse-650.png')}
             style={styles.checkboxChild}
             resizeMode="contain"
           />
           <Image
-            source={require('../assets/Icon.svg')}
+            source={require('../assets/Icon.png')}
             style={styles.icon}
             resizeMode="contain"
           />

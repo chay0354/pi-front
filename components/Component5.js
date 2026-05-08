@@ -16,7 +16,7 @@ const Component5 = ({style, category = 'base'}) => {
         resizeMode="cover"
       />
       <Image
-        source={require('../assets/Union.svg')}
+        source={require('../assets/Union.png')}
         style={styles.unionIcon}
         resizeMode="contain"
       />

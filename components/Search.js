@@ -13,7 +13,7 @@ const Search = ({style, vector190}) => {
       <View style={styles.navigationalIcon}>
         {vector190 && (
           <Image
-            source={require('../assets/Vector-190.svg')}
+            source={require('../assets/Vector-190.png')}
             style={styles.navigationalIconChild}
             resizeMode="contain"
           />
