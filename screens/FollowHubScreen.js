@@ -494,7 +494,7 @@ const FollowHubScreen = ({
         />
       </View>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={styles.list} contentContainerStyle={styles.listContent}>
         {loadingRows ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator color="#FFC40A" />

@@ -143,7 +143,7 @@ const UserRegistrationScreen = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>

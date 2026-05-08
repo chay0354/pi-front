@@ -111,7 +111,7 @@ const VerificationCodeScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={styles.overlay} />
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}>

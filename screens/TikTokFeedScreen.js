@@ -159,7 +159,7 @@ const ListCardImages = ({images, width, height = 252}) => {
   }
   return (
     <View style={{width, height, position: 'relative'}}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         ref={scrollRef}
         horizontal
         pagingEnabled
@@ -993,7 +993,7 @@ const ImageSwiper = ({
           alignItems: isSingleImage ? 'center' : 'flex-start',
         },
       ]}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         ref={scrollViewRef}
         horizontal
         pagingEnabled
@@ -4107,7 +4107,7 @@ const TikTokFeedScreen = ({
                     {showRecent ? 'אחרונים' : 'תוצאות חיפוש'}
                   </Text>
                 </View>
-                <ScrollView
+                <ScrollView keyboardShouldPersistTaps="handled"
                   style={styles.userSearchList}
                   contentContainerStyle={styles.userSearchListContent}
                   showsVerticalScrollIndicator={false}>
@@ -4238,7 +4238,7 @@ const TikTokFeedScreen = ({
       {/* List view: only the card list scrolls; top bar + bottom bar stay fixed (inset scroll region on web). */}
       {!showUserSearchPanel && selectedTopBarFilter === 'list' && (
         <View style={styles.listModeWrapper}>
-        <ScrollView
+        <ScrollView keyboardShouldPersistTaps="handled"
           style={styles.listScrollView}
           contentContainerStyle={[
             styles.listScrollContent,
@@ -5271,7 +5271,7 @@ const TikTokFeedScreen = ({
               </Text>
             </View>
             <View style={styles.commentsListFrame}>
-              <ScrollView
+              <ScrollView keyboardShouldPersistTaps="handled"
                 style={styles.commentsList}
                 contentContainerStyle={styles.commentsListContent}
                 showsVerticalScrollIndicator={false}>

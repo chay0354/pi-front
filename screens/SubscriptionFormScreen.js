@@ -499,7 +499,7 @@ const SubscriptionFormScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={[styles.overlay, styles.companyOverlay]} />
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={[
           styles.contentContainer,

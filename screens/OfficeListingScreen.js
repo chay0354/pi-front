@@ -783,7 +783,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         <Text style={styles.headerTitle}>יצירת מודעה</Text>
       </View>
 
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
@@ -792,7 +792,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           <Text style={styles.sectionTitle}>
             בחר קטגוריה<Text style={styles.required}>*</Text>
           </Text>
-          <ScrollView
+          <ScrollView keyboardShouldPersistTaps="handled"
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryScrollView}>

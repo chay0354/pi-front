@@ -1599,7 +1599,7 @@ const UserProfileScreen = ({
         styles.container,
         {paddingTop: useFixedListingTopNav ? 0 : top + 10},
       ]}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,

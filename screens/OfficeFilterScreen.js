@@ -157,7 +157,7 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
           <View style={styles.handleBar} />
         </TouchableOpacity>
       </View>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>

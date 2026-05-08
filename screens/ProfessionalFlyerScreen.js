@@ -184,7 +184,7 @@ const ProfessionalFlyerScreen = ({
 
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, {paddingBottom: 210 + insets.bottom}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>

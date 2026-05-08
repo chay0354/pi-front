@@ -103,7 +103,7 @@ const MeterFilterScreen = ({initialFilter, onClose, onSave}) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>

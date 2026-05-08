@@ -233,7 +233,7 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,

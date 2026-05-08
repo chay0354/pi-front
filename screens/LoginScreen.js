@@ -101,7 +101,7 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}>
