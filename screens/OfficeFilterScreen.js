@@ -148,6 +148,7 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
+      <View style={{height: insets.top}} />
       <View style={styles.topHandleWrap}>
         <TouchableOpacity
           onPress={onClose}

@@ -13,6 +13,7 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
 import {categoryImages} from '../utils/constant';
@@ -171,6 +172,7 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
  * Form for creating an office listing
  */
 const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
+  const insets = useSafeAreaInsets();
   const [propertyType, setPropertyType] = useState(null);
   const [area, setArea] = useState(1);
   const [rooms, setRooms] = useState(1);
@@ -775,6 +777,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
   return (
     <View style={styles.container}>
+      <View style={{height: insets.top}} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.backButton}>

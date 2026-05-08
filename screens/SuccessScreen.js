@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
@@ -24,6 +25,7 @@ const SuccessScreen = ({
   subscription,
   localProfileImage = null,
 }) => {
+  const insets = useSafeAreaInsets();
   const isCompany =
     subscriptionType === subscriptionTypes.company ||
     String(subscription?.subscription_type || '').toLowerCase() === 'company';
@@ -66,7 +68,7 @@ const SuccessScreen = ({
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>

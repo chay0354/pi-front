@@ -1,6 +1,5 @@
 import {
   ImageBackground,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
@@ -10,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import React, {useContext, useCallback, useEffect, useRef, useState} from 'react';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
@@ -26,6 +26,7 @@ const Home = ({
   onOpenProfessionalsDirectory,
   onOpenUserProfile,
 }) => {
+  const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [viewerRing, setViewerRing] = useState(null);
@@ -190,38 +191,38 @@ const Home = ({
       source={require('../assets/background.png')}
       style={styles.background}>
       <View style={styles.backgroundClip}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.flipRoot}>
-          <Animated.View
-            pointerEvents={flipped ? 'none' : 'auto'}
-            style={[
-              styles.flipFace,
-              {
-                opacity: frontOpacity,
-                transform: [{perspective: 1200}, {rotateY: frontRotate}],
-              },
-            ]}>
-            {frontFace}
-          </Animated.View>
-          <Animated.View
-            pointerEvents={flipped ? 'auto' : 'none'}
-            style={[
-              styles.flipFace,
-              {
-                opacity: backOpacity,
-                transform: [{perspective: 1200}, {rotateY: backRotate}],
-              },
-            ]}>
-            {backFace}
-          </Animated.View>
-        </View>
+        <View style={[styles.safeArea, {paddingTop: insets.top}]}>
+          <View style={styles.flipRoot}>
+            <Animated.View
+              pointerEvents={flipped ? 'none' : 'auto'}
+              style={[
+                styles.flipFace,
+                {
+                  opacity: frontOpacity,
+                  transform: [{perspective: 1200}, {rotateY: frontRotate}],
+                },
+              ]}>
+              {frontFace}
+            </Animated.View>
+            <Animated.View
+              pointerEvents={flipped ? 'auto' : 'none'}
+              style={[
+                styles.flipFace,
+                {
+                  opacity: backOpacity,
+                  transform: [{perspective: 1200}, {rotateY: backRotate}],
+                },
+              ]}>
+              {backFace}
+            </Animated.View>
+          </View>
 
-        <StoryViewerModal
-          visible={viewerVisible}
-          ring={viewerRing}
-          onClose={handleCloseViewer}
-        />
-      </SafeAreaView>
+          <StoryViewerModal
+            visible={viewerVisible}
+            ring={viewerRing}
+            onClose={handleCloseViewer}
+          />
+        </View>
       </View>
     </ImageBackground>
   );

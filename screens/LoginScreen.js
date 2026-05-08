@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {getCurrentUser} from '../utils/api';
 
@@ -34,6 +35,7 @@ const ONBOARDING_IMAGES = [
  * Login page for registered users to sign in
  */
 const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [subscriberNumber, setSubscriberNumber] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -101,28 +103,38 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top + 28}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            activeOpacity={0.8}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.brandWrap}>
-          <Image source={require('../assets/logo.png')} style={styles.logoIcon} resizeMode="contain" />
           <Image
+            source={require('../assets/logo.png')}
+            style={styles.logoIcon}
+            resizeMode="contain"
+          />
+          {/* <Image
             source={require('../assets/its-just-simple.png')}
             style={styles.sloganImage}
             resizeMode="contain"
-          />
+          /> */}
         </View>
 
         <View style={styles.formCard}>
           <Text style={styles.headerTitle}>התחברות</Text>
-          <Text style={styles.instructionText}>הזן את כתובת המייל או מספר המנוי שלך</Text>
+          <Text style={styles.instructionText}>
+            הזן את כתובת המייל או מספר המנוי שלך
+          </Text>
 
           {errorMessage && (
             <View style={styles.errorContainer}>
@@ -158,7 +170,9 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
           </View>
 
           <TouchableOpacity
-            disabled={(!email.trim() && !subscriberNumber.trim()) || isLoggingIn}
+            disabled={
+              (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
+            }
             style={[
               styles.loginButton,
               (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
@@ -210,7 +224,10 @@ const OnboardingOverlay = ({imageSource, onNext, onSkip}) => {
       <TouchableOpacity
         activeOpacity={1}
         onPress={onSkip}
-        style={[styles.onboardingSkipZone, {width: skipWidth, height: skipHeight}]}
+        style={[
+          styles.onboardingSkipZone,
+          {width: skipWidth, height: skipHeight},
+        ]}
       />
       <TouchableOpacity
         activeOpacity={1}
@@ -239,7 +256,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 24,
-    paddingTop: 28,
     paddingBottom: 40,
   },
   topBar: {

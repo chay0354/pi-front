@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
   resendVerificationCode,
@@ -39,6 +40,7 @@ const VerificationScreen = ({
   email: propEmail,
   subscriptionId,
 }) => {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState(propEmail || '');
   const [companyCode, setCompanyCode] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -121,7 +123,7 @@ const VerificationScreen = ({
       <View style={styles.overlay} />
       <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>

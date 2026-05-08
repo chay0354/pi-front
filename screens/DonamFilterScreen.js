@@ -96,6 +96,7 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
+      <View style={{height: insets.top}} />
       <View style={styles.topRail}>
         <TouchableOpacity
           activeOpacity={0.7}

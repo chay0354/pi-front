@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
   loadTikTokLikedState,
@@ -64,6 +65,7 @@ function isPostListingRecord(item) {
 }
 
 const UserListingsScreen = ({creatorId, displayName = '', onClose, onOpenListing}) => {
+  const insets = useSafeAreaInsets();
   const {currentUser} = useContext(ContextHook);
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -178,6 +180,7 @@ const UserListingsScreen = ({creatorId, displayName = '', onClose, onOpenListing
 
   return (
     <View style={styles.container}>
+      <View style={{height: insets.top}} />
       <View style={styles.header}>
         <TouchableOpacity
           onPress={onClose}
@@ -223,7 +226,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 50,
     paddingBottom: 16,
     borderBottomWidth: 0,
   },

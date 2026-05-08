@@ -6,17 +6,19 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {TERMS_OF_USE_HEBREW} from './termsOfUseContent';
 
 /**
  * Full terms of use — black text on white background, RTL Hebrew.
  */
 const TermsOfUseScreen = ({onClose}) => {
+  const insets = useSafeAreaInsets();
   return (
     <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 8}]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
@@ -47,7 +49,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 32,
     paddingHorizontal: 20,
-    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',

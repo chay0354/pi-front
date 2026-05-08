@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
@@ -70,12 +71,16 @@ const SettingsScreen = ({
   transactionCancellationUrl = LEGAL_DEFAULTS.transactionCancellationUrl,
   onOpenFollowHub,
 }) => {
+  const insets = useSafeAreaInsets();
   const {currentUser, setCurrentUser} = useContext(ContextHook);
-  const isLoggedBroker = currentUser?.subscription_type === subscriptionTypes.broker;
+  const isLoggedBroker =
+    currentUser?.subscription_type === subscriptionTypes.broker;
   const isLoggedProfessional =
     currentUser?.subscription_type === subscriptionTypes.professional;
-  const isLoggedCompany = currentUser?.subscription_type === subscriptionTypes.company;
-  const isLoggedRegular = currentUser?.subscription_type === subscriptionTypes.user;
+  const isLoggedCompany =
+    currentUser?.subscription_type === subscriptionTypes.company;
+  const isLoggedRegular =
+    currentUser?.subscription_type === subscriptionTypes.user;
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
   const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
   const viewerId = toSubscriptionId(
@@ -152,7 +157,10 @@ const SettingsScreen = ({
           if (
             String(prev.email || '')
               .trim()
-              .toLowerCase() !== String(sub.email || '').trim().toLowerCase()
+              .toLowerCase() !==
+            String(sub.email || '')
+              .trim()
+              .toLowerCase()
           ) {
             return prev;
           }
@@ -221,7 +229,11 @@ const SettingsScreen = ({
   );
   const renderMenuIcon = type => (
     <View style={styles.menuIconBase}>
-      <Image source={MENU_ICONS[type]} style={styles.menuIconSingle} resizeMode="contain" />
+      <Image
+        source={MENU_ICONS[type]}
+        style={styles.menuIconSingle}
+        resizeMode="contain"
+      />
     </View>
   );
   const openBrokerUpdates = () => {
@@ -231,7 +243,10 @@ const SettingsScreen = ({
   return (
     <ScrollView
       style={styles.settingsScreen}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[
+        styles.contentContainer,
+        {paddingTop: insets.top + 10},
+      ]}
       showsVerticalScrollIndicator={false}>
       {/* Header with X button */}
       <View style={styles.header}>
@@ -309,7 +324,11 @@ const SettingsScreen = ({
           activeOpacity={0.8}
           onPress={onOpenChat}
           style={styles.buttonsImageWrap}>
-          <Image source={PI_CHAT_BAR} style={styles.buttonsImage} resizeMode="contain" />
+          <Image
+            source={PI_CHAT_BAR}
+            style={styles.buttonsImage}
+            resizeMode="contain"
+          />
           {unreadChatCount > 0 ? (
             <View
               style={styles.chatBadge}
@@ -331,7 +350,9 @@ const SettingsScreen = ({
               {followingPreviewLoading ? (
                 <Text style={styles.followingPreviewHint}>...</Text>
               ) : followingPreviewRows.length === 0 ? (
-                <Text style={styles.followingPreviewHint}>אין עדיין מעקבים</Text>
+                <Text style={styles.followingPreviewHint}>
+                  אין עדיין מעקבים
+                </Text>
               ) : (
                 followingPreviewRows.map((row, idx) => {
                   const raw =
@@ -341,7 +362,11 @@ const SettingsScreen = ({
                     null;
                   return (
                     <View
-                      key={row?.id || row?.subscription_id || `following-preview-${idx}`}
+                      key={
+                        row?.id ||
+                        row?.subscription_id ||
+                        `following-preview-${idx}`
+                      }
                       style={styles.followingPreviewAvatarWrap}>
                       <Image
                         source={
@@ -361,19 +386,25 @@ const SettingsScreen = ({
         ) : null}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>ניהול המודעות</Text>
-          <TouchableOpacity style={[styles.cardItem, styles.cardItemDivider]} onPress={onOpenEditPublishAd}>
+          <TouchableOpacity
+            style={[styles.cardItem, styles.cardItemDivider]}
+            onPress={onOpenEditPublishAd}>
             {renderChevron()}
             <Text style={styles.cardItemText}>ערוך / פרסם פוסט</Text>
             {renderMenuIcon('edit')}
           </TouchableOpacity>
           {isLoggedBroker ? (
-            <TouchableOpacity style={[styles.cardItem, styles.cardItemDivider]} onPress={openBrokerUpdates}>
+            <TouchableOpacity
+              style={[styles.cardItem, styles.cardItemDivider]}
+              onPress={openBrokerUpdates}>
               {renderChevron()}
               <Text style={styles.cardItemText}>עדכון נכסים חדשים שעולים</Text>
               {renderMenuIcon('updates')}
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.cardItem} onPress={() => onOpenFavorites && onOpenFavorites()}>
+          <TouchableOpacity
+            style={styles.cardItem}
+            onPress={() => onOpenFavorites && onOpenFavorites()}>
             {renderChevron()}
             <Text style={styles.cardItemText}>מועדפים</Text>
             {renderMenuIcon('favorites')}
@@ -388,7 +419,9 @@ const SettingsScreen = ({
             <Text style={styles.cardTitle}>מנויים</Text>
             <TouchableOpacity
               style={[styles.cardItem, styles.cardItemDivider]}
-              onPress={() => handleSubscriptionPress(subscriptionTypes.company)}>
+              onPress={() =>
+                handleSubscriptionPress(subscriptionTypes.company)
+              }>
               {renderChevron()}
               <Text style={styles.cardItemText}>מנוי לחברות</Text>
               {renderMenuIcon('company')}
@@ -402,7 +435,9 @@ const SettingsScreen = ({
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cardItem}
-              onPress={() => handleSubscriptionPress(subscriptionTypes.professional)}>
+              onPress={() =>
+                handleSubscriptionPress(subscriptionTypes.professional)
+              }>
               {renderChevron()}
               <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
               {renderMenuIcon('professional')}
@@ -417,7 +452,9 @@ const SettingsScreen = ({
           <Text style={styles.cardTitle}>כללי</Text>
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
-            onPress={() => onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()}>
+            onPress={() =>
+              onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()
+            }>
             {renderChevron()}
             <Text style={styles.cardItemText}>שחזור קוד סודי</Text>
             {renderMenuIcon('secret')}
@@ -454,10 +491,7 @@ const SettingsScreen = ({
                 accessibilityStatementUrl &&
                 String(accessibilityStatementUrl).trim();
               if (u) {
-                openUrlOrPlaceholder(
-                  accessibilityStatementUrl,
-                  'הצהרת נגישות',
-                );
+                openUrlOrPlaceholder(accessibilityStatementUrl, 'הצהרת נגישות');
               } else if (onOpenAccessibilityStatement) {
                 onOpenAccessibilityStatement();
               } else {
@@ -480,10 +514,7 @@ const SettingsScreen = ({
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() =>
-              openUrlOrPlaceholder(
-                transactionCancellationUrl,
-                'ביטול עסקה',
-              )
+              openUrlOrPlaceholder(transactionCancellationUrl, 'ביטול עסקה')
             }
             activeOpacity={0.8}>
             {renderChevron()}
@@ -519,8 +550,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   contentContainer: {
-    flex: 1,
-    paddingTop: 50,
+    // flex: 1,
     paddingBottom: 40,
     paddingHorizontal: 24,
     gap: 24,
@@ -637,7 +667,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 6,
     shadowColor: '#5EEAD4',
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.5,
     shadowRadius: 5,
     borderWidth: 2,

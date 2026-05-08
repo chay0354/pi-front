@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {recoverSubscriberCodeByEmail} from '../utils/api';
 
@@ -21,6 +22,7 @@ const KEY_ICON = require('../assets/menu/key.png');
  * שחזור קוד סודי – enter email, send מספר מנוי by mail
  */
 const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -51,11 +53,14 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>שחזור קוד סודי</Text>
@@ -64,11 +69,16 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
 
         <View style={styles.card}>
           <View style={styles.keyIconWrap}>
-            <Image source={KEY_ICON} style={styles.keyImage} resizeMode="contain" />
+            <Image
+              source={KEY_ICON}
+              style={styles.keyImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.cardTitle}>שכחת את הקוד?</Text>
           <Text style={styles.cardBody}>
-            לא נורא, הזן את כתובת המייל המשויכת לחשבונך, ואנו נשלח לך את קוד המנוי שלך.
+            לא נורא, הזן את כתובת המייל המשויכת לחשבונך, ואנו נשלח לך את קוד
+            המנוי שלך.
           </Text>
 
           <View style={styles.inputWrap}>
@@ -95,7 +105,7 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
           </View>
 
           {email.trim().length === 0 ? (
-            <Text style={styles.promo}>הזן מייל לקבלת קוד חינם לחצי  שנה</Text>
+            <Text style={styles.promo}>הזן מייל לקבלת קוד חינם לחצי שנה</Text>
           ) : null}
 
           <TouchableOpacity
@@ -104,14 +114,21 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
             onPress={handleSend}
             style={[styles.btnWrap, !canSend && styles.btnWrapDisabled]}>
             <LinearGradient
-              colors={canSend ? ['#FEE787', '#BD9947', '#9C6522'] : ['#4d4966', '#4d4966']}
+              colors={
+                canSend
+                  ? ['#FEE787', '#BD9947', '#9C6522']
+                  : ['#4d4966', '#4d4966']
+              }
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.btnGradient}>
               {loading ? (
                 <ActivityIndicator color="#1e1d27" />
               ) : (
-                <Text style={[styles.btnText, !canSend && styles.btnTextDisabled]}>שלח</Text>
+                <Text
+                  style={[styles.btnText, !canSend && styles.btnTextDisabled]}>
+                  שלח
+                </Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -130,7 +147,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scroll: {
-    paddingTop: Platform.OS === 'web' ? 44 : 52,
     paddingHorizontal: 24,
     paddingBottom: 40,
   },

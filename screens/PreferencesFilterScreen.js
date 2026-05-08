@@ -192,6 +192,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
 
   return (
     <View style={styles.container}>
+      <View style={{height: insets.top}} />
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={onClose}

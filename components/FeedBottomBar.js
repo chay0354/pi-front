@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ACTIVE_FILTER_COLOR = '#FFC40A';
 /** Bottom-bar filter icons (סוג, מטר, land …) — use a single-color / alpha template so `tintColor` matches מחיר/עיר. */
@@ -135,6 +136,7 @@ const FeedBottomBar = ({
   onOpenPriceFilter,
   onOpenEditPublishAdWithCategory,
 }) => {
+  const insets = useSafeAreaInsets();
   const categoryNum = useMemo(() => {
     if (selectedCategory == null || selectedCategory === '') return NaN;
     const n = parseInt(String(selectedCategory).trim(), 10);
@@ -221,7 +223,11 @@ const FeedBottomBar = ({
   }, [categoryNum, feedFilters?.type]);
 
   return (
-    <View style={styles.bottomBar}>
+    <View
+      style={[
+        styles.bottomBar,
+        {paddingBottom: insets.bottom, height: 70 + insets.bottom},
+      ]}>
       <View style={styles.bottomBarRow}>
         {BOTTOM_BAR_ITEMS.map(item => {
           if (item.id === 'price') {
@@ -235,7 +241,10 @@ const FeedBottomBar = ({
                 <View style={styles.bottomBarIconWrap}>
                   <Image
                     source={ICONS.price}
-                    style={[styles.bottomBarIcon, active && styles.bottomBarIconActive]}
+                    style={[
+                      styles.bottomBarIcon,
+                      active && styles.bottomBarIconActive,
+                    ]}
                     tintColor={active ? ACTIVE_FILTER_COLOR : undefined}
                     resizeMode="contain"
                   />
@@ -259,7 +268,9 @@ const FeedBottomBar = ({
               <TouchableOpacity
                 key={item.id}
                 style={[styles.bottomBarItem, styles.bottomBarItemPost]}
-                onPress={() => onOpenEditPublishAdWithCategory?.(selectedCategory)}
+                onPress={() =>
+                  onOpenEditPublishAdWithCategory?.(selectedCategory)
+                }
                 activeOpacity={0.8}>
                 <View style={styles.bottomBarIconWrapPost}>
                   <Image
@@ -268,7 +279,10 @@ const FeedBottomBar = ({
                     resizeMode="contain"
                   />
                 </View>
-                <Text style={[styles.bottomBarLabel, styles.bottomBarLabelPost]}>{item.label}</Text>
+                <Text
+                  style={[styles.bottomBarLabel, styles.bottomBarLabelPost]}>
+                  {item.label}
+                </Text>
               </TouchableOpacity>
             );
           }
@@ -283,7 +297,10 @@ const FeedBottomBar = ({
                 <View style={styles.bottomBarIconWrap}>
                   <Image
                     source={ICONS.city}
-                    style={[styles.bottomBarIcon, active && styles.bottomBarIconActive]}
+                    style={[
+                      styles.bottomBarIcon,
+                      active && styles.bottomBarIconActive,
+                    ]}
                     tintColor={active ? ACTIVE_FILTER_COLOR : undefined}
                     resizeMode="contain"
                   />

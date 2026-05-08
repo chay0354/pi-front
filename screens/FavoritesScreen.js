@@ -14,6 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
@@ -124,6 +125,7 @@ const FavoritesScreen = ({
   /** After pics/list/video/liked tap: open TikTok feed with that mode (storage already written). */
   onNavigateToTikTokAfterTopBarFilter,
 }) => {
+  const insets = useSafeAreaInsets();
   const ctx = useContext(ContextHook) || {};
   const currentUser = ctx.currentUser || null;
   const [listings, setListings] = useState([]);
@@ -261,7 +263,7 @@ const FavoritesScreen = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, {height: 54 + insets.top, paddingTop: insets.top + (Platform.OS === 'web' ? 8 : 2)}]}>
         <Pressable
           onPress={() => {
             if (typeof onBack === 'function') {

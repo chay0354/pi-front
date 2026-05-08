@@ -207,6 +207,7 @@ const CompanyReportScreen = ({
 
   return (
     <View style={[styles.container, {paddingBottom: bottomInset}]}>
+      <View style={{height: insets.top}} />
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={onClose}

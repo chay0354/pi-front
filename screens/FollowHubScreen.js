@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   getFollowHubRows,
   getFollowStats,
@@ -67,6 +68,7 @@ const FollowHubScreen = ({
   initialTab = TAB_FOLLOWERS,
   onOpenUserProfile = null,
 }) => {
+  const insets = useSafeAreaInsets();
   const profileId = toSubscriptionId(
     profileUser?.subscription_id || profileUser?.owner_id || profileUser?.id,
   );
@@ -452,7 +454,7 @@ const FollowHubScreen = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.headerWrap}>
+      <View style={[styles.headerWrap, {paddingTop: insets.top + 12}]}>
         <View style={styles.topRow}>
           <TouchableOpacity onPress={onClose} style={styles.backBtn}>
             <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
@@ -619,7 +621,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e1d27',
     borderBottomWidth: 1,
     borderBottomColor: '#373548',
-    paddingTop: 12,
     paddingBottom: 8,
     paddingHorizontal: 24,
   },

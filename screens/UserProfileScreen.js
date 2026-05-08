@@ -693,8 +693,7 @@ const UserProfileScreen = ({
     resolvedCreator?.company_logo_url ||
     resolvedCreator?.companyLogoUrl ||
     profile?.company_logo_url;
-  const logoImage =
-    typeof logoImageRaw === 'string' ? logoImageRaw.trim() : '';
+  const logoImage = typeof logoImageRaw === 'string' ? logoImageRaw.trim() : '';
   // Hero avatar: for listings opened from the feed, use the same URL order as TikTok
   // (getUserProfileImageUrl: personal / creator before company logo). Otherwise company
   // logo wins here and looks different from the feed/list card.
@@ -754,9 +753,7 @@ const UserProfileScreen = ({
       resolvedCreator?.subscription_type || user?.subscription_type || '',
     ).toLowerCase();
     const canReport =
-      st === 'company' ||
-      st === 'professional' ||
-      st === 'broker';
+      st === 'company' || st === 'professional' || st === 'broker';
     if (canReport && typeof onOpenCompanyReport === 'function') {
       onOpenCompanyReport();
       return;
@@ -848,7 +845,9 @@ const UserProfileScreen = ({
   const lastAdImages = (() => {
     if (!lastAd) return [];
     const isVideoLikeUrl = u => {
-      const s = String(u || '').trim().toLowerCase();
+      const s = String(u || '')
+        .trim()
+        .toLowerCase();
       if (!s) return true;
       if (/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(s)) return true;
       if (/\/videos?\//i.test(s)) return true;
@@ -906,7 +905,9 @@ const UserProfileScreen = ({
     const isPlaceholderUri = u =>
       !u || /^text-post-placeholder$/i.test(String(u).trim());
     const firstImageFor = item => {
-      const listingImgs = Array.isArray(item?.listing_images) ? item.listing_images : [];
+      const listingImgs = Array.isArray(item?.listing_images)
+        ? item.listing_images
+        : [];
       for (const img of listingImgs) {
         const uri =
           img && typeof img === 'object'
@@ -922,18 +923,20 @@ const UserProfileScreen = ({
             : String(img || '').trim();
         if (!isPlaceholderUri(uri)) return {uri};
       }
-      const directUri = String(item?.main_image_url || item?.image_url || '').trim();
+      const directUri = String(
+        item?.main_image_url || item?.image_url || '',
+      ).trim();
       if (!isPlaceholderUri(directUri)) return {uri: directUri};
       const videoUri = (() => {
         if (item?.video && typeof item.video === 'object') {
-          return (
-            String(item.video.uri || item.video.url || '').trim() ||
-            null
-          );
+          return String(item.video.uri || item.video.url || '').trim() || null;
         }
-        if (typeof item?.video === 'string') return String(item.video).trim() || null;
+        if (typeof item?.video === 'string')
+          return String(item.video).trim() || null;
         if (item?.video_url) return String(item.video_url).trim() || null;
-        const lv = Array.isArray(item?.listing_videos) ? item.listing_videos : [];
+        const lv = Array.isArray(item?.listing_videos)
+          ? item.listing_videos
+          : [];
         for (const v of lv) {
           if (v && typeof v === 'object' && v.video_url) {
             return String(v.video_url).trim();
@@ -970,7 +973,10 @@ const UserProfileScreen = ({
   const fullScreenCarouselRef = useRef(null);
 
   const viewedSubscriptionId = toSubscriptionId(
-    resolvedCreator?.id || user?.subscription_id || user?.owner_id || profile?.id,
+    resolvedCreator?.id ||
+      user?.subscription_id ||
+      user?.owner_id ||
+      profile?.id,
   );
   const currentSubscriptionId = toSubscriptionId(currentUser?.id);
   const isOwnProfile =
@@ -1033,7 +1039,11 @@ const UserProfileScreen = ({
 
   useEffect(() => {
     let cancelled = false;
-    if (!viewedSubscriptionId || !currentSubscriptionId || viewedSubscriptionId === currentSubscriptionId) {
+    if (
+      !viewedSubscriptionId ||
+      !currentSubscriptionId ||
+      viewedSubscriptionId === currentSubscriptionId
+    ) {
       setFollowStatus({isFollowing: false, hasPendingRequest: false});
       setFollowStatusLoading(false);
       return undefined;
@@ -1067,9 +1077,7 @@ const UserProfileScreen = ({
   const formatStatCount = value =>
     followStatsLoading || value == null ? '—' : String(value);
   const viewerLoggedIn = !!(
-    currentUser &&
-    String(currentUser.email || '')
-      .trim()
+    currentUser && String(currentUser.email || '').trim()
   );
   const shouldShowFollowPlus =
     !!viewedSubscriptionId &&
@@ -1088,14 +1096,17 @@ const UserProfileScreen = ({
       }
       return;
     }
-    if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest) return;
+    if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest)
+      return;
     setSendingFollowRequest(true);
     try {
       await sendFollowRequest(currentSubscriptionId, viewedSubscriptionId);
       setFollowStatus(prev => ({...prev, hasPendingRequest: true}));
       setFollowStats(prev => ({
         ...prev,
-        pendingRequests: isOwnProfile ? prev.pendingRequests : prev.pendingRequests + 1,
+        pendingRequests: isOwnProfile
+          ? prev.pendingRequests
+          : prev.pendingRequests + 1,
       }));
     } catch (e) {
       Alert.alert('', e?.message || 'לא הצלחנו לשלוח בקשת מעקב');
@@ -1174,9 +1185,7 @@ const UserProfileScreen = ({
       try {
         const st = await loadTikTokLikedState(String(currentUser.id));
         if (!cancelled) {
-          setCompanyHeroFavorited(
-            st.likedListingIds.has(companyListingId),
-          );
+          setCompanyHeroFavorited(st.likedListingIds.has(companyListingId));
         }
       } catch {
         if (!cancelled) setCompanyHeroFavorited(false);
@@ -1201,9 +1210,7 @@ const UserProfileScreen = ({
 
     const readLikedSet = async () => {
       const st = await loadTikTokLikedState(userId);
-      return new Set(
-        [...st.likedListingIds].map(x => String(x)),
-      );
+      return new Set([...st.likedListingIds].map(x => String(x)));
     };
     const writeLikedSet = async set => {
       await persistLikedListingIds(userId, set);
@@ -1250,8 +1257,7 @@ const UserProfileScreen = ({
   /** Company: show פרוייקטים נבחרים after אודות (strip is between bio and פרטי התקשרות) when from companies directory or TikTok company post. */
   const showCompanySelectedProjectsStrip =
     isCompany &&
-    (openedFromCompaniesDirectory ||
-      (user?._fromTikTokPost && openedFromPost));
+    (openedFromCompaniesDirectory || (user?._fromTikTokPost && openedFromPost));
   // Professionals: no listings section.
   const hideMyPropertiesSection =
     isProfessional ||
@@ -1577,16 +1583,16 @@ const UserProfileScreen = ({
   );
   const showFixedProHero = Boolean(
     isListingFromFeed &&
-      lastAd &&
-      isProfessional &&
-      !showTikTokProfessionalHeader &&
-      !fromCompanyProjects,
+    lastAd &&
+    isProfessional &&
+    !showTikTokProfessionalHeader &&
+    !fromCompanyProjects,
   );
   const showFixedBackOnly = Boolean(
     isListingFromFeed &&
-      !fromCompanyProjects &&
-      (!isProfessional || showTikTokProfessionalHeader) &&
-      !showFixedProHero,
+    !fromCompanyProjects &&
+    (!isProfessional || showTikTokProfessionalHeader) &&
+    !showFixedProHero,
   );
   const useFixedListingTopNav =
     showFixedCompanyHero || showFixedProHero || showFixedBackOnly;
@@ -1594,194 +1600,217 @@ const UserProfileScreen = ({
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {paddingTop: useFixedListingTopNav ? 0 : top + 10},
-      ]}>
-      <ScrollView keyboardShouldPersistTaps="handled"
+    <View style={[styles.container, {paddingTop: top + 10}]}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingBottom: Math.max(80, bottom + 32)},
+          {paddingBottom: Math.max(bottom + 10)},
         ]}
         showsVerticalScrollIndicator={false}>
         {(!isProfessional || showTikTokProfessionalHeader) &&
           !fromCompanyProjects &&
           !useFixedListingTopNav && (
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.backBtn}
-            hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.backBtn, {top: top + 10}]}
+              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={28}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
 
         {(!isProfessional || showTikTokProfessionalHeader) &&
           !fromCompanyProjects && (
-        <View style={styles.profileBlock}>
-          <View style={styles.avatarWrap}>
-            <ProfileAvatar
-              uri={displayLogoSource?.uri}
-              name={displayName}
-              size={78}
-              imageStyle={
-                Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
-              }
-            />
-            {shouldShowFollowPlus ? (
+            <View style={styles.profileBlock}>
+              <View style={styles.avatarWrap}>
+                <ProfileAvatar
+                  uri={displayLogoSource?.uri}
+                  name={displayName}
+                  size={78}
+                  imageStyle={
+                    Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                  }
+                />
+                {shouldShowFollowPlus ? (
+                  <TouchableOpacity
+                    onPress={handleSendFollowRequest}
+                    style={styles.avatarBadge}
+                    disabled={sendingFollowRequest}
+                    activeOpacity={0.8}>
+                    {sendingFollowRequest ? (
+                      <Text style={styles.avatarBadgeSending}>...</Text>
+                    ) : (
+                      <MaterialCommunityIcons
+                        name="plus"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <Text style={styles.userName}>{displayName}</Text>
+              {displayEmail != null && displayEmail !== '' ? (
+                <Text style={styles.userEmail}>{displayEmail}</Text>
+              ) : null}
+              {!isBnbListingAdProfile ? (
+                <View style={styles.statsRow}>
+                  <TouchableOpacity
+                    style={styles.stat}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      typeof onOpenFollowHub === 'function' &&
+                      onOpenFollowHub('requests')
+                    }>
+                    <Text style={styles.statNumber}>
+                      {formatStatCount(likesCount)}
+                    </Text>
+                    <Text style={styles.statLabel}>לייקים</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.stat}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      typeof onOpenFollowHub === 'function' &&
+                      onOpenFollowHub('followers')
+                    }>
+                    <Text style={styles.statNumber}>
+                      {formatStatCount(followersCount)}
+                    </Text>
+                    <Text style={styles.statLabel}>עוקבים</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.stat}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      typeof onOpenFollowHub === 'function' &&
+                      onOpenFollowHub('following')
+                    }>
+                    <Text style={styles.statNumber}>
+                      {formatStatCount(followingCount)}
+                    </Text>
+                    <Text style={styles.statLabel}>עוקב</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+        {(!isProfessional || showTikTokProfessionalHeader) &&
+          !fromCompanyProjects && (
+            <View style={styles.actionRow}>
               <TouchableOpacity
-                onPress={handleSendFollowRequest}
-                style={styles.avatarBadge}
-                disabled={sendingFollowRequest}
-                activeOpacity={0.8}>
-                {sendingFollowRequest ? (
-                  <Text style={styles.avatarBadgeSending}>...</Text>
-                ) : (
-                  <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          <Text style={styles.userName}>{displayName}</Text>
-          {displayEmail != null && displayEmail !== '' ? (
-            <Text style={styles.userEmail}>{displayEmail}</Text>
-          ) : null}
-          {!isBnbListingAdProfile ? (
-            <View style={styles.statsRow}>
-              <TouchableOpacity
-                style={styles.stat}
+                onPress={() => {
+                  if (isOwnProfile) return;
+                  typeof onCall === 'function' && onCall();
+                }}
                 activeOpacity={0.8}
-                onPress={() =>
-                  typeof onOpenFollowHub === 'function' &&
-                  onOpenFollowHub('requests')
-                }>
-                <Text style={styles.statNumber}>{formatStatCount(likesCount)}</Text>
-                <Text style={styles.statLabel}>לייקים</Text>
+                disabled={isOwnProfile}
+                style={[
+                  styles.actionBtnTouch,
+                  isOwnProfile && styles.actionBtnDisabled,
+                ]}>
+                <Image
+                  source={require('../assets/callWithText.png')}
+                  style={styles.actionBtnImage}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.stat}
+                onPress={() => {
+                  if (isOwnProfile) return;
+                  if (
+                    !currentUser &&
+                    typeof onOpenUserRegistration === 'function'
+                  ) {
+                    onOpenUserRegistration();
+                  } else if (typeof onMessage === 'function') {
+                    onMessage();
+                  }
+                }}
                 activeOpacity={0.8}
-                onPress={() =>
-                  typeof onOpenFollowHub === 'function' &&
-                  onOpenFollowHub('followers')
-                }>
-                <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
-                <Text style={styles.statLabel}>עוקבים</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.stat}
-                activeOpacity={0.8}
-                onPress={() =>
-                  typeof onOpenFollowHub === 'function' &&
-                  onOpenFollowHub('following')
-                }>
-                <Text style={styles.statNumber}>{formatStatCount(followingCount)}</Text>
-                <Text style={styles.statLabel}>עוקב</Text>
+                disabled={isOwnProfile}
+                style={[
+                  styles.actionBtnTouch,
+                  isOwnProfile && styles.actionBtnDisabled,
+                ]}>
+                <Image
+                  source={require('../assets/chatWithText.png')}
+                  style={styles.actionBtnImage}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
             </View>
-          ) : null}
-        </View>
-        )}
-
-        {(!isProfessional || showTikTokProfessionalHeader) &&
-          !fromCompanyProjects && (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            onPress={() => {
-              if (isOwnProfile) return;
-              typeof onCall === 'function' && onCall();
-            }}
-            activeOpacity={0.8}
-            disabled={isOwnProfile}
-            style={[styles.actionBtnTouch, isOwnProfile && styles.actionBtnDisabled]}>
-            <Image
-              source={require('../assets/callWithText.png')}
-              style={styles.actionBtnImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              if (isOwnProfile) return;
-              if (
-                !currentUser &&
-                typeof onOpenUserRegistration === 'function'
-              ) {
-                onOpenUserRegistration();
-              } else if (typeof onMessage === 'function') {
-                onMessage();
-              }
-            }}
-            activeOpacity={0.8}
-            disabled={isOwnProfile}
-            style={[styles.actionBtnTouch, isOwnProfile && styles.actionBtnDisabled]}>
-            <Image
-              source={require('../assets/chatWithText.png')}
-              style={styles.actionBtnImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-        </View>
-        )}
+          )}
 
         {/* Last ad card - full width, no bubble */}
         {lastAd && (
           <View style={styles.lastAdCard}>
             <View
               style={
-                openedFromPost ? styles.lastAdImageWrapGridMode : styles.lastAdImageWrap
+                openedFromPost
+                  ? styles.lastAdImageWrapGridMode
+                  : styles.lastAdImageWrap
               }>
               {openedFromPost ? (
                 <View style={styles.lastAdGrid}>
                   {postGridDisplayItems.map((item, i) => {
-                      if (!item) {
-                        return (
-                          <View
-                            key={`post-grid-ph-${i}`}
-                            style={[
-                              styles.lastAdGridItem,
-                              styles.lastAdGridPlaceholderCell,
-                            ]}>
-                            <MaterialCommunityIcons
-                              name="camera-outline"
-                              size={24}
-                              color="rgba(255,255,255,0.45)"
-                            />
-                          </View>
-                        );
-                      }
-                      if (item.isVideo) {
-                        return (
-                          <TouchableOpacity
-                            key={`post-grid-v-${item.uri || i}-${i}`}
-                            style={styles.lastAdGridItem}
-                            activeOpacity={0.85}
-                            onPress={() => {}}>
-                            <View style={[styles.lastAdGridImage, styles.lastAdGridVideoCell]}>
-                              <MaterialCommunityIcons
-                                name="play-circle"
-                                size={36}
-                                color="rgba(255,255,255,0.85)"
-                              />
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      }
+                    if (!item) {
+                      return (
+                        <View
+                          key={`post-grid-ph-${i}`}
+                          style={[
+                            styles.lastAdGridItem,
+                            styles.lastAdGridPlaceholderCell,
+                          ]}>
+                          <MaterialCommunityIcons
+                            name="camera-outline"
+                            size={24}
+                            color="rgba(255,255,255,0.45)"
+                          />
+                        </View>
+                      );
+                    }
+                    if (item.isVideo) {
                       return (
                         <TouchableOpacity
-                          key={`post-grid-img-${item.uri}-${i}`}
+                          key={`post-grid-v-${item.uri || i}-${i}`}
                           style={styles.lastAdGridItem}
                           activeOpacity={0.85}
                           onPress={() => {}}>
-                          <Image
-                            source={{uri: item.uri}}
-                            style={styles.lastAdGridImage}
-                            resizeMode="cover"
-                          />
+                          <View
+                            style={[
+                              styles.lastAdGridImage,
+                              styles.lastAdGridVideoCell,
+                            ]}>
+                            <MaterialCommunityIcons
+                              name="play-circle"
+                              size={36}
+                              color="rgba(255,255,255,0.85)"
+                            />
+                          </View>
                         </TouchableOpacity>
                       );
-                    })}
+                    }
+                    return (
+                      <TouchableOpacity
+                        key={`post-grid-img-${item.uri}-${i}`}
+                        style={styles.lastAdGridItem}
+                        activeOpacity={0.85}
+                        onPress={() => {}}>
+                        <Image
+                          source={{uri: item.uri}}
+                          style={styles.lastAdGridImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               ) : lastAdImages.length > 0 ? (
                 <>
@@ -1855,331 +1884,373 @@ const UserProfileScreen = ({
             </View>
 
             {!openedFromPost && (isBnbListingAdProfile || !isProfessional) && (
-            <View style={styles.lastAdBody}>
-              {isBnbListingAdProfile ? (
-                <BnbListingProfileContent
-                  listing={lastAd}
-                  mapAddress={firstNonEmpty(
-                    lastAd?.address,
-                    lastAd?.location,
-                    user?.address,
-                    brokerAddress,
-                  )}
-                  onReportPress={handleReportPress}
-                />
-              ) : (
-              <>
-              <View style={styles.lastAdPiAndPurposeRow}>
-                {renderPiRating() || <View />}
-                {isCompany ? (
-                  <Image
-                    source={require('../assets/pre-sale.png')}
-                    style={styles.preSaleBadgeImage}
-                    resizeMode="contain"
+              <View style={styles.lastAdBody}>
+                {isBnbListingAdProfile ? (
+                  <BnbListingProfileContent
+                    listing={lastAd}
+                    mapAddress={firstNonEmpty(
+                      lastAd?.address,
+                      lastAd?.location,
+                      user?.address,
+                      brokerAddress,
+                    )}
+                    onReportPress={handleReportPress}
                   />
-                ) : isProfessional ? (
-                  <Text style={styles.lastAdProfessionalName} numberOfLines={1}>
-                    {displayName}
-                  </Text>
                 ) : (
-                  <View style={styles.lastAdPurposeTag}>
-                    <Text style={styles.lastAdPurposeText}>
-                      {lastAd.purpose || 'להשכרה'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {!isProfessional && (
-                <View style={styles.lastAdPriceRow}>
-                  <Text style={styles.lastAdPrice}>
-                    {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
-                  </Text>
-                </View>
-              )}
-              {(() => {
-                const addr = firstNonEmpty(
-                  user?._fromTikTokPost ? user?.creator_business_address : null,
-                  user?._fromTikTokPost ? user?.business_address : null,
-                  lastAd.address,
-                  lastAd.location,
-                );
-                if (!addr) return null;
-                return (
-                  <View style={styles.lastAdLocationRow}>
-                    <Text style={styles.lastAdLocationText}>{addr}</Text>
-                    <SimpleLineIcons
-                      name="location-pin"
-                      size={18}
-                      color="rgba(255,255,255,0.9)"
-                    />
-                  </View>
-                );
-              })()}
-              {isBroker && (
-                <View style={styles.lastAdDivider} />
-              )}
-              {isCompany && (
-                <View style={styles.companyStatsRow}>
-                  <View style={styles.companyStatItem}>
-                    <Image
-                      source={require('../assets/building_icon.png')}
-                      style={styles.companyStatIconImage}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.companyStatText}>
-                      {formatCompanyBuildingsLabel(companyBuildingCount)}
-                    </Text>
-                  </View>
-                  <View style={styles.companyStatItem}>
-                    <Image
-                      source={require('../assets/floor_icon.png')}
-                      style={styles.companyStatIconImage}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.companyStatText}>
-                      {formatCompanyFloorsLabel(companyFloorCount)}
-                    </Text>
-                  </View>
-                  <View style={styles.companyStatItem}>
-                    <Image
-                      source={require('../assets/apartment_icon.png')}
-                      style={styles.companyStatIconImage}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.companyStatText}>
-                      {formatCompanyApartmentsLabel(companyApartmentCount)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {isCompany && <View style={styles.lastAdDivider} />}
-              {isRegularUserAdView ? (
-                <>
-                  <View style={styles.lastAdDivider} />
-                  <Text style={styles.lastAdDescription} numberOfLines={6}>
-                    {String(lastAd.description || '').trim() || 'אין תיאור'}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <View style={styles.lastAdPostedBy}>
-                    <Text style={styles.lastAdPostedByLabel}>פורסם ע"י</Text>
-                    <View style={styles.brokerCardBottomLocation}>
-                      <Text style={styles.lastAdPostedByName}>{displayName}</Text>
-                      {lastAd.profileImageUrl || displayImage ? (
+                  <>
+                    <View style={styles.lastAdPiAndPurposeRow}>
+                      {renderPiRating() || <View />}
+                      {isCompany ? (
                         <Image
-                          source={{uri: lastAd.profileImageUrl || displayImage}}
-                          style={styles.lastAdPostedByAvatar}
-                          resizeMode="cover"
+                          source={require('../assets/pre-sale.png')}
+                          style={styles.preSaleBadgeImage}
+                          resizeMode="contain"
                         />
+                      ) : isProfessional ? (
+                        <Text
+                          style={styles.lastAdProfessionalName}
+                          numberOfLines={1}>
+                          {displayName}
+                        </Text>
                       ) : (
-                        <View
-                          style={[
-                            styles.lastAdPostedByAvatar,
-                            styles.lastAdPostedByAvatarPlaceholder,
-                          ]}>
-                          <MaterialCommunityIcons
-                            name="account"
-                            size={14}
-                            color="#fff"
-                          />
+                        <View style={styles.lastAdPurposeTag}>
+                          <Text style={styles.lastAdPurposeText}>
+                            {lastAd.purpose || 'להשכרה'}
+                          </Text>
                         </View>
                       )}
                     </View>
-                  </View>
-                  <Text style={styles.lastAdDescription} numberOfLines={6}>
-                    {lastAd.description ||
-                      'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
-                  </Text>
-                </>
-              )}
-              <View style={styles.lastAdDivider} />
-              {isBroker ? (
-                <>
-                  <View style={styles.lastAdFeaturesGrid}>
-                    {adFeatures.map((item, index) => (
-                      <View
-                        key={`feat-${item.iconKey}-${index}`}
-                        style={styles.lastAdFeatureChip}>
-                        <Text style={styles.smartInfoBtnLabel}>
-                          {item.label}
+                    {!isProfessional && (
+                      <View style={styles.lastAdPriceRow}>
+                        <Text style={styles.lastAdPrice}>
+                          {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
                         </Text>
-                        <Image
-                          source={getFeatureIconSource(item.iconKey)}
-                          style={styles.smartInfoBtnIcon}
-                          resizeMode="contain"
-                        />
                       </View>
-                    ))}
-                  </View>
-                  <View style={styles.lastAdDividerWhite} />
-                </>
-              ) : isCompany && projectOffersCards.length > 0 ? (
-                <>
-                  <View style={styles.projectOffersSection}>
-                    <Text style={styles.projectOffersTitle}>הפרויקט מציע</Text>
-                    {projectOffersCards.map(card => {
-                      const areaStr =
-                        card.area != null
-                          ? `גודל: ${card.area} מ"ר`
-                          : 'גודל: —';
-                      const priceStr =
-                        card.price != null
-                          ? `החל מ-${Number(card.price).toLocaleString('he-IL')}₪`
-                          : null;
-                      const roomsStr =
-                        card.rooms != null ? `מס' חדרים: ${card.rooms}` : null;
-                      const isSimple = card.rooms == null;
-                      const detailsLine = isSimple
-                        ? `${areaStr} | ${priceStr || 'החל מ-—₪'}`
-                        : [areaStr, roomsStr].filter(Boolean).join(' | ');
+                    )}
+                    {(() => {
+                      const addr = firstNonEmpty(
+                        user?._fromTikTokPost
+                          ? user?.creator_business_address
+                          : null,
+                        user?._fromTikTokPost ? user?.business_address : null,
+                        lastAd.address,
+                        lastAd.location,
+                      );
+                      if (!addr) return null;
                       return (
-                        <View key={card.key} style={styles.projectOfferCard}>
-                          <View style={styles.projectOfferCardHeader}>
-                            <Image
-                              source={getProjectOfferIconName(card.iconKey)}
-                              style={styles.companyStatIconImage}
-                              resizeMode="contain"
-                            />
-                            <Text style={styles.projectOfferCardTitle}>
-                              {card.title}
-                            </Text>
-                          </View>
-                          <Text style={styles.projectOfferCardDetails}>
-                            {detailsLine}
-                          </Text>
-                          {!isSimple && (
-                            <Text style={styles.projectOfferCardPrice}>
-                              {priceStr || 'החל מ-—₪'}
-                            </Text>
-                          )}
+                        <View style={styles.lastAdLocationRow}>
+                          <Text style={styles.lastAdLocationText}>{addr}</Text>
+                          <SimpleLineIcons
+                            name="location-pin"
+                            size={18}
+                            color="rgba(255,255,255,0.9)"
+                          />
                         </View>
                       );
-                    })}
-                  </View>
-                  <View style={styles.lastAdDividerWhite} />
-                  <View style={styles.constructionStatusBlock}>
-                    <Text style={styles.constructionStatusTitle}>
-                      מצב בנייה
-                    </Text>
-                    <View style={styles.constructionStatusRow}>
-                      {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
-                        const status = (lastAd?.construction_status ?? '')
-                          .toString()
-                          .toLowerCase();
-                        const isSelected =
-                          status === (step.name || '').toLowerCase();
-                        const isNotLast =
-                          index < CONSTRUCTION_STATUS_STEPS.length - 1;
-                        return (
-                          <React.Fragment key={step.name}>
-                            <View style={styles.constructionStatusStep}>
-                              {isSelected ? (
-                                <Image
-                                  source={require('../assets/profile/check.png')}
-                                  style={styles.constructionStatusCheckImage}
-                                  resizeMode="contain"
-                                />
-                              ) : (
-                                <View style={styles.constructionStatusCircle} />
-                              )}
-                              <Text
-                                style={[
-                                  styles.constructionStatusLabel,
-                                  isSelected &&
-                                    styles.constructionStatusLabelActive,
-                                ]}>
-                                {step.title}
-                              </Text>
-                            </View>
-                            {isNotLast ? (
-                              <View
-                                style={styles.constructionStatusDottedLine}
-                              />
-                            ) : null}
-                          </React.Fragment>
-                        );
-                      })}
-                    </View>
-                    <View style={styles.lastAdDivider} />
-                  </View>
-                </>
-              ) : (
-                <>
-                  {isCompany ? (
-                    <>
-                      <View style={styles.constructionStatusBlock}>
-                        <Text style={styles.constructionStatusTitle}>
-                          מצב בנייה
+                    })()}
+                    {isBroker && <View style={styles.lastAdDivider} />}
+                    {isCompany && (
+                      <View style={styles.companyStatsRow}>
+                        <View style={styles.companyStatItem}>
+                          <Image
+                            source={require('../assets/building_icon.png')}
+                            style={styles.companyStatIconImage}
+                            resizeMode="contain"
+                          />
+                          <Text style={styles.companyStatText}>
+                            {formatCompanyBuildingsLabel(companyBuildingCount)}
+                          </Text>
+                        </View>
+                        <View style={styles.companyStatItem}>
+                          <Image
+                            source={require('../assets/floor_icon.png')}
+                            style={styles.companyStatIconImage}
+                            resizeMode="contain"
+                          />
+                          <Text style={styles.companyStatText}>
+                            {formatCompanyFloorsLabel(companyFloorCount)}
+                          </Text>
+                        </View>
+                        <View style={styles.companyStatItem}>
+                          <Image
+                            source={require('../assets/apartment_icon.png')}
+                            style={styles.companyStatIconImage}
+                            resizeMode="contain"
+                          />
+                          <Text style={styles.companyStatText}>
+                            {formatCompanyApartmentsLabel(
+                              companyApartmentCount,
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                    {isCompany && <View style={styles.lastAdDivider} />}
+                    {isRegularUserAdView ? (
+                      <>
+                        <View style={styles.lastAdDivider} />
+                        <Text
+                          style={styles.lastAdDescription}
+                          numberOfLines={6}>
+                          {String(lastAd.description || '').trim() ||
+                            'אין תיאור'}
                         </Text>
-                        <View style={styles.constructionStatusRow}>
-                          {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
-                            const status = (lastAd?.construction_status ?? '')
-                              .toString()
-                              .toLowerCase();
-                            const isSelected =
-                              status === (step.name || '').toLowerCase();
-                            const isNotLast =
-                              index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.lastAdPostedBy}>
+                          <Text style={styles.lastAdPostedByLabel}>
+                            פורסם ע"י
+                          </Text>
+                          <View style={styles.brokerCardBottomLocation}>
+                            <Text style={styles.lastAdPostedByName}>
+                              {displayName}
+                            </Text>
+                            {lastAd.profileImageUrl || displayImage ? (
+                              <Image
+                                source={{
+                                  uri: lastAd.profileImageUrl || displayImage,
+                                }}
+                                style={styles.lastAdPostedByAvatar}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.lastAdPostedByAvatar,
+                                  styles.lastAdPostedByAvatarPlaceholder,
+                                ]}>
+                                <MaterialCommunityIcons
+                                  name="account"
+                                  size={14}
+                                  color="#fff"
+                                />
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <Text
+                          style={styles.lastAdDescription}
+                          numberOfLines={6}>
+                          {lastAd.description ||
+                            'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
+                        </Text>
+                      </>
+                    )}
+                    <View style={styles.lastAdDivider} />
+                    {isBroker ? (
+                      <>
+                        <View style={styles.lastAdFeaturesGrid}>
+                          {adFeatures.map((item, index) => (
+                            <View
+                              key={`feat-${item.iconKey}-${index}`}
+                              style={styles.lastAdFeatureChip}>
+                              <Text style={styles.smartInfoBtnLabel}>
+                                {item.label}
+                              </Text>
+                              <Image
+                                source={getFeatureIconSource(item.iconKey)}
+                                style={styles.smartInfoBtnIcon}
+                                resizeMode="contain"
+                              />
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.lastAdDividerWhite} />
+                      </>
+                    ) : isCompany && projectOffersCards.length > 0 ? (
+                      <>
+                        <View style={styles.projectOffersSection}>
+                          <Text style={styles.projectOffersTitle}>
+                            הפרויקט מציע
+                          </Text>
+                          {projectOffersCards.map(card => {
+                            const areaStr =
+                              card.area != null
+                                ? `גודל: ${card.area} מ"ר`
+                                : 'גודל: —';
+                            const priceStr =
+                              card.price != null
+                                ? `החל מ-${Number(card.price).toLocaleString('he-IL')}₪`
+                                : null;
+                            const roomsStr =
+                              card.rooms != null
+                                ? `מס' חדרים: ${card.rooms}`
+                                : null;
+                            const isSimple = card.rooms == null;
+                            const detailsLine = isSimple
+                              ? `${areaStr} | ${priceStr || 'החל מ-—₪'}`
+                              : [areaStr, roomsStr].filter(Boolean).join(' | ');
                             return (
-                              <React.Fragment key={step.name}>
-                                <View style={styles.constructionStatusStep}>
-                                  {isSelected ? (
-                                    <Image
-                                      source={require('../assets/profile/check.png')}
-                                      style={styles.constructionStatusCheckImage}
-                                      resizeMode="contain"
-                                    />
-                                  ) : (
-                                    <View
-                                      style={styles.constructionStatusCircle}
-                                    />
-                                  )}
-                                  <Text
-                                    style={[
-                                      styles.constructionStatusLabel,
-                                      isSelected &&
-                                        styles.constructionStatusLabelActive,
-                                    ]}>
-                                    {step.title}
+                              <View
+                                key={card.key}
+                                style={styles.projectOfferCard}>
+                                <View style={styles.projectOfferCardHeader}>
+                                  <Image
+                                    source={getProjectOfferIconName(
+                                      card.iconKey,
+                                    )}
+                                    style={styles.companyStatIconImage}
+                                    resizeMode="contain"
+                                  />
+                                  <Text style={styles.projectOfferCardTitle}>
+                                    {card.title}
                                   </Text>
                                 </View>
-                                {isNotLast ? (
-                                  <View
-                                    style={styles.constructionStatusDottedLine}
-                                  />
-                                ) : null}
-                              </React.Fragment>
+                                <Text style={styles.projectOfferCardDetails}>
+                                  {detailsLine}
+                                </Text>
+                                {!isSimple && (
+                                  <Text style={styles.projectOfferCardPrice}>
+                                    {priceStr || 'החל מ-—₪'}
+                                  </Text>
+                                )}
+                              </View>
                             );
                           })}
                         </View>
-                      </View>
-                      <View style={styles.lastAdDividerWhite} />
-                    </>
-                  ) : null}
-                  {isRegularUserAdView ? (
-                    <>
-                      <View style={styles.lastAdFeaturesGrid}>
-                        {adFeatures.map((item, index) => (
-                          <View
-                            key={`feat-regular-${item.iconKey}-${index}`}
-                            style={styles.lastAdFeatureChip}>
-                            <Text style={styles.smartInfoBtnLabel}>
-                              {item.label}
-                            </Text>
-                            <Image
-                              source={getFeatureIconSource(item.iconKey)}
-                              style={styles.smartInfoBtnIcon}
-                              resizeMode="contain"
-                            />
+                        <View style={styles.lastAdDividerWhite} />
+                        <View style={styles.constructionStatusBlock}>
+                          <Text style={styles.constructionStatusTitle}>
+                            מצב בנייה
+                          </Text>
+                          <View style={styles.constructionStatusRow}>
+                            {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
+                              const status = (lastAd?.construction_status ?? '')
+                                .toString()
+                                .toLowerCase();
+                              const isSelected =
+                                status === (step.name || '').toLowerCase();
+                              const isNotLast =
+                                index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                              return (
+                                <React.Fragment key={step.name}>
+                                  <View style={styles.constructionStatusStep}>
+                                    {isSelected ? (
+                                      <Image
+                                        source={require('../assets/profile/check.png')}
+                                        style={
+                                          styles.constructionStatusCheckImage
+                                        }
+                                        resizeMode="contain"
+                                      />
+                                    ) : (
+                                      <View
+                                        style={styles.constructionStatusCircle}
+                                      />
+                                    )}
+                                    <Text
+                                      style={[
+                                        styles.constructionStatusLabel,
+                                        isSelected &&
+                                          styles.constructionStatusLabelActive,
+                                      ]}>
+                                      {step.title}
+                                    </Text>
+                                  </View>
+                                  {isNotLast ? (
+                                    <View
+                                      style={
+                                        styles.constructionStatusDottedLine
+                                      }
+                                    />
+                                  ) : null}
+                                </React.Fragment>
+                              );
+                            })}
                           </View>
-                        ))}
-                      </View>
-                      <View style={styles.lastAdDividerWhite} />
-                    </>
-                  ) : null}
-                  {/* <View style={styles.lastAdDividerWhite} /> */}
-                  {/* <View style={styles.lastAdFeaturesGrid}>
+                          <View style={styles.lastAdDivider} />
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        {isCompany ? (
+                          <>
+                            <View style={styles.constructionStatusBlock}>
+                              <Text style={styles.constructionStatusTitle}>
+                                מצב בנייה
+                              </Text>
+                              <View style={styles.constructionStatusRow}>
+                                {CONSTRUCTION_STATUS_STEPS.map(
+                                  (step, index) => {
+                                    const status = (
+                                      lastAd?.construction_status ?? ''
+                                    )
+                                      .toString()
+                                      .toLowerCase();
+                                    const isSelected =
+                                      status ===
+                                      (step.name || '').toLowerCase();
+                                    const isNotLast =
+                                      index <
+                                      CONSTRUCTION_STATUS_STEPS.length - 1;
+                                    return (
+                                      <React.Fragment key={step.name}>
+                                        <View
+                                          style={styles.constructionStatusStep}>
+                                          {isSelected ? (
+                                            <Image
+                                              source={require('../assets/profile/check.png')}
+                                              style={
+                                                styles.constructionStatusCheckImage
+                                              }
+                                              resizeMode="contain"
+                                            />
+                                          ) : (
+                                            <View
+                                              style={
+                                                styles.constructionStatusCircle
+                                              }
+                                            />
+                                          )}
+                                          <Text
+                                            style={[
+                                              styles.constructionStatusLabel,
+                                              isSelected &&
+                                                styles.constructionStatusLabelActive,
+                                            ]}>
+                                            {step.title}
+                                          </Text>
+                                        </View>
+                                        {isNotLast ? (
+                                          <View
+                                            style={
+                                              styles.constructionStatusDottedLine
+                                            }
+                                          />
+                                        ) : null}
+                                      </React.Fragment>
+                                    );
+                                  },
+                                )}
+                              </View>
+                            </View>
+                            <View style={styles.lastAdDividerWhite} />
+                          </>
+                        ) : null}
+                        {isRegularUserAdView ? (
+                          <>
+                            <View style={styles.lastAdFeaturesGrid}>
+                              {adFeatures.map((item, index) => (
+                                <View
+                                  key={`feat-regular-${item.iconKey}-${index}`}
+                                  style={styles.lastAdFeatureChip}>
+                                  <Text style={styles.smartInfoBtnLabel}>
+                                    {item.label}
+                                  </Text>
+                                  <Image
+                                    source={getFeatureIconSource(item.iconKey)}
+                                    style={styles.smartInfoBtnIcon}
+                                    resizeMode="contain"
+                                  />
+                                </View>
+                              ))}
+                            </View>
+                            <View style={styles.lastAdDividerWhite} />
+                          </>
+                        ) : null}
+                        {/* <View style={styles.lastAdDividerWhite} /> */}
+                        {/* <View style={styles.lastAdFeaturesGrid}>
                     {adFeatures.map((item, index) => (
                       <View
                         key={`feat-${item.iconKey}-${index}`}
@@ -2195,20 +2266,22 @@ const UserProfileScreen = ({
                       </View>
                     ))}
                   </View> */}
-                </>
-              )}
-              {!isBroker && !isCompany && !isRegularUserAdView ? (
-                <View style={styles.lastAdDividerWhite} />
-              ) : null}
-              {showLocationMap ? (
-                <LocationMap
-                  address={lastAd.address || lastAd.location || brokerAddress}
-                  containerStyle={styles.locationMapContainer}
-                />
-              ) : null}
-              </>
-              )}
-            </View>
+                      </>
+                    )}
+                    {!isBroker && !isCompany && !isRegularUserAdView ? (
+                      <View style={styles.lastAdDividerWhite} />
+                    ) : null}
+                    {showLocationMap ? (
+                      <LocationMap
+                        address={
+                          lastAd.address || lastAd.location || brokerAddress
+                        }
+                        containerStyle={styles.locationMapContainer}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </View>
             )}
           </View>
         )}
@@ -2278,296 +2351,315 @@ const UserProfileScreen = ({
           !openedFromPost &&
           !isProfessional &&
           !isBnbListingAdProfile && (
-          <View style={styles.brokerCardOverlayLine} />
-        )}
+            <View style={styles.brokerCardOverlayLine} />
+          )}
         {!isRegularUserAdView && !isBnbListingAdProfile && (
-        <View style={styles.brokerCardBottom}>
-          {!isCompany || showCompanyPostSpecialties ? (
-            <>
-              <View style={styles.brokerCardBottomHeader}>
-                {renderPiRating()}
-                <View style={styles.brokerCardBottomNameBlock}>
-                  <Text style={styles.brokerCardBottomName}>{displayName}</Text>
-                </View>
-              </View>
-              {brokerAddress ? (
-                <View style={styles.brokerCardBottomLocationRow}>
-                  <Text style={styles.brokerCardBottomAddress}>
-                    {brokerAddress}
-                  </Text>
-                  <SimpleLineIcons
-                    name="location-pin"
-                    size={16}
-                    color="#FFFFFF"
-                  />
-                </View>
-              ) : null}
-              {user?._fromTikTokPost && isBroker && openedFromPost ? (
-                <View style={styles.brokerCardBottomSectionDivider} />
-              ) : null}
-              {!user?._fromTikTokPost && !isBroker && (
-                <View style={styles.brokerCardBottomSectionDivider} />
-              )}
-              {!hideCompanyPostSpecialtiesBlock && (
-                <>
-                  <Text style={styles.brokerCardBottomSectionTitle}>התמחויות</Text>
-                  <View style={styles.brokerCardBottomTags}>
-                    {overlayActivityRegions.length > 0 ? (
-                      overlayActivityRegions.map((s, i) => (
-                        <View key={i} style={styles.brokerCardBottomTag}>
-                          <Text style={styles.brokerCardBottomTagText}>
-                            {typeof s === 'string'
-                              ? s
-                              : (s?.label ?? s?.name ?? String(s))}
-                          </Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.brokerCardBottomTagEmpty}>
-                        אין התמחויות
-                      </Text>
-                    )}
+          <View style={styles.brokerCardBottom}>
+            {!isCompany || showCompanyPostSpecialties ? (
+              <>
+                <View style={styles.brokerCardBottomHeader}>
+                  {renderPiRating()}
+                  <View style={styles.brokerCardBottomNameBlock}>
+                    <Text style={styles.brokerCardBottomName}>
+                      {displayName}
+                    </Text>
                   </View>
-                </>
-              )}
-              {!user?._fromTikTokPost && (
-                <View style={styles.brokerCardBottomContentDivider} />
-              )}
-            </>
-          ) : null}
-          {isCompany && (!showCompanyPostSpecialties || user?._fromTikTokPost) ? (
-            <>
-              {showCompanyPostSpecialties ? (
-                <View style={styles.brokerCardBottomContentDivider} />
-              ) : null}
-              <Text style={styles.brokerCardBottomAboutTitle}>אודות החברה</Text>
-            </>
-          ) : null}
-          <Text style={styles.brokerCardBottomBio}>
-            {brokerBio && String(brokerBio).trim() ? brokerBio : 'אין תיאור'}
-          </Text>
-          {!hideMyPropertiesSection && <View style={styles.brokerCardBottomDivider} />}
-        </View>
+                </View>
+                {brokerAddress ? (
+                  <View style={styles.brokerCardBottomLocationRow}>
+                    <Text style={styles.brokerCardBottomAddress}>
+                      {brokerAddress}
+                    </Text>
+                    <SimpleLineIcons
+                      name="location-pin"
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+                {user?._fromTikTokPost && isBroker && openedFromPost ? (
+                  <View style={styles.brokerCardBottomSectionDivider} />
+                ) : null}
+                {!user?._fromTikTokPost && !isBroker && (
+                  <View style={styles.brokerCardBottomSectionDivider} />
+                )}
+                {!hideCompanyPostSpecialtiesBlock && (
+                  <>
+                    <Text style={styles.brokerCardBottomSectionTitle}>
+                      התמחויות
+                    </Text>
+                    <View style={styles.brokerCardBottomTags}>
+                      {overlayActivityRegions.length > 0 ? (
+                        overlayActivityRegions.map((s, i) => (
+                          <View key={i} style={styles.brokerCardBottomTag}>
+                            <Text style={styles.brokerCardBottomTagText}>
+                              {typeof s === 'string'
+                                ? s
+                                : (s?.label ?? s?.name ?? String(s))}
+                            </Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.brokerCardBottomTagEmpty}>
+                          אין התמחויות
+                        </Text>
+                      )}
+                    </View>
+                  </>
+                )}
+                {!user?._fromTikTokPost && (
+                  <View style={styles.brokerCardBottomContentDivider} />
+                )}
+              </>
+            ) : null}
+            {isCompany &&
+            (!showCompanyPostSpecialties || user?._fromTikTokPost) ? (
+              <>
+                {showCompanyPostSpecialties ? (
+                  <View style={styles.brokerCardBottomContentDivider} />
+                ) : null}
+                <Text style={styles.brokerCardBottomAboutTitle}>
+                  אודות החברה
+                </Text>
+              </>
+            ) : null}
+            <Text style={styles.brokerCardBottomBio}>
+              {brokerBio && String(brokerBio).trim() ? brokerBio : 'אין תיאור'}
+            </Text>
+            {!hideMyPropertiesSection && (
+              <View style={styles.brokerCardBottomDivider} />
+            )}
+          </View>
         )}
 
         {!isRegularUserAdView &&
           !hideMyPropertiesSection &&
           !isBnbListingAdProfile && (
-        <View style={styles.myPropertiesSection}>
-          <View style={styles.myPropertiesHeader}>
-            <Text style={styles.myPropertiesTitle}>
-              {isCompany ? 'פרוייקטים נבחרים' : 'הנכסים שלי'}
-            </Text>
-            {isCompany ? (
-              openedFromCompaniesDirectory ? (
-                <TouchableOpacity
-                  onPress={() =>
-                    typeof onClose === 'function' ? onClose() : undefined
-                  }
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="לכל הפרוייקטים שלנו">
-                  <Text style={styles.myPropertiesSeeAllText}>
-                    לכל הפרוייקטים שלנו
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={() =>
-                    typeof onOpenAllListings === 'function' && creatorId
-                      ? onOpenAllListings(creatorId)
-                      : undefined
-                  }
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="לכל הפרוייקטים שלנו">
-                  <Text style={styles.myPropertiesSeeAllText}>
-                    לכל הפרוייקטים שלנו
-                  </Text>
-                </TouchableOpacity>
-              )
-            ) : (
-              <TouchableOpacity
-                onPress={() =>
-                  typeof onOpenAllListings === 'function' && creatorId
-                    ? onOpenAllListings(creatorId)
-                    : undefined
-                }
-                activeOpacity={0.7}>
-                <Text style={styles.myPropertiesSeeAllText}>
-                  לכל הנכסים שלי
+            <View style={styles.myPropertiesSection}>
+              <View style={styles.myPropertiesHeader}>
+                <Text style={styles.myPropertiesTitle}>
+                  {isCompany ? 'פרוייקטים נבחרים' : 'הנכסים שלי'}
                 </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {userListingsLoading ? (
-            <View style={styles.myPropertiesListPlaceholder}>
-              <Text style={styles.myPropertiesPlaceholderText}>טוען...</Text>
-            </View>
-          ) : userListings.length === 0 ? (
-            <View style={styles.myPropertiesListPlaceholder}>
-              <Text style={styles.myPropertiesPlaceholderText}>
-                אין נכסים להצגה
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={userListings.filter(l => !isPostListingRecord(l))}
-              horizontal
-              inverted
-              showsHorizontalScrollIndicator={false}
-              style={styles.myPropertiesFlatList}
-              contentContainerStyle={styles.myPropertiesListContent}
-              keyExtractor={item => String(item.id)}
-              renderItem={({item}) => {
-                const imgs = item.listing_images || [];
-                const firstImg = imgs[0]?.image_url;
-                const purposeRaw = item.purpose || item.search_purpose || '';
-                const listingCategory = Number(item.category);
-                const purposeLabel =
-                  listingCategory === 5
-                    ? 'BNB'
-                    : purposeRaw === 'sale' ||
-                        String(purposeRaw).toLowerCase() === 'sale' ||
-                        purposeRaw === 'מכירה'
-                      ? 'למכירה'
-                      : 'להשכרה';
-                const priceNum = item.price != null ? Number(item.price) : null;
-                const priceStr =
-                  priceNum != null && !isNaN(priceNum)
-                    ? `₪${Math.round(priceNum).toLocaleString('he-IL')}`
-                    : '—';
-                const location =
-                  (
-                    item.address ||
-                    item.land_address ||
-                    item.search_address ||
-                    ''
-                  ).trim() || '—';
-                return (
-                  <View style={styles.myPropertiesCard}>
-                    <View style={styles.myPropertiesCardImageWrap}>
-                      {firstImg ? (
-                        <Image
-                          source={{uri: firstImg}}
-                          style={styles.myPropertiesCardImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.myPropertiesCardImage,
-                            styles.myPropertiesCardImagePlaceholder,
-                          ]}>
-                          <MaterialCommunityIcons
-                            name="image-outline"
-                            size={40}
-                            color="rgba(255,255,255,0.4)"
-                          />
+                {isCompany ? (
+                  openedFromCompaniesDirectory ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        typeof onClose === 'function' ? onClose() : undefined
+                      }
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="לכל הפרוייקטים שלנו">
+                      <Text style={styles.myPropertiesSeeAllText}>
+                        לכל הפרוייקטים שלנו
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() =>
+                        typeof onOpenAllListings === 'function' && creatorId
+                          ? onOpenAllListings(creatorId)
+                          : undefined
+                      }
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="לכל הפרוייקטים שלנו">
+                      <Text style={styles.myPropertiesSeeAllText}>
+                        לכל הפרוייקטים שלנו
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                ) : (
+                  <TouchableOpacity
+                    onPress={() =>
+                      typeof onOpenAllListings === 'function' && creatorId
+                        ? onOpenAllListings(creatorId)
+                        : undefined
+                    }
+                    activeOpacity={0.7}>
+                    <Text style={styles.myPropertiesSeeAllText}>
+                      לכל הנכסים שלי
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {userListingsLoading ? (
+                <View style={styles.myPropertiesListPlaceholder}>
+                  <Text style={styles.myPropertiesPlaceholderText}>
+                    טוען...
+                  </Text>
+                </View>
+              ) : userListings.length === 0 ? (
+                <View style={styles.myPropertiesListPlaceholder}>
+                  <Text style={styles.myPropertiesPlaceholderText}>
+                    אין נכסים להצגה
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={userListings.filter(l => !isPostListingRecord(l))}
+                  horizontal
+                  inverted
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.myPropertiesFlatList}
+                  contentContainerStyle={styles.myPropertiesListContent}
+                  keyExtractor={item => String(item.id)}
+                  renderItem={({item}) => {
+                    const imgs = item.listing_images || [];
+                    const firstImg = imgs[0]?.image_url;
+                    const purposeRaw =
+                      item.purpose || item.search_purpose || '';
+                    const listingCategory = Number(item.category);
+                    const purposeLabel =
+                      listingCategory === 5
+                        ? 'BNB'
+                        : purposeRaw === 'sale' ||
+                            String(purposeRaw).toLowerCase() === 'sale' ||
+                            purposeRaw === 'מכירה'
+                          ? 'למכירה'
+                          : 'להשכרה';
+                    const priceNum =
+                      item.price != null ? Number(item.price) : null;
+                    const priceStr =
+                      priceNum != null && !isNaN(priceNum)
+                        ? `₪${Math.round(priceNum).toLocaleString('he-IL')}`
+                        : '—';
+                    const location =
+                      (
+                        item.address ||
+                        item.land_address ||
+                        item.search_address ||
+                        ''
+                      ).trim() || '—';
+                    return (
+                      <View style={styles.myPropertiesCard}>
+                        <View style={styles.myPropertiesCardImageWrap}>
+                          {firstImg ? (
+                            <Image
+                              source={{uri: firstImg}}
+                              style={styles.myPropertiesCardImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View
+                              style={[
+                                styles.myPropertiesCardImage,
+                                styles.myPropertiesCardImagePlaceholder,
+                              ]}>
+                              <MaterialCommunityIcons
+                                name="image-outline"
+                                size={40}
+                                color="rgba(255,255,255,0.4)"
+                              />
+                            </View>
+                          )}
+                          {isCompany ? (
+                            <Image
+                              source={require('../assets/pre-sale.png')}
+                              style={styles.myPropertiesCardBadgeImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.myPropertiesCardBadge}>
+                              <Text style={styles.myPropertiesCardBadgeText}>
+                                {purposeLabel}
+                              </Text>
+                            </View>
+                          )}
                         </View>
-                      )}
-                      {isCompany ? (
-                        <Image
-                          source={require('../assets/pre-sale.png')}
-                          style={styles.myPropertiesCardBadgeImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <View style={styles.myPropertiesCardBadge}>
-                          <Text style={styles.myPropertiesCardBadgeText}>
-                            {purposeLabel}
+                        <View style={styles.myPropertiesCardBottom}>
+                          <Text style={styles.myPropertiesCardPrice}>
+                            {priceStr}
+                          </Text>
+                          <Text
+                            style={styles.myPropertiesCardLocation}
+                            numberOfLines={1}>
+                            {location}
                           </Text>
                         </View>
-                      )}
-                    </View>
-                    <View style={styles.myPropertiesCardBottom}>
-                      <Text style={styles.myPropertiesCardPrice}>
-                        {priceStr}
-                      </Text>
-                      <Text
-                        style={styles.myPropertiesCardLocation}
-                        numberOfLines={1}>
-                        {location}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              }}
-            />
+                      </View>
+                    );
+                  }}
+                />
+              )}
+            </View>
           )}
-        </View>
-        )}
 
         {/* Contact Details – פרטי התקשרות */}
         {!isRegularUserAdView && !isBnbListingAdProfile && (
           <View style={styles.contactDetailsDivider} />
         )}
         {!isRegularUserAdView && !isBnbListingAdProfile && (
-        <View style={styles.contactDetailsSection}>
-          <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
-          <View style={styles.contactDetailsContent}>
-            <View style={styles.contactDetailsRight}>
-              <ProfileAvatar
-                uri={contactLogo || undefined}
-                name={displayName}
-                size={100}
-                style={styles.contactDetailsProfileAvatar}
-                imageStyle={
-                  Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
-                }
-              />
-              <Text style={styles.contactDetailsAgencyName}>{displayName}</Text>
-              {isCompany && (
-                <TouchableOpacity
-                  style={[styles.contactDetailsRow]}
-                  onPress={() => {}}>
-                  <Text style={styles.contactDetailsLink}>{contactEmail}</Text>
-                  <Image
-                    source={require('../assets/web-icon.png')}
-                    style={styles.contactDetailsIconImage}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              )}
-              {contactPhones.map((phone, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.contactDetailsRow}
-                  onPress={() => {}}>
-                  <Text style={styles.contactDetailsLink}>
-                    {String(phone).trim()}
-                  </Text>
-                  <Image
-                    source={contactPhoneIconSource}
-                    style={styles.contactDetailsIconImage}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              ))}
-              {contactEmail ? (
-                <TouchableOpacity
-                  style={[styles.contactDetailsRow, {marginBottom: 0}]}
-                  onPress={() => {}}>
-                  <Text style={styles.contactDetailsLink}>{contactEmail}</Text>
-                  <Image
-                    source={contactEmailIconSource}
-                    style={styles.contactDetailsIconImage}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              ) : null}
+          <View style={styles.contactDetailsSection}>
+            <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
+            <View style={styles.contactDetailsContent}>
+              <View style={styles.contactDetailsRight}>
+                <ProfileAvatar
+                  uri={contactLogo || undefined}
+                  name={displayName}
+                  size={100}
+                  style={styles.contactDetailsProfileAvatar}
+                  imageStyle={
+                    Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                  }
+                />
+                <Text style={styles.contactDetailsAgencyName}>
+                  {displayName}
+                </Text>
+                {isCompany && (
+                  <TouchableOpacity
+                    style={[styles.contactDetailsRow]}
+                    onPress={() => {}}>
+                    <Text style={styles.contactDetailsLink}>
+                      {contactEmail}
+                    </Text>
+                    <Image
+                      source={require('../assets/web-icon.png')}
+                      style={styles.contactDetailsIconImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                )}
+                {contactPhones.map((phone, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.contactDetailsRow}
+                    onPress={() => {}}>
+                    <Text style={styles.contactDetailsLink}>
+                      {String(phone).trim()}
+                    </Text>
+                    <Image
+                      source={contactPhoneIconSource}
+                      style={styles.contactDetailsIconImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+                {contactEmail ? (
+                  <TouchableOpacity
+                    style={[styles.contactDetailsRow, {marginBottom: 0}]}
+                    onPress={() => {}}>
+                    <Text style={styles.contactDetailsLink}>
+                      {contactEmail}
+                    </Text>
+                    <Image
+                      source={contactEmailIconSource}
+                      style={styles.contactDetailsIconImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={styles.contactDetailsCopyBtn}
+                onPress={copyContactDetails}>
+                <MaterialCommunityIcons
+                  name="content-copy"
+                  size={20}
+                  color="#fff"
+                />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.contactDetailsCopyBtn}
-              onPress={copyContactDetails}>
-              <MaterialCommunityIcons
-                name="content-copy"
-                size={20}
-                color="#fff"
-              />
-            </TouchableOpacity>
           </View>
-        </View>
         )}
         {!isRegularUserAdView && !isBnbListingAdProfile && (
           <View style={styles.contactDetailsDivider} />
@@ -2575,179 +2667,182 @@ const UserProfileScreen = ({
 
         {/* Rating & Reviews – כמות כוכבי פאי / ביקורות (לא מציגים דירוג עצמי בפרופיל שלך) */}
         {!isRegularUserAdView && !isBnbListingAdProfile ? (
-        <View style={styles.reviewsSection}>
-          {!isOwnProfile ? (
-            <>
-              <Text style={styles.reviewsPiTitle}>
-                כמה כוכבי פאי היית נותן על השירות שקיבלת?
-              </Text>
-              <RatingImprovePicker
-                value={selectedRating}
-                onChange={setSelectedRating}
-              />
-              <Pressable
-                onPress={() => {
-                  handleRate();
-                }}
-                disabled={submitReviewLoading}
-                style={({pressed}) => [
-                  styles.reviewsRateBtnWrap,
-                  pressed && styles.reviewsRateBtnPressed,
-                ]}>
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.04, 0.51, 0.88]}
-                  start={{x: 0.4, y: 0}}
-                  end={{x: 0.4, y: 1}}
-                  style={styles.reviewsRateBtnGradient}
-                >
-                  <Text style={styles.reviewsRateBtnLabel}>דרג</Text>
-                </LinearGradient>
-              </Pressable>
-            </>
-          ) : null}
-
-          <Text style={styles.reviewsListTitle}>ביקורות</Text>
-          {!isOwnProfile ? (
-            <TextInput
-              style={styles.reviewsInput}
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              placeholder="הוסף ביקורת"
-              placeholderTextColor="rgba(255,255,255,0.4)"
-            />
-          ) : null}
-          {reviewsLoading ? (
-            <Text style={styles.reviewsPlaceholder}>טוען ביקורות...</Text>
-          ) : reviews.length === 0 ? (
-            <Text style={styles.reviewsPlaceholder}>אין עדיין ביקורות</Text>
-          ) : (
-            visibleReviews.map(r => (
-              <View key={r.id} style={styles.reviewCard}>
-                <View style={styles.reviewCardHeader}>
-                  <View style={styles.reviewCardAvatarWrap}>
-                    {r.reviewer_image_url ? (
-                      <Image
-                        source={{uri: r.reviewer_image_url}}
-                        style={styles.reviewCardAvatar}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View
-                        style={[
-                          styles.reviewCardAvatar,
-                          styles.avatarPlaceholder,
-                        ]}>
-                        <MaterialCommunityIcons
-                          name="account"
-                          size={24}
-                          color="rgba(255,255,255,0.6)"
-                        />
-                      </View>
-                    )}
-
-                    <Image
-                      source={getStarSource(
-                        Math.min(5, Math.max(1, Number(r.rating) || 1)) - 1,
-                      )}
-                      style={[
-                        r.rating === 1
-                          ? styles.reviewCardStarBadgeImage1
-                          : Number(r.rating) === 5
-                            ? styles.reviewCardStarBadgeImage5
-                            : styles.reviewCardStarBadgeImage,
-                      ]}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.contactDetailsRight}>
-                    <Text style={styles.reviewCardName}>
-                      {r.reviewer_name || 'משתמש'}
-                    </Text>
-                    <Text style={styles.reviewCardDate}>
-                      {formatReviewDate(r.created_at)}
-                    </Text>
-                  </View>
-                </View>
-                {r.comment ? (
-                  <Text style={styles.reviewCardBody}>{r.comment}</Text>
-                ) : null}
-              </View>
-            ))
-          )}
-          {!reviewsLoading && reviews.length > 0 ? (
-            <View style={styles.readMoreWrap}>
-              <Pressable
-                onPress={() => {
-                  if (typeof onOpenAllReviews === 'function') {
-                    onOpenAllReviews(reviews);
-                  }
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="כל הביקורות">
-                <Text style={styles.readMoreText}>קרא עוד</Text>
-              </Pressable>
-              <View style={styles.contactDetailsDivider} />
-            </View>
-          ) : null}
-          <View style={styles.profileCtaSection}>
-            <TouchableOpacity
-              style={styles.profileCtaWarningBtn}
-              onPress={handleReportPress}
-              activeOpacity={0.85}>
-              <Text style={styles.profileCtaWarningText}>דווח</Text>
-              <MaterialCommunityIcons
-                name="alert-outline"
-                size={22}
-                color="#F7F3E6"
-              />
-            </TouchableOpacity>
-            {(isCompany || isProfessional) && !user?._fromTikTokPost && (
+          <View style={styles.reviewsSection}>
+            {!isOwnProfile ? (
               <>
-                <View style={styles.profilePiChatWrap}>
+                <Text style={styles.reviewsPiTitle}>
+                  כמה כוכבי פאי היית נותן על השירות שקיבלת?
+                </Text>
+                <RatingImprovePicker
+                  value={selectedRating}
+                  onChange={setSelectedRating}
+                />
+                <Pressable
+                  onPress={() => {
+                    handleRate();
+                  }}
+                  disabled={submitReviewLoading}
+                  style={({pressed}) => [
+                    styles.reviewsRateBtnWrap,
+                    pressed && styles.reviewsRateBtnPressed,
+                  ]}>
+                  <LinearGradient
+                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    locations={[0.04, 0.51, 0.88]}
+                    start={{x: 0.4, y: 0}}
+                    end={{x: 0.4, y: 1}}
+                    style={styles.reviewsRateBtnGradient}>
+                    <Text style={styles.reviewsRateBtnLabel}>דרג</Text>
+                  </LinearGradient>
+                </Pressable>
+              </>
+            ) : null}
+
+            <Text style={styles.reviewsListTitle}>ביקורות</Text>
+            {!isOwnProfile ? (
+              <TextInput
+                style={styles.reviewsInput}
+                value={reviewComment}
+                onChangeText={setReviewComment}
+                placeholder="הוסף ביקורת"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+              />
+            ) : null}
+            {reviewsLoading ? (
+              <Text style={styles.reviewsPlaceholder}>טוען ביקורות...</Text>
+            ) : reviews.length === 0 ? (
+              <Text style={styles.reviewsPlaceholder}>אין עדיין ביקורות</Text>
+            ) : (
+              visibleReviews.map(r => (
+                <View key={r.id} style={styles.reviewCard}>
+                  <View style={styles.reviewCardHeader}>
+                    <View style={styles.reviewCardAvatarWrap}>
+                      {r.reviewer_image_url ? (
+                        <Image
+                          source={{uri: r.reviewer_image_url}}
+                          style={styles.reviewCardAvatar}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.reviewCardAvatar,
+                            styles.avatarPlaceholder,
+                          ]}>
+                          <MaterialCommunityIcons
+                            name="account"
+                            size={24}
+                            color="rgba(255,255,255,0.6)"
+                          />
+                        </View>
+                      )}
+
+                      <Image
+                        source={getStarSource(
+                          Math.min(5, Math.max(1, Number(r.rating) || 1)) - 1,
+                        )}
+                        style={[
+                          r.rating === 1
+                            ? styles.reviewCardStarBadgeImage1
+                            : Number(r.rating) === 5
+                              ? styles.reviewCardStarBadgeImage5
+                              : styles.reviewCardStarBadgeImage,
+                        ]}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.contactDetailsRight}>
+                      <Text style={styles.reviewCardName}>
+                        {r.reviewer_name || 'משתמש'}
+                      </Text>
+                      <Text style={styles.reviewCardDate}>
+                        {formatReviewDate(r.created_at)}
+                      </Text>
+                    </View>
+                  </View>
+                  {r.comment ? (
+                    <Text style={styles.reviewCardBody}>{r.comment}</Text>
+                  ) : null}
+                </View>
+              ))
+            )}
+            {!reviewsLoading && reviews.length > 0 ? (
+              <View style={styles.readMoreWrap}>
+                <Pressable
+                  onPress={() => {
+                    if (typeof onOpenAllReviews === 'function') {
+                      onOpenAllReviews(reviews);
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="כל הביקורות">
+                  <Text style={styles.readMoreText}>קרא עוד</Text>
+                </Pressable>
+                <View style={styles.contactDetailsDivider} />
+              </View>
+            ) : null}
+            <View style={styles.profileCtaSection}>
+              <TouchableOpacity
+                style={styles.profileCtaWarningBtn}
+                onPress={handleReportPress}
+                activeOpacity={0.85}>
+                <Text style={styles.profileCtaWarningText}>דווח</Text>
+                <MaterialCommunityIcons
+                  name="alert-outline"
+                  size={22}
+                  color="#F7F3E6"
+                />
+              </TouchableOpacity>
+              {(isCompany || isProfessional) && !user?._fromTikTokPost && (
+                <>
+                  <View style={styles.profilePiChatWrap}>
+                    <TouchableOpacity
+                      style={styles.profileCtaChatImageOnlyBtn}
+                      onPress={handleChatPress}
+                      activeOpacity={0.85}>
+                      <Image
+                        source={require('../assets/menu/pichat.png')}
+                        style={styles.profileCtaChatImageOnlyAsset}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                    {unreadChatCount > 0 ? (
+                      <View
+                        style={styles.profilePiChatBadge}
+                        pointerEvents="none"
+                        accessibilityRole="text"
+                        accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+                        <Text
+                          style={styles.profilePiChatBadgeText}
+                          numberOfLines={1}>
+                          {unreadChatCount > 99
+                            ? '99+'
+                            : String(unreadChatCount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
                   <TouchableOpacity
-                    style={styles.profileCtaChatImageOnlyBtn}
-                    onPress={handleChatPress}
+                    style={styles.profileCtaPhoneBtn}
+                    onPress={handleCallPress}
                     activeOpacity={0.85}>
+                    <Text
+                      style={styles.profileCtaPhoneText}
+                      numberOfLines={1}
+                      ellipsizeMode="tail">
+                      פנייה בטלפון {primaryContactPhone}
+                    </Text>
                     <Image
-                      source={require('../assets/menu/pichat.png')}
-                      style={styles.profileCtaChatImageOnlyAsset}
+                      source={require('../assets/phone.png')}
+                      style={styles.profileCtaPhoneIcon}
                       resizeMode="contain"
                     />
                   </TouchableOpacity>
-                  {unreadChatCount > 0 ? (
-                    <View
-                      style={styles.profilePiChatBadge}
-                      pointerEvents="none"
-                      accessibilityRole="text"
-                      accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
-                      <Text style={styles.profilePiChatBadgeText} numberOfLines={1}>
-                        {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.profileCtaPhoneBtn}
-                  onPress={handleCallPress}
-                  activeOpacity={0.85}>
-                  <Text
-                    style={styles.profileCtaPhoneText}
-                    numberOfLines={1}
-                    ellipsizeMode="tail">
-                    פנייה בטלפון {primaryContactPhone}
-                  </Text>
-                  <Image
-                    source={require('../assets/phone.png')}
-                    style={styles.profileCtaPhoneIcon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              </>
-            )}
+                </>
+              )}
+            </View>
           </View>
-        </View>
         ) : isRegularUserAdView && !isBnbListingAdProfile ? (
           <View style={styles.profileCtaSection}>
             <TouchableOpacity
@@ -2813,7 +2908,7 @@ const UserProfileScreen = ({
               <TouchableOpacity
                 onPress={onClose}
                 activeOpacity={0.8}
-                style={styles.heroCircleBtn}
+                style={[styles.heroCircleBtn, {top: top + 10}]}
                 hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
                 <MaterialCommunityIcons
                   name="chevron-left"
@@ -2852,7 +2947,7 @@ const UserProfileScreen = ({
           ) : (
             <TouchableOpacity
               onPress={onClose}
-              style={styles.backBtn}
+              style={[styles.backBtn, {top: top + 10}]}
               hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
               <MaterialCommunityIcons
                 name="chevron-left"

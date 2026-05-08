@@ -20,6 +20,7 @@ import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import {Audio} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {DEFAULT_WELCOME_MESSAGE} from '../utils/chatDefaults';
@@ -219,6 +220,7 @@ const isExclusiveOfferFromPeerForViewer = (m, viewerEmail) => {
 };
 
 const ChatScreen = ({onClose, sharedListing = null, conversation = null, currentUser = null, onMessageSent, onPiWelcomeOpened, onOpenPost}) => {
+  const insets = useSafeAreaInsets();
   const msg = DEFAULT_WELCOME_MESSAGE;
   const isWelcome = isWelcomeConversation(conversation);
   const isUser = isUserConversation(conversation);
@@ -1734,8 +1736,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [showExclusiveOfferModal, buildExclusiveTemplate, exclusiveMonths]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, {paddingBottom: insets.bottom}]}>
+      <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         {isGroupThread ? (
           <>
             <TouchableOpacity
@@ -1743,11 +1745,19 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               style={styles.groupHeaderBack}
               activeOpacity={0.7}
               hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-              <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={28}
+                color="#fff"
+              />
             </TouchableOpacity>
             <View style={styles.groupHeaderCenter}>
               {groupAvatarResolved ? (
-                <Image source={{uri: groupAvatarResolved}} style={styles.groupHeaderMiniAvatar} resizeMode="cover" />
+                <Image
+                  source={{uri: groupAvatarResolved}}
+                  style={styles.groupHeaderMiniAvatar}
+                  resizeMode="cover"
+                />
               ) : (
                 <Image
                   source={require('../assets/pi-chat/groupe-icon-small.png')}
@@ -1781,7 +1791,11 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
               accessibilityRole="button"
               accessibilityLabel="חזור">
-              <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={28}
+                color="#fff"
+              />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={onClose}
@@ -1849,7 +1863,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
+            onContentSizeChange={() =>
+              scrollRef.current?.scrollToEnd({animated: true})
+            }>
             {isDirectPeer && isBrokerUser && !hasSentExclusiveOfferInThread ? (
               <View style={styles.exclusiveCtaWrap}>
                 <TouchableOpacity
@@ -1870,7 +1886,11 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               <View style={styles.groupInfoCard}>
                 <View style={styles.groupInfoAvatarRing}>
                   {groupAvatarResolved ? (
-                    <Image source={{uri: groupAvatarResolved}} style={styles.groupInfoAvatarImg} resizeMode="cover" />
+                    <Image
+                      source={{uri: groupAvatarResolved}}
+                      style={styles.groupInfoAvatarImg}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <Image
                       source={require('../assets/pi-chat/igroupicon-big.png')}
@@ -1887,12 +1907,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                   </View>
                 ) : (
                   <View style={styles.groupMemberStack}>
-                    {groupMembersList.slice(0, 12).map((member, i) => (
+                    {groupMembersList.slice(0, 12).map((member, i) =>
                       (() => {
                         const refRaw =
                           member?.email != null && String(member.email).trim()
                             ? String(member.email).trim()
-                            : member?.user_id != null && String(member.user_id).trim()
+                            : member?.user_id != null &&
+                                String(member.user_id).trim()
                               ? String(member.user_id).trim()
                               : member?.id != null && String(member.id).trim()
                                 ? String(member.id).trim()
@@ -1900,14 +1921,28 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                         const ref = refRaw.toLowerCase();
                         const resolvedAvatar =
                           normalizeAvatarUrl(getUserProfileImageUrl(member)) ||
-                          normalizeAvatarUrl(groupMemberAvatarOverrides[ref] || null) ||
+                          normalizeAvatarUrl(
+                            groupMemberAvatarOverrides[ref] || null,
+                          ) ||
                           null;
                         return (
                           <View
-                            key={member.email || member.user_id || member.id || `m-${i}`}
-                            style={[styles.groupMemberOverlap, i > 0 && styles.groupMemberOverlapShift]}>
+                            key={
+                              member.email ||
+                              member.user_id ||
+                              member.id ||
+                              `m-${i}`
+                            }
+                            style={[
+                              styles.groupMemberOverlap,
+                              i > 0 && styles.groupMemberOverlapShift,
+                            ]}>
                             {resolvedAvatar ? (
-                              <Image source={{uri: resolvedAvatar}} style={styles.groupMemberAvatar} resizeMode="cover" />
+                              <Image
+                                source={{uri: resolvedAvatar}}
+                                style={styles.groupMemberAvatar}
+                                resizeMode="cover"
+                              />
                             ) : (
                               <Image
                                 source={require('../assets/image-copy-10.png')}
@@ -1917,8 +1952,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                             )}
                           </View>
                         );
-                      })()
-                    ))}
+                      })(),
+                    )}
                   </View>
                 )}
                 {savedGroupDescription ? (
@@ -1954,7 +1989,10 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         </View>
 
         <View style={styles.inputRow}>
-          <TouchableOpacity style={styles.inputBarIconBtn} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity
+            style={styles.inputBarIconBtn}
+            activeOpacity={0.7}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
             <MaterialCommunityIcons name="plus" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.inputPillWrap}>
@@ -1968,14 +2006,24 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               maxLength={2000}
               editable={composerActive}
               writingDirection="rtl"
-              {...(Platform.OS === 'web' ? {id: 'pi-chat-composer-textarea'} : {})}
+              {...(Platform.OS === 'web'
+                ? {id: 'pi-chat-composer-textarea'}
+                : {})}
             />
           </View>
           <TouchableOpacity
-            style={[styles.inputBarIconBtn, (!composerActive || isWelcome || sending || isRecording) && styles.inputBarIconDisabled]}
+            style={[
+              styles.inputBarIconBtn,
+              (!composerActive || isWelcome || sending || isRecording) &&
+                styles.inputBarIconDisabled,
+            ]}
             activeOpacity={0.7}
             hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-            onPress={composerActive && !isWelcome && !sending && !isRecording ? handleSendPhoto : undefined}
+            onPress={
+              composerActive && !isWelcome && !sending && !isRecording
+                ? handleSendPhoto
+                : undefined
+            }
             disabled={!composerActive || isWelcome || sending || isRecording}>
             <Image
               source={require('../assets/pi-chat/chat-camera.png')}
@@ -1984,7 +2032,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             />
           </TouchableOpacity>
           {sending ? (
-            <View style={styles.inputBarIconBtn} accessibilityState={{busy: true}}>
+            <View
+              style={styles.inputBarIconBtn}
+              accessibilityState={{busy: true}}>
               <ActivityIndicator size="small" color="#fff" />
             </View>
           ) : canSubmitMessage ? (
@@ -2008,8 +2058,16 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                     }
                   : undefined
               }
-              onPressIn={Platform.OS !== 'web' && composerActive && !isWelcome ? startVoiceRecording : undefined}
-              onPressOut={Platform.OS !== 'web' && composerActive && !isWelcome ? stopVoiceRecordingAndSend : undefined}>
+              onPressIn={
+                Platform.OS !== 'web' && composerActive && !isWelcome
+                  ? startVoiceRecording
+                  : undefined
+              }
+              onPressOut={
+                Platform.OS !== 'web' && composerActive && !isWelcome
+                  ? stopVoiceRecordingAndSend
+                  : undefined
+              }>
               <Image
                 source={require('../assets/pi-chat/mic.png')}
                 style={[
@@ -2038,40 +2096,63 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 style={styles.offerNavAction}
                 activeOpacity={0.7}
                 hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
-                <MaterialCommunityIcons name="chevron-left" size={24} color="#fff" />
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={24}
+                  color="#fff"
+                />
               </TouchableOpacity>
               <Text style={styles.offerHeaderTitle}>הצעה לבלעדיות</Text>
               <View style={styles.offerNavAction} />
             </View>
           </View>
 
-          <ScrollView style={styles.offerScroll} contentContainerStyle={styles.offerScrollContent}>
+          <ScrollView
+            style={styles.offerScroll}
+            contentContainerStyle={styles.offerScrollContent}>
             <View style={styles.offerListingCard}>
               <View style={styles.offerListingTextCol}>
                 <View style={styles.offerTagsRow}>
                   {listingDisplayNumber ? (
                     <View style={styles.offerTagDark}>
-                      <Text style={styles.offerTagDarkText}>{`מודעה מס ${listingDisplayNumber}`}</Text>
+                      <Text
+                        style={
+                          styles.offerTagDarkText
+                        }>{`מודעה מס ${listingDisplayNumber}`}</Text>
                     </View>
                   ) : null}
                   {listingCategoryLabel ? (
                     <View style={styles.offerTagCategory}>
-                      <Text style={styles.offerTagCategoryText}>{listingCategoryLabel}</Text>
+                      <Text style={styles.offerTagCategoryText}>
+                        {listingCategoryLabel}
+                      </Text>
                     </View>
                   ) : null}
                 </View>
                 <Text style={styles.offerPrice}>{offerPriceText}</Text>
                 <View style={styles.offerLocationRow}>
-                  <MaterialCommunityIcons name="map-marker-outline" size={18} color="#D2D0DC" />
+                  <MaterialCommunityIcons
+                    name="map-marker-outline"
+                    size={18}
+                    color="#D2D0DC"
+                  />
                   <Text style={styles.offerLocation}>{offerLocationText}</Text>
                 </View>
               </View>
               <View style={styles.offerImageWrap}>
                 {offerImageUri ? (
-                  <Image source={{uri: offerImageUri}} style={styles.offerImage} resizeMode="cover" />
+                  <Image
+                    source={{uri: offerImageUri}}
+                    style={styles.offerImage}
+                    resizeMode="cover"
+                  />
                 ) : (
                   <View style={[styles.offerImage, styles.offerImageFallback]}>
-                    <MaterialCommunityIcons name="image-outline" size={28} color="#BDBBD0" />
+                    <MaterialCommunityIcons
+                      name="image-outline"
+                      size={28}
+                      color="#BDBBD0"
+                    />
                   </View>
                 )}
                 {exclusiveLoadingListing ? (
@@ -2084,10 +2165,14 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
 
             <View style={styles.offerCard}>
               <Text style={styles.offerCardTitle}>תקופת בלעדיות</Text>
-              <Text style={styles.offerCardSubtitle}>תוך כמה חודשים אתם מתחייבים למצוא שוכר?</Text>
+              <Text style={styles.offerCardSubtitle}>
+                תוך כמה חודשים אתם מתחייבים למצוא שוכר?
+              </Text>
               <View style={styles.offerScaleNumbers}>
-                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
-                  <Text key={n} style={styles.offerScaleNumber}>{n}</Text>
+                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                  <Text key={n} style={styles.offerScaleNumber}>
+                    {n}
+                  </Text>
                 ))}
               </View>
               <View style={styles.offerTimeline}>
@@ -2106,8 +2191,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 />
               </View>
               <View style={styles.offerScaleActions}>
-                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
-                  <Pressable key={`pick-${n}`} style={styles.offerPickHit} onPress={() => setExclusiveMonths(n)} />
+                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                  <Pressable
+                    key={`pick-${n}`}
+                    style={styles.offerPickHit}
+                    onPress={() => setExclusiveMonths(n)}
+                  />
                 ))}
               </View>
             </View>
@@ -2119,7 +2208,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 ? {nativeID: 'pi-chat-offer-message-textarea'}
                 : {})}>
               <Text style={styles.offerMessageText}>
-                היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב{offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי{' '}
+                היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי
+                במודעה שלך עבור הדירה ב{offerLocationText} ואני מעוניין להציע
+                בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי{' '}
                 <Text style={styles.offerMessageHighlightGold}>
                   בתוך {exclusiveMonths} חודשים
                 </Text>
@@ -2130,7 +2221,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             <View style={styles.offerHowCard}>
               <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
               <Text style={styles.offerHowText}>
-                ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה.
+                ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר
+                אישור תוכלו להתחיל לנהל איתו שיחה.
               </Text>
             </View>
           </ScrollView>
@@ -2153,13 +2245,25 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         onRequestClose={() => setShowAddMembersModal(false)}>
         <View style={styles.addMembersRoot}>
           <View style={styles.addMembersHeader}>
-            <TouchableOpacity onPress={() => setShowAddMembersModal(false)} style={styles.addMembersBackBtn} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
+            <TouchableOpacity
+              onPress={() => setShowAddMembersModal(false)}
+              style={styles.addMembersBackBtn}
+              activeOpacity={0.7}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={26}
+                color="#fff"
+              />
             </TouchableOpacity>
             <Text style={styles.addMembersTitle}>הוסף חברים לקבוצה</Text>
             <TouchableOpacity
               onPress={submitAddMembers}
-              disabled={addMembersSubmitting || Object.keys(addMembersSelected).filter((k) => addMembersSelected[k]).length === 0}
+              disabled={
+                addMembersSubmitting ||
+                Object.keys(addMembersSelected).filter(
+                  k => addMembersSelected[k],
+                ).length === 0
+              }
               style={styles.addMembersSaveBtn}
               activeOpacity={0.7}>
               {addMembersSubmitting ? (
@@ -2177,38 +2281,67 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               value={addMembersSearch}
               onChangeText={setAddMembersSearch}
             />
-            <MaterialCommunityIcons name="magnify" size={22} color="rgba(255,255,255,0.55)" style={styles.addMembersSearchIcon} />
+            <MaterialCommunityIcons
+              name="magnify"
+              size={22}
+              color="rgba(255,255,255,0.55)"
+              style={styles.addMembersSearchIcon}
+            />
           </View>
-          <ScrollView style={styles.addMembersScroll} contentContainerStyle={styles.addMembersScrollContent} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.addMembersScroll}
+            contentContainerStyle={styles.addMembersScrollContent}
+            keyboardShouldPersistTaps="handled">
             {addMembersLoading ? (
               <View style={styles.addMembersLoadingWrap}>
                 <ActivityIndicator size="small" color={GOLD} />
               </View>
             ) : addMembersCandidates.length === 0 ? (
-              <Text style={styles.addMembersEmpty}>לא נמצאו משתמשים מתאימים להוספה.</Text>
+              <Text style={styles.addMembersEmpty}>
+                לא נמצאו משתמשים מתאימים להוספה.
+              </Text>
             ) : (
               addMembersCandidates.map((row, i) => {
-                const email = String(row?.email || '').trim().toLowerCase();
+                const email = String(row?.email || '')
+                  .trim()
+                  .toLowerCase();
                 const checked = !!addMembersSelected[email];
                 const pic = normalizeAvatarUrl(getUserProfileImageUrl(row));
                 return (
                   <Pressable
                     key={email || row?.id || `cand-${i}`}
-                    style={[styles.addMemberRow, i > 0 && styles.addMemberRowBorder]}
+                    style={[
+                      styles.addMemberRow,
+                      i > 0 && styles.addMemberRowBorder,
+                    ]}
                     onPress={() => toggleAddMember(email)}
                     android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
                     <View style={styles.addMemberCheckCol}>
-                      <View style={[styles.addMemberCheckOuter, checked && styles.addMemberCheckOuterOn]}>
-                        {checked ? <View style={styles.addMemberCheckInner} /> : null}
+                      <View
+                        style={[
+                          styles.addMemberCheckOuter,
+                          checked && styles.addMemberCheckOuterOn,
+                        ]}>
+                        {checked ? (
+                          <View style={styles.addMemberCheckInner} />
+                        ) : null}
                       </View>
                     </View>
                     <View style={styles.addMemberTextCol}>
-                      <Text style={styles.addMemberName} numberOfLines={1}>{row?.title || email}</Text>
-                      <Text style={styles.addMemberSub} numberOfLines={1}>{row?.subtitle || email}</Text>
+                      <Text style={styles.addMemberName} numberOfLines={1}>
+                        {row?.title || email}
+                      </Text>
+                      <Text style={styles.addMemberSub} numberOfLines={1}>
+                        {row?.subtitle || email}
+                      </Text>
                     </View>
                     <View style={styles.addMemberAvatarRing}>
                       <Image
-                        source={pic ? {uri: pic} : require('../assets/image-copy-10.png')}
+                        source={
+                          pic
+                            ? {uri: pic}
+                            : require('../assets/image-copy-10.png')
+                        }
                         style={styles.addMemberAvatar}
                         resizeMode="cover"
                       />
@@ -2341,7 +2474,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingTop: 48,
     paddingBottom: 12,
     backgroundColor: CHAT_CHROME_BG,
     borderBottomWidth: 1,

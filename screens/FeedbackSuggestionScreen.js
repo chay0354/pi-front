@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {submitImprovementFeedback, toSubscriptionId} from '../utils/api';
@@ -62,6 +63,7 @@ const BundledPng = ({source, style, resizeMode = 'contain'}) => {
  * הצעות לשיפור — rating + text, then thank-you step
  */
 const FeedbackSuggestionScreen = ({onClose}) => {
+  const insets = useSafeAreaInsets();
   const {currentUser} = useContext(ContextHook);
   const [step, setStep] = useState('form');
   const [rating, setRating] = useState(0);
@@ -105,7 +107,7 @@ const FeedbackSuggestionScreen = ({onClose}) => {
     return (
       <View style={styles.root}>
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
@@ -137,7 +139,7 @@ const FeedbackSuggestionScreen = ({onClose}) => {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top + (10)}]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>

@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getConversationWithWelcomeMessage} from '../utils/chatDefaults';
 import {
   getChatConversations,
@@ -347,6 +348,7 @@ const ChatListScreen = ({
   currentUser = null,
   refreshKey = 0,
 }) => {
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -863,7 +865,7 @@ const ChatListScreen = ({
   return (
     <View style={styles.container}>
       <View style={styles.topSection}>
-        <View style={styles.headerRow}>
+        <View style={[styles.headerRow, {paddingTop: insets.top + 10}]}>
           <Pressable
             onPress={() => (typeof onClose === 'function' ? onClose() : undefined)}
             style={({pressed}) => [
@@ -1445,15 +1447,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#1E1D27',
-    paddingHorizontal: 24,
     paddingTop: 54,
     paddingBottom: 10,
   },
   headerBtn: {padding: 0},
   headerBackBtn: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },

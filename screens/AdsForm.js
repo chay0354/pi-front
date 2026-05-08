@@ -19,6 +19,7 @@ import {
   Dimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
   uploadFile,
@@ -453,6 +454,7 @@ const AdsForm = ({
   /** Navigate to post composer for current category; return path is set by App. */
   onOpenPostEditor = null,
 }) => {
+  const insets = useSafeAreaInsets();
   const [propertyType, setPropertyType] = useState(null);
   const [serviceAndFacilityType, setServiceAndFacilityType] = useState(null);
   const [cancellationPolicy, setCancellationPolicy] = useState(null);
@@ -2117,7 +2119,7 @@ const AdsForm = ({
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         <TouchableOpacity
           onPress={onClose}
           style={[
@@ -2655,7 +2657,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },

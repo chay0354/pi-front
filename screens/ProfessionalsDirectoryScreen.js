@@ -357,8 +357,8 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.topNav}>
+    <View style={styles.safe}>
+      <View style={[styles.topNav, {paddingTop: insets.top}]}>
         <View style={styles.titleRow}>
           <TouchableOpacity
             onPress={onClose}
@@ -598,7 +598,7 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
         </View>
       ) : null}
 
-    </SafeAreaView>
+    </View>
   );
 };
 

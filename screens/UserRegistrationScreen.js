@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
 
@@ -26,6 +27,7 @@ const UserRegistrationScreen = ({
   onOpenLogin: _onOpenLogin,
   selectedCategory: _selectedCategory,
 }) => {
+  const insets = useSafeAreaInsets();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -145,7 +147,7 @@ const UserRegistrationScreen = ({
     <View style={styles.container}>
       <ScrollView keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.mainContent}>

@@ -1,6 +1,15 @@
 import React from 'react';
-import {View, ScrollView, Text, TouchableOpacity, StyleSheet, Platform, Image} from 'react-native';
+import {
+  View,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Image,
+} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 
 const KEY_ICON = require('../assets/menu/key.png');
@@ -9,13 +18,17 @@ const KEY_ICON = require('../assets/menu/key.png');
  * Confirmation after requesting מספר מנוי by email
  */
 const SecretCodeRecoverySentScreen = ({email, onBack}) => {
+  const insets = useSafeAreaInsets();
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backBtn}
+            hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>שחזור קוד סודי</Text>
@@ -24,7 +37,11 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
 
         <View style={styles.card}>
           <View style={styles.keyIconWrap}>
-            <Image source={KEY_ICON} style={styles.keyImage} resizeMode="contain" />
+            <Image
+              source={KEY_ICON}
+              style={styles.keyImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.cardTitle}>הקוד בדרך אליך!</Text>
           <Text style={styles.subLine}>שלחנו את קוד המנוי שלך לכתובת</Text>
@@ -33,7 +50,10 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
             אנא בדוק את תיבת הדואר הנכנס שלך{'\n'}(וגם את תיקיית הספאם).
           </Text>
 
-          <TouchableOpacity activeOpacity={0.85} onPress={onBack} style={styles.btnWrap}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={onBack}
+            style={styles.btnWrap}>
             <LinearGradient
               colors={['#FEE787', '#BD9947', '#9C6522']}
               start={{x: 0, y: 0}}
@@ -57,7 +77,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   scroll: {
-    paddingTop: Platform.OS === 'web' ? 44 : 52,
     paddingHorizontal: 24,
     paddingBottom: 40,
   },

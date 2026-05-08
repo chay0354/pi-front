@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getCompaniesDirectory} from '../utils/api';
 
@@ -43,6 +44,7 @@ const topSectionElevation = Platform.select({
 });
 
 const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState([]);
   const [query, setQuery] = useState('');
@@ -85,8 +87,8 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
   }, [filtered]);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={[styles.topSection, topSectionElevation]}>
+    <View style={styles.safe}>
+      <View style={[styles.topSection, topSectionElevation, {paddingTop: insets.top}]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
             <MaterialCommunityIcons name="chevron-left" size={28} color={Colors.white100} />
@@ -163,7 +165,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -11,6 +11,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getListings} from '../utils/api';
 
@@ -136,6 +137,7 @@ const CompanyProjectsScreen = ({
   onClose,
   onOpenListing,
 }) => {
+  const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -205,7 +207,8 @@ const CompanyProjectsScreen = ({
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
+      <View style={{height: insets.top}} />
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
           <MaterialCommunityIcons name="chevron-left" size={28} color={Colors.white100} />
@@ -242,7 +245,7 @@ const CompanyProjectsScreen = ({
           showsVerticalScrollIndicator={false}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

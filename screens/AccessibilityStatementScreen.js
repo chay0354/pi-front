@@ -6,17 +6,19 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ACCESSIBILITY_STATEMENT_HEBREW} from './accessibilityStatementContent';
 
 /**
  * הצהרת נגישות — black text on white background, RTL Hebrew.
  */
 const AccessibilityStatementScreen = ({onClose}) => {
+  const insets = useSafeAreaInsets();
   return (
     <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 8}]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>

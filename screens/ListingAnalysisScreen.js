@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {brokerCategories} from '../utils/constant';
 import {getListings} from '../utils/api';
 
@@ -85,6 +86,7 @@ const CroppedCategoryImage = ({source, categoryId}) => {
 };
 
 const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
+  const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -143,7 +145,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         <TouchableOpacity
           onPress={onClose}
           style={styles.headerBtn}
@@ -256,7 +258,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 50,
     paddingBottom: 14,
     paddingHorizontal: 12,
     borderBottomWidth: 1,

@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {submitSubscription} from '../utils/api';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
@@ -29,6 +30,7 @@ const SubscriptionFormScreen = ({
   onNext,
   subscriptionType = subscriptionTypes.broker,
 }) => {
+  const insets = useSafeAreaInsets();
   const isCompanyFlow = subscriptionType === subscriptionTypes.company;
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
@@ -504,6 +506,7 @@ const SubscriptionFormScreen = ({
         contentContainerStyle={[
           styles.contentContainer,
           styles.companyContentContainer,
+          {paddingTop: insets.top},
         ]}
         showsVerticalScrollIndicator={false}>
         {/* Top nav section (dark wrapper with header + wizard) */}

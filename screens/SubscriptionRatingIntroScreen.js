@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 
@@ -22,12 +23,13 @@ const SubscriptionRatingIntroScreen = ({
   onContinue,
   subscriptionType = subscriptionTypes.broker,
 }) => {
+  const insets = useSafeAreaInsets();
   return (
     <View style={styles.container}>
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top + 46}]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -113,7 +115,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    paddingTop: 46,
     paddingBottom: 40,
     paddingHorizontal: 24,
     alignItems: 'center',
