@@ -15,9 +15,9 @@ export function normalizeApiBaseUrl(url) {
 
 // On web: when opened via network IP (e.g. http://192.168.1.5:8084), use same host for API so it works from other devices
 export function getApiUrl() {
-  if (isWeb && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return normalizeApiBaseUrl(`${window.location.protocol}//${window.location.hostname}:3000`);
-  }
+  // if (isWeb && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  //   return normalizeApiBaseUrl(`${window.location.protocol}//${window.location.hostname}:3000`);
+  // }
   return normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
 }
 
@@ -46,10 +46,66 @@ function getNativeApiUrl() {
 }
 
 const API_URL = normalizeApiBaseUrl(isWeb ? getApiUrl() : getNativeApiUrl());
+console.log('API_URL', API_URL);
 
 /** Resolved API base URL (for debugging broker search / connectivity). */
 export function getResolvedApiUrl() {
   return isWeb ? getApiUrl() : getNativeApiUrl();
+}
+
+const DEFAULT_API_TIMEOUT_MS = 30000;
+
+/**
+ * Centralized fetch wrapper for backend calls.
+ * Adds an AbortController-based timeout and, on transport-level failures
+ * (network down, DNS, TLS, timeout, "Failed to fetch"), throws a richer Error
+ * that includes method + full URL + resolved API base + original cause —
+ * so we can tell *which* request died and against *which* host.
+ *
+ * Successful responses (including 4xx/5xx) pass through unchanged.
+ */
+export async function apiFetch(input, options = {}) {
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, signal: externalSignal, ...rest } = options;
+  const url = typeof input === 'string' ? input : input?.url || '';
+  const method = String(rest?.method || 'GET').toUpperCase();
+
+  const controller = new AbortController();
+  const onExternalAbort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort(externalSignal.reason);
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(new Error('timeout')), timeoutMs) : null;
+
+  try {
+    return await fetch(input, { ...rest, signal: controller.signal });
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    const isAbort = error?.name === 'AbortError' || /aborted/i.test(message);
+    const isNetwork =
+      /network request failed|failed to fetch|networkerror/i.test(message);
+
+    if (isAbort || isNetwork) {
+      const reason = isAbort && timeoutId && controller.signal.reason?.message === 'timeout'
+        ? `timeout after ${timeoutMs}ms`
+        : isAbort
+          ? 'aborted'
+          : 'network unreachable';
+      const enriched = new Error(
+        `[apiFetch] ${method} ${url} failed: ${reason}. ` +
+        `API base: ${API_URL}. Original: ${message || error}`,
+      );
+      enriched.cause = error;
+      enriched.url = url;
+      enriched.method = method;
+      enriched.apiBase = API_URL;
+      throw enriched;
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) externalSignal.removeEventListener?.('abort', onExternalAbort);
+  }
 }
 
 function logBrokerSearch(step, payload) {
@@ -162,7 +218,7 @@ export const submitSubscription = async (formData, files = {}) => {
       }
     }
 
-    const response = await fetch(`${API_URL}/api/subscription/submit`, {
+    const response = await apiFetch(`${API_URL}/api/subscription/submit`, {
       method: 'POST',
       body: formDataToSend,
       // Don't set Content-Type header - let fetch set it with boundary
@@ -194,7 +250,7 @@ export const uploadProfilePicture = async (file) => {
   const toAppend = await toFormDataFile(file, 'profilePicture');
   if (!toAppend) throw new Error('No profile picture to upload');
   formData.append('profilePicture', toAppend);
-  const response = await fetch(`${API_URL}/api/upload-profile-pic`, {
+  const response = await apiFetch(`${API_URL}/api/upload-profile-pic`, {
     method: 'POST',
     body: formData,
   });
@@ -222,7 +278,7 @@ export const verifyEmail = async (
       subscriptionId,
       API_URL,
     });
-    const response = await fetch(`${API_URL}/api/subscription/verify`, {
+    const response = await apiFetch(`${API_URL}/api/subscription/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -260,7 +316,7 @@ export const verifyEmailSkipTest = async (email, subscriptionId) => {
   if (!subscriptionId) {
     throw new Error('subscriptionId is required');
   }
-  const response = await fetch(`${API_URL}/api/subscription/verify-skip-test`, {
+  const response = await apiFetch(`${API_URL}/api/subscription/verify-skip-test`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -294,7 +350,7 @@ export const verifyEmailSkipTest = async (email, subscriptionId) => {
  */
 export const resendVerificationCode = async (email, subscriptionId = null) => {
   try {
-    const response = await fetch(`${API_URL}/api/subscription/resend-code`, {
+    const response = await apiFetch(`${API_URL}/api/subscription/resend-code`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -319,7 +375,7 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
  * Request מספר מנוי by email (שחזור קוד סודי). Server sends email if verified subscription exists.
  */
 export const recoverSubscriberCodeByEmail = async email => {
-  const response = await fetch(`${API_URL}/api/subscription/recover-subscriber-code`, {
+  const response = await apiFetch(`${API_URL}/api/subscription/recover-subscriber-code`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({email: String(email || '').trim()}),
@@ -350,7 +406,7 @@ export const getSubscription = async subscriptionId => {
     return { success: false, subscription: null };
   }
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_URL}/api/subscription/${subscriptionId}`,
       {
         method: 'GET',
@@ -390,7 +446,7 @@ export const getSubscription = async subscriptionId => {
  */
 export const askSmartInfo = async (topic, topicLabel, address) => {
   try {
-    const response = await fetch(`${API_URL}/api/ai/smart-info`, {
+    const response = await apiFetch(`${API_URL}/api/ai/smart-info`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, topicLabel, address: address || '' }),
@@ -414,7 +470,7 @@ export const askSmartInfo = async (topic, topicLabel, address) => {
 export const getReviews = async (targetSubscriptionId) => {
   try {
     if (!targetSubscriptionId) return { success: true, reviews: [] };
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_URL}/api/reviews?target_subscription_id=${encodeURIComponent(targetSubscriptionId)}`,
       { method: 'GET', headers: { 'Content-Type': 'application/json' } },
     );
@@ -451,7 +507,7 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
     if (listingId && String(listingId).trim()) {
       body.listing_id = String(listingId).trim();
     }
-    const response = await fetch(`${API_URL}/api/reviews`, {
+    const response = await apiFetch(`${API_URL}/api/reviews`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -476,7 +532,7 @@ export const registerRegularUser = async ({email, name = null, phone = null, pro
     return { success: false, error: 'Invalid email', subscription: null };
   }
   try {
-    const response = await fetch(`${API_URL}/api/users/register-regular`, {
+    const response = await apiFetch(`${API_URL}/api/users/register-regular`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -501,7 +557,7 @@ export const registerRegularUser = async ({email, name = null, phone = null, pro
  * Send a follow request from one subscription user to another.
  */
 export const sendFollowRequest = async (requesterSubscriptionId, targetSubscriptionId) => {
-  const response = await fetch(`${API_URL}/api/follows/request`, {
+  const response = await apiFetch(`${API_URL}/api/follows/request`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -518,7 +574,7 @@ export const sendFollowRequest = async (requesterSubscriptionId, targetSubscript
  * Unfollow a user.
  */
 export const unfollowUser = async (followerSubscriptionId, followingSubscriptionId) => {
-  const response = await fetch(`${API_URL}/api/follows/unfollow`, {
+  const response = await apiFetch(`${API_URL}/api/follows/unfollow`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -535,7 +591,7 @@ export const unfollowUser = async (followerSubscriptionId, followingSubscription
  * Accept or reject an incoming follow request.
  */
 export const respondToFollowRequest = async (requestId, actorSubscriptionId, action) => {
-  const response = await fetch(`${API_URL}/api/follows/requests/respond`, {
+  const response = await apiFetch(`${API_URL}/api/follows/requests/respond`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -553,7 +609,7 @@ export const respondToFollowRequest = async (requestId, actorSubscriptionId, act
  * Withdraw a pending follow request you sent (requester cancels).
  */
 export const cancelFollowRequest = async (requesterSubscriptionId, targetSubscriptionId) => {
-  const response = await fetch(`${API_URL}/api/follows/requests/cancel`, {
+  const response = await apiFetch(`${API_URL}/api/follows/requests/cancel`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -574,7 +630,7 @@ export const getFollowStatus = async (viewerId, targetId) => {
     viewer_id: String(viewerId || '').trim(),
     target_id: String(targetId || '').trim(),
   });
-  const response = await fetch(`${API_URL}/api/follows/status?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/follows/status?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to fetch follow status');
   return data;
@@ -590,7 +646,7 @@ export const getMutualFollowBatch = async (viewerId, targetIds) => {
   if (!v || list.length === 0) {
     return { success: true, mutual: {} };
   }
-  const response = await fetch(`${API_URL}/api/follows/mutual-batch`, {
+  const response = await apiFetch(`${API_URL}/api/follows/mutual-batch`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ viewer_id: v, target_ids: list }),
@@ -606,7 +662,7 @@ export const getMutualFollowBatch = async (viewerId, targetIds) => {
  * Get likes/followers/following/pending requests counts for a profile.
  */
 export const getFollowStats = async userId => {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/follows/stats?user_id=${encodeURIComponent(String(userId || '').trim())}`,
     {cache: 'no-store'},
   );
@@ -625,7 +681,7 @@ export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q =
   });
   if (viewerId) params.set('viewer_id', String(viewerId).trim());
   if (q && String(q).trim()) params.set('q', String(q).trim());
-  const response = await fetch(`${API_URL}/api/follows/hub?${params.toString()}`, {
+  const response = await apiFetch(`${API_URL}/api/follows/hub?${params.toString()}`, {
     cache: 'no-store',
   });
   const data = await response.json();
@@ -649,7 +705,7 @@ export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q =
  */
 export const submitImprovementFeedback = async (payload) => {
   try {
-    const response = await fetch(`${API_URL}/api/improvements-feedback`, {
+    const response = await apiFetch(`${API_URL}/api/improvements-feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -698,7 +754,7 @@ export const submitImprovementFeedback = async (payload) => {
  */
 export const submitCompanyReport = async (payload) => {
   try {
-    const response = await fetch(`${API_URL}/api/company-reports`, {
+    const response = await apiFetch(`${API_URL}/api/company-reports`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -782,8 +838,7 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
         error: normalizedEmail && !looksLikeEmail ? 'Invalid email' : 'Missing user identifier',
       };
     }
-
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_URL}/api/user/current?${params.toString()}`,
       {
         method: 'GET',
@@ -794,7 +849,6 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
     );
 
     const data = await response.json();
-
     // "User not found" is a valid lookup result, not a transport failure.
     if (response.status === 404) {
       return {
@@ -842,7 +896,7 @@ export const uploadFile = async (file, folder = 'general') => {
     }
     formData.append('folder', folder);
 
-    const response = await fetch(`${API_URL}/api/upload`, {
+    const response = await apiFetch(`${API_URL}/api/upload`, {
       method: 'POST',
       body: formData,
       // Do not set Content-Type — fetch must add multipart boundary automatically.
@@ -940,7 +994,7 @@ export const getListings = async (options = {}) => {
     console.log('🌐 [api.js] API_URL:', API_URL);
     console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo, listingCondition, searchPurpose, feedPost, hospitalityNature, landInMortgage, permit});
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -978,7 +1032,7 @@ export const getListings = async (options = {}) => {
  */
 export const updateListingFreeze = async (listingId, isFrozen) => {
   try {
-    const response = await fetch(`${API_URL}/api/listings/${listingId}`, {
+    const response = await apiFetch(`${API_URL}/api/listings/${listingId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_frozen: !!isFrozen }),
@@ -998,7 +1052,7 @@ export const updateListingFreeze = async (listingId, isFrozen) => {
 export const getRecentUserSearches = async userEmail => {
   const email = userEmail ? String(userEmail).trim() : '';
   if (!email) return {success: true, recent: []};
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
   );
   const data = await response.json().catch(() => ({}));
@@ -1013,7 +1067,7 @@ export const recordUserSearch = async (userEmail, targetSubscriptionId) => {
     targetSubscriptionId != null ? String(targetSubscriptionId).trim() : '';
   if (!email || !target) return {success: false};
   try {
-    const response = await fetch(`${API_URL}/api/search/users/recent`, {
+    const response = await apiFetch(`${API_URL}/api/search/users/recent`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({user_email: email, target_subscription_id: target}),
@@ -1035,7 +1089,7 @@ export const clearRecentUserSearches = async userEmail => {
   const email = userEmail ? String(userEmail).trim() : '';
   if (!email) return {success: false};
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
       {method: 'DELETE'},
     );
@@ -1055,7 +1109,7 @@ export const clearRecentUserSearches = async userEmail => {
 export const getBoostQuota = async userEmail => {
   const email = userEmail ? String(userEmail).trim() : '';
   if (!email) throw new Error('user_email required');
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/listings/boost-quota?user_email=${encodeURIComponent(email)}`,
   );
   const data = await response.json().catch(() => ({}));
@@ -1075,7 +1129,7 @@ export const boostListing = async (listingId, userEmail) => {
   if (!id) throw new Error('listingId required');
   if (!email) throw new Error('user_email required');
   try {
-    const response = await fetch(`${API_URL}/api/listings/${id}/boost`, {
+    const response = await apiFetch(`${API_URL}/api/listings/${id}/boost`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_email: email }),
@@ -1104,7 +1158,7 @@ export const boostListing = async (listingId, userEmail) => {
 export const recordListingView = async (listingId) => {
   if (!listingId) return;
   try {
-    const response = await fetch(`${API_URL}/api/listings/${listingId}/view`, { method: 'POST' });
+    const response = await apiFetch(`${API_URL}/api/listings/${listingId}/view`, { method: 'POST' });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to record view');
@@ -1117,7 +1171,7 @@ export const recordListingView = async (listingId) => {
 export const recordListingShare = async (listingId, count = 1) => {
   if (!listingId) return null;
   try {
-    const response = await fetch(`${API_URL}/api/listings/${listingId}/share`, {
+    const response = await apiFetch(`${API_URL}/api/listings/${listingId}/share`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({count: Number(count) || 1}),
@@ -1139,7 +1193,7 @@ export const recordListingShare = async (listingId, count = 1) => {
  */
 export const likeListing = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await fetch(`${API_URL}/api/listings/${listingId}/like`, {
+  const response = await apiFetch(`${API_URL}/api/listings/${listingId}/like`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: String(userId) }),
@@ -1157,7 +1211,7 @@ export const likeListing = async (listingId, userId) => {
  */
 export const unlikeListing = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await fetch(`${API_URL}/api/listings/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
+  const response = await apiFetch(`${API_URL}/api/listings/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
     method: 'DELETE',
   });
   const data = await response.json();
@@ -1173,7 +1227,7 @@ export const unlikeListing = async (listingId, userId) => {
  */
 export const likePost = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await fetch(`${API_URL}/api/posts/${listingId}/like`, {
+  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/like`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: String(userId) }),
@@ -1191,7 +1245,7 @@ export const likePost = async (listingId, userId) => {
  */
 export const unlikePost = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await fetch(`${API_URL}/api/posts/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
+  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
     method: 'DELETE',
   });
   const data = await response.json();
@@ -1211,7 +1265,7 @@ export const getPostComments = async (listingId, userId = null) => {
     params.set('user_id', String(userId).trim());
   }
   const qs = params.toString();
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/posts/${listingId}/comments${qs ? `?${qs}` : ''}`,
   );
   const data = await response.json();
@@ -1229,7 +1283,7 @@ export const getPostComments = async (listingId, userId = null) => {
 export const addPostComment = async (listingId, userId, text, imageUrl = null) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
   const u = imageUrl != null && String(imageUrl).trim() !== '' ? String(imageUrl).trim() : null;
-  const response = await fetch(`${API_URL}/api/posts/${listingId}/comments`, {
+  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1257,7 +1311,7 @@ export const reactToPostComment = async (listingId, commentId, userId, reactionT
   if (reactionType !== 'like' && reactionType !== 'dislike') {
     throw new Error('reactionType must be like or dislike');
   }
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction`,
     {
       method: 'POST',
@@ -1283,7 +1337,7 @@ export const clearPostCommentReaction = async (listingId, commentId, userId) => 
   if (!listingId || !commentId || !userId) {
     throw new Error('listingId, commentId and userId required');
   }
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction?user_id=${encodeURIComponent(String(userId))}`,
     { method: 'DELETE' },
   );
@@ -1302,7 +1356,7 @@ export const getChatUnreadCount = async (userEmail, afterIso = null) => {
   if (!userEmail) return { success: true, count: 0 };
   const params = new URLSearchParams({ user_email: String(userEmail).trim().toLowerCase() });
   if (afterIso) params.set('after', afterIso);
-  const response = await fetch(`${API_URL}/api/chat/unread-count?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/chat/unread-count?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) return { success: true, count: 0 };
   return { success: true, count: typeof data.count === 'number' ? data.count : 0 };
@@ -1317,7 +1371,7 @@ export const getChatConversations = async (userEmail) => {
   if (!userEmail) return { success: true, conversations: [] };
   const email = String(userEmail).trim().toLowerCase();
   const url = `${API_URL}/api/chat/conversations?user_email=${encodeURIComponent(email)}`;
-  const response = await fetch(url);
+  const response = await apiFetch(url);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load conversations');
   return data;
@@ -1357,7 +1411,7 @@ export const searchBrokers = async (q, excludeEmail = null) => {
   });
   let response;
   try {
-    response = await fetch(url);
+    response = await apiFetch(url);
   } catch (fetchErr) {
     logBrokerSearch('fetch_failed', {
       resolvedApiBase: resolvedBase,
@@ -1415,7 +1469,7 @@ export const getDirectContactsForGroup = async (userEmail, q = '', audience = 'a
   if (aud === 'regular' || aud === 'non_regular' || aud === 'all') {
     params.set('audience', aud);
   }
-  const response = await fetch(`${API_URL}/api/chat/direct-contacts?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/chat/direct-contacts?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load contacts');
   return { success: !!data.success, contacts: data.contacts || [] };
@@ -1426,7 +1480,7 @@ export const getBrokersForGroupPicker = async (q, excludeEmail = null) => {
   const params = new URLSearchParams();
   if (q != null && String(q).trim()) params.set('q', String(q).trim());
   if (excludeEmail) params.set('exclude_email', String(excludeEmail).trim().toLowerCase());
-  const response = await fetch(`${API_URL}/api/brokers/group-picker?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/brokers/group-picker?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load brokers');
   return { success: !!data.success, brokers: data.brokers || [] };
@@ -1441,7 +1495,7 @@ export const getUsersForGroupPicker = async (q = '', excludeEmail = null, audien
   if (aud === 'regular' || aud === 'broker_only' || aud === 'non_regular' || aud === 'all') {
     params.set('audience', aud);
   }
-  const response = await fetch(`${API_URL}/api/users/group-picker?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/users/group-picker?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load users');
   return { success: !!data.success, users: data.users || [] };
@@ -1457,7 +1511,7 @@ export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind,
   if (groupImageUrl != null && String(groupImageUrl).trim()) {
     payload.group_image_url = String(groupImageUrl).trim();
   }
-  const response = await fetch(`${API_URL}/api/chat/groups`, {
+  const response = await apiFetch(`${API_URL}/api/chat/groups`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1473,7 +1527,7 @@ export const addMembersToChatGroup = async ({ userEmail, conversationId, memberE
     conversation_id: String(conversationId || '').trim(),
     member_emails: (memberEmails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean),
   };
-  const response = await fetch(`${API_URL}/api/chat/groups/add-members`, {
+  const response = await apiFetch(`${API_URL}/api/chat/groups/add-members`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1489,14 +1543,14 @@ export const getGroupChatMessages = async (userEmail, conversationId) => {
     user_email: String(userEmail).trim().toLowerCase(),
     conversation_id: String(conversationId).trim(),
   });
-  const response = await fetch(`${API_URL}/api/chat/group-messages?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/chat/group-messages?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load messages');
   return data;
 };
 
 export const updateGroupDescription = async ({userEmail, conversationId, description}) => {
-  const response = await fetch(`${API_URL}/api/chat/group-description`, {
+  const response = await apiFetch(`${API_URL}/api/chat/group-description`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1511,7 +1565,7 @@ export const updateGroupDescription = async ({userEmail, conversationId, descrip
 };
 
 export const updateGroupTitle = async ({userEmail, conversationId, title}) => {
-  const response = await fetch(`${API_URL}/api/chat/group-title`, {
+  const response = await apiFetch(`${API_URL}/api/chat/group-title`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1526,7 +1580,7 @@ export const updateGroupTitle = async ({userEmail, conversationId, title}) => {
 };
 
 export const removeMemberFromChatGroup = async ({userEmail, conversationId, memberEmail}) => {
-  const response = await fetch(`${API_URL}/api/chat/groups/remove-member`, {
+  const response = await apiFetch(`${API_URL}/api/chat/groups/remove-member`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1541,7 +1595,7 @@ export const removeMemberFromChatGroup = async ({userEmail, conversationId, memb
 };
 
 export const updateGroupMemberRole = async ({userEmail, conversationId, targetEmail, role}) => {
-  const response = await fetch(`${API_URL}/api/chat/groups/member-role`, {
+  const response = await apiFetch(`${API_URL}/api/chat/groups/member-role`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1577,7 +1631,7 @@ export const sendGroupChatMessage = async (
     payload.listing_id = String(listingId).trim();
   }
   if (listingShare) payload.listing_share = true;
-  const response = await fetch(`${API_URL}/api/chat/group-messages`, {
+  const response = await apiFetch(`${API_URL}/api/chat/group-messages`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1596,7 +1650,7 @@ export const getChatParticipantDisplay = async (userRef) => {
   if (!userRef) return { success: true, name: null, profileImageUrl: null };
   const ref = String(userRef).trim();
   const url = `${API_URL}/api/chat/participant-display?user_ref=${encodeURIComponent(ref)}`;
-  const response = await fetch(url);
+  const response = await apiFetch(url);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load participant display');
   return data;
@@ -1613,7 +1667,7 @@ export const getListingPreview = async (listingId) => {
   const id = String(listingId).trim();
   if (!id) return null;
   try {
-    const response = await fetch(`${API_URL}/api/listings/${encodeURIComponent(id)}/preview`);
+    const response = await apiFetch(`${API_URL}/api/listings/${encodeURIComponent(id)}/preview`);
     const data = await response.json();
     if (!response.ok) return null;
     return data?.listing || null;
@@ -1628,14 +1682,14 @@ export const getChatMessages = async (myEmail, otherUserEmail) => {
     user_email: String(myEmail).trim().toLowerCase(),
     other_user_email: String(otherUserEmail).trim().toLowerCase(),
   });
-  const response = await fetch(`${API_URL}/api/chat/messages?${params.toString()}`);
+  const response = await apiFetch(`${API_URL}/api/chat/messages?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load messages');
   return data;
 };
 
 export const respondToExclusiveOffer = async ({userEmail, conversationId, accept}) => {
-  const response = await fetch(`${API_URL}/api/chat/exclusive-offer/respond`, {
+  const response = await apiFetch(`${API_URL}/api/chat/exclusive-offer/respond`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1702,7 +1756,7 @@ export const sendChatMessage = async (
     payload.listing_id = String(listingId).trim();
   }
   if (listingShare) payload.listing_share = true;
-  const response = await fetch(`${API_URL}/api/chat/messages`, {
+  const response = await apiFetch(`${API_URL}/api/chat/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -1721,7 +1775,7 @@ export const uploadChatMedia = async (file) => {
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');
   formData.append('file', toAppend);
-  const response = await fetch(`${API_URL}/api/chat/upload-media`, {
+  const response = await apiFetch(`${API_URL}/api/chat/upload-media`, {
     method: 'POST',
     body: formData,
   });
@@ -1739,7 +1793,7 @@ export const uploadGroupImage = async (file) => {
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');
   formData.append('file', toAppend);
-  const response = await fetch(`${API_URL}/api/chat/upload-group-image`, {
+  const response = await apiFetch(`${API_URL}/api/chat/upload-group-image`, {
     method: 'POST',
     body: formData,
   });
@@ -1772,7 +1826,7 @@ export const toSubscriptionId = id => {
  * @returns {Promise<{ success: boolean, rings?: Array }>}
  */
 export const getStoriesFeed = async () => {
-  const response = await fetch(`${API_URL}/api/stories/feed`, {
+  const response = await apiFetch(`${API_URL}/api/stories/feed`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1787,7 +1841,7 @@ export const getStoriesFeed = async () => {
  * Company directory for home "חפשו עוד" (verified/active company subscriptions + ad counts)
  */
 export const getCompaniesDirectory = async () => {
-  const response = await fetch(`${API_URL}/api/companies/directory`, {
+  const response = await apiFetch(`${API_URL}/api/companies/directory`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1802,7 +1856,7 @@ export const getCompaniesDirectory = async () => {
  * Professionals directory for home "חפשו עוד" (verified/active professional subscriptions)
  */
 export const getProfessionalsDirectory = async () => {
-  const response = await fetch(`${API_URL}/api/professionals/directory`, {
+  const response = await apiFetch(`${API_URL}/api/professionals/directory`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1818,7 +1872,7 @@ export const getProfessionalsDirectory = async () => {
  * @param {{ subscription_id: string, media_url: string }} payload
  */
 export const createStory = async payload => {
-  const response = await fetch(`${API_URL}/api/stories`, {
+  const response = await apiFetch(`${API_URL}/api/stories`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1834,7 +1888,7 @@ export const createListing = async listingData => {
   try {
     console.log('Sending listing data to API:', listingData);
 
-    const response = await fetch(`${API_URL}/api/listings`, {
+    const response = await apiFetch(`${API_URL}/api/listings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1866,7 +1920,7 @@ export const updateListing = async (listingId, listingData) => {
     throw new Error('Invalid listing id for update');
   }
   try {
-    const response = await fetch(`${API_URL}/api/listings/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`${API_URL}/api/listings/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(listingData),
