@@ -7,6 +7,7 @@ import {
   Image,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 
 const AVATAR = 66;
@@ -24,6 +25,7 @@ const HomeStoryStrip = ({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      nestedScrollEnabled={Platform.OS === 'android'}
       contentContainerStyle={styles.row}>
       {loading && rings.length === 0 ? (
         <View style={styles.loadingWrap}>

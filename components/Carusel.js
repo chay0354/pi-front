@@ -1,4 +1,4 @@
-import React, {useRef, useState, useEffect} from 'react';
+import React, {useRef, useState, useEffect, useCallback, memo} from 'react';
 import {
   View,
   ScrollView,
@@ -10,16 +10,90 @@ import {
 } from 'react-native';
 import {userCategories} from '../utils/constant';
 
-const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => {
+/** Fixed slot + transform scales match prior 104×142 / 174×212 layout without per-frame width/height relayout (Android). */
+const CATEGORY_SLOT_W = 174;
+const CATEGORY_SLOT_H = 212;
+const CATEGORY_SIDE_SCALE_X = 104 / CATEGORY_SLOT_W;
+const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
+
+const CarouselCategoryItem = memo(function CarouselCategoryItem({
+  item,
+  itemWidth,
+  index,
+  centerIndex,
+  listLength,
+  onCategorySelect,
+  scrollToIndex,
+}) {
+  const isCenter = index === centerIndex;
+  const isLeft = index === centerIndex - 1;
+  const isRight = index === centerIndex + 1;
+  const isFaded = !isCenter && !isLeft && !isRight;
+
+  const source = isCenter
+    ? item.image
+    : index < centerIndex
+      ? item.imageLeft
+      : item.imageRight;
+
+  const onPress = useCallback(() => {
+    if (
+      (isCenter || index === 0 || index === listLength - 1) &&
+      onCategorySelect
+    ) {
+      onCategorySelect(item.id);
+    } else {
+      scrollToIndex(index);
+    }
+  }, [isCenter, index, listLength, onCategorySelect, scrollToIndex, item.id]);
+
+  const imageTransform = isCenter
+    ? [{translateY: -15}]
+    : [{scaleX: CATEGORY_SIDE_SCALE_X}, {scaleY: CATEGORY_SIDE_SCALE_Y}];
+
+  return (
+    <TouchableOpacity
+      style={[styles.categoryItem, {width: itemWidth}]}
+      onPress={onPress}
+      activeOpacity={0.7}>
+      <Image
+        source={source}
+        resizeMode="contain"
+        style={[
+          styles.tikImageBase,
+          isFaded && styles.fadedImage,
+          {transform: imageTransform},
+        ]}
+      />
+    </TouchableOpacity>
+  );
+});
+
+const Carusel = ({
+  style,
+  categoriesList = userCategories,
+  onCategorySelect,
+}) => {
   const {width: screenWidth} = useWindowDimensions();
   // Use provided list or full list so all users can see all categories
-  const list = categoriesList && categoriesList.length > 0 ? categoriesList : userCategories;
+  const list =
+    categoriesList && categoriesList.length > 0
+      ? categoriesList
+      : userCategories;
   const scrollViewRef = useRef(null);
   const hasInitialScrollDone = useRef(false);
   const lastScrollPositionRef = useRef(0);
+  /** Android: throttling onScroll setState avoids JS backlog that delays touch / scroll for seconds after a fling. */
+  const androidScrollNextEmitRef = useRef(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const initialCenterIndex = Math.min(2, Math.max(0, list.length - 1));
   const [centerIndex, setCenterIndex] = useState(initialCenterIndex);
+  const onCategorySelectRef = useRef(onCategorySelect);
+  onCategorySelectRef.current = onCategorySelect;
+
+  const emitCategorySelect = useCallback(id => {
+    onCategorySelectRef.current?.(id);
+  }, []);
 
   // Use real carousel viewport width for stable center math (web + native).
   const viewportWidth = carouselWidth > 0 ? carouselWidth : screenWidth;
@@ -43,44 +117,68 @@ const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => 
     if (scrollViewRef.current && Math.abs(scrollPosition - snapScrollX) > 1) {
       scrollViewRef.current.scrollTo({
         x: snapScrollX,
-        animated: true,
+        // Android: animated correction fights the gesture handler and can leave the scroll view
+        // ignoring touches until the animation finishes.
+        animated: Platform.OS !== 'android',
       });
     }
   };
 
-  const handleScroll = event => {
-    const scrollPosition = event.nativeEvent.contentOffset.x;
-    lastScrollPositionRef.current = scrollPosition;
-    const viewportCenter = scrollPosition + viewportWidth / 2;
+  const handleScroll = useCallback(
+    event => {
+      const scrollPosition = event.nativeEvent.contentOffset.x;
+      lastScrollPositionRef.current = scrollPosition;
 
-    // Use same itemWidth as layout so center detection matches visible items
-    let closestIndex = 0;
-    let minDistance = Infinity;
-
-    list.forEach((_, index) => {
-      const itemCenter = (index + 0.5) * itemWidth;
-      const distance = Math.abs(viewportCenter - itemCenter);
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = index;
+      if (Platform.OS === 'android') {
+        const now =
+          typeof globalThis.performance !== 'undefined' &&
+          typeof globalThis.performance.now === 'function'
+            ? globalThis.performance.now()
+            : Date.now();
+        if (now < androidScrollNextEmitRef.current) {
+          return;
+        }
+        androidScrollNextEmitRef.current = now + 80;
       }
-    });
 
-    setCenterIndex(prev => {
-      if (closestIndex === prev) return prev;
-      // Hysteresis: only switch when viewport has clearly crossed the boundary
-      const boundaryRight = (prev + 1) * itemWidth;
-      const boundaryLeft = prev * itemWidth;
-      if (closestIndex > prev && viewportCenter >= boundaryRight) return closestIndex;
-      if (closestIndex < prev && viewportCenter <= boundaryLeft) return closestIndex;
-      return prev;
-    });
-  };
+      const viewportCenter = scrollPosition + viewportWidth / 2;
+
+      let closestIndex = 0;
+      let minDistance = Infinity;
+
+      list.forEach((_, index) => {
+        const itemCenter = (index + 0.5) * itemWidth;
+        const distance = Math.abs(viewportCenter - itemCenter);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      setCenterIndex(prev => {
+        if (closestIndex === prev) return prev;
+        const boundaryRight = (prev + 1) * itemWidth;
+        const boundaryLeft = prev * itemWidth;
+        if (closestIndex > prev && viewportCenter >= boundaryRight)
+          return closestIndex;
+        if (closestIndex < prev && viewportCenter <= boundaryLeft)
+          return closestIndex;
+        return prev;
+      });
+    },
+    [viewportWidth, itemWidth, list],
+  );
+
+  const handleScrollBeginDrag = useCallback(() => {
+    androidScrollNextEmitRef.current = 0;
+  }, []);
 
   const handleScrollEndDrag = () => {
-    // Keep web deterministic; native relies on momentum end.
     if (Platform.OS === 'web') {
+      runSnapToCenter(lastScrollPositionRef.current);
+    } else if (Platform.OS === 'android') {
+      // Short drags often never fire onMomentumScrollEnd; snap + sync center or touches stay wrong.
       runSnapToCenter(lastScrollPositionRef.current);
     }
   };
@@ -90,30 +188,19 @@ const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => 
     runSnapToCenter(scrollPosition);
   };
 
-  const isCenterItem = index => {
-    return index === centerIndex;
-  };
-
-  const isLeftItem = index => {
-    return index === centerIndex - 1;
-  };
-
-  const isRightItem = index => {
-    return index === centerIndex + 1;
-  };
-
-  const scrollToIndex = (index, animated = true) => {
-    if (!scrollViewRef.current || viewportWidth <= 0) {
-      return;
-    }
-
-    const scrollX = Math.max(0, (index - 1) * itemWidth);
-
-    scrollViewRef.current.scrollTo({
-      x: scrollX,
-      animated,
-    });
-  };
+  const scrollToIndex = useCallback(
+    (index, animated = true) => {
+      if (!scrollViewRef.current || viewportWidth <= 0) {
+        return;
+      }
+      const scrollX = Math.max(0, (index - 1) * itemWidth);
+      scrollViewRef.current.scrollTo({
+        x: scrollX,
+        animated,
+      });
+    },
+    [viewportWidth, itemWidth],
+  );
 
   // Initial scroll once per mount: center the intended item when we have valid dimensions.
   useEffect(() => {
@@ -138,7 +225,27 @@ const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => 
     return () => clearTimeout(t);
   }, [viewportWidth, itemWidth, initialCenterIndex]);
 
-  const snapInterval = Math.round(itemWidth);
+  const snapInterval = itemWidth;
+
+  const categoryIdsKey = list.map(c => c.id).join(',');
+  const listRef = useRef(list);
+  listRef.current = list;
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    listRef.current.forEach(row => {
+      [row.image, row.imageLeft, row.imageRight].forEach(src => {
+        try {
+          const resolved = Image.resolveAssetSource(src);
+          if (resolved?.uri) {
+            Image.prefetch(resolved.uri);
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      });
+    });
+  }, [categoryIdsKey]);
 
   return (
     <View style={[style]}>
@@ -158,52 +265,25 @@ const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => 
         bounces={false}
         pagingEnabled={false}
         onScroll={handleScroll}
+        onScrollBeginDrag={handleScrollBeginDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
-        scrollEventThrottle={16}>
-        {list.map((item, index) => {
-          const isCenter = isCenterItem(index);
-          const isLeft = isLeftItem(index);
-          const isRight = isRightItem(index);
-          const isFaded = !isCenter && !isLeft && !isRight;
-
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.categoryItem, {width: itemWidth}]}
-              onPress={() => {
-                if (
-                  (isCenter ||
-                    index === 0 ||
-                    index === list.length - 1) &&
-                  onCategorySelect
-                ) {
-                  onCategorySelect(item.id);
-                } else {
-                  scrollToIndex(index);
-                }
-              }}
-              activeOpacity={0.7}>
-              <Image
-                source={
-                  isCenter
-                    ? item.image
-                    : index < centerIndex
-                      ? item.imageLeft
-                      : item.imageRight
-                }
-                resizeMode="contain"
-                style={[
-                  styles.tikImage,
-                  isCenter && styles.centerImage,
-                  isLeft && styles.leftImage,
-                  isRight && styles.rightImage,
-                  isFaded && styles.fadedImage,
-                ]}
-              />
-            </TouchableOpacity>
-          );
-        })}
+        scrollEventThrottle={Platform.OS === 'android' ? 64 : 16}
+        nestedScrollEnabled={Platform.OS === 'android'}
+        removeClippedSubviews={false}
+        {...(Platform.OS === 'android' ? {overScrollMode: 'never'} : {})}>
+        {list.map((item, index) => (
+          <CarouselCategoryItem
+            key={item.id}
+            item={item}
+            itemWidth={itemWidth}
+            index={index}
+            centerIndex={centerIndex}
+            listLength={list.length}
+            onCategorySelect={emitCategorySelect}
+            scrollToIndex={scrollToIndex}
+          />
+        ))}
       </ScrollView>
     </View>
   );
@@ -211,31 +291,18 @@ const Carusel = ({style, categoriesList = userCategories, onCategorySelect}) => 
 
 const styles = StyleSheet.create({
   categoryItem: {
-    height: 142,
+    height: 220,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
-  tikImage: {
-    width: 104,
-    height: 142,
-  },
-  centerImage: {
-    width: 174,
-    height: 212,
-    marginTop: -15,
-  },
-  leftImage: {
-    width: 104,
-    height: 142,
-  },
-  rightImage: {
-    width: 104,
-    height: 142,
+  tikImageBase: {
+    width: CATEGORY_SLOT_W,
+    height: CATEGORY_SLOT_H,
   },
   fadedImage: {
     opacity: 0.2,
-    transform: [{rotate: '0deg'}],
   },
 });
 

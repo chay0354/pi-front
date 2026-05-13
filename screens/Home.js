@@ -4,11 +4,16 @@ import {
   Text,
   View,
   Image,
-  ScrollView,
   Animated,
   Platform,
 } from 'react-native';
-import React, {useContext, useCallback, useEffect, useRef, useState} from 'react';
+import React, {
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
@@ -110,10 +115,7 @@ const Home = ({
         onPress={onLogoPress}
         accessibilityRole="button"
         accessibilityLabel="Pi AI">
-        <Image
-          source={require('../assets/homeLogo.png')}
-          style={styles.logo}
-        />
+        <Image source={require('../assets/homeLogo.png')} style={styles.logo} />
       </TouchableOpacity>
 
       <View style={styles.content}>
@@ -186,6 +188,16 @@ const Home = ({
     />
   );
 
+  // Android: horizontal ScrollViews (category carousel) mis-handle touches inside a 3D
+  // transformed ancestor (perspective + rotateY). Keep the same opacity crossfade; skip 3D on Android only.
+  const use3dFlip = Platform.OS !== 'android';
+  const frontTransform = use3dFlip
+    ? [{perspective: 1200}, {rotateY: frontRotate}]
+    : undefined;
+  const backTransform = use3dFlip
+    ? [{perspective: 1200}, {rotateY: backRotate}]
+    : undefined;
+
   return (
     <ImageBackground
       source={require('../assets/background.png')}
@@ -199,7 +211,7 @@ const Home = ({
                 styles.flipFace,
                 {
                   opacity: frontOpacity,
-                  transform: [{perspective: 1200}, {rotateY: frontRotate}],
+                  ...(frontTransform ? {transform: frontTransform} : {}),
                 },
               ]}>
               {frontFace}
@@ -210,7 +222,7 @@ const Home = ({
                 styles.flipFace,
                 {
                   opacity: backOpacity,
-                  transform: [{perspective: 1200}, {rotateY: backRotate}],
+                  ...(backTransform ? {transform: backTransform} : {}),
                 },
               ]}>
               {backFace}
@@ -247,7 +259,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 20,
     marginTop: 20,
-    marginRight: 26,
+    marginEnd: 26,
   },
   safeArea: {
     flex: 1,

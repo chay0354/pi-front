@@ -80,12 +80,10 @@ import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLa
 import {ContextHook} from '../hooks/ContextHook';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
-const COMPANY_OFFICE_SIZES_SECTION_TITLE =
-  'הפרוייקט מציע משרדים בגדלים של';
+const COMPANY_OFFICE_SIZES_SECTION_TITLE = 'הפרוייקט מציע משרדים בגדלים של';
 const COMPANY_WHOLE_FLOOR_SECTION_TITLE = 'הפרוייקט מציע קומה שלמה';
 /** Company commercial (category 8) — `companyCategoryForm[8]` */
-const CAT8_COMMERCIAL_SIZES_SECTION_TITLE =
-  'הפרוייקט מציע שטחי מסחר בגדלים של';
+const CAT8_COMMERCIAL_SIZES_SECTION_TITLE = 'הפרוייקט מציע שטחי מסחר בגדלים של';
 const CAT8_WHOLE_FLOOR_SECTION_TITLE = 'הפרוייקט מציע קומה שלמה';
 
 function normalizeCompanyLandParcel(raw) {
@@ -575,7 +573,7 @@ const AdsForm = ({
       });
     });
     if (Object.keys(next).length > 0) {
-      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+      setProjectOfferGroupsExpanded(prev => ({...prev, ...next}));
     }
   }, [initialListing?.id, adsFormFields]);
 
@@ -610,16 +608,20 @@ const AdsForm = ({
           (po[ak] != null && Number(po[ak]) > 0) ||
           (po[pk] != null && Number(po[pk]) > 0);
         if (has) {
-          const rowTitle =
-            prefix === 'office' ? `משרד ${i}` : `קומה שלמה ${i}`;
+          const rowTitle = prefix === 'office' ? `משרד ${i}` : `קומה שלמה ${i}`;
           next[`${fieldIndex}-${rowTitle}`] = true;
         }
       }
     });
     if (Object.keys(next).length > 0) {
-      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+      setProjectOfferGroupsExpanded(prev => ({...prev, ...next}));
     }
-  }, [initialListing?.id, initialListing?.project_offers, category, adsFormFields]);
+  }, [
+    initialListing?.id,
+    initialListing?.project_offers,
+    category,
+    adsFormFields,
+  ]);
 
   useEffect(() => {
     if (!initialListing?.id || parseInt(category, 10) !== 8) {
@@ -641,8 +643,7 @@ const AdsForm = ({
       ) {
         return;
       }
-      const isCommercial =
-        sectionTitle === CAT8_COMMERCIAL_SIZES_SECTION_TITLE;
+      const isCommercial = sectionTitle === CAT8_COMMERCIAL_SIZES_SECTION_TITLE;
       for (let i = 1; i <= 40; i++) {
         const ak = isCommercial
           ? `cat8_commercial_space_${i}_sqm`
@@ -654,21 +655,26 @@ const AdsForm = ({
           (po[ak] != null && Number(po[ak]) > 0) ||
           (po[pk] != null && Number(po[pk]) > 0);
         if (has) {
-          const rowTitle = isCommercial
-            ? `שטח מסחרי ${i}`
-            : `קומה שלמה ${i}`;
+          const rowTitle = isCommercial ? `שטח מסחרי ${i}` : `קומה שלמה ${i}`;
           next[`${fieldIndex}-${rowTitle}`] = true;
         }
       }
     });
     if (Object.keys(next).length > 0) {
-      setProjectOfferGroupsExpanded(prev => ({ ...prev, ...next }));
+      setProjectOfferGroupsExpanded(prev => ({...prev, ...next}));
     }
-  }, [initialListing?.id, initialListing?.project_offers, category, adsFormFields]);
+  }, [
+    initialListing?.id,
+    initialListing?.project_offers,
+    category,
+    adsFormFields,
+  ]);
 
   useEffect(() => {
     const fields = formList?.[category]?.fields || [];
-    const hasPricePerNight = fields.some(field => field?.key === 'pricepernight');
+    const hasPricePerNight = fields.some(
+      field => field?.key === 'pricepernight',
+    );
     if (!hasPricePerNight) return;
     const numericPrice = Number(price);
     if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
@@ -680,7 +686,8 @@ const AdsForm = ({
     if (initialListing) {
       const gd = initialListing.general_details;
       let host =
-        gd && typeof gd === 'object' &&
+        gd &&
+        typeof gd === 'object' &&
         (gd.bnb_host_type === 'private' || gd.bnb_host_type === 'business')
           ? gd.bnb_host_type
           : null;
@@ -700,7 +707,10 @@ const AdsForm = ({
   // Pre-fill form when editing an existing listing
   useEffect(() => {
     if (!initialListing) return;
-    const cat = initialListing.category != null ? parseInt(initialListing.category) : null;
+    const cat =
+      initialListing.category != null
+        ? parseInt(initialListing.category)
+        : null;
     if (cat >= 1 && cat <= 12) setCategory(cat);
     const ptRaw = initialListing.property_type ?? initialListing.propertyType;
     if (ptRaw != null && String(ptRaw).trim() !== '') {
@@ -712,11 +722,17 @@ const AdsForm = ({
         ? String(initialListing.project_name)
         : '',
     );
-    setAddress(initialListing.address != null ? String(initialListing.address) : '');
+    setAddress(
+      initialListing.address != null ? String(initialListing.address) : '',
+    );
     let parcel =
-      initialListing.land_parcel != null ? String(initialListing.land_parcel) : '';
+      initialListing.land_parcel != null
+        ? String(initialListing.land_parcel)
+        : '';
     let block =
-      initialListing.land_block != null ? String(initialListing.land_block) : '';
+      initialListing.land_block != null
+        ? String(initialListing.land_block)
+        : '';
     if (
       (!parcel || !block) &&
       initialListing.land_address != null &&
@@ -773,12 +789,20 @@ const AdsForm = ({
         initialListing.preferred_age_min ?? initialListing.preferredAgeMin;
       const amax =
         initialListing.preferred_age_max ?? initialListing.preferredAgeMax;
-      if (amin != null && String(amin).trim() !== '' && !Number.isNaN(Number(amin))) {
+      if (
+        amin != null &&
+        String(amin).trim() !== '' &&
+        !Number.isNaN(Number(amin))
+      ) {
         setPreferredAgeMin(
           Math.max(18, Math.min(100, Math.round(Number(amin)))),
         );
       }
-      if (amax != null && String(amax).trim() !== '' && !Number.isNaN(Number(amax))) {
+      if (
+        amax != null &&
+        String(amax).trim() !== '' &&
+        !Number.isNaN(Number(amax))
+      ) {
         setPreferredAgeMax(
           Math.max(18, Math.min(100, Math.round(Number(amax)))),
         );
@@ -786,7 +810,9 @@ const AdsForm = ({
     } else {
       setBudget(initialListing.budget ?? 1000);
     }
-    const imgs = initialListing.images ?? (initialListing.image ? [{uri: initialListing.image}] : []);
+    const imgs =
+      initialListing.images ??
+      (initialListing.image ? [{uri: initialListing.image}] : []);
     if (imgs.length > 0) {
       const first = imgs[0];
       const uri = typeof first === 'string' ? first : first?.uri;
@@ -795,7 +821,9 @@ const AdsForm = ({
         setMainImageUrl(uri);
       }
       if (imgs.length > 1) {
-        const rest = imgs.slice(1).map(i => (typeof i === 'string' ? {uri: i} : {uri: i?.uri}));
+        const rest = imgs
+          .slice(1)
+          .map(i => (typeof i === 'string' ? {uri: i} : {uri: i?.uri}));
         setAdditionalImages(rest.filter(i => i?.uri));
         setAdditionalImageUrls(rest.map(i => i?.uri).filter(Boolean));
       }
@@ -812,10 +840,14 @@ const AdsForm = ({
       setBnbBusinessLogo(null);
       setBnbBusinessLogoUrl(null);
     }
-    if (initialListing.general_details && typeof initialListing.general_details === 'object') {
+    if (
+      initialListing.general_details &&
+      typeof initialListing.general_details === 'object'
+    ) {
       const gd = initialListing.general_details;
       const listingAreaNum =
-        initialListing.area != null && !Number.isNaN(Number(initialListing.area))
+        initialListing.area != null &&
+        !Number.isNaN(Number(initialListing.area))
           ? Math.max(0, Math.round(Number(initialListing.area)))
           : null;
       setGeneralDetailsCounts(prev => ({
@@ -826,9 +858,16 @@ const AdsForm = ({
             : listingAreaNum != null && listingAreaNum > 0
               ? listingAreaNum
               : prev.sqm_area,
-        building_count: gd.building_count != null ? Number(gd.building_count) : prev.building_count,
-        floor_count: gd.floor_count != null ? Number(gd.floor_count) : prev.floor_count,
-        apartment_count: gd.apartment_count != null ? Number(gd.apartment_count) : prev.apartment_count,
+        building_count:
+          gd.building_count != null
+            ? Number(gd.building_count)
+            : prev.building_count,
+        floor_count:
+          gd.floor_count != null ? Number(gd.floor_count) : prev.floor_count,
+        apartment_count:
+          gd.apartment_count != null
+            ? Number(gd.apartment_count)
+            : prev.apartment_count,
         shop_count:
           gd.shop_count != null ? Number(gd.shop_count) : prev.shop_count,
       }));
@@ -853,8 +892,11 @@ const AdsForm = ({
         }));
       }
     }
-    if (initialListing.project_offers && typeof initialListing.project_offers === 'object') {
-      setProjectOffers(prev => ({ ...prev, ...initialListing.project_offers }));
+    if (
+      initialListing.project_offers &&
+      typeof initialListing.project_offers === 'object'
+    ) {
+      setProjectOffers(prev => ({...prev, ...initialListing.project_offers}));
     }
     const subType = String(currentUser?.subscription_type || '').toLowerCase();
     const isCompanyLike =
@@ -878,10 +920,7 @@ const AdsForm = ({
       const po = initialListing.project_offers;
       if (po && typeof po === 'object') {
         setCat8CommercialRepeatCount(
-          maxRepeatSlotFromProjectOffers(
-            po,
-            /cat8_commercial_space_(\d+)_/,
-          ),
+          maxRepeatSlotFromProjectOffers(po, /cat8_commercial_space_(\d+)_/),
         );
         setCat8WholeFloorRepeatCount(
           maxRepeatSlotFromProjectOffers(po, /cat8_whole_floor_(\d+)_/),
@@ -897,11 +936,7 @@ const AdsForm = ({
         initialListing.companyOffersLandSizes;
       if (Array.isArray(raw)) {
         setCompanyLandParcels(raw.map(normalizeCompanyLandParcel));
-      } else if (
-        raw &&
-        typeof raw === 'object' &&
-        Array.isArray(raw.parcels)
-      ) {
+      } else if (raw && typeof raw === 'object' && Array.isArray(raw.parcels)) {
         setCompanyLandParcels(raw.parcels.map(normalizeCompanyLandParcel));
       } else {
         setCompanyLandParcels([]);
@@ -929,12 +964,18 @@ const AdsForm = ({
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
     }
-    if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
+    if (
+      ['low', 'medium', 'high'].includes(
+        String(initialListing.exposure_level || '').toLowerCase(),
+      )
+    ) {
       setExposureLevel(String(initialListing.exposure_level).toLowerCase());
     }
     const cpRaw = initialListing.cancellation_policy ?? null;
     setCancellationPolicy(
-      cpRaw != null && String(cpRaw).trim() !== '' ? String(cpRaw).trim() : null,
+      cpRaw != null && String(cpRaw).trim() !== ''
+        ? String(cpRaw).trim()
+        : null,
     );
     setHotDeal(
       initialListing.hot_deal === true ||
@@ -979,8 +1020,11 @@ const AdsForm = ({
   // Loading states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
-  const [publishValidationVisible, setPublishValidationVisible] = useState(false);
-  const [publishValidationMessages, setPublishValidationMessages] = useState([]);
+  const [publishValidationVisible, setPublishValidationVisible] =
+    useState(false);
+  const [publishValidationMessages, setPublishValidationMessages] = useState(
+    [],
+  );
 
   // File input refs for web
   const mainImageInputRef = useRef(null);
@@ -1028,16 +1072,16 @@ const AdsForm = ({
   // בלעדי (10): הסרת סוגי דירה מ"הפרויקט מציע" — מפתח `${fieldIndex}-${groupTitle}` → false = מוסתר
   const [projectOfferGroupsOn, setProjectOfferGroupsOn] = useState({});
   /** "הפרויקט מציע": אקורדיון — מפתח `${fieldIndex}-${groupTitle}` → true = שדות פתוחים (ברירת מחדל סגור) */
-  const [projectOfferGroupsExpanded, setProjectOfferGroupsExpanded] = useState({});
+  const [projectOfferGroupsExpanded, setProjectOfferGroupsExpanded] = useState(
+    {},
+  );
   /** Company category 2 (משרדים): dynamic משרד 1… / קומה שלמה 1… rows; default 0 visible slots */
   const [companyOfficeRepeatCount, setCompanyOfficeRepeatCount] = useState(0);
   const [companyWholeFloorRepeatCount, setCompanyWholeFloorRepeatCount] =
     useState(0);
   /** Company category 8 (מסחר): dynamic שטח מסחרי / קומה שלמה rows */
-  const [cat8CommercialRepeatCount, setCat8CommercialRepeatCount] =
-    useState(0);
-  const [cat8WholeFloorRepeatCount, setCat8WholeFloorRepeatCount] =
-    useState(0);
+  const [cat8CommercialRepeatCount, setCat8CommercialRepeatCount] = useState(0);
+  const [cat8WholeFloorRepeatCount, setCat8WholeFloorRepeatCount] = useState(0);
   /** Company category 7 (קרקעות): dynamic קרקע rows — persisted as `company_offers_land_sizes` */
   const [companyLandParcels, setCompanyLandParcels] = useState([]);
 
@@ -1068,22 +1112,25 @@ const AdsForm = ({
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
   // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
-  const hydrateGeneralDetailsWithRadio = (groups) => {
+  const hydrateGeneralDetailsWithRadio = groups => {
     if (!groups || !groups.groups) return groups;
-    const getValue = (key) => {
-      if (key in generalDetailsCounts) return Number(generalDetailsCounts[key]) || 0;
+    const getValue = key => {
+      if (key in generalDetailsCounts)
+        return Number(generalDetailsCounts[key]) || 0;
       if (key in projectOffers) return Number(projectOffers[key]) || 0;
       if (key in otherFormValues) return Number(otherFormValues[key]) || 0;
       return 0;
     };
     const setValue = (key, val) => {
-      const numVal = key.endsWith('_price') ? Number(val) || 0 : Math.max(0, Number(val) || 0);
+      const numVal = key.endsWith('_price')
+        ? Number(val) || 0
+        : Math.max(0, Number(val) || 0);
       if (key in generalDetailsCounts) {
-        setGeneralDetailsCounts(prev => ({ ...prev, [key]: numVal }));
+        setGeneralDetailsCounts(prev => ({...prev, [key]: numVal}));
       } else if (key in projectOffers) {
-        setProjectOffers(prev => ({ ...prev, [key]: numVal }));
+        setProjectOffers(prev => ({...prev, [key]: numVal}));
       } else {
-        setOtherFormValues(prev => ({ ...prev, [key]: numVal }));
+        setOtherFormValues(prev => ({...prev, [key]: numVal}));
       }
     };
     const mapGroupFields = grp => ({
@@ -1093,7 +1140,7 @@ const AdsForm = ({
           return {
             ...f,
             value: getValue(f.key),
-            onChange: (val) => setValue(f.key, val),
+            onChange: val => setValue(f.key, val),
           };
         }
         if (f.type === 'boolean_toggle' && f.key) {
@@ -1111,9 +1158,9 @@ const AdsForm = ({
       if (t === COMPANY_OFFICE_SIZES_SECTION_TITLE) {
         return {
           ...groups,
-          groups: buildCompanyOfficeRepeatGroups(
-            companyOfficeRepeatCount,
-          ).map(mapGroupFields),
+          groups: buildCompanyOfficeRepeatGroups(companyOfficeRepeatCount).map(
+            mapGroupFields,
+          ),
         };
       }
       if (t === COMPANY_WHOLE_FLOOR_SECTION_TITLE) {
@@ -1483,8 +1530,7 @@ const AdsForm = ({
         fieldKeys.includes('address-phone-description') ||
         fieldKeys.includes('propertyaddress') ||
         fieldKeys.includes('landaddress');
-      const needsProjectNameAndAddress =
-        fieldKeys.includes('propertyaddress');
+      const needsProjectNameAndAddress = fieldKeys.includes('propertyaddress');
       if (needsAddressPhoneDescription) {
         if (!String(address || '').trim()) {
           publishErrors.push('הזינו כתובת');
@@ -1576,10 +1622,8 @@ const AdsForm = ({
         require('../assets/ad-uplaud/button-yelow.png'),
       );
       return {
-        gray:
-          gray?.width && gray?.height ? gray.width / gray.height : fbGray,
-        yellow:
-          yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
+        gray: gray?.width && gray?.height ? gray.width / gray.height : fbGray,
+        yellow: yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
       };
     } catch (_) {
       return {gray: fbGray, yellow: fbYellow};
@@ -1669,13 +1713,10 @@ const AdsForm = ({
             formData.append('file', mainImage.file);
             formData.append('folder', 'listings/images');
 
-            const response = await fetch(
-              `${getResolvedApiUrl()}/api/upload`,
-              {
-                method: 'POST',
-                body: formData,
-              },
-            );
+            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+              method: 'POST',
+              body: formData,
+            });
 
             const data = await response.json();
             if (data.success && data.url) {
@@ -1743,20 +1784,22 @@ const AdsForm = ({
       }
 
       // Upload main image (skip for category 3; skip if already have URL from edit)
-      if (category !== 3 && !uploadedMainImageUrl && mainImage && mainImage.file) {
+      if (
+        category !== 3 &&
+        !uploadedMainImageUrl &&
+        mainImage &&
+        mainImage.file
+      ) {
         try {
           setUploadProgress(prev => ({...prev, mainImage: true}));
           const formData = new FormData();
           formData.append('file', mainImage.file);
           formData.append('folder', 'listings/images');
 
-          const response = await fetch(
-            `${getResolvedApiUrl()}/api/upload`,
-            {
-              method: 'POST',
-              body: formData,
-            },
-          );
+          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+            method: 'POST',
+            body: formData,
+          });
 
           const data = await response.json();
           if (data.success && data.url) {
@@ -1785,13 +1828,10 @@ const AdsForm = ({
             formData.append('file', additionalImages[i].file);
             formData.append('folder', 'listings/images');
 
-            const response = await fetch(
-              `${getResolvedApiUrl()}/api/upload`,
-              {
-                method: 'POST',
-                body: formData,
-              },
-            );
+            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+              method: 'POST',
+              body: formData,
+            });
 
             const data = await response.json();
             if (data.success && data.url) {
@@ -1816,13 +1856,10 @@ const AdsForm = ({
           formData.append('file', videoFile.file);
           formData.append('folder', 'listings/videos');
 
-          const response = await fetch(
-            `${getResolvedApiUrl()}/api/upload`,
-            {
-              method: 'POST',
-              body: formData,
-            },
-          );
+          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+            method: 'POST',
+            body: formData,
+          });
 
           const data = await response.json();
           if (data.success && data.url) {
@@ -1844,10 +1881,10 @@ const AdsForm = ({
           const formData = new FormData();
           formData.append('file', salesImage.file);
           formData.append('folder', 'listings/images');
-          const response = await fetch(
-            `${getResolvedApiUrl()}/api/upload`,
-            {method: 'POST', body: formData},
-          );
+          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+            method: 'POST',
+            body: formData,
+          });
           const data = await response.json();
           if (data.success && data.url) {
             uploadedSalesImageUrl = data.url;
@@ -1870,13 +1907,10 @@ const AdsForm = ({
             const formData = new FormData();
             formData.append('file', bnbBusinessLogo.file);
             formData.append('folder', 'listings/images');
-            const response = await fetch(
-              `${getResolvedApiUrl()}/api/upload`,
-              {
-                method: 'POST',
-                body: formData,
-              },
-            );
+            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
+              method: 'POST',
+              body: formData,
+            });
             const data = await response.json();
             if (data.success && data.url) {
               uploadedBnbBusinessLogoUrl = data.url;
@@ -1979,7 +2013,7 @@ const AdsForm = ({
               saleAtPresale: saleAtPresale === true,
               salesImageUrl: uploadedSalesImageUrl || null,
               projectOffers: (() => {
-                const merged = { ...projectOffers, ...otherFormValues };
+                const merged = {...projectOffers, ...otherFormValues};
                 padDynamicCompanyProjectOfferSlots(merged, listingCategory, {
                   companyOfficeRepeatCount,
                   companyWholeFloorRepeatCount,
@@ -2033,8 +2067,9 @@ const AdsForm = ({
                 hotDeal: !!hotDeal,
               }),
               ...(listingCategory === 7 && {
-                companyOffersLandSizes: (
-                  Array.isArray(companyLandParcels) ? companyLandParcels : []
+                companyOffersLandSizes: (Array.isArray(companyLandParcels)
+                  ? companyLandParcels
+                  : []
                 ).map(p => ({
                   unit: p.unit === 'sqm' ? 'sqm' : 'dunam',
                   area: Number(p.area) || 0,
@@ -2051,7 +2086,8 @@ const AdsForm = ({
           : initialListing?.ad_number != null && initialListing.ad_number !== ''
             ? String(initialListing.ad_number).trim()
             : '';
-      const existingListingId = rawEditId && uuidRe.test(rawEditId) ? rawEditId : null;
+      const existingListingId =
+        rawEditId && uuidRe.test(rawEditId) ? rawEditId : null;
 
       const result = existingListingId
         ? await updateListing(existingListingId, listingData)
@@ -2080,7 +2116,7 @@ const AdsForm = ({
               price: 0,
             });
             // Drop local file so another "פרסם" without changing the image does not create another companion post.
-            setSalesImage({ uri: uploadedSalesImageUrl });
+            setSalesImage({uri: uploadedSalesImageUrl});
             setSalesImageUrl(uploadedSalesImageUrl);
           }
         } catch (mirrorErr) {
@@ -2140,459 +2176,452 @@ const AdsForm = ({
 
         <>
           {adsFormFields.map((field, index) => {
-              switch (field.key) {
-                case 'profileverification':
-                  return (
-                    <ProfileVerification
-                      key="profileverification"
-                      mainImage={mainImage}
-                      setMainImage={setMainImage}
-                      uploadProgress={uploadProgress}
-                      handleMainImageUpload={handleMainImageUpload}
-                      handleMainImageChange={handleMainImageChange}
-                      mainImageInputRef={mainImageInputRef}
-                      hasVideo={hasVideo}
-                      setHasVideo={setHasVideo}
-                      videoFile={videoFile}
-                      handleVideoUpload={handleVideoUpload}
-                      handleVideoChange={handleVideoChange}
-                      videoInputRef={videoInputRef}
-                    />
-                  );
-                case 'searchpurpose':
-                  return (
-                    <SearchPurpose
-                      key="searchpurpose"
-                      searchPurpose={searchPurpose}
-                      setSearchPurpose={setSearchPurpose}
-                    />
-                  );
-                case 'apartmenttype':
-                  return (
-                    <ApartmentType
-                      key="apartmenttype"
-                      preferredApartmentType={preferredApartmentType}
-                      setPreferredApartmentType={setPreferredApartmentType}
-                    />
-                  );
-                case 'preferences':
-                  return (
-                    <Preferences
-                      key="preferences"
-                      preferences={preferences}
-                      setPreferences={setPreferences}
-                      preferredGender={preferredGender}
-                      setPreferredGender={setPreferredGender}
-                      preferredAgeMin={preferredAgeMin}
-                      setPreferredAgeMin={setPreferredAgeMin}
-                      preferredAgeMax={preferredAgeMax}
-                      setPreferredAgeMax={setPreferredAgeMax}
-                    />
-                  );
-                case 'price':
-                  return (
-                    <PriceCount
-                      key="price"
-                      price={category === 3 ? budget : price}
-                      setPrice={category === 3 ? setBudget : setPrice}
-                      title={category === 3 ? 'התקציב שלי' : 'מחיר'}
-                      counterStep={
-                        category === 3
-                          ? PRICE_COUNTER_STEP_ROOMMATE_BUDGET
-                          : PRICE_COUNTER_STEP_DEFAULT
-                      }
-                    />
-                  );
-                case 'pricepernight':
-                  return (
-                    <PriceCount
-                      key="pricepernight"
-                      price={price}
-                      setPrice={setPrice}
-                      title={field.title}
-                      isPricePerNight={true}
-                      hotDeal={hotDeal}
-                      setHotDeal={setHotDeal}
-                      counterStep={PRICE_COUNTER_STEP_PER_NIGHT}
-                    />
-                  );
-                case 'contactdetails':
-                  return (
-                    <ContactDetails
-                      key="contactdetails"
-                      contactFullName={contactFullName}
-                      setContactFullName={setContactFullName}
-                      address={address}
-                      setAddress={setAddress}
-                      contactEmail={contactEmail}
-                      setContactEmail={setContactEmail}
-                      phone={phone}
-                      setPhone={setPhone}
-                      description={description}
-                      setDescription={setDescription}
-                      showBnbBusinessLogo={
-                        category === 5 && bnbHostType === 'business'
-                      }
-                      bnbBusinessLogo={bnbBusinessLogo}
-                      onBnbBusinessLogoPress={handleBnbBusinessLogoUpload}
-                      bnbBusinessLogoInputRef={bnbBusinessLogoInputRef}
-                      onBnbBusinessLogoWebFileChange={
-                        handleBnbBusinessLogoChange
-                      }
-                    />
-                  );
-                case 'additionaldetails':
-                  return (
-                    <AdditionalDetails
-                      key="additionaldetails"
-                      description={description}
-                      setDescription={setDescription}
-                    />
-                  );
-                case 'multiimagewithvideo':
-                  return (
-                    <MultiImageWithVideo
-                      key="multiimagewithvideo"
-                      category={category}
-                      mainImage={mainImage}
-                      setMainImage={setMainImage}
-                      uploadProgress={uploadProgress}
-                      handleMainImageUpload={handleMainImageUpload}
-                      handleMainImageChange={handleMainImageChange}
-                      mainImageInputRef={mainImageInputRef}
-                      additionalImages={additionalImages}
-                      handleAdditionalImageUpload={handleAdditionalImageUpload}
-                      handleAdditionalImageChange={handleAdditionalImageChange}
-                      additionalImageInputRefs={additionalImageInputRefs}
-                      hasVideo={hasVideo}
-                      setHasVideo={setHasVideo}
-                      videoFile={videoFile}
-                      handleVideoUpload={handleVideoUpload}
-                      handleVideoChange={handleVideoChange}
-                      videoInputRef={videoInputRef}
-                      wayToDisplayAd={field.wayToDisplayAd}
-                      feedDisplayPriority={feedDisplayPriority}
-                      setFeedDisplayPriority={setFeedDisplayPriority}
-                    />
-                  );
-                case 'hospitalitynature':
-                  // TODO
-                  return (
-                    <HospitalityNature
-                      key="hospitalitynature"
-                      preferredApartmentType={preferredApartmentType}
-                      setPreferredApartmentType={setPreferredApartmentType}
-                    />
-                  );
-                case 'displayoptions':
-                  // Show display mode choices only when there are 2+ images.
-                  if (totalSelectedImages < 2) {
-                    return null;
-                  }
-                  return (
-                    <DisplayOptions
-                      key="displayoptions"
-                      displayOption={displayOption}
-                      setDisplayOption={setDisplayOption}
-                    />
-                  );
-                case 'propertytype':
-                  return (
-                    <PropertyType
-                      key="propertytype"
-                      propertyType={propertyType}
-                      setPropertyType={setPropertyType}
-                      propertyTypes={field.data || []}
-                      title={field.title}
-                    />
-                  );
-                case 'proposedland':
-                  return <ProposedLand key="proposedland" />;
-                case 'radiooptions':
-                  return (
-                    <RadioOptions
-                      key={`radiooptions-${index}`}
-                      data={field.data}
-                      title={field.title}
-                      selectedValue={landRadioValues[field.title]}
-                      onChange={value =>
-                        setLandRadioValues(prev => ({
-                          ...prev,
-                          [field.title]: value,
-                        }))
-                      }
-                    />
-                  );
-                case 'landaddress':
-                  return (
-                    <LandAddress
-                      key="landaddress"
-                      address={address}
-                      setAddress={setAddress}
-                      landParcel={landParcel}
-                      setLandParcel={setLandParcel}
-                      landBlock={landBlock}
-                      setLandBlock={setLandBlock}
-                      phone={phone}
-                      setPhone={setPhone}
-                      description={description}
-                      setDescription={setDescription}
-                    />
-                  );
-                case 'propertyaddress':
-                  return (
-                    <PropertyAddress
-                      key="propertyaddress"
-                      projectName={projectName}
-                      setProjectName={setProjectName}
-                      address={address}
-                      setAddress={setAddress}
-                      phone={phone}
-                      setPhone={setPhone}
-                      description={description}
-                      setDescription={setDescription}
-                    />
-                  );
-                case 'generaldetails': {
-                  const counterDataWithSetters = (field.counterData || []).map(
-                    (c) => {
-                      if (c.key) {
-                        const raw = generalDetailsCounts[c.key];
-                        const num =
-                          raw !== undefined && raw !== null ? Number(raw) : 0;
-                        return {
-                          ...c,
-                          value: Number.isFinite(num) ? num : 0,
-                          setCount: (val) => {
-                            const n = Math.max(0, Number(val) || 0);
-                            setGeneralDetailsCounts((prev) => ({
-                              ...prev,
-                              [c.key]: n,
-                            }));
-                          },
-                        };
-                      }
-                      const isAreaField = c.title && c.title.includes('שטח');
-                      const isRoomsField =
-                        c.title && c.title.includes('חדרים');
-                      const isFloorField = c.title && c.title.includes('קומה');
+            switch (field.key) {
+              case 'profileverification':
+                return (
+                  <ProfileVerification
+                    key="profileverification"
+                    mainImage={mainImage}
+                    setMainImage={setMainImage}
+                    uploadProgress={uploadProgress}
+                    handleMainImageUpload={handleMainImageUpload}
+                    handleMainImageChange={handleMainImageChange}
+                    mainImageInputRef={mainImageInputRef}
+                    hasVideo={hasVideo}
+                    setHasVideo={setHasVideo}
+                    videoFile={videoFile}
+                    handleVideoUpload={handleVideoUpload}
+                    handleVideoChange={handleVideoChange}
+                    videoInputRef={videoInputRef}
+                  />
+                );
+              case 'searchpurpose':
+                return (
+                  <SearchPurpose
+                    key="searchpurpose"
+                    searchPurpose={searchPurpose}
+                    setSearchPurpose={setSearchPurpose}
+                  />
+                );
+              case 'apartmenttype':
+                return (
+                  <ApartmentType
+                    key="apartmenttype"
+                    preferredApartmentType={preferredApartmentType}
+                    setPreferredApartmentType={setPreferredApartmentType}
+                  />
+                );
+              case 'preferences':
+                return (
+                  <Preferences
+                    key="preferences"
+                    preferences={preferences}
+                    setPreferences={setPreferences}
+                    preferredGender={preferredGender}
+                    setPreferredGender={setPreferredGender}
+                    preferredAgeMin={preferredAgeMin}
+                    setPreferredAgeMin={setPreferredAgeMin}
+                    preferredAgeMax={preferredAgeMax}
+                    setPreferredAgeMax={setPreferredAgeMax}
+                  />
+                );
+              case 'price':
+                return (
+                  <PriceCount
+                    key="price"
+                    price={category === 3 ? budget : price}
+                    setPrice={category === 3 ? setBudget : setPrice}
+                    title={category === 3 ? 'התקציב שלי' : 'מחיר'}
+                    counterStep={
+                      category === 3
+                        ? PRICE_COUNTER_STEP_ROOMMATE_BUDGET
+                        : PRICE_COUNTER_STEP_DEFAULT
+                    }
+                  />
+                );
+              case 'pricepernight':
+                return (
+                  <PriceCount
+                    key="pricepernight"
+                    price={price}
+                    setPrice={setPrice}
+                    title={field.title}
+                    isPricePerNight={true}
+                    hotDeal={hotDeal}
+                    setHotDeal={setHotDeal}
+                    counterStep={PRICE_COUNTER_STEP_PER_NIGHT}
+                  />
+                );
+              case 'contactdetails':
+                return (
+                  <ContactDetails
+                    key="contactdetails"
+                    contactFullName={contactFullName}
+                    setContactFullName={setContactFullName}
+                    address={address}
+                    setAddress={setAddress}
+                    contactEmail={contactEmail}
+                    setContactEmail={setContactEmail}
+                    phone={phone}
+                    setPhone={setPhone}
+                    description={description}
+                    setDescription={setDescription}
+                    showBnbBusinessLogo={
+                      category === 5 && bnbHostType === 'business'
+                    }
+                    bnbBusinessLogo={bnbBusinessLogo}
+                    onBnbBusinessLogoPress={handleBnbBusinessLogoUpload}
+                    bnbBusinessLogoInputRef={bnbBusinessLogoInputRef}
+                    onBnbBusinessLogoWebFileChange={handleBnbBusinessLogoChange}
+                  />
+                );
+              case 'additionaldetails':
+                return (
+                  <AdditionalDetails
+                    key="additionaldetails"
+                    description={description}
+                    setDescription={setDescription}
+                  />
+                );
+              case 'multiimagewithvideo':
+                return (
+                  <MultiImageWithVideo
+                    key="multiimagewithvideo"
+                    category={category}
+                    mainImage={mainImage}
+                    setMainImage={setMainImage}
+                    uploadProgress={uploadProgress}
+                    handleMainImageUpload={handleMainImageUpload}
+                    handleMainImageChange={handleMainImageChange}
+                    mainImageInputRef={mainImageInputRef}
+                    additionalImages={additionalImages}
+                    handleAdditionalImageUpload={handleAdditionalImageUpload}
+                    handleAdditionalImageChange={handleAdditionalImageChange}
+                    additionalImageInputRefs={additionalImageInputRefs}
+                    hasVideo={hasVideo}
+                    setHasVideo={setHasVideo}
+                    videoFile={videoFile}
+                    handleVideoUpload={handleVideoUpload}
+                    handleVideoChange={handleVideoChange}
+                    videoInputRef={videoInputRef}
+                    wayToDisplayAd={field.wayToDisplayAd}
+                    feedDisplayPriority={feedDisplayPriority}
+                    setFeedDisplayPriority={setFeedDisplayPriority}
+                  />
+                );
+              case 'hospitalitynature':
+                // TODO
+                return (
+                  <HospitalityNature
+                    key="hospitalitynature"
+                    preferredApartmentType={preferredApartmentType}
+                    setPreferredApartmentType={setPreferredApartmentType}
+                  />
+                );
+              case 'displayoptions':
+                // Show display mode choices only when there are 2+ images.
+                if (totalSelectedImages < 2) {
+                  return null;
+                }
+                return (
+                  <DisplayOptions
+                    key="displayoptions"
+                    displayOption={displayOption}
+                    setDisplayOption={setDisplayOption}
+                  />
+                );
+              case 'propertytype':
+                return (
+                  <PropertyType
+                    key="propertytype"
+                    propertyType={propertyType}
+                    setPropertyType={setPropertyType}
+                    propertyTypes={field.data || []}
+                    title={field.title}
+                  />
+                );
+              case 'proposedland':
+                return <ProposedLand key="proposedland" />;
+              case 'radiooptions':
+                return (
+                  <RadioOptions
+                    key={`radiooptions-${index}`}
+                    data={field.data}
+                    title={field.title}
+                    selectedValue={landRadioValues[field.title]}
+                    onChange={value =>
+                      setLandRadioValues(prev => ({
+                        ...prev,
+                        [field.title]: value,
+                      }))
+                    }
+                  />
+                );
+              case 'landaddress':
+                return (
+                  <LandAddress
+                    key="landaddress"
+                    address={address}
+                    setAddress={setAddress}
+                    landParcel={landParcel}
+                    setLandParcel={setLandParcel}
+                    landBlock={landBlock}
+                    setLandBlock={setLandBlock}
+                    phone={phone}
+                    setPhone={setPhone}
+                    description={description}
+                    setDescription={setDescription}
+                  />
+                );
+              case 'propertyaddress':
+                return (
+                  <PropertyAddress
+                    key="propertyaddress"
+                    projectName={projectName}
+                    setProjectName={setProjectName}
+                    address={address}
+                    setAddress={setAddress}
+                    phone={phone}
+                    setPhone={setPhone}
+                    description={description}
+                    setDescription={setDescription}
+                  />
+                );
+              case 'generaldetails': {
+                const counterDataWithSetters = (field.counterData || []).map(
+                  c => {
+                    if (c.key) {
+                      const raw = generalDetailsCounts[c.key];
+                      const num =
+                        raw !== undefined && raw !== null ? Number(raw) : 0;
                       return {
                         ...c,
-                        value: isAreaField
-                          ? area
-                          : isRoomsField
-                            ? rooms
-                            : isFloorField
-                              ? floor
-                              : c.value,
-                        setCount: isAreaField
-                          ? setArea
-                          : isRoomsField
-                            ? setRooms
-                            : isFloorField
-                              ? setFloor
-                              : () => {},
+                        value: Number.isFinite(num) ? num : 0,
+                        setCount: val => {
+                          const n = Math.max(0, Number(val) || 0);
+                          setGeneralDetailsCounts(prev => ({
+                            ...prev,
+                            [c.key]: n,
+                          }));
+                        },
                       };
-                    },
-                  );
-                  return (
-                    <GeneralDetails
-                      key="generaldetails"
-                      area={area}
-                      setArea={setArea}
-                      rooms={rooms}
-                      setRooms={setRooms}
-                      floor={floor}
-                      setFloor={setFloor}
-                      amenities={amenities}
-                      setAmenities={setAmenities}
-                      toggleAmenity={toggleAmenity}
-                      setAmenityQuantity={setAmenityQuantity}
-                      amenitiesWithQuantity={amenitiesWithQuantity}
-                      isArea={field.isArea}
-                      isRooms={field.isRooms}
-                      isFloor={field.isFloor}
-                      amenitiesData={field.data}
-                      optionSecondValues={optionSecondValues}
-                      setOptionSecondValue={setOptionSecondValue}
-                      counterData={counterDataWithSetters}
-                    />
-                  );
-                }
-                case 'serviceandfacility':
-                  return (
-                    <ServiceAndFacility
-                      key="serviceandfacility"
-                      propertyType={serviceAndFacilityType}
-                      setPropertyType={setServiceAndFacilityType}
-                      data={field.data || []}
-                      title={field.title}
-                    />
-                  );
-                case 'accommodationoffers':
-                  return (
-                    <AccommodationOffers
-                      key="accommodationoffers"
-                      guestCount={guestCount}
-                      setGuestCount={setGuestCount}
-                      checkInDate={checkInDate}
-                      setCheckInDate={setCheckInDate}
-                      checkOutDate={checkOutDate}
-                      setCheckOutDate={setCheckOutDate}
-                    />
-                  );
-                case 'cancellationpolicy':
-                  return (
-                    <CancellationPolicy
-                      key="cancellationpolicy"
-                      cancellationPolicy={cancellationPolicy}
-                      setCancellationPolicy={setCancellationPolicy}
-                      data={field.data || []}
-                      title={field.title}
-                    />
-                  );
-                case 'propertycondition':
-                  return (
-                    <PropertyCondition
-                      key="propertycondition"
-                      condition={condition}
-                      setCondition={setCondition}
-                    />
-                  );
-                case 'purpose':
-                  return (
-                    <Purpose
-                      key="purpose"
-                      purpose={purpose}
-                      setPurpose={setPurpose}
-                    />
-                  );
-                case 'address-phone-description':
-                  return (
-                    <AddressDetails
-                      key="address-phone-description"
-                      address={address}
-                      setAddress={setAddress}
-                      phone={phone}
-                      setPhone={setPhone}
-                      description={description}
-                      setDescription={setDescription}
-                    />
-                  );
-                case 'salesimage':
-                  return (
-                    <SalesImage
-                      key="salesimage"
-                      salesImage={salesImage}
-                      handleSalesImageUpload={handleSalesImageUpload}
-                      handleSalesImageChange={handleSalesImageChange}
-                      salesImageInputRef={salesImageInputRef}
-                      uploadProgress={uploadProgress}
-                      onPressCreateSalesImage={
-                        onOpenPostEditor
-                          ? () => {
-                              const fromForm =
-                                parseInt(String(category), 10);
-                              const fromInitial =
-                                initialCategory != null
-                                  ? parseInt(String(initialCategory), 10)
-                                  : NaN;
-                              const listingCat = Number.isFinite(fromForm) &&
-                                fromForm > 0
+                    }
+                    const isAreaField = c.title && c.title.includes('שטח');
+                    const isRoomsField = c.title && c.title.includes('חדרים');
+                    const isFloorField = c.title && c.title.includes('קומה');
+                    return {
+                      ...c,
+                      value: isAreaField
+                        ? area
+                        : isRoomsField
+                          ? rooms
+                          : isFloorField
+                            ? floor
+                            : c.value,
+                      setCount: isAreaField
+                        ? setArea
+                        : isRoomsField
+                          ? setRooms
+                          : isFloorField
+                            ? setFloor
+                            : () => {},
+                    };
+                  },
+                );
+                return (
+                  <GeneralDetails
+                    key="generaldetails"
+                    area={area}
+                    setArea={setArea}
+                    rooms={rooms}
+                    setRooms={setRooms}
+                    floor={floor}
+                    setFloor={setFloor}
+                    amenities={amenities}
+                    setAmenities={setAmenities}
+                    toggleAmenity={toggleAmenity}
+                    setAmenityQuantity={setAmenityQuantity}
+                    amenitiesWithQuantity={amenitiesWithQuantity}
+                    isArea={field.isArea}
+                    isRooms={field.isRooms}
+                    isFloor={field.isFloor}
+                    amenitiesData={field.data}
+                    optionSecondValues={optionSecondValues}
+                    setOptionSecondValue={setOptionSecondValue}
+                    counterData={counterDataWithSetters}
+                  />
+                );
+              }
+              case 'serviceandfacility':
+                return (
+                  <ServiceAndFacility
+                    key="serviceandfacility"
+                    propertyType={serviceAndFacilityType}
+                    setPropertyType={setServiceAndFacilityType}
+                    data={field.data || []}
+                    title={field.title}
+                  />
+                );
+              case 'accommodationoffers':
+                return (
+                  <AccommodationOffers
+                    key="accommodationoffers"
+                    guestCount={guestCount}
+                    setGuestCount={setGuestCount}
+                    checkInDate={checkInDate}
+                    setCheckInDate={setCheckInDate}
+                    checkOutDate={checkOutDate}
+                    setCheckOutDate={setCheckOutDate}
+                  />
+                );
+              case 'cancellationpolicy':
+                return (
+                  <CancellationPolicy
+                    key="cancellationpolicy"
+                    cancellationPolicy={cancellationPolicy}
+                    setCancellationPolicy={setCancellationPolicy}
+                    data={field.data || []}
+                    title={field.title}
+                  />
+                );
+              case 'propertycondition':
+                return (
+                  <PropertyCondition
+                    key="propertycondition"
+                    condition={condition}
+                    setCondition={setCondition}
+                  />
+                );
+              case 'purpose':
+                return (
+                  <Purpose
+                    key="purpose"
+                    purpose={purpose}
+                    setPurpose={setPurpose}
+                  />
+                );
+              case 'address-phone-description':
+                return (
+                  <AddressDetails
+                    key="address-phone-description"
+                    address={address}
+                    setAddress={setAddress}
+                    phone={phone}
+                    setPhone={setPhone}
+                    description={description}
+                    setDescription={setDescription}
+                  />
+                );
+              case 'salesimage':
+                return (
+                  <SalesImage
+                    key="salesimage"
+                    salesImage={salesImage}
+                    handleSalesImageUpload={handleSalesImageUpload}
+                    handleSalesImageChange={handleSalesImageChange}
+                    salesImageInputRef={salesImageInputRef}
+                    uploadProgress={uploadProgress}
+                    onPressCreateSalesImage={
+                      onOpenPostEditor
+                        ? () => {
+                            const fromForm = parseInt(String(category), 10);
+                            const fromInitial =
+                              initialCategory != null
+                                ? parseInt(String(initialCategory), 10)
+                                : NaN;
+                            const listingCat =
+                              Number.isFinite(fromForm) && fromForm > 0
                                 ? fromForm
-                                : Number.isFinite(fromInitial) && fromInitial > 0
+                                : Number.isFinite(fromInitial) &&
+                                    fromInitial > 0
                                   ? fromInitial
                                   : null;
-                              onOpenPostEditor(listingCat);
-                            }
-                          : undefined
-                      }
-                    />
-                  );
-                case 'saleatpresale':
-                  return (
-                    <SaleAtPreSale
-                      key="saleatpresale"
-                      isSelected={saleAtPresale}
-                      onToggle={setSaleAtPresale}
-                    />
-                  );
-                case 'generaldetailswithradio': {
-                  const toggleable =
-                    field.groups?.toggleableOfferGroups === true;
-                  const companyOfficeGeneralDetailsFigma =
-                    isCompanyOfficeUpload &&
-                    field.groups?.title === 'פרטים כלליים';
-                  /** פרטים כלליים / הפרויקט מציע / כל בלוק דומה — שורות סגורות כברירת מחדל */
-                  const accordionForRadioGroups =
-                    companyOfficeGeneralDetailsFigma
-                      ? false
-                      : !toggleable ||
-                        field.groups?.title === 'הפרויקט מציע';
-                  return (
-                    <GeneralDetailsWithRadio
-                      key={`generaldetailswithradio-${index}`}
-                      groups={hydrateGeneralDetailsWithRadio(field.groups)}
-                      toggleableOfferGroups={toggleable}
-                      offerToggleKeyPrefix={toggleable ? String(index) : ''}
-                      accordionGroups={accordionForRadioGroups}
-                      companyOfficeGeneralDetailsFigma={
-                        companyOfficeGeneralDetailsFigma
-                      }
-                      isOfferGroupExpanded={
-                        accordionForRadioGroups
-                          ? title =>
-                              projectOfferGroupsExpanded[`${index}-${title}`] ===
-                              true
-                          : undefined
-                      }
-                      onToggleOfferExpand={
-                        accordionForRadioGroups
-                          ? toggleProjectOfferExpand(index)
-                          : undefined
-                      }
-                      isOfferGroupIncluded={
-                        toggleable
-                          ? title =>
-                              projectOfferGroupsOn[`${index}-${title}`] !==
-                              false
-                          : undefined
-                      }
-                      onToggleOfferGroup={
-                        toggleable
-                          ? toggleProjectOfferGroup(index, field.groups)
-                          : undefined
-                      }
-                      onAddRepeatableRow={
-                        isCompanyOfficeUpload || isCompanyCommercialUpload
-                          ? handleCompanyRepeatRowAdd
-                          : undefined
-                      }
-                    />
-                  );
-                }
-                case 'constructionstatus':
-                  return (
-                    <ConstructionStatus
-                      key="constructionstatus"
-                      data={field.data || []}
-                      title={field.title}
-                      constructionStatus={constructionStatus}
-                      setConstructionStatus={setConstructionStatus}
-                    />
-                  );
-                case 'companyofferslandsizes':
-                  return (
-                    <CompanyOffersLandSizes
-                      key="companyofferslandsizes"
-                      lands={companyLandParcels}
-                      setLands={setCompanyLandParcels}
-                    />
-                  );
-                default:
-                  return null;
+                            onOpenPostEditor(listingCat);
+                          }
+                        : undefined
+                    }
+                  />
+                );
+              case 'saleatpresale':
+                return (
+                  <SaleAtPreSale
+                    key="saleatpresale"
+                    isSelected={saleAtPresale}
+                    onToggle={setSaleAtPresale}
+                  />
+                );
+              case 'generaldetailswithradio': {
+                const toggleable = field.groups?.toggleableOfferGroups === true;
+                const companyOfficeGeneralDetailsFigma =
+                  isCompanyOfficeUpload &&
+                  field.groups?.title === 'פרטים כלליים';
+                /** פרטים כלליים / הפרויקט מציע / כל בלוק דומה — שורות סגורות כברירת מחדל */
+                const accordionForRadioGroups = companyOfficeGeneralDetailsFigma
+                  ? false
+                  : !toggleable || field.groups?.title === 'הפרויקט מציע';
+                return (
+                  <GeneralDetailsWithRadio
+                    key={`generaldetailswithradio-${index}`}
+                    groups={hydrateGeneralDetailsWithRadio(field.groups)}
+                    toggleableOfferGroups={toggleable}
+                    offerToggleKeyPrefix={toggleable ? String(index) : ''}
+                    accordionGroups={accordionForRadioGroups}
+                    companyOfficeGeneralDetailsFigma={
+                      companyOfficeGeneralDetailsFigma
+                    }
+                    isOfferGroupExpanded={
+                      accordionForRadioGroups
+                        ? title =>
+                            projectOfferGroupsExpanded[`${index}-${title}`] ===
+                            true
+                        : undefined
+                    }
+                    onToggleOfferExpand={
+                      accordionForRadioGroups
+                        ? toggleProjectOfferExpand(index)
+                        : undefined
+                    }
+                    isOfferGroupIncluded={
+                      toggleable
+                        ? title =>
+                            projectOfferGroupsOn[`${index}-${title}`] !== false
+                        : undefined
+                    }
+                    onToggleOfferGroup={
+                      toggleable
+                        ? toggleProjectOfferGroup(index, field.groups)
+                        : undefined
+                    }
+                    onAddRepeatableRow={
+                      isCompanyOfficeUpload || isCompanyCommercialUpload
+                        ? handleCompanyRepeatRowAdd
+                        : undefined
+                    }
+                  />
+                );
               }
-            })}
+              case 'constructionstatus':
+                return (
+                  <ConstructionStatus
+                    key="constructionstatus"
+                    data={field.data || []}
+                    title={field.title}
+                    constructionStatus={constructionStatus}
+                    setConstructionStatus={setConstructionStatus}
+                  />
+                );
+              case 'companyofferslandsizes':
+                return (
+                  <CompanyOffersLandSizes
+                    key="companyofferslandsizes"
+                    lands={companyLandParcels}
+                    setLands={setCompanyLandParcels}
+                  />
+                );
+              default:
+                return null;
+            }
+          })}
         </>
 
         {/* Publish Button — full PNG (gray / yellow); aspect ratio from asset */}
@@ -2661,7 +2690,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   backButton: {
-    marginRight: 15,
+    marginEnd: 15,
   },
   backArrow: {
     color: '#fff',
@@ -2773,7 +2802,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.yellowIcons,
     borderWidth: 2,
     borderColor: '#fff',
-    marginLeft: -10,
+    marginStart: -10,
     marginTop: -8,
     ...Platform.select({
       web: {
