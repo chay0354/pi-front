@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {flexEnd} from '../index';
 
 const BG = '#1e1d27';
 const MODAL_BACKDROP = '#00000080';
@@ -29,7 +31,10 @@ const SubscriptionRatingIntroScreen = ({
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top + 46}]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {paddingTop: insets.top + 46},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -39,7 +44,9 @@ const SubscriptionRatingIntroScreen = ({
               color={Colors.white100}
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+          <Text style={styles.headerTitle}>
+            {getHeaderTitle(subscriptionType)}
+          </Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -56,7 +63,9 @@ const SubscriptionRatingIntroScreen = ({
             <Text style={styles.title}>איזה יופי שהצטרפתם אלינו!</Text>
 
             <View style={[styles.ratingCard, styles.ratingCardCompact]}>
-              <Text style={styles.bestRatingTextLead}>עליכם לקבל את הדירוג הגבוה ביותר:</Text>
+              <Text style={styles.bestRatingTextLead}>
+                עליכם לקבל את הדירוג הגבוה ביותר:
+              </Text>
 
               <View style={styles.ratingPiGroup}>
                 <View style={styles.piBadgeWrap}>
@@ -130,7 +139,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     flex: 1,

@@ -11,11 +11,14 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
+import {flexEnd} from '../index';
+
 import {
   resendVerificationCode,
   verifyEmail,
@@ -46,8 +49,7 @@ const VerificationScreen = ({
   const [isSending, setIsSending] = useState(false);
   const [isVerifyingCompanyCode, setIsVerifyingCompanyCode] = useState(false);
   const [isSkipTesting, setIsSkipTesting] = useState(false);
-  const showCompanyCodeCard =
-    subscriptionType === subscriptionTypes.company;
+  const showCompanyCodeCard = subscriptionType === subscriptionTypes.company;
 
   useEffect(() => {
     if (propEmail) setEmail(propEmail);
@@ -70,7 +72,10 @@ const VerificationScreen = ({
       await resendVerificationCode(email.trim(), subscriptionId);
       if (onNext) onNext();
     } catch (error) {
-      Alert.alert('שגיאה', error.message || 'נכשל בשליחת קוד האימות. אנא נסה שוב.');
+      Alert.alert(
+        'שגיאה',
+        error.message || 'נכשל בשליחת קוד האימות. אנא נסה שוב.',
+      );
       setIsSending(false);
     }
   };
@@ -79,9 +84,16 @@ const VerificationScreen = ({
     if (!canVerifyCompanyCode) return;
     setIsVerifyingCompanyCode(true);
     try {
-      const response = await verifyEmail(email, companyCode.trim(), subscriptionId);
+      const response = await verifyEmail(
+        email,
+        companyCode.trim(),
+        subscriptionId,
+      );
       if (response?.success && response?.subscription) {
-        if (!response.subscription.subscriber_number && response.subscriberNumber) {
+        if (
+          !response.subscription.subscriber_number &&
+          response.subscriberNumber
+        ) {
           response.subscription.subscriber_number = response.subscriberNumber;
         }
         if (onSkipVerifiedTest) {
@@ -90,7 +102,10 @@ const VerificationScreen = ({
           onNext();
         }
       } else {
-        Alert.alert('שגיאה', response?.error || 'קוד האימות שגוי. אנא נסה שוב.');
+        Alert.alert(
+          'שגיאה',
+          response?.error || 'קוד האימות שגוי. אנא נסה שוב.',
+        );
       }
     } catch (error) {
       Alert.alert('שגיאה', error.message || 'קוד האימות שגוי. אנא נסה שוב.');
@@ -121,9 +136,13 @@ const VerificationScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={styles.overlay} />
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top}]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {paddingTop: insets.top},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>
@@ -134,7 +153,9 @@ const VerificationScreen = ({
                 color={Colors.white100}
               />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+            <Text style={styles.headerTitle}>
+              {getHeaderTitle(subscriptionType)}
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -177,14 +198,17 @@ const VerificationScreen = ({
               </TouchableOpacity>
             )}
             <TextInput
-              style={[styles.inputField, canSendEmailCode && styles.inputFieldFilled]}
+              style={[
+                styles.inputField,
+                canSendEmailCode && styles.inputFieldFilled,
+              ]}
               placeholder="כתובת מייל"
               placeholderTextColor="rgba(255,255,255,0.35)"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              textAlign="right"
+              textAlign="left"
             />
           </View>
 
@@ -225,7 +249,7 @@ const VerificationScreen = ({
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 value={companyCode}
                 onChangeText={setCompanyCode}
-                textAlign="right"
+                textAlign="left"
                 keyboardType={
                   Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'
                 }
@@ -248,32 +272,37 @@ const VerificationScreen = ({
           </View>
         )}
 
-        {showSkipEmailVerificationTest && subscriptionId && onSkipVerifiedTest && (
-          <TouchableOpacity
-            style={styles.skipTestLink}
-            disabled={isSkipTesting}
-            onPress={async () => {
-              setIsSkipTesting(true);
-              try {
-                const response = await verifyEmailSkipTest(undefined, subscriptionId);
-                if (response?.success && response.subscription) {
-                  onSkipVerifiedTest(response.subscription);
+        {showSkipEmailVerificationTest &&
+          subscriptionId &&
+          onSkipVerifiedTest && (
+            <TouchableOpacity
+              style={styles.skipTestLink}
+              disabled={isSkipTesting}
+              onPress={async () => {
+                setIsSkipTesting(true);
+                try {
+                  const response = await verifyEmailSkipTest(
+                    undefined,
+                    subscriptionId,
+                  );
+                  if (response?.success && response.subscription) {
+                    onSkipVerifiedTest(response.subscription);
+                  }
+                } catch (err) {
+                  Alert.alert(
+                    'שגיאה',
+                    err.message ||
+                      'דילוג אימות זמין רק כשהשרת מוגדר (ALLOW_SKIP_EMAIL_VERIFICATION=1)',
+                  );
+                } finally {
+                  setIsSkipTesting(false);
                 }
-              } catch (err) {
-                Alert.alert(
-                  'שגיאה',
-                  err.message ||
-                    'דילוג אימות זמין רק כשהשרת מוגדר (ALLOW_SKIP_EMAIL_VERIFICATION=1)',
-                );
-              } finally {
-                setIsSkipTesting(false);
-              }
-            }}>
-            <Text style={styles.skipTestLinkText}>
-              {isSkipTesting ? 'מדלג...' : 'דלג על אימות מייל (בדיקה)'}
-            </Text>
-          </TouchableOpacity>
-        )}
+              }}>
+              <Text style={styles.skipTestLinkText}>
+                {isSkipTesting ? 'מדלג...' : 'דלג על אימות מייל (בדיקה)'}
+              </Text>
+            </TouchableOpacity>
+          )}
       </ScrollView>
     </ImageBackground>
   );
@@ -328,7 +357,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     fontSize: 18,
@@ -392,7 +421,7 @@ const styles = StyleSheet.create({
   instructionText: {
     flex: 1,
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
     fontSize: 18,
     lineHeight: 32,
     fontFamily: 'Rubik-Regular',
@@ -413,7 +442,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontSize: 20,
     letterSpacing: 0.2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   pillInputFilled: {
     color: Colors.white100,
@@ -448,7 +477,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontSize: 20,
     letterSpacing: 0.2,
-    textAlign: 'right',
+    textAlign: 'left',
     backgroundColor: 'transparent',
   },
   inputFieldFilled: {

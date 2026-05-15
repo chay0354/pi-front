@@ -1,7 +1,6 @@
-import {StyleSheet, View, TextInput} from 'react-native';
+import {StyleSheet, View, TextInput, I18nManager} from 'react-native';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
-
 export const TextAreaBox = ({
   title,
   required,
@@ -9,21 +8,23 @@ export const TextAreaBox = ({
   setValue,
   placeholder,
 }) => {
+  const labelSideSpacing = {marginLeft: 12};
   return (
     <View>
       <Title
         text={title}
         required={required}
-        textStyle={styles.inputLabel}
+        textStyle={[styles.inputLabel, labelSideSpacing]}
         starStyle={{color: Colors.textSecondary}}
       />
       <TextInput
-        style={styles.textArea}
+        style={[styles.textArea, {textAlign:'left'}]}
         placeholder={placeholder}
         placeholderTextColor="rgba(255, 255, 255, 0.5)"
         value={value}
         onChangeText={setValue}
         multiline
+        textAlign="left"
       />
     </View>
   );
@@ -41,11 +42,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 10,
     height: 165,
-    textAlign: 'right',
   },
   inputLabel: {
     fontSize: 14,
-    marginRight: 12,
     marginBottom: 0,
     color: '#D2D0DC',
   },

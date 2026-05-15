@@ -8,10 +8,12 @@ import {
   Image,
   Pressable,
   useWindowDimensions,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
+import {flexStart} from '../index';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -47,7 +49,12 @@ function normalizeApartmentTypeInitial(v) {
   return [String(v).trim()].filter(Boolean);
 }
 
-const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+const ApartmentTypeFilterScreen = ({
+  initialFilter,
+  onClose,
+  onSave,
+  selectedCategory,
+}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
@@ -57,7 +64,9 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave, selectedCate
   );
   const [selectedIds, setSelectedIds] = useState(() => {
     const allowed = new Set(apartmentTypeOptions.map(o => o.id));
-    return normalizeApartmentTypeInitial(initialFilter).filter(id => allowed.has(id));
+    return normalizeApartmentTypeInitial(initialFilter).filter(id =>
+      allowed.has(id),
+    );
   });
 
   const handleSave = () => {
@@ -98,12 +107,16 @@ const ApartmentTypeFilterScreen = ({initialFilter, onClose, onSave, selectedCate
         showsVerticalScrollIndicator={false}>
         <View style={styles.topGroup}>
           <View style={[styles.header, compact && styles.headerCompact]}>
-            <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
+            <Image
+              source={MENU_ICON}
+              style={styles.headerIcon}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>סוג דירה</Text>
           </View>
 
           <View style={[styles.radioList, compact && styles.radioListCompact]}>
-            {apartmentTypeOptions.map((option) => {
+            {apartmentTypeOptions.map(option => {
               const checked = selectedIds.includes(option.id);
               return (
                 <TouchableOpacity
@@ -199,7 +212,7 @@ const styles = StyleSheet.create({
   },
   radioList: {
     width: '100%',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 28,
     marginTop: 0,
   },
@@ -210,14 +223,14 @@ const styles = StyleSheet.create({
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 16,
   },
   radioLabel: {
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   footer: {
     width: '100%',

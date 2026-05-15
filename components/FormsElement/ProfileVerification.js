@@ -1,11 +1,10 @@
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, View, I18nManager} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {ProfilePictureUpload} from './ProfilePictureUpload';
 import {VideoUpload} from './VideoUpload';
 import {Divider} from './Divider';
 import {Spacing} from '../../constants/styles';
-
 export const ProfileVerification = ({
   mainImage,
   uploadProgress,
@@ -47,7 +46,7 @@ export const ProfileVerification = ({
             fontSize: 14,
             marginTop: 10,
             fontFamily: 'Rubik-Regular',
-            textAlign: 'right',
+            textAlign: 'left',
           }}>
           כדי להגביר את החיבורים שלכם לשותפים פוטנציאלים, מומלץ לשתף סרטון קצר
           עליכם.

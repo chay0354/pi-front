@@ -7,10 +7,12 @@ import {
   StyleSheet,
   Platform,
   Image,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
+import {flexEnd} from '../index';
 
 const KEY_ICON = require('../assets/menu/key.png');
 
@@ -90,7 +92,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   backChevron: {
     color: Colors.white100,

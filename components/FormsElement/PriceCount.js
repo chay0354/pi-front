@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   TextInput,
   Pressable,
+  I18nManager,
 } from 'react-native';
 import React, {useEffect, useRef, useState} from 'react';
 import {Colors} from '../../constants/styles';
@@ -24,6 +25,8 @@ export const PriceCount = ({
   /** ₪ increment/decrement for − / + buttons */
   counterStep = PRICE_COUNTER_STEP_DEFAULT,
 }) => {
+  const rowEndAlign = 'flex-start';
+  const sideSpacing = {marginLeft: 6};
   const inputRef = useRef(null);
   const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
@@ -59,7 +62,7 @@ export const PriceCount = ({
             <Text style={styles.priceValue}>₪</Text>
             <TextInput
               ref={inputRef}
-              style={[styles.priceValueInput, {width: inputWidth}]}
+              style={[styles.priceValueInput, sideSpacing, {width: inputWidth}]}
               value={draftPrice}
               onChangeText={setDraftPrice}
               onBlur={commitDraftPrice}
@@ -74,9 +77,7 @@ export const PriceCount = ({
         <View style={styles.counterDivider} />
         <TouchableOpacity
           style={styles.counterButtonRight}
-          onPress={() =>
-            setPrice(Number(price || 0) + counterStep)
-          }>
+          onPress={() => setPrice(Number(price || 0) + counterStep)}>
           <Text style={styles.counterButtonPlus}>+</Text>
         </TouchableOpacity>
       </View>
@@ -87,7 +88,7 @@ export const PriceCount = ({
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'flex-end',
+              justifyContent: rowEndAlign,
             }}>
             {hotDeal ? (
               <View style={styles.hotDealContainer}>
@@ -100,12 +101,15 @@ export const PriceCount = ({
               setName={() => setHotDeal?.(v => !v)}
               index={0}
               isSelected={!!hotDeal}
-              radioOptionStyle={{paddingTop: 0, paddingLeft: 10}}
+              radioOptionStyle={{
+                paddingTop: 0,
+                paddingLeft: 10,
+              }}
             />
           </View>
           <Text
             style={{
-              textAlign: 'right',
+              textAlign: 'left',
               color: '#9E9DA4',
               marginTop: 10,
               fontSize: 15,
@@ -149,7 +153,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     textAlign: 'center',
     paddingVertical: 0,
-    marginLeft: 6,
   },
   counterButtonLeft: {
     width: 52,

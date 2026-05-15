@@ -9,11 +9,14 @@ import {
   ImageBackground,
   Alert,
   ActivityIndicator,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
+import {flexEnd} from '../index';
+
 import {
   verifyEmail,
   resendVerificationCode,
@@ -69,7 +72,10 @@ const VerificationCodeScreen = ({
         }
         if (onNext) onNext(response.subscription);
       } else {
-        Alert.alert('שגיאה', response?.error || 'קוד האימות שגוי. אנא נסה שוב.');
+        Alert.alert(
+          'שגיאה',
+          response?.error || 'קוד האימות שגוי. אנא נסה שוב.',
+        );
       }
     } catch (error) {
       Alert.alert('שגיאה', error.message || 'קוד האימות שגוי. אנא נסה שוב.');
@@ -113,9 +119,13 @@ const VerificationCodeScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={styles.overlay} />
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top}]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {paddingTop: insets.top},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>
@@ -126,7 +136,9 @@ const VerificationCodeScreen = ({
                 color={Colors.white100}
               />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+            <Text style={styles.headerTitle}>
+              {getHeaderTitle(subscriptionType)}
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -142,19 +154,23 @@ const VerificationCodeScreen = ({
         <View style={styles.cardWrap}>
           <View style={styles.card}>
             <View style={styles.successCircle}>
-              <MaterialCommunityIcons name="check" size={20} color={SUCCESS_CIRCLE} />
+              <MaterialCommunityIcons
+                name="check"
+                size={20}
+                color={SUCCESS_CIRCLE}
+              />
             </View>
 
             <View style={styles.titleBlock}>
               <Text style={styles.title}>קוד האימות נשלח בהצלחה</Text>
-              <Text style={styles.subtitle}> הזינו את קוד האימות ליצירת המנוי</Text>
+              <Text style={styles.subtitle}>
+                {' '}
+                הזינו את קוד האימות ליצירת המנוי
+              </Text>
             </View>
 
             <View
-              style={[
-                styles.inputRow,
-                codeFilled && styles.inputRowFilled,
-              ]}>
+              style={[styles.inputRow, codeFilled && styles.inputRowFilled]}>
               {codeFilled && (
                 <TouchableOpacity
                   onPress={() => setVerificationCode('')}
@@ -168,13 +184,16 @@ const VerificationCodeScreen = ({
                 </TouchableOpacity>
               )}
               <TextInput
-                style={[styles.inputField, codeFilled && styles.inputFieldFilled]}
+                style={[
+                  styles.inputField,
+                  codeFilled && styles.inputFieldFilled,
+                ]}
                 placeholder="קוד אימות"
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 value={verificationCode}
                 onChangeText={setVerificationCode}
                 keyboardType="number-pad"
-                textAlign="right"
+                textAlign="left"
                 maxLength={6}
               />
             </View>
@@ -292,7 +311,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     fontSize: 18,
@@ -412,7 +431,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontSize: 20,
     letterSpacing: 0.2,
-    textAlign: 'right',
+    textAlign:'left',
     backgroundColor: 'transparent',
   },
   inputFieldFilled: {

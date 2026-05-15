@@ -18,11 +18,17 @@ const TermsOfUseScreen = ({onClose}) => {
     <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 8}]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingTop: insets.top + 8},
+        ]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={2}>
@@ -83,7 +89,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 15,
     lineHeight: 24,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
     backgroundColor: '#ffffff',
   },

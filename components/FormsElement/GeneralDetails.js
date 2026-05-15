@@ -1,4 +1,4 @@
-import {StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, View, I18nManager} from 'react-native';
 import React from 'react';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
@@ -9,6 +9,7 @@ import {TouchableOpacity} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../../constants/styles';
 import {Divider} from './Divider';
+import {flexEnd} from '../../index';
 
 export const GeneralDetails = ({
   area,
@@ -29,8 +30,11 @@ export const GeneralDetails = ({
   setOptionSecondValue,
   counterData,
 }) => {
+  const inputLabelSpacing = {marginLeft: 12};
   const safeSetOptionSecondValue =
-    typeof setOptionSecondValue === 'function' ? setOptionSecondValue : () => {};
+    typeof setOptionSecondValue === 'function'
+      ? setOptionSecondValue
+      : () => {};
 
   const hasCounterFields = Array.isArray(counterData) && counterData.length > 0;
 
@@ -38,7 +42,9 @@ export const GeneralDetails = ({
     <FormContainer>
       {hasCounterFields ? (
         <>
-          <Text style={styles.sectionHeading}>פרטים כלליים</Text>
+          <Text style={[styles.sectionHeading, {alignSelf: flexEnd}]}>
+            פרטים כלליים
+          </Text>
           {counterData.map((counter, index) => (
             <View key={counter.title || String(index)}>
               <CountUpdate
@@ -90,7 +96,11 @@ export const GeneralDetails = ({
               styleDevider={{marginTop: 20}}>
               {/* Quantity selector for amenities that need it - below the amenity row */}
               {hasOption && isSelected && (
-                <View style={styles.amenityQuantitySelector}>
+                <View
+                  style={[
+                    styles.amenityQuantitySelector,
+                    {justifyContent: flexEnd},
+                  ]}>
                   {amenity.option.map(qty => (
                     <TouchableOpacity
                       key={qty}
@@ -102,7 +112,10 @@ export const GeneralDetails = ({
                           locations={[0.0456, 0.5076, 0.8831]}
                           start={{x: 0, y: 0}}
                           end={{x: 1, y: 1}}
-                          style={styles.amenityQuantityButtonSelected}>
+                          style={[
+                            styles.amenityQuantityButtonSelected,
+                            {justifyContent: flexEnd},
+                          ]}>
                           <Text style={styles.amenityQuantityTextSelected}>
                             {qty}
                           </Text>
@@ -117,7 +130,11 @@ export const GeneralDetails = ({
                           </View>
                         </LinearGradient>
                       ) : (
-                        <View style={styles.amenityQuantityButton}>
+                        <View
+                          style={[
+                            styles.amenityQuantityButton,
+                            {justifyContent: flexEnd},
+                          ]}>
                           <Text style={styles.amenityQuantityText}>{qty}</Text>
                           <View style={styles.amenityQuantityDot} />
                         </View>
@@ -137,7 +154,9 @@ export const GeneralDetails = ({
                       title: opt,
                     }))}
                     condition={optionSecondValues?.[optionSecondKey] || ''}
-                    setCondition={value => safeSetOptionSecondValue(optionSecondKey, value)}
+                    setCondition={value =>
+                      safeSetOptionSecondValue(optionSecondKey, value)
+                    }
                   />
                 </View>
               )}
@@ -146,7 +165,10 @@ export const GeneralDetails = ({
                 /* Distance input */
                 hasDistance && isSelected && (
                   <View style={styles.amenityOptionSecondContainer}>
-                    <Title text={'גודל מרפסת'} textStyle={styles.inputLabel} />
+                    <Title
+                      text={'גודל מרפסת'}
+                      textStyle={[styles.inputLabel, inputLabelSpacing]}
+                    />
                     <CountUpdate
                       isArea={true}
                       count={area}
@@ -171,7 +193,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     color: 'rgba(210, 208, 220, 0.98)',
-    alignSelf: 'flex-end',
     marginBottom: 24,
   },
   counterSeparator: {
@@ -189,10 +210,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 20,
-    justifyContent: 'flex-end',
   },
   amenityQuantityButtonContainer: {
-    marginLeft: 16,
+    marginRight: 16,
   },
   amenityQuantityButton: {
     backgroundColor: '#2B2A39',
@@ -205,7 +225,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
   },
   amenityQuantityButtonSelected: {
     borderRadius: 846.154,
@@ -215,7 +234,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
   },
   amenityQuantityText: {
     color: Colors.whiteGeneral,
@@ -234,14 +252,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1.5,
     borderColor: '#8C85B3',
-    marginLeft: 6,
+    marginRight: 6,
   },
   amenityQuantityDotSelected: {
     width: 20,
     height: 20,
     borderRadius: 10,
     backgroundColor: '#1A1B3A',
-    marginLeft: 6,
+    marginRight: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -255,7 +273,7 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 14,
-    marginRight: 12,
+    marginLeft: 12,
     marginBottom: 0,
     color: '#D2D0DC',
     marginBottom: 10,

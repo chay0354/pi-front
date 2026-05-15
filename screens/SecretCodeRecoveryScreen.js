@@ -10,11 +10,13 @@ import {
   Alert,
   Platform,
   Image,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {recoverSubscriberCodeByEmail} from '../utils/api';
+import {flexEnd} from '../index';
 
 const KEY_ICON = require('../assets/menu/key.png');
 
@@ -160,7 +162,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   backChevron: {
     color: Colors.white100,
@@ -226,7 +228,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     backgroundColor: '#2b2a39',
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   clearBtn: {
@@ -248,7 +250,7 @@ const styles = StyleSheet.create({
     color: '#E39513',
     fontSize: 14,
     letterSpacing: 0.14,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 20,
   },
   btnWrap: {

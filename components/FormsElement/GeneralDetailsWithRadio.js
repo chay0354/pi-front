@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {StyleSheet, View, I18nManager} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {CountUpdate} from './CountUpdate';
@@ -8,6 +8,7 @@ import {Text} from 'react-native';
 import {Divider} from './Divider';
 import {CardPriceField} from './CardPriceField';
 import {Colors} from '../../constants/styles';
+import {flexEnd} from '../../index';
 
 export const GeneralDetailsWithRadio = ({
   groups,
@@ -23,19 +24,21 @@ export const GeneralDetailsWithRadio = ({
   /** Company office listing form — flat פרטים כלליים card per Figma */
   companyOfficeGeneralDetailsFigma = false,
 }) => {
+  const sideMargin16 = {marginLeft: 16};
+  const optionSpacing = {marginRight: 20};
   const radioOptions = groups;
   const useFigmaStyleForSection =
     radioOptions?.title === 'פרטים כלליים' ||
     radioOptions?.title === 'הפרויקט מציע' ||
     radioOptions?.title === 'הפרוייקט מציע משרדים בגדלים של' ||
     radioOptions?.title === 'הפרוייקט מציע קומה שלמה';
-  const groupIncluded = (group) => {
+  const groupIncluded = group => {
     if (!toggleableOfferGroups || !isOfferGroupIncluded) {
       return group.isSelected !== false;
     }
     return isOfferGroupIncluded(group.title);
   };
-  const groupExpanded = (group) => {
+  const groupExpanded = group => {
     if (!accordionGroups || !isOfferGroupExpanded) {
       return true;
     }
@@ -49,72 +52,74 @@ export const GeneralDetailsWithRadio = ({
     const rows = radioOptions.groups || [];
     return (
       <FormContainer style={styles.companyOfficeFigmaCard}>
-        <Text style={styles.companyOfficeSectionHeading}>
+        <Text
+          style={[
+            styles.companyOfficeSectionHeading,
+            {textAlign: 'left', alignSelf: flexEnd},
+          ]}>
           {radioOptions.title}
         </Text>
         {rows.map((group, gi) => {
-            const countField = group.fields?.find(x => x.type === 'count');
-            const toggleField = group.fields?.find(
-              x => x.type === 'boolean_toggle',
-            );
-            const keyBase = offerToggleKeyPrefix
-              ? `${offerToggleKeyPrefix}-${gi}`
-              : String(gi);
+          const countField = group.fields?.find(x => x.type === 'count');
+          const toggleField = group.fields?.find(
+            x => x.type === 'boolean_toggle',
+          );
+          const keyBase = offerToggleKeyPrefix
+            ? `${offerToggleKeyPrefix}-${gi}`
+            : String(gi);
 
-            if (countField) {
-              const hasFollowingRow = gi < rows.length - 1;
-              return (
-                <View key={`co-${keyBase}-count`}>
-                  <View style={styles.companyOfficeBlock}>
-                    <CountUpdate
-                      variant="figmaOffice"
-                      title={group.title}
-                      required={!!group.titleRequired}
-                      count={countField.value}
-                      setCount={
-                        typeof countField.onChange === 'function'
-                          ? countField.onChange
-                          : () => {}
-                      }
-                      isArea={!!countField.isArea}
-                      isDivider={false}
-                      isLast
-                      min={0}
-                    />
-                  </View>
-                  {hasFollowingRow ? (
-                    <Divider style={styles.companyOfficeSectionDivider} />
-                  ) : null}
-                </View>
-              );
-            }
-
-            if (toggleField) {
-              const selected = Number(toggleField.value) > 0;
-              return (
-                <View
-                  key={`co-${keyBase}-toggle`}
-                  style={styles.companyOfficeToggleWrap}>
-                  <RadioWithText
+          if (countField) {
+            const hasFollowingRow = gi < rows.length - 1;
+            return (
+              <View key={`co-${keyBase}-count`}>
+                <View style={styles.companyOfficeBlock}>
+                  <CountUpdate
+                    variant="figmaOffice"
                     title={group.title}
-                    name={group.title}
-                    setName={() =>
-                      toggleField.onChange(!selected)
+                    required={!!group.titleRequired}
+                    count={countField.value}
+                    setCount={
+                      typeof countField.onChange === 'function'
+                        ? countField.onChange
+                        : () => {}
                     }
-                    index={gi}
-                    isSelected={selected}
-                    useFigmaStyleIcon
-                    isRequired={false}
-                    isNotLastIndex={false}
-                    radioOptionStyle={styles.companyOfficeToggleRow}
-                    styleDevider={{}}
+                    isArea={!!countField.isArea}
+                    isDivider={false}
+                    isLast
+                    min={0}
                   />
                 </View>
-              );
-            }
+                {hasFollowingRow ? (
+                  <Divider style={styles.companyOfficeSectionDivider} />
+                ) : null}
+              </View>
+            );
+          }
 
-            return null;
-          })}
+          if (toggleField) {
+            const selected = Number(toggleField.value) > 0;
+            return (
+              <View
+                key={`co-${keyBase}-toggle`}
+                style={styles.companyOfficeToggleWrap}>
+                <RadioWithText
+                  title={group.title}
+                  name={group.title}
+                  setName={() => toggleField.onChange(!selected)}
+                  index={gi}
+                  isSelected={selected}
+                  useFigmaStyleIcon
+                  isRequired={false}
+                  isNotLastIndex={false}
+                  radioOptionStyle={styles.companyOfficeToggleRow}
+                  styleDevider={{}}
+                />
+              </View>
+            );
+          }
+
+          return null;
+        })}
       </FormContainer>
     );
   }
@@ -123,7 +128,7 @@ export const GeneralDetailsWithRadio = ({
     <FormContainer>
       <Title text={radioOptions.title} required={radioOptions.titleRequired} />
       {toggleableOfferGroups && !accordionGroups ? (
-        <Text style={styles.toggleHint}>
+        <Text style={[styles.toggleHint, {textAlign: 'left'}]}>
           לחצו על השורה כדי להסיר או להחזיר סוג דירה מהמודעה
         </Text>
       ) : null}
@@ -133,10 +138,7 @@ export const GeneralDetailsWithRadio = ({
         const included = groupIncluded(group);
         const expanded = groupExpanded(group);
         const showFields =
-          !isAddRepeatRow &&
-          included &&
-          group.isSelected !== false &&
-          expanded;
+          !isAddRepeatRow && included && group.isSelected !== false && expanded;
         const rowPress =
           isAddRepeatRow && typeof onAddRepeatableRow === 'function'
             ? () => onAddRepeatableRow(radioOptions.title)
@@ -146,25 +148,29 @@ export const GeneralDetailsWithRadio = ({
                 ? () => onToggleOfferGroup(group.title)
                 : () => {};
         const rowLongPress =
-          isAddRepeatRow || !toggleableOfferGroups || !accordionGroups || !onToggleOfferGroup
+          isAddRepeatRow ||
+          !toggleableOfferGroups ||
+          !accordionGroups ||
+          !onToggleOfferGroup
             ? undefined
             : () => onToggleOfferGroup(group.title);
-        const iconSelected =
-          isAddRepeatRow
-            ? false
-            : toggleableOfferGroups &&
-                accordionGroups &&
-                radioOptions.title === 'הפרויקט מציע'
-              ? included && expanded
-              : toggleableOfferGroups && !accordionGroups
+        const iconSelected = isAddRepeatRow
+          ? false
+          : toggleableOfferGroups &&
+              accordionGroups &&
+              radioOptions.title === 'הפרויקט מציע'
+            ? included && expanded
+            : toggleableOfferGroups && !accordionGroups
+              ? included
+              : toggleableOfferGroups && accordionGroups
                 ? included
-                : toggleableOfferGroups && accordionGroups
-                  ? included
-                  : accordionGroups
-                    ? expanded
-                    : included;
+                : accordionGroups
+                  ? expanded
+                  : included;
         return (
-          <View key={offerToggleKeyPrefix ? `${offerToggleKeyPrefix}-${gi}` : gi} style={{}}>
+          <View
+            key={offerToggleKeyPrefix ? `${offerToggleKeyPrefix}-${gi}` : gi}
+            style={{}}>
             {group.title && (
               <RadioWithText
                 title={group.title}
@@ -190,7 +196,8 @@ export const GeneralDetailsWithRadio = ({
                       return (
                         <React.Fragment key={key}>
                           {f.subTitle && (
-                            <Text style={styles.subFields}>
+                            <Text
+                              style={[styles.subFields, {textAlign: 'left'}]}>
                               {f.subTitle}
                               {f.subTitleRequired && '*'}
                             </Text>
@@ -198,7 +205,11 @@ export const GeneralDetailsWithRadio = ({
                           <CountUpdate
                             title={f.title}
                             count={f.value}
-                            setCount={typeof f.onChange === 'function' ? f.onChange : () => {}}
+                            setCount={
+                              typeof f.onChange === 'function'
+                                ? f.onChange
+                                : () => {}
+                            }
                             isArea={!!f.isArea}
                             isDivider={false}
                             isLast={!isNotLastIndex}
@@ -214,14 +225,19 @@ export const GeneralDetailsWithRadio = ({
                       return (
                         <React.Fragment key={key}>
                           {f.subTitle && (
-                            <Text style={styles.subFields}>
+                            <Text
+                              style={[styles.subFields, {textAlign: 'left'}]}>
                               {f.subTitle}
                               {f.subTitleRequired && '*'}
                             </Text>
                           )}
                           <CardPriceField
                             price={f.value}
-                            setPrice={typeof f.onChange === 'function' ? f.onChange : () => {}}
+                            setPrice={
+                              typeof f.onChange === 'function'
+                                ? f.onChange
+                                : () => {}
+                            }
                           />
                         </React.Fragment>
                       );
@@ -230,7 +246,9 @@ export const GeneralDetailsWithRadio = ({
                     if (f.type === 'radiowithtext') {
                       const key = f.key || `field-${gi}-${idx}`;
                       return (
-                        <View key={key} style={{marginRight: 16, marginBottom: 20}}>
+                        <View
+                          key={key}
+                          style={[sideMargin16, {marginBottom: 20}]}>
                           <RadioWithText
                             isNotLastIndex={false}
                             title={f.title}
@@ -241,7 +259,7 @@ export const GeneralDetailsWithRadio = ({
                             radioOptionStyle={{
                               paddingTop: 0,
                             }}
-                            containerStyle={{marginLeft: 20}}
+                            containerStyle={optionSpacing}
                           />
                         </View>
                       );
@@ -266,11 +284,9 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   companyOfficeSectionHeading: {
-    alignSelf: 'flex-end',
     fontFamily: 'Rubik-Regular',
     fontSize: 18,
     color: Colors.textSecondary,
-    textAlign: 'right',
     marginBottom: 14,
   },
   companyOfficeBlock: {
@@ -290,17 +306,13 @@ const styles = StyleSheet.create({
   toggleHint: {
     fontSize: 13,
     color: 'rgba(210,208,220,0.75)',
-    textAlign: 'right',
     marginBottom: 8,
-    marginRight: 4,
     fontFamily: 'Rubik-Regular',
   },
   subFields: {
     fontSize: 14,
     color: '#D2D0DC',
     marginBottom: 10,
-    textAlign: 'right',
-    marginRight: 16,
     fontFamily: 'Rubik-Regular',
   },
 });

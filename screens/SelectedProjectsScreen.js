@@ -17,7 +17,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getCompaniesDirectory} from '../utils/api';
-import {flexStart, textAlign} from '../index';
+import {flexEnd} from '../index';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const H_PAD = 20;
@@ -118,7 +118,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
             placeholderTextColor={Colors.grey200}
             value={query}
             onChangeText={setQuery}
-            textAlign={"right"}
+            textAlign={'right'}
           />
           <MaterialCommunityIcons
             name="magnify"
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: flexStart,
+    alignItems: flexEnd,
   },
   headerSpacer: {
     width: 44,
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     color: Colors.white100,
     fontSize: 15,
     paddingVertical: 10,
-    textAlign,
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   searchIcon: {

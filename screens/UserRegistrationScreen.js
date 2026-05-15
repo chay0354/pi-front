@@ -10,12 +10,14 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
+import {flexEnd} from '../index';
 
 /**
  * Regular user registration – shown when user without profile tries to publish an ad.
@@ -42,7 +44,10 @@ const UserRegistrationScreen = ({
     if (Platform.OS !== 'web') {
       const {status} = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('נדרשת הרשאה', 'נדרשת הרשאה לספריית התמונות להעלאת תמונת פרופיל.');
+        Alert.alert(
+          'נדרשת הרשאה',
+          'נדרשת הרשאה לספריית התמונות להעלאת תמונת פרופיל.',
+        );
       }
     }
   };
@@ -94,7 +99,10 @@ const UserRegistrationScreen = ({
           const file = {
             uri: profileImage.uri,
             type: profileImage.mimeType || profileImage.type || 'image/jpeg',
-            name: profileImage.fileName || profileImage.uri?.split('/').pop() || 'profile.jpg',
+            name:
+              profileImage.fileName ||
+              profileImage.uri?.split('/').pop() ||
+              'profile.jpg',
           };
           const data = await uploadProfilePicture(file);
           if (data && data.url) profilePictureUrl = data.url;
@@ -126,7 +134,8 @@ const UserRegistrationScreen = ({
       const user = {
         ...reg.subscription,
         id: reg.subscription.id,
-        subscription_type: reg.subscription.subscription_type || subscriptionTypes.user,
+        subscription_type:
+          reg.subscription.subscription_type || subscriptionTypes.user,
         email: reg.subscription.email || emailTrim,
         name: reg.subscription.name || name,
         phone: reg.subscription.phone || phoneTrim,
@@ -145,7 +154,8 @@ const UserRegistrationScreen = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={[styles.content, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
@@ -153,7 +163,9 @@ const UserRegistrationScreen = ({
           <View style={styles.mainContent}>
             <View style={styles.headerBlock}>
               <Text style={styles.title}>הירשם ופרסם מודעה</Text>
-              <Text style={styles.subtitle}>בוא נתחיל - זה ייקח שניות בודדות</Text>
+              <Text style={styles.subtitle}>
+                בוא נתחיל - זה ייקח שניות בודדות
+              </Text>
             </View>
 
             <View style={styles.formBlock}>
@@ -163,7 +175,11 @@ const UserRegistrationScreen = ({
                   onPress={pickProfileImage}
                   activeOpacity={0.85}>
                   <Image
-                    source={profileImage ? {uri: profileImage.uri} : PROFILE_PLACEHOLDER}
+                    source={
+                      profileImage
+                        ? {uri: profileImage.uri}
+                        : PROFILE_PLACEHOLDER
+                    }
                     style={[
                       styles.profileImage,
                       !profileImage && styles.profilePlaceholderImage,
@@ -191,7 +207,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={fullName}
                   onChangeText={setFullName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -208,14 +224,16 @@ const UserRegistrationScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
               <View style={styles.inputWrap}>
                 <Text style={styles.label}>טלפון</Text>
                 <View style={styles.phoneRow}>
-                  <TouchableOpacity style={styles.countrySelector} activeOpacity={0.8}>
+                  <TouchableOpacity
+                    style={styles.countrySelector}
+                    activeOpacity={0.8}>
                     <Text style={styles.countryChevron}>⌄</Text>
                     <Text style={styles.countryCode}>IL</Text>
                   </TouchableOpacity>
@@ -226,7 +244,7 @@ const UserRegistrationScreen = ({
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
               </View>
@@ -246,7 +264,9 @@ const UserRegistrationScreen = ({
                 {submitting ? (
                   <ActivityIndicator color="#1E1D27" />
                 ) : (
-                  <Text style={styles.registerButtonText}>הרשם ופרסם מודעה</Text>
+                  <Text style={styles.registerButtonText}>
+                    הרשם ופרסם מודעה
+                  </Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -369,7 +389,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.14,
     color: '#D2D0DC',
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   errorContainer: {
     backgroundColor: 'rgba(255,0,0,0.15)',
@@ -380,7 +400,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ffcccc',
     fontSize: 14,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   inputWrap: {
     width: '100%',
@@ -389,7 +409,7 @@ const styles = StyleSheet.create({
   labelRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
     gap: 2,
     paddingHorizontal: 16,
   },
@@ -398,7 +418,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 0.14,
     color: '#D2D0DC',
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   requiredMark: {
@@ -406,7 +426,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 0.14,
     color: '#D2D0DC',
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   input: {
@@ -422,7 +442,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     color: '#FFFFFF',
     height: 52,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   phoneRow: {
@@ -468,8 +488,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
-    writingDirection: 'ltr',
+    textAlign: 'left',
+    writingDirection: 'rtl',
     height: '100%',
   },
   registerButtonWrap: {

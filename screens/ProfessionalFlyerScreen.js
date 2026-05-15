@@ -8,25 +8,40 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getReviews, submitReview} from '../utils/api';
 import RatingImprovePicker from '../components/RatingImprovePicker';
+import {flexStart} from '../index';
 
-const imgBack = 'https://www.figma.com/api/mcp/asset/a65e2691-fd86-48b9-9865-87c80bdc1758';
-const imgShare = 'https://www.figma.com/api/mcp/asset/ce257c8c-ba69-4114-85be-89c8f9f942a1';
-const imgSound = 'https://www.figma.com/api/mcp/asset/5b0b3bca-8006-442f-9e15-94f7697a6831';
-const imgPin = 'https://www.figma.com/api/mcp/asset/9a509ed0-fd67-4a15-9cc6-2d22c3716581';
-const imgPinInner = 'https://www.figma.com/api/mcp/asset/820a6c25-c547-4246-ba2b-79bb1f6c8ae5';
-const imgCopy = 'https://www.figma.com/api/mcp/asset/cb70a2ec-3bea-4171-93c6-ab84cd2b04c1';
-const imgMail = 'https://www.figma.com/api/mcp/asset/3ddf6b79-5608-4233-8578-e5f708f27f2a';
-const imgPhone = 'https://www.figma.com/api/mcp/asset/bc16af83-a1b8-4bdf-b71b-5f103e8b69da';
-const imgReport = 'https://www.figma.com/api/mcp/asset/e4b1e73d-863e-4986-a69f-07957bdb756a';
-const imgChatBadge = 'https://www.figma.com/api/mcp/asset/280b12e8-92d9-4c49-a5aa-265286008994';
-const imgCallWhite = 'https://www.figma.com/api/mcp/asset/9b9c4fea-832d-4ec7-8670-5539e677e104';
-const imgRatingFive = 'https://www.figma.com/api/mcp/asset/6c9fb3d5-d761-41d4-865b-0306074701f3';
-const imgRatingOne = 'https://www.figma.com/api/mcp/asset/c17ace7a-d891-430d-9a02-cd97ff0196cc';
+const imgBack =
+  'https://www.figma.com/api/mcp/asset/a65e2691-fd86-48b9-9865-87c80bdc1758';
+const imgShare =
+  'https://www.figma.com/api/mcp/asset/ce257c8c-ba69-4114-85be-89c8f9f942a1';
+const imgSound =
+  'https://www.figma.com/api/mcp/asset/5b0b3bca-8006-442f-9e15-94f7697a6831';
+const imgPin =
+  'https://www.figma.com/api/mcp/asset/9a509ed0-fd67-4a15-9cc6-2d22c3716581';
+const imgPinInner =
+  'https://www.figma.com/api/mcp/asset/820a6c25-c547-4246-ba2b-79bb1f6c8ae5';
+const imgCopy =
+  'https://www.figma.com/api/mcp/asset/cb70a2ec-3bea-4171-93c6-ab84cd2b04c1';
+const imgMail =
+  'https://www.figma.com/api/mcp/asset/3ddf6b79-5608-4233-8578-e5f708f27f2a';
+const imgPhone =
+  'https://www.figma.com/api/mcp/asset/bc16af83-a1b8-4bdf-b71b-5f103e8b69da';
+const imgReport =
+  'https://www.figma.com/api/mcp/asset/e4b1e73d-863e-4986-a69f-07957bdb756a';
+const imgChatBadge =
+  'https://www.figma.com/api/mcp/asset/280b12e8-92d9-4c49-a5aa-265286008994';
+const imgCallWhite =
+  'https://www.figma.com/api/mcp/asset/9b9c4fea-832d-4ec7-8670-5539e677e104';
+const imgRatingFive =
+  'https://www.figma.com/api/mcp/asset/6c9fb3d5-d761-41d4-865b-0306074701f3';
+const imgRatingOne =
+  'https://www.figma.com/api/mcp/asset/c17ace7a-d891-430d-9a02-cd97ff0196cc';
 const fallbackExpertImage = require('../assets/image-7.png');
 
 const collectPhones = professional =>
@@ -44,7 +59,9 @@ const collectPhones = professional =>
 
 const collectTags = professional =>
   [
-    ...(Array.isArray(professional?.specializations) ? professional.specializations : []),
+    ...(Array.isArray(professional?.specializations)
+      ? professional.specializations
+      : []),
     ...(Array.isArray(professional?.types) ? professional.types : []),
   ]
     .map(v => String(v || '').trim())
@@ -79,13 +96,19 @@ const getReviewerImage = currentUser =>
 const RatingBadge = ({value = 5, compact = false}) => {
   const safeValue = Math.max(1, Math.min(5, Number(value) || 5));
   return (
-    <View style={compact ? styles.ratingBadgeCompactWrap : styles.ratingBadgeWrap}>
+    <View
+      style={compact ? styles.ratingBadgeCompactWrap : styles.ratingBadgeWrap}>
       <Image
         source={{uri: safeValue === 1 ? imgRatingOne : imgRatingFive}}
-        style={compact ? styles.ratingBadgeCompactImage : styles.ratingBadgeImage}
+        style={
+          compact ? styles.ratingBadgeCompactImage : styles.ratingBadgeImage
+        }
         resizeMode="contain"
       />
-      <Text style={compact ? styles.ratingBadgeCompactText : styles.ratingBadgeText}>
+      <Text
+        style={
+          compact ? styles.ratingBadgeCompactText : styles.ratingBadgeText
+        }>
         {safeValue}
       </Text>
     </View>
@@ -107,13 +130,21 @@ const ProfessionalFlyerScreen = ({
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const subscriptionId = String(
-    professional?.subscription_id || professional?.id || professional?.owner_id || '',
+    professional?.subscription_id ||
+      professional?.id ||
+      professional?.owner_id ||
+      '',
   ).trim();
   const title = String(
-    professional?.display_name || professional?.name || professional?.contact_person_name || 'בעל מקצוע',
+    professional?.display_name ||
+      professional?.name ||
+      professional?.contact_person_name ||
+      'בעל מקצוע',
   ).trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
-  const description = String(professional?.bio || professional?.description || 'אין תיאור').trim();
+  const description = String(
+    professional?.bio || professional?.description || 'אין תיאור',
+  ).trim();
   const heroImage = String(
     professional?.profile_image_url || professional?.profile_picture_url || '',
   ).trim();
@@ -123,7 +154,10 @@ const ProfessionalFlyerScreen = ({
 
   const averageRating = useMemo(() => {
     if (!Array.isArray(reviews) || reviews.length === 0) {
-      return Math.max(1, Math.min(5, Math.round(Number(professional?.average_rating) || 5)));
+      return Math.max(
+        1,
+        Math.min(5, Math.round(Number(professional?.average_rating) || 5)),
+      );
     }
     const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
     const avg = Math.round(sum / reviews.length);
@@ -184,25 +218,55 @@ const ProfessionalFlyerScreen = ({
 
   return (
     <View style={styles.screen}>
-      <ScrollView keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.content, {paddingBottom: 210 + insets.bottom}]}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.content,
+          {paddingBottom: 210 + insets.bottom},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
           {heroImage ? (
-            <Image source={{uri: heroImage}} style={styles.heroImage} resizeMode="cover" />
+            <Image
+              source={{uri: heroImage}}
+              style={styles.heroImage}
+              resizeMode="cover"
+            />
           ) : (
-            <Image source={fallbackExpertImage} style={styles.heroImage} resizeMode="cover" />
+            <Image
+              source={fallbackExpertImage}
+              style={styles.heroImage}
+              resizeMode="cover"
+            />
           )}
           <View style={[styles.topButtons, {paddingTop: insets.top + 8}]}>
-            <TouchableOpacity style={styles.topIconBtn} onPress={onClose} activeOpacity={0.85}>
-              <Image source={{uri: imgBack}} style={styles.topIcon} resizeMode="contain" />
+            <TouchableOpacity
+              style={styles.topIconBtn}
+              onPress={onClose}
+              activeOpacity={0.85}>
+              <Image
+                source={{uri: imgBack}}
+                style={styles.topIcon}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.topIconBtn} onPress={() => {}} activeOpacity={0.85}>
-              <Image source={{uri: imgShare}} style={styles.topIconShare} resizeMode="contain" />
+            <TouchableOpacity
+              style={styles.topIconBtn}
+              onPress={() => {}}
+              activeOpacity={0.85}>
+              <Image
+                source={{uri: imgShare}}
+                style={styles.topIconShare}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.soundBtn} activeOpacity={0.85}>
-            <Image source={{uri: imgSound}} style={styles.soundIcon} resizeMode="contain" />
+            <Image
+              source={{uri: imgSound}}
+              style={styles.soundIcon}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
           <View style={styles.heroTimeline} />
         </View>
@@ -215,8 +279,16 @@ const ProfessionalFlyerScreen = ({
           <View style={styles.addressRow}>
             <Text style={styles.addressText}>{address}</Text>
             <View style={styles.pinWrap}>
-              <Image source={{uri: imgPin}} style={styles.pinLayer} resizeMode="contain" />
-              <Image source={{uri: imgPinInner}} style={styles.pinLayer} resizeMode="contain" />
+              <Image
+                source={{uri: imgPin}}
+                style={styles.pinLayer}
+                resizeMode="contain"
+              />
+              <Image
+                source={{uri: imgPinInner}}
+                style={styles.pinLayer}
+                resizeMode="contain"
+              />
             </View>
           </View>
         </View>
@@ -250,47 +322,80 @@ const ProfessionalFlyerScreen = ({
           <Text style={styles.sectionTitle}>פרטי התקשרות</Text>
           <View style={styles.contactLogoWrap}>
             {heroImage ? (
-              <Image source={{uri: heroImage}} style={styles.contactLogo} resizeMode="cover" />
+              <Image
+                source={{uri: heroImage}}
+                style={styles.contactLogo}
+                resizeMode="cover"
+              />
             ) : (
-              <Image source={fallbackExpertImage} style={styles.contactLogo} resizeMode="cover" />
+              <Image
+                source={fallbackExpertImage}
+                style={styles.contactLogo}
+                resizeMode="cover"
+              />
             )}
           </View>
           <Text style={styles.contactName}>{title}</Text>
 
           {phones.map(phone => (
-            <TouchableOpacity key={phone} style={styles.contactRow} activeOpacity={0.85}>
+            <TouchableOpacity
+              key={phone}
+              style={styles.contactRow}
+              activeOpacity={0.85}>
               <Text style={styles.contactLink}>{phone}</Text>
-              <Image source={{uri: imgPhone}} style={styles.contactIcon} resizeMode="contain" />
+              <Image
+                source={{uri: imgPhone}}
+                style={styles.contactIcon}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           ))}
           {email ? (
             <TouchableOpacity style={styles.contactRow} activeOpacity={0.85}>
               <Text style={styles.contactLink}>{email}</Text>
-              <Image source={{uri: imgMail}} style={styles.contactIcon} resizeMode="contain" />
+              <Image
+                source={{uri: imgMail}}
+                style={styles.contactIcon}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.copyBtn} onPress={copyContact} activeOpacity={0.85}>
-            <Image source={{uri: imgCopy}} style={styles.copyIcon} resizeMode="contain" />
+          <TouchableOpacity
+            style={styles.copyBtn}
+            onPress={copyContact}
+            activeOpacity={0.85}>
+            <Image
+              source={{uri: imgCopy}}
+              style={styles.copyIcon}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         </View>
 
         <View style={styles.divider} />
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitleCenter}>כמה כוכבי פאי היית נותן על השירות שקיבלת?</Text>
+          <Text style={styles.sectionTitleCenter}>
+            כמה כוכבי פאי היית נותן על השירות שקיבלת?
+          </Text>
           <RatingImprovePicker
             value={selectedRating}
             onChange={setSelectedRating}
             style={{marginBottom: 24}}
           />
-          <TouchableOpacity onPress={submitRating} activeOpacity={0.85} disabled={submitLoading}>
+          <TouchableOpacity
+            onPress={submitRating}
+            activeOpacity={0.85}
+            disabled={submitLoading}>
             <LinearGradient
               colors={['#FEE787', '#BD9947', '#9C6522']}
               locations={[0.0456, 0.5076, 0.8831]}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={styles.rateBtn}>
-              <Text style={styles.rateBtnText}>{submitLoading ? 'שולח...' : 'דרג'}</Text>
+              <Text style={styles.rateBtnText}>
+                {submitLoading ? 'שולח...' : 'דרג'}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
 
@@ -301,7 +406,7 @@ const ProfessionalFlyerScreen = ({
             onChangeText={setReviewComment}
             placeholder="הוסף ביקורת"
             placeholderTextColor="rgba(255,255,255,0.35)"
-            textAlign="right"
+            textAlign={'left'}
           />
 
           {reviewsLoading ? (
@@ -310,22 +415,38 @@ const ProfessionalFlyerScreen = ({
             <Text style={styles.emptyText}>אין עדיין ביקורות</Text>
           ) : (
             reviews.map(r => (
-              <View key={r.id || `${r.created_at}-${r.reviewer_name}`} style={styles.reviewCard}>
+              <View
+                key={r.id || `${r.created_at}-${r.reviewer_name}`}
+                style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
                   <View style={styles.reviewMeta}>
-                    <Text style={styles.reviewName}>{r.reviewer_name || 'משתמש'}</Text>
-                    <Text style={styles.reviewDate}>{formatReviewDate(r.created_at)}</Text>
+                    <Text style={styles.reviewName}>
+                      {r.reviewer_name || 'משתמש'}
+                    </Text>
+                    <Text style={styles.reviewDate}>
+                      {formatReviewDate(r.created_at)}
+                    </Text>
                   </View>
                   <View style={styles.reviewAvatarWrap}>
                     {r.reviewer_image_url ? (
-                      <Image source={{uri: r.reviewer_image_url}} style={styles.reviewAvatar} resizeMode="cover" />
+                      <Image
+                        source={{uri: r.reviewer_image_url}}
+                        style={styles.reviewAvatar}
+                        resizeMode="cover"
+                      />
                     ) : (
-                      <Image source={fallbackExpertImage} style={styles.reviewAvatar} resizeMode="cover" />
+                      <Image
+                        source={fallbackExpertImage}
+                        style={styles.reviewAvatar}
+                        resizeMode="cover"
+                      />
                     )}
                     <RatingBadge value={Number(r.rating) || 5} compact />
                   </View>
                 </View>
-                {r.comment ? <Text style={styles.reviewBody}>{r.comment}</Text> : null}
+                {r.comment ? (
+                  <Text style={styles.reviewBody}>{r.comment}</Text>
+                ) : null}
               </View>
             ))
           )}
@@ -333,13 +454,23 @@ const ProfessionalFlyerScreen = ({
 
         <View style={styles.divider} />
 
-        <TouchableOpacity style={styles.reportBtn} onPress={() => Alert.alert('דיווח', 'הדיווח נשלח')}>
+        <TouchableOpacity
+          style={styles.reportBtn}
+          onPress={() => Alert.alert('דיווח', 'הדיווח נשלח')}>
           <Text style={styles.reportText}>דווח</Text>
-          <Image source={{uri: imgReport}} style={styles.reportIcon} resizeMode="contain" />
+          <Image
+            source={{uri: imgReport}}
+            style={styles.reportIcon}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </ScrollView>
 
-      <View style={[styles.bottomCtas, {paddingBottom: Math.max(9, insets.bottom)}]}>
+      <View
+        style={[
+          styles.bottomCtas,
+          {paddingBottom: Math.max(9, insets.bottom)},
+        ]}>
         <TouchableOpacity onPress={onMessage} activeOpacity={0.85}>
           <LinearGradient
             colors={['#FEE787', '#BD9947', '#9C6522']}
@@ -347,13 +478,27 @@ const ProfessionalFlyerScreen = ({
             start={{x: 0, y: 0}}
             end={{x: 1, y: 1}}
             style={styles.ctaGold}>
-            <Image source={{uri: imgChatBadge}} style={styles.chatBadge} resizeMode="contain" />
+            <Image
+              source={{uri: imgChatBadge}}
+              style={styles.chatBadge}
+              resizeMode="contain"
+            />
             <Text style={styles.ctaGoldText}>שליחת הודעה</Text>
           </LinearGradient>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => onCall?.(phones[0] || '')} activeOpacity={0.85} style={styles.ctaPhone}>
-          <Image source={{uri: imgCallWhite}} style={styles.ctaPhoneIcon} resizeMode="contain" />
-          <Text style={styles.ctaPhoneText}>{`פנייה בטלפון ${phones[0] || ''}`}</Text>
+        <TouchableOpacity
+          onPress={() => onCall?.(phones[0] || '')}
+          activeOpacity={0.85}
+          style={styles.ctaPhone}>
+          <Image
+            source={{uri: imgCallWhite}}
+            style={styles.ctaPhoneIcon}
+            resizeMode="contain"
+          />
+          <Text
+            style={
+              styles.ctaPhoneText
+            }>{`פנייה בטלפון ${phones[0] || ''}`}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -363,7 +508,12 @@ const ProfessionalFlyerScreen = ({
 const styles = StyleSheet.create({
   screen: {flex: 1, backgroundColor: '#1E1D27'},
   content: {alignItems: 'center'},
-  heroWrap: {width: '100%', height: 380, position: 'relative', overflow: 'hidden'},
+  heroWrap: {
+    width: '100%',
+    height: 380,
+    position: 'relative',
+    overflow: 'hidden',
+  },
   heroImage: {width: '100%', height: '100%'},
   topButtons: {
     position: 'absolute',
@@ -395,17 +545,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFBA30',
   },
   nameSection: {width: '100%', paddingHorizontal: 24, paddingTop: 24, gap: 6},
-  titleRow: {width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start'},
+  titleRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
   titleText: {
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
     color: '#F7F3E6',
     fontSize: 28,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
     marginLeft: 12,
   },
-  ratingBadgeWrap: {width: 47, height: 35, alignItems: 'center', justifyContent: 'center'},
+  ratingBadgeWrap: {
+    width: 47,
+    height: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   ratingBadgeImage: {width: 47, height: 35},
   ratingBadgeText: {
     position: 'absolute',
@@ -414,7 +574,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
   },
-  ratingBadgeCompactWrap: {width: 30, height: 30, position: 'absolute', left: -6, bottom: -6},
+  ratingBadgeCompactWrap: {
+    width: 30,
+    height: 30,
+    position: 'absolute',
+    left: -6,
+    bottom: -6,
+  },
   ratingBadgeCompactImage: {width: 30, height: 30},
   ratingBadgeCompactText: {
     position: 'absolute',
@@ -423,22 +589,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.54,
   },
-  addressRow: {flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 4},
-  addressText: {color: '#FFFFFF', fontSize: 18, lineHeight: 32, fontFamily: 'Rubik-Regular'},
+  addressRow: {
+    flexDirection: 'row',
+    justifyContent: flexStart,
+    alignItems: 'center',
+    gap: 4,
+  },
+  addressText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    fontFamily: 'Rubik-Regular',
+  },
   pinWrap: {width: 24, height: 24},
   pinLayer: {position: 'absolute', width: 24, height: 24},
-  divider: {width: 366, height: 1, backgroundColor: '#373548', marginVertical: 24},
-  section: {width: '100%', paddingHorizontal: 24, alignItems: 'flex-end'},
-  sectionTitle: {color: '#D2D0DC', fontSize: 18, fontFamily: 'Rubik-Regular', marginBottom: 24},
-  sectionTitleCenter: {
-    width: '100%',
-    textAlign: 'right',
+  divider: {
+    width: 366,
+    height: 1,
+    backgroundColor: '#373548',
+    marginVertical: 24,
+  },
+  section: {width: '100%', paddingHorizontal: 24, alignItems: flexStart},
+  sectionTitle: {
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     marginBottom: 24,
   },
-  tagsRow: {width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10},
+  sectionTitleCenter: {
+    width: '100%',
+    textAlign: 'left',
+    color: '#D2D0DC',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    marginBottom: 24,
+  },
+  tagsRow: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: flexStart,
+    gap: 10,
+  },
   tagChip: {
     height: 27.143,
     borderWidth: 0.714,
@@ -448,9 +640,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tagText: {color: '#FFFFFF', fontSize: 16, lineHeight: 22, fontFamily: 'Rubik-Regular'},
-  emptyText: {width: '100%', color: '#D2D0DC', fontSize: 16, textAlign: 'right', fontFamily: 'Rubik-Regular'},
-  descriptionText: {width: '100%', color: '#FFFFFF', fontSize: 18, lineHeight: 32, textAlign: 'right', fontFamily: 'Rubik-Regular'},
+  tagText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+  },
+  emptyText: {
+    width: '100%',
+    color: '#D2D0DC',
+    fontSize: 16,
+    textAlign: 'left',
+    fontFamily: 'Rubik-Regular',
+  },
+  descriptionText: {
+    width: '100%',
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    textAlign: 'left',
+    fontFamily: 'Rubik-Regular',
+  },
   contactLogoWrap: {
     width: 108,
     height: 108,
@@ -461,8 +671,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   contactLogo: {width: '100%', height: '100%'},
-  contactName: {color: '#FFFFFF', fontSize: 13.6, marginBottom: 24, fontFamily: 'Rubik-Regular'},
-  contactRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 10},
+  contactName: {
+    color: '#FFFFFF',
+    fontSize: 13.6,
+    marginBottom: 24,
+    fontFamily: 'Rubik-Regular',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: flexStart,
+    gap: 10,
+    marginBottom: 10,
+  },
   contactLink: {
     color: '#FFFFFF',
     fontSize: 18,
@@ -473,8 +694,20 @@ const styles = StyleSheet.create({
   contactIcon: {width: 28, height: 28},
   copyBtn: {position: 'absolute', left: 0, bottom: 34},
   copyIcon: {width: 24, height: 24},
-  rateBtn: {width: '100%', height: 44, borderRadius: 846, alignItems: 'center', justifyContent: 'center', marginBottom: 31},
-  rateBtnText: {color: '#1E1D27', fontSize: 20, letterSpacing: 0.2, fontFamily: 'Rubik-Medium'},
+  rateBtn: {
+    width: '100%',
+    height: 44,
+    borderRadius: 846,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 31,
+  },
+  rateBtnText: {
+    color: '#1E1D27',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+  },
   reviewInput: {
     width: '100%',
     height: 52,
@@ -495,13 +728,41 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
   },
-  reviewHeader: {width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12},
-  reviewMeta: {flex: 1, alignItems: 'flex-end'},
-  reviewName: {color: '#F7F3E6', fontSize: 18, lineHeight: 24, fontFamily: 'Rubik-Medium'},
-  reviewDate: {color: '#D2D0DC', fontSize: 14, lineHeight: 16, letterSpacing: 0.54, fontFamily: 'Rubik-Regular'},
-  reviewAvatarWrap: {width: 66, height: 66, borderRadius: 1000, position: 'relative'},
+  reviewHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  reviewMeta: {flex: 1, alignItems: flexStart},
+  reviewName: {
+    color: '#F7F3E6',
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+  },
+  reviewDate: {
+    color: '#D2D0DC',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+  },
+  reviewAvatarWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 1000,
+    position: 'relative',
+  },
   reviewAvatar: {width: 66, height: 66, borderRadius: 1000},
-  reviewBody: {color: '#FFFFFF', fontSize: 18, lineHeight: 32, textAlign: 'right', fontFamily: 'Rubik-Regular'},
+  reviewBody: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 32,
+    textAlign: 'left',
+    fontFamily: 'Rubik-Regular',
+  },
   reportBtn: {
     width: 366,
     height: 40,
@@ -513,7 +774,12 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 24,
   },
-  reportText: {color: '#FFFFFF', fontSize: 20, letterSpacing: 0.2, fontFamily: 'Rubik-Medium'},
+  reportText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+  },
   reportIcon: {width: 24, height: 24},
   bottomCtas: {
     position: 'absolute',
@@ -534,7 +800,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  ctaGoldText: {color: '#1E1D27', fontSize: 20, letterSpacing: 0.2, fontFamily: 'Rubik-Medium'},
+  ctaGoldText: {
+    color: '#1E1D27',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+  },
   chatBadge: {width: 85, height: 38},
   ctaPhone: {
     width: '100%',
@@ -548,7 +819,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  ctaPhoneText: {color: '#FFFFFF', fontSize: 20, letterSpacing: 0.2, fontFamily: 'Rubik-Medium'},
+  ctaPhoneText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Medium',
+  },
   ctaPhoneIcon: {width: 24, height: 24},
 });
 

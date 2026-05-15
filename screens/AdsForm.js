@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   PanResponder,
   Dimensions,
+  I18nManager,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -2770,7 +2771,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     marginBottom: 5,
-    textAlign: 'left',
+    textAlign: "left",
     fontFamily: 'Rubik-Medium',
   },
   ageRangeSliderContainer: {

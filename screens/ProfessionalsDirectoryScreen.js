@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -17,10 +18,14 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
+import {flexStart} from '../index';
 
-const imgBackArrow = 'https://www.figma.com/api/mcp/asset/7f09ed22-4005-48ed-88bc-b516005535ca';
-const imgSearchOutline = 'https://www.figma.com/api/mcp/asset/64d5a467-13ce-4fb9-ac0f-e97f15e3998f';
-const imgSearchFill = 'https://www.figma.com/api/mcp/asset/ef9a7923-13e3-4c40-87a5-ed642b1040cd';
+const imgBackArrow =
+  'https://www.figma.com/api/mcp/asset/7f09ed22-4005-48ed-88bc-b516005535ca';
+const imgSearchOutline =
+  'https://www.figma.com/api/mcp/asset/64d5a467-13ce-4fb9-ac0f-e97f15e3998f';
+const imgSearchFill =
+  'https://www.figma.com/api/mcp/asset/ef9a7923-13e3-4c40-87a5-ed642b1040cd';
 const imgViewToggleLeftIcon = require('../assets/swiperleft.png');
 const imgViewToggleRightIcon = require('../assets/swipereight.png');
 
@@ -31,7 +36,8 @@ const imgSortArrowUp = require('../assets/profile/arow-up.png');
 const imgSortArrowDown = require('../assets/profile/arow-down.png');
 const imgStarBig = require('../assets/pros/star-big.png');
 const imgLocationPro = require('../assets/pros/location-pro.png');
-const imgProfileRing = 'https://www.figma.com/api/mcp/asset/9daf687f-169f-43ec-baf8-8539b1ebca51';
+const imgProfileRing =
+  'https://www.figma.com/api/mcp/asset/9daf687f-169f-43ec-baf8-8539b1ebca51';
 const imgProMessagesButton = require('../assets/pros/pro-messges.png');
 /** Same gold bar asset pattern as filter sheets (`FilterSaveButton`); replace PNG if artwork should read חפש not שמור */
 const SEARCH_BUTTON_PNG = require('../assets/buy-rent/search.png');
@@ -41,7 +47,9 @@ const SETTINGS_FOOTER_SCROLL_PADDING = 162;
 
 const collectTags = professional =>
   [
-    ...(Array.isArray(professional?.specializations) ? professional.specializations : []),
+    ...(Array.isArray(professional?.specializations)
+      ? professional.specializations
+      : []),
     ...(Array.isArray(professional?.types) ? professional.types : []),
   ]
     .map(v => String(v || '').trim())
@@ -68,10 +76,17 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
   const description = String(professional?.bio || 'ללא תיאור').trim();
 
   return (
-    <TouchableOpacity style={styles.cardShell} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={styles.cardShell}
+      onPress={onPress}
+      activeOpacity={0.9}>
       <View style={styles.cardMedia}>
         {mediaUrl ? (
-          <Image source={{uri: mediaUrl}} style={styles.cardMediaImage} resizeMode="cover" />
+          <Image
+            source={{uri: mediaUrl}}
+            style={styles.cardMediaImage}
+            resizeMode="cover"
+          />
         ) : (
           <View style={[styles.cardMediaImage, styles.cardMediaFallback]} />
         )}
@@ -102,7 +117,11 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
                 {address}
               </Text>
               <View style={styles.pinIconWrap}>
-                <Image source={imgLocationPro} style={styles.pinIconLayer} resizeMode="contain" />
+                <Image
+                  source={imgLocationPro}
+                  style={styles.pinIconLayer}
+                  resizeMode="contain"
+                />
               </View>
             </View>
           </View>
@@ -128,7 +147,11 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
             e?.stopPropagation?.();
             onPressMessage?.(professional);
           }}>
-          <Image source={imgProMessagesButton} style={styles.messageBtnImage} resizeMode="contain" />
+          <Image
+            source={imgProMessagesButton}
+            style={styles.messageBtnImage}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -143,7 +166,10 @@ const ProfessionalListCard = ({professional, onPress}) => {
   const address = String(professional?.address || 'מיקום לא זמין').trim();
 
   return (
-    <TouchableOpacity style={styles.listCardShell} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={styles.listCardShell}
+      onPress={onPress}
+      activeOpacity={0.9}>
       <View style={styles.listCardTopRow}>
         <View style={styles.listInfoCol}>
           <View style={styles.listTitleRow}>
@@ -165,7 +191,11 @@ const ProfessionalListCard = ({professional, onPress}) => {
               {address}
             </Text>
             <View style={styles.listPinIconWrap}>
-              <Image source={imgLocationPro} style={styles.listPinIconLayer} resizeMode="contain" />
+              <Image
+                source={imgLocationPro}
+                style={styles.listPinIconLayer}
+                resizeMode="contain"
+              />
             </View>
           </View>
         </View>
@@ -186,7 +216,11 @@ const ProfessionalListCard = ({professional, onPress}) => {
   );
 };
 
-const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessageProfessional}) => {
+const ProfessionalsDirectoryScreen = ({
+  onClose,
+  onOpenProfessional,
+  onMessageProfessional,
+}) => {
   const insets = useSafeAreaInsets();
   const settingsScrollBottomPad =
     SETTINGS_FOOTER_SCROLL_PADDING + Math.max(0, insets.bottom);
@@ -210,7 +244,9 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
     setError(null);
     try {
       const res = await getProfessionalsDirectory();
-      setProfessionals(Array.isArray(res?.professionals) ? res.professionals : []);
+      setProfessionals(
+        Array.isArray(res?.professionals) ? res.professionals : [],
+      );
     } catch (e) {
       setError(e.message || 'טעינה נכשלה');
       setProfessionals([]);
@@ -224,7 +260,9 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
   }, [load]);
 
   const filtered = useMemo(() => {
-    const q = String(query || '').trim().toLowerCase();
+    const q = String(query || '')
+      .trim()
+      .toLowerCase();
     const base = professionals.filter(item => {
       const haystack = [
         item?.display_name,
@@ -237,13 +275,11 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
         .join(' ');
       if (q && !haystack.includes(q)) return false;
 
-      const locationQuery = String(appliedLocation || '').trim().toLowerCase();
+      const locationQuery = String(appliedLocation || '')
+        .trim()
+        .toLowerCase();
       if (locationQuery) {
-        const locationHaystack = [
-          item?.address,
-          item?.display_name,
-          item?.bio,
-        ]
+        const locationHaystack = [item?.address, item?.display_name, item?.bio]
           .map(v => String(v || '').toLowerCase())
           .join(' ');
         if (!locationHaystack.includes(locationQuery)) return false;
@@ -251,18 +287,22 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
 
       if (appliedTypeFilters.length > 0) {
         const typeSet = new Set(
-          (Array.isArray(item?.types) ? item.types : []).map(v => String(v || '').trim()),
+          (Array.isArray(item?.types) ? item.types : []).map(v =>
+            String(v || '').trim(),
+          ),
         );
         if (!appliedTypeFilters.some(tag => typeSet.has(tag))) return false;
       }
 
       if (appliedExpertiseFilters.length > 0) {
         const expertiseSet = new Set(
-          (Array.isArray(item?.specializations) ? item.specializations : []).map(v =>
-            String(v || '').trim(),
-          ),
+          (Array.isArray(item?.specializations)
+            ? item.specializations
+            : []
+          ).map(v => String(v || '').trim()),
         );
-        if (!appliedExpertiseFilters.some(tag => expertiseSet.has(tag))) return false;
+        if (!appliedExpertiseFilters.some(tag => expertiseSet.has(tag)))
+          return false;
       }
 
       return true;
@@ -289,7 +329,14 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
     );
   };
   const typeOptions = useMemo(() => {
-    const preferred = ['תיווך', 'עו״ד', 'עיצוב פנים', 'יועץ משכנתאות', 'שמאות', 'אדריכלות'];
+    const preferred = [
+      'תיווך',
+      'עו״ד',
+      'עיצוב פנים',
+      'יועץ משכנתאות',
+      'שמאות',
+      'אדריכלות',
+    ];
     const seen = new Set();
     const out = [];
     preferred.forEach(tag => {
@@ -316,7 +363,10 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
       out.push(tag);
     });
     professionals.forEach(item => {
-      (Array.isArray(item?.specializations) ? item.specializations : []).forEach(tag => {
+      (Array.isArray(item?.specializations)
+        ? item.specializations
+        : []
+      ).forEach(tag => {
         const normalized = String(tag || '').trim();
         if (!normalized || seen.has(normalized)) return;
         seen.add(normalized);
@@ -327,7 +377,8 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
   }, [professionals]);
 
   const toggleDraftFilter = (value, kind) => {
-    const setter = kind === 'type' ? setDraftTypeFilters : setDraftExpertiseFilters;
+    const setter =
+      kind === 'type' ? setDraftTypeFilters : setDraftExpertiseFilters;
     setter(prev =>
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
     );
@@ -435,7 +486,11 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
                 }
                 activeOpacity={0.9}>
                 <Image
-                  source={viewMode === 'cards' ? imgViewToggleRightIcon : imgViewToggleLeftIcon}
+                  source={
+                    viewMode === 'cards'
+                      ? imgViewToggleRightIcon
+                      : imgViewToggleLeftIcon
+                  }
                   style={styles.cardsIcon}
                   resizeMode="contain"
                 />
@@ -465,7 +520,7 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
           {filtered.length === 0 ? (
             <Text style={styles.emptyText}>לא נמצאו בעלי מקצוע</Text>
           ) : (
-            filtered.map(item => (
+            filtered.map(item =>
               viewMode === 'cards' ? (
                 <ProfessionalCard
                   key={item.id}
@@ -479,8 +534,8 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
                   professional={item}
                   onPress={() => onOpenProfessional?.(item)}
                 />
-              )
-            ))
+              ),
+            )
           )}
         </ScrollView>
       )}
@@ -525,7 +580,7 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
                     placeholder=""
                     placeholderTextColor="#FFFFFF"
                     style={styles.settingsInput}
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
               </View>
@@ -538,7 +593,10 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
                     return (
                       <TouchableOpacity
                         key={`type-${tag}`}
-                        style={[styles.settingsChip, active && styles.settingsChipActive]}
+                        style={[
+                          styles.settingsChip,
+                          active && styles.settingsChipActive,
+                        ]}
                         onPress={() => toggleDraftFilter(tag, 'type')}
                         activeOpacity={0.85}>
                         <Text
@@ -562,7 +620,10 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
                     return (
                       <TouchableOpacity
                         key={`expertise-${tag}`}
-                        style={[styles.settingsChip, active && styles.settingsChipActive]}
+                        style={[
+                          styles.settingsChip,
+                          active && styles.settingsChipActive,
+                        ]}
                         onPress={() => toggleDraftFilter(tag, 'expertise')}
                         activeOpacity={0.85}>
                         <Text
@@ -585,7 +646,10 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
               styles.settingsBottom,
               {paddingBottom: Math.max(8, insets.bottom + 4)},
             ]}>
-            <TouchableOpacity style={styles.clearBtn} onPress={clearSearchSettings} activeOpacity={0.9}>
+            <TouchableOpacity
+              style={styles.clearBtn}
+              onPress={clearSearchSettings}
+              activeOpacity={0.9}>
               <Text style={styles.clearBtnText}>נקה תוצאות</Text>
             </TouchableOpacity>
             <FilterSaveButton
@@ -597,7 +661,6 @@ const ProfessionalsDirectoryScreen = ({onClose, onOpenProfessional, onMessagePro
           </View>
         </View>
       ) : null}
-
     </View>
   );
 };
@@ -690,7 +753,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingVertical: 0,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   controlsRow: {
@@ -762,7 +825,7 @@ const styles = StyleSheet.create({
   },
   listCardTopRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     alignItems: 'flex-start',
     gap: 10,
   },
@@ -770,12 +833,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 16,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   listTitleRow: {
     width: '100%',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     alignItems: 'center',
     gap: 20,
   },
@@ -798,7 +861,7 @@ const styles = StyleSheet.create({
   listTitleText: {
     flex: 1,
     color: '#F7F3E6',
-    textAlign: 'right',
+    textAlign: 'left',
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
@@ -806,7 +869,7 @@ const styles = StyleSheet.create({
   listAddressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
   },
   listAddressText: {
@@ -815,7 +878,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   listPinIconWrap: {
     width: 20,
@@ -849,7 +912,7 @@ const styles = StyleSheet.create({
   },
   listTagsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 6,
   },
@@ -867,7 +930,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   cardMedia: {
     height: 212,
@@ -918,11 +981,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     alignItems: 'flex-start',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   cardTitleAddressCol: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     justifyContent: 'center',
     gap: 12,
   },
@@ -947,13 +1010,13 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
     alignSelf: 'stretch',
   },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
   },
   addressText: {
@@ -962,7 +1025,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   pinIconWrap: {
     width: 18,
@@ -976,7 +1039,7 @@ const styles = StyleSheet.create({
   },
   tagsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 6,
   },
@@ -994,14 +1057,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   descriptionText: {
     color: '#FFFFFF',
     fontSize: 15,
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   messageBtnImage: {
     width: '100%',
@@ -1090,13 +1153,13 @@ const styles = StyleSheet.create({
   },
   settingsSection: {
     gap: 12,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   settingsSectionTitle: {
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   settingsInputWrap: {
     width: '100%',
@@ -1112,13 +1175,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   settingsChipWrap: {
     width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 6,
   },
   settingsChip: {

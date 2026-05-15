@@ -8,6 +8,7 @@ import {
   Image,
   Pressable,
   TextInput,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
@@ -22,8 +23,12 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   const bottomInset = Math.max(insets.bottom, 8);
   const [minDonam, setMinDonam] = useState(initialFilter?.minDonam ?? 1);
   const [maxDonam, setMaxDonam] = useState(initialFilter?.maxDonam ?? 2);
-  const [minDraft, setMinDraft] = useState(String(initialFilter?.minDonam ?? 1));
-  const [maxDraft, setMaxDraft] = useState(String(initialFilter?.maxDonam ?? 2));
+  const [minDraft, setMinDraft] = useState(
+    String(initialFilter?.minDonam ?? 1),
+  );
+  const [maxDraft, setMaxDraft] = useState(
+    String(initialFilter?.maxDonam ?? 2),
+  );
   const minInputWidth = Math.max(20, String(minDraft || '').length * 11);
   const maxInputWidth = Math.max(20, String(maxDraft || '').length * 11);
 
@@ -67,7 +72,7 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
     if (onClose) onClose();
   };
 
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number((v).toFixed(1))));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v.toFixed(1))));
   const display = v => (v % 1 === 0 ? v.toString() : v.toFixed(1));
 
   const commitMinDraft = () => {
@@ -106,7 +111,8 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
@@ -126,7 +132,9 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
             <View style={styles.counterInput}>
               <TouchableOpacity
                 style={styles.counterBtn}
-                onPress={() => setMinDonam(v => clamp(v - STEP, MIN_DONAM, maxDonam - STEP))}>
+                onPress={() =>
+                  setMinDonam(v => clamp(v - STEP, MIN_DONAM, maxDonam - STEP))
+                }>
                 <Text style={styles.counterButton}>-</Text>
               </TouchableOpacity>
               <View style={styles.counterValueContainer}>
@@ -143,7 +151,9 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
               </View>
               <TouchableOpacity
                 style={styles.counterBtn}
-                onPress={() => setMinDonam(v => clamp(v + STEP, MIN_DONAM, maxDonam - STEP))}>
+                onPress={() =>
+                  setMinDonam(v => clamp(v + STEP, MIN_DONAM, maxDonam - STEP))
+                }>
                 <Text style={styles.counterButton}>+</Text>
               </TouchableOpacity>
             </View>
@@ -154,7 +164,9 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
             <View style={styles.counterInput}>
               <TouchableOpacity
                 style={styles.counterBtn}
-                onPress={() => setMaxDonam(v => clamp(v - STEP, minDonam + STEP, MAX_DONAM))}>
+                onPress={() =>
+                  setMaxDonam(v => clamp(v - STEP, minDonam + STEP, MAX_DONAM))
+                }>
                 <Text style={styles.counterButton}>-</Text>
               </TouchableOpacity>
               <View style={styles.counterValueContainer}>
@@ -171,7 +183,9 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
               </View>
               <TouchableOpacity
                 style={styles.counterBtn}
-                onPress={() => setMaxDonam(v => clamp(v + STEP, minDonam + STEP, MAX_DONAM))}>
+                onPress={() =>
+                  setMaxDonam(v => clamp(v + STEP, minDonam + STEP, MAX_DONAM))
+                }>
                 <Text style={styles.counterButton}>+</Text>
               </TouchableOpacity>
             </View>
@@ -210,8 +224,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
+  scroll: {flex: 1},
+  scrollContent: {paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24},
   footer: {
     paddingHorizontal: 24,
     paddingTop: 16,
@@ -225,9 +239,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#464646',
     borderRadius: 3,
   },
-  header: { alignItems: 'center', marginBottom: 28 },
-  headerIcon: { width: 36, height: 36 },
-  title: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Medium', marginTop: 8 },
+  header: {alignItems: 'center', marginBottom: 28},
+  headerIcon: {width: 36, height: 36},
+  title: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+    marginTop: 8,
+  },
   rangeRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -235,14 +254,14 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     gap: 12,
   },
-  donamField: { flex: 1 },
+  donamField: {flex: 1},
   donamLabel: {
     color: '#fff',
     fontSize: 14,
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
-  rangeDash: { color: 'rgba(255,255,255,0.5)', fontSize: 18, marginBottom: 24 },
+  rangeDash: {color: 'rgba(255,255,255,0.5)', fontSize: 18, marginBottom: 24},
   counterInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,7 +278,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  counterButton: { color: '#fff', fontSize: 22, fontWeight: '600' },
+  counterButton: {color: '#fff', fontSize: 22, fontWeight: '600'},
   counterValueContainer: {
     flex: 1,
     height: '100%',
@@ -275,9 +294,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     textAlign: 'center',
   },
-  saveBtnWrap: { marginBottom: 12, width: '100%' },
-  clearWrap: { alignItems: 'center' },
-  clearText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, textDecorationLine: 'underline' },
+  saveBtnWrap: {marginBottom: 12, width: '100%'},
+  clearWrap: {alignItems: 'center'},
+  clearText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 16,
+    textDecorationLine: 'underline',
+  },
 });
 
 export default DonamFilterScreen;

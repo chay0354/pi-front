@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
@@ -16,6 +17,7 @@ import {ContextHook} from '../hooks/ContextHook';
 import {submitImprovementFeedback, toSubscriptionId} from '../utils/api';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {resolveBundledAssetSource} from '../utils/bundledAsset';
+import {flexEnd} from '../index';
 
 const thanksEndImage = require('../assets/improve/end.png');
 const sendButtonImage = require('../assets/improve/send-button.png');
@@ -77,7 +79,8 @@ const FeedbackSuggestionScreen = ({onClose}) => {
       (currentUser?.name && String(currentUser.name).trim()) ||
       (currentUser?.contact_person_name &&
         String(currentUser.contact_person_name).trim()) ||
-      (currentUser?.business_name && String(currentUser.business_name).trim()) ||
+      (currentUser?.business_name &&
+        String(currentUser.business_name).trim()) ||
       (currentUser?.broker_office_name &&
         String(currentUser.broker_office_name).trim()) ||
       null;
@@ -110,7 +113,10 @@ const FeedbackSuggestionScreen = ({onClose}) => {
           contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.backBtn}
+              hitSlop={12}>
               <Text style={styles.backChevron}>{'‹'}</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle}>הצעות לשיפור</Text>
@@ -139,11 +145,14 @@ const FeedbackSuggestionScreen = ({onClose}) => {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, {paddingTop: insets.top + (10)}]}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>הצעות לשיפור</Text>
@@ -172,7 +181,7 @@ const FeedbackSuggestionScreen = ({onClose}) => {
             onChangeText={setMessage}
             multiline
             textAlignVertical="top"
-            textAlign="right"
+            textAlign="left"
           />
 
           <TouchableOpacity
@@ -234,7 +243,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   backChevron: {
     color: Colors.white100,
@@ -317,7 +326,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 56,
     zIndex: 0,
-    ...Platform.select({web: {display: 'block', userSelect: 'none'}, default: {}}),
+    ...Platform.select({
+      web: {display: 'block', userSelect: 'none'},
+      default: {},
+    }),
   },
   sendButtonImageDisabled: {
     opacity: 0.45,

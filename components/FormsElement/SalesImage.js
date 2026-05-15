@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  I18nManager,
 } from 'react-native';
 import React from 'react';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
-
 export const SalesImage = ({
   salesImage,
   handleSalesImageUpload,
@@ -25,7 +25,7 @@ export const SalesImage = ({
   return (
     <FormContainer>
       <Title text={'תמונה מכירתית'} />
-      <Text style={styles.subTitle}>
+      <Text style={[styles.subTitle, {textAlign:'left'}]}>
         מומלץ להוסיף תמונה מכירתית על מנת להגביר את החשיפה של הפרוייקט שלכם.
       </Text>
       <TouchableOpacity
@@ -79,7 +79,6 @@ export const SalesImage = ({
 
 const styles = StyleSheet.create({
   subTitle: {
-    textAlign: 'right',
     color: '#9E9DA4',
     fontSize: 15,
     fontFamily: 'Rubik-Regular',

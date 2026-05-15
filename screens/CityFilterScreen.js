@@ -15,6 +15,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import {flexStart} from '../index';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -28,7 +29,12 @@ const KNOB_SIZE = 22;
 // Figma assets for node 12:74885
 const FIGMA_CITY_ICON = require('../assets/buttom-bar/city.png');
 
-const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+const CityFilterScreen = ({
+  initialFilter,
+  onClose,
+  onSave,
+  selectedCategory,
+}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
@@ -36,14 +42,17 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
   const isPartners = selectedCategory === 3 || selectedCategory === '3';
   // null = do not filter by rent/sale (מחיר/עיר style "no filter" until user picks a purpose)
   const [purpose, setPurpose] = useState(
-    initialFilter != null && (initialFilter.purpose === 'rent' || initialFilter.purpose === 'sale')
+    initialFilter != null &&
+      (initialFilter.purpose === 'rent' || initialFilter.purpose === 'sale')
       ? initialFilter.purpose
       : null,
   ); // null | 'rent' | 'sale'
   const [city, setCity] = useState(initialFilter?.city ?? '');
   const [street, setStreet] = useState(initialFilter?.street ?? '');
   const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
-  const [immediateEntry, setImmediateEntry] = useState(initialFilter?.immediateEntry ?? false);
+  const [immediateEntry, setImmediateEntry] = useState(
+    initialFilter?.immediateEntry ?? false,
+  );
 
   // Non-functional for now; slider only reflects the static default value.
   // Drag / tap wiring will be added in a follow-up.
@@ -87,7 +96,8 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
         </TouchableOpacity>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -99,7 +109,11 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
         scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={FIGMA_CITY_ICON} style={styles.headerIcon} resizeMode="contain" />
+          <Image
+            source={FIGMA_CITY_ICON}
+            style={styles.headerIcon}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>עיר</Text>
         </View>
 
@@ -140,7 +154,7 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
             placeholderTextColor="rgba(255,255,255,0.4)"
             value={city}
             onChangeText={setCity}
-            textAlign={I18nManager.isRTL ? 'right' : 'right'}
+            textAlign="left"
           />
         </View>
         <View style={styles.divider} />
@@ -153,7 +167,7 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
             placeholderTextColor="rgba(255,255,255,0.4)"
             value={street}
             onChangeText={setStreet}
-            textAlign={I18nManager.isRTL ? 'right' : 'right'}
+            textAlign="left"
           />
         </View>
         <View style={styles.divider} />
@@ -162,7 +176,7 @@ const CityFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
           <Text style={styles.label}>מרחק ממני (ק"מ)</Text>
           <View style={styles.sliderTrackWrap} pointerEvents="none">
             <View style={styles.sliderMarkers}>
-              {DISTANCE_OPTIONS.map((km) => (
+              {DISTANCE_OPTIONS.map(km => (
                 <View key={km} style={styles.sliderMarkerCell}>
                   <Text style={styles.sliderMarkerText}>{km}</Text>
                 </View>
@@ -293,17 +307,17 @@ const styles = StyleSheet.create({
   },
   sectionTitleRow: {
     width: '100%',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     marginBottom: 18,
   },
   sectionTitle: {
     color: TEXT_SECONDARY,
     fontFamily: 'Rubik-Regular',
     fontSize: 14,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   purposeList: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     marginBottom: 18,
   },
   fieldWrap: {
@@ -319,7 +333,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: 0.14,
   },
   input: {
@@ -334,7 +348,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   sliderTrackWrap: {
@@ -398,7 +412,7 @@ const styles = StyleSheet.create({
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     marginBottom: 14,
     gap: 8,
   },

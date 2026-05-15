@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  I18nManager,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {Video, ResizeMode} from 'expo-av';
@@ -20,6 +21,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {submitSubscription} from '../utils/api';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {flexEnd, flexStart} from '../index';
 
 /**
  * SubscriptionFormScreen Component
@@ -397,7 +399,10 @@ const SubscriptionFormScreen = ({
 
       // Prepare files (profile pic chosen on this screen → uploaded to profile-pics when you press Next)
       const files = {};
-      const profilePicIsUrl = profilePicture?.uri && (profilePicture.uri.startsWith('http://') || profilePicture.uri.startsWith('https://'));
+      const profilePicIsUrl =
+        profilePicture?.uri &&
+        (profilePicture.uri.startsWith('http://') ||
+          profilePicture.uri.startsWith('https://'));
       if (profilePicIsUrl) {
         formData.profile_picture_url = profilePicture.uri;
       } else if (profilePicture) {
@@ -405,20 +410,32 @@ const SubscriptionFormScreen = ({
       }
 
       const hasProfileImage = !!profilePicIsUrl || !!files.profilePicture;
-      console.log('[SubscriptionFormScreen] Next (stage 2 → verification): profile image included:', hasProfileImage, hasProfileImage ? '(will be uploaded to profile-pics bucket)' : '(no image)');
+      console.log(
+        '[SubscriptionFormScreen] Next (stage 2 → verification): profile image included:',
+        hasProfileImage,
+        hasProfileImage
+          ? '(will be uploaded to profile-pics bucket)'
+          : '(no image)',
+      );
 
       if (additionalImages.length > 0)
         files.additionalImages = additionalImages.filter(img => img !== null);
 
       const companyLogoIsUrl =
         companyLogo?.uri &&
-        (companyLogo.uri.startsWith('http://') || companyLogo.uri.startsWith('https://'));
+        (companyLogo.uri.startsWith('http://') ||
+          companyLogo.uri.startsWith('https://'));
       if (companyLogoIsUrl) {
         formData.company_logo_url = companyLogo.uri;
       } else if (companyLogo) {
         files.companyLogo = companyLogo;
       }
-      console.log('[SubscriptionFormScreen] Submitting company logo for subscription_type=', subscriptionType, '-> company_logo_url target column. hasLogo:', !!companyLogo);
+      console.log(
+        '[SubscriptionFormScreen] Submitting company logo for subscription_type=',
+        subscriptionType,
+        '-> company_logo_url target column. hasLogo:',
+        !!companyLogo,
+      );
       if (video && activeTab === 'video') files.video = video;
 
       // Submit to backend
@@ -501,7 +518,8 @@ const SubscriptionFormScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={[styles.overlay, styles.companyOverlay]} />
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={[
           styles.contentContainer,
@@ -565,7 +583,11 @@ const SubscriptionFormScreen = ({
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.brokerTabPillActiveGradient}>
-                  <Text style={[styles.brokerTabPillText, styles.brokerTabPillTextActive]}>
+                  <Text
+                    style={[
+                      styles.brokerTabPillText,
+                      styles.brokerTabPillTextActive,
+                    ]}>
                     תמונות
                   </Text>
                 </LinearGradient>
@@ -583,7 +605,11 @@ const SubscriptionFormScreen = ({
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.brokerTabPillActiveGradient}>
-                  <Text style={[styles.brokerTabPillText, styles.brokerTabPillTextActive]}>
+                  <Text
+                    style={[
+                      styles.brokerTabPillText,
+                      styles.brokerTabPillTextActive,
+                    ]}>
                     סרטון
                   </Text>
                 </LinearGradient>
@@ -600,7 +626,9 @@ const SubscriptionFormScreen = ({
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
                 <>
-                  <Text style={styles.brokerCardTitle}>תמונת פרופיל (חובה)</Text>
+                  <Text style={styles.brokerCardTitle}>
+                    תמונת פרופיל (חובה)
+                  </Text>
                   <View style={styles.profileImageWrap}>
                     {profilePicture ? (
                       <>
@@ -637,9 +665,13 @@ const SubscriptionFormScreen = ({
                             size={64}
                             color="rgba(255,255,255,0.4)"
                           />
-                          <Text style={styles.profileImagePlaceholderText}>תמונת פרופיל</Text>
+                          <Text style={styles.profileImagePlaceholderText}>
+                            תמונת פרופיל
+                          </Text>
                           <View style={styles.brokerUploadButton}>
-                            <Text style={styles.brokerUploadButtonText}>העלאת תמונה</Text>
+                            <Text style={styles.brokerUploadButtonText}>
+                              העלאת תמונה
+                            </Text>
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -674,7 +706,12 @@ const SubscriptionFormScreen = ({
                                   }}
                                   style={styles.mediaRemoveButtonSmall}
                                   accessibilityLabel="הסר תמונה"
-                                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                                  hitSlop={{
+                                    top: 8,
+                                    bottom: 8,
+                                    left: 8,
+                                    right: 8,
+                                  }}>
                                   <MaterialCommunityIcons
                                     name="close"
                                     size={14}
@@ -686,7 +723,9 @@ const SubscriptionFormScreen = ({
                               <TouchableOpacity
                                 style={styles.additionalImagePlaceholder}
                                 onPress={() => pickAdditionalImage(index)}>
-                                <Text style={styles.additionalImagePlusIcon}>+</Text>
+                                <Text style={styles.additionalImagePlusIcon}>
+                                  +
+                                </Text>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -743,9 +782,13 @@ const SubscriptionFormScreen = ({
                           size={64}
                           color="rgba(255,255,255,0.4)"
                         />
-                        <Text style={styles.videoUploadPlaceholderText}>העלה סרטון</Text>
+                        <Text style={styles.videoUploadPlaceholderText}>
+                          העלה סרטון
+                        </Text>
                         <View style={styles.videoUploadButton}>
-                          <Text style={styles.videoUploadButtonText}>העלאת סרטון</Text>
+                          <Text style={styles.videoUploadButtonText}>
+                            העלאת סרטון
+                          </Text>
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -756,7 +799,9 @@ const SubscriptionFormScreen = ({
 
             {/* Company Logo Section - No Container */}
             <View style={styles.companyLogoWrap}>
-              <TouchableOpacity onPress={pickCompanyLogo} style={styles.companyLogoTouch}>
+              <TouchableOpacity
+                onPress={pickCompanyLogo}
+                style={styles.companyLogoTouch}>
                 <View style={styles.companyLogoCircle}>
                   <View style={styles.companyLogoInnerFrame}>
                     {companyLogo ? (
@@ -766,7 +811,9 @@ const SubscriptionFormScreen = ({
                         resizeMode="cover"
                       />
                     ) : (
-                      <Text style={styles.companyLogoPlaceholderText}>לוגו{'\n'}חברה</Text>
+                      <Text style={styles.companyLogoPlaceholderText}>
+                        לוגו{'\n'}חברה
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -838,7 +885,9 @@ const SubscriptionFormScreen = ({
         {isCompanyFlow && (
           <>
             <View style={styles.companyLogoWrap}>
-              <TouchableOpacity onPress={pickCompanyLogo} style={styles.companyLogoTouch}>
+              <TouchableOpacity
+                onPress={pickCompanyLogo}
+                style={styles.companyLogoTouch}>
                 <View style={styles.companyLogoCircle}>
                   <View style={styles.companyLogoInnerFrame}>
                     {companyLogo ? (
@@ -848,7 +897,9 @@ const SubscriptionFormScreen = ({
                         resizeMode="cover"
                       />
                     ) : (
-                      <Text style={styles.companyLogoPlaceholderText}>לוגו{'\n'}חברה</Text>
+                      <Text style={styles.companyLogoPlaceholderText}>
+                        לוגו{'\n'}חברה
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -866,12 +917,15 @@ const SubscriptionFormScreen = ({
           style={[
             styles.formSection,
             isCompanyFlow && styles.companyFormSection,
-            subscriptionType === subscriptionTypes.broker && styles.brokerFormSection,
+            subscriptionType === subscriptionTypes.broker &&
+              styles.brokerFormSection,
             subscriptionType === subscriptionTypes.professional &&
               styles.professionalFormSection,
           ]}>
           {subscriptionType === subscriptionTypes.company && (
-            <Text style={[styles.sectionTitle, styles.companySectionTitle]}>פרטים כלליים</Text>
+            <Text style={[styles.sectionTitle, styles.companySectionTitle]}>
+              פרטים כלליים
+            </Text>
           )}
 
           {subscriptionType === subscriptionTypes.company ? (
@@ -884,7 +938,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyName}
                   onChangeText={setCompanyName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -896,7 +950,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={contactPersonName}
                   onChangeText={setContactPersonName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -908,7 +962,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyId}
                   onChangeText={setCompanyId}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -921,7 +975,7 @@ const SubscriptionFormScreen = ({
                   value={officePhone}
                   onChangeText={setOfficePhone}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -934,7 +988,7 @@ const SubscriptionFormScreen = ({
                   value={mobilePhone}
                   onChangeText={setMobilePhone}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -948,7 +1002,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setCompanyEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -962,7 +1016,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setCompanyWebsite}
                   keyboardType="url"
                   autoCapitalize="none"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -975,7 +1029,11 @@ const SubscriptionFormScreen = ({
                     addDescription && styles.companyDescriptionCheckboxChecked,
                   ]}>
                   {addDescription && (
-                    <MaterialCommunityIcons name="check" size={14} color={Colors.yellowIcons} />
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={14}
+                      color={Colors.yellowIcons}
+                    />
                   )}
                 </TouchableOpacity>
               </View>
@@ -990,7 +1048,7 @@ const SubscriptionFormScreen = ({
                     onChangeText={setDescription}
                     multiline
                     numberOfLines={4}
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
               )}
@@ -1037,7 +1095,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerageLicenseNumber}
                   onChangeText={setBrokerageLicenseNumber}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1049,7 +1107,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerOfficeName}
                   onChangeText={setBrokerOfficeName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1061,7 +1119,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={agentName}
                   onChangeText={setAgentName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1073,7 +1131,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1086,7 +1144,7 @@ const SubscriptionFormScreen = ({
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1100,7 +1158,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1114,7 +1172,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setDescription}
                   multiline
                   numberOfLines={4}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </>
@@ -1133,7 +1191,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessName}
                   onChangeText={setBusinessName}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1145,7 +1203,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessAddress}
                   onChangeText={setBusinessAddress}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1157,7 +1215,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1170,7 +1228,7 @@ const SubscriptionFormScreen = ({
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1183,7 +1241,7 @@ const SubscriptionFormScreen = ({
                   value={phone2}
                   onChangeText={setPhone2}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1197,7 +1255,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
 
@@ -1211,7 +1269,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setDescription}
                   multiline
                   numberOfLines={4}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </>
@@ -1221,7 +1279,9 @@ const SubscriptionFormScreen = ({
             style={[
               styles.nextButton,
               styles.companyNextButton,
-              isCompanyFlow && !companyCanProceed && styles.companyNextButtonDisabled,
+              isCompanyFlow &&
+                !companyCanProceed &&
+                styles.companyNextButtonDisabled,
               subscriptionType === subscriptionTypes.broker &&
                 !brokerCanProceed &&
                 styles.companyNextButtonDisabled,
@@ -1234,7 +1294,8 @@ const SubscriptionFormScreen = ({
             disabled={
               isSubmitting ||
               (isCompanyFlow && !companyCanProceed) ||
-              (subscriptionType === subscriptionTypes.broker && !brokerCanProceed) ||
+              (subscriptionType === subscriptionTypes.broker &&
+                !brokerCanProceed) ||
               (subscriptionType === subscriptionTypes.professional &&
                 !professionalCanProceed)
             }>
@@ -1245,7 +1306,9 @@ const SubscriptionFormScreen = ({
                 style={[
                   styles.nextButtonText,
                   styles.companyNextButtonText,
-                  isCompanyFlow && !companyCanProceed && styles.companyNextButtonTextDisabled,
+                  isCompanyFlow &&
+                    !companyCanProceed &&
+                    styles.companyNextButtonTextDisabled,
                 ]}>
                 הבא
               </Text>
@@ -1345,7 +1408,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     fontSize: FontSizes.fs18,
@@ -1447,7 +1510,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.fs18,
     fontWeight: '600',
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   companySectionTitle: {
     width: '100%',
@@ -1606,7 +1669,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     paddingRight: 6,
   },
   professionalTagSection: {
@@ -1649,7 +1712,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   formSection: {
     width: '100%',
@@ -1678,7 +1741,7 @@ const styles = StyleSheet.create({
   },
   companyLabelRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     alignItems: 'center',
     gap: 2,
     paddingRight: 16,
@@ -1707,7 +1770,7 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   companyInput: {
     height: 52,
@@ -1731,7 +1794,7 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
     textAlignVertical: 'top',
   },
   nextButton: {
@@ -1796,7 +1859,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
     marginTop: 2,
   },
@@ -1830,7 +1893,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     textAlignVertical: 'top',
   },
   brokerTabContainer: {
@@ -1873,7 +1936,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     color: Colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   profileImageWrap: {
     width: '100%',
@@ -1999,13 +2062,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     color: Colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   brokerChipsContainer: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 8,
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   brokerChip: {
     paddingHorizontal: 9,
@@ -2035,7 +2098,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   checkboxCircle: {
     width: 24,
@@ -2062,7 +2125,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
     fontWeight: '500',
   },
   errorCloseButton: {

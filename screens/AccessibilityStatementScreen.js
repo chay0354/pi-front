@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ACCESSIBILITY_STATEMENT_HEBREW} from './accessibilityStatementContent';
@@ -18,11 +19,17 @@ const AccessibilityStatementScreen = ({onClose}) => {
     <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 8}]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingTop: insets.top + 8},
+        ]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={2}>
@@ -84,7 +91,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 15,
     lineHeight: 24,
-    textAlign: 'left',
+    textAlign: "left",
     writingDirection: 'rtl',
     backgroundColor: '#ffffff',
   },

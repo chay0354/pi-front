@@ -8,12 +8,14 @@ import {
   StyleSheet,
   ImageBackground,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {flexEnd, flexStart} from '../index';
 
 const BLUE_100 = '#1e1d27';
 const WHITE_HEADLINE = '#f7f3e6';
@@ -141,7 +143,10 @@ const SubscriptionScreen = ({
     () => subscriptionCopy(subscriptionType, isAgreed, currentUser),
     [subscriptionType, isAgreed, currentUser],
   );
-  const features = useMemo(() => featuresForType(subscriptionType), [subscriptionType]);
+  const features = useMemo(
+    () => featuresForType(subscriptionType),
+    [subscriptionType],
+  );
 
   const handleStart = () => {
     if (!isAgreed || !onStart) return;
@@ -166,7 +171,10 @@ const SubscriptionScreen = ({
           style={styles.scrollView}
           contentContainerStyle={[
             styles.contentContainer,
-            {paddingTop: topPad + 8, paddingBottom: Math.max(insets.bottom, 28)},
+            {
+              paddingTop: topPad + 8,
+              paddingBottom: Math.max(insets.bottom, 28),
+            },
           ]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
@@ -174,9 +182,15 @@ const SubscriptionScreen = ({
               onPress={onClose}
               style={styles.backButton}
               hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color={Colors.white100} />
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={24}
+                color={Colors.white100}
+              />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+            <Text style={styles.headerTitle}>
+              {getHeaderTitle(subscriptionType)}
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -189,7 +203,7 @@ const SubscriptionScreen = ({
                       ? {uri: PROFESSIONAL_FIGMA_PROFILE_IMAGE}
                       : subscriptionType === subscriptionTypes.broker
                         ? {uri: BROKER_FIGMA_PROFILE_IMAGE}
-                      : require('../assets/subscription-company-profile.png')
+                        : require('../assets/subscription-company-profile.png')
                   }
                   style={styles.profileImage}
                   resizeMode="cover"
@@ -234,8 +248,8 @@ const SubscriptionScreen = ({
                   אני מאשר/ת שלא אפרסם מודעות פיקטיביות
                 </Text>
                 <Text style={styles.disclaimerText}>
-                  במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע חסימה
-                  אוטומטית של החשבון.
+                  במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע
+                  חסימה אוטומטית של החשבון.
                 </Text>
               </View>
               <TouchableOpacity
@@ -244,7 +258,11 @@ const SubscriptionScreen = ({
                 hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
                 {isAgreed ? (
                   <View style={styles.checkboxChecked}>
-                    <MaterialCommunityIcons name="check" size={14} color="#F4AD39" />
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={14}
+                      color="#F4AD39"
+                    />
                   </View>
                 ) : (
                   <View style={styles.checkboxEmpty} />
@@ -270,7 +288,11 @@ const SubscriptionScreen = ({
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.primaryButtonGradient}>
-                  <Text style={[styles.primaryButtonText, styles.primaryButtonTextEnabled]}>
+                  <Text
+                    style={[
+                      styles.primaryButtonText,
+                      styles.primaryButtonTextEnabled,
+                    ]}>
                     התחל
                   </Text>
                 </LinearGradient>
@@ -321,7 +343,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     flex: 1,
@@ -420,7 +442,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     color: Colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
   },
   featuresList: {
@@ -451,7 +473,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   agreementBlock: {
     width: '100%',
@@ -472,7 +494,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     color: Colors.white100,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   disclaimerText: {
     fontSize: 12,
@@ -480,9 +502,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.54,
     color: Colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
     maxWidth: 322,
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
   },
   checkboxHit: {
     paddingTop: 2,

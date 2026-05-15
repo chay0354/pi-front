@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -14,6 +15,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {flexEnd} from '../index';
 
 const BG = '#1e1d27';
 
@@ -68,7 +70,10 @@ const SuccessScreen = ({
       <View style={styles.overlay} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top}]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {paddingTop: insets.top},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>
@@ -79,7 +84,9 @@ const SuccessScreen = ({
                 color={Colors.white100}
               />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{getHeaderTitle(subscriptionType)}</Text>
+            <Text style={styles.headerTitle}>
+              {getHeaderTitle(subscriptionType)}
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -112,7 +119,11 @@ const SuccessScreen = ({
                 )}
               </View>
               <View style={styles.checkmarkOverlay}>
-                <MaterialCommunityIcons name="check" size={16} color="#15e3ff" />
+                <MaterialCommunityIcons
+                  name="check"
+                  size={16}
+                  color="#15e3ff"
+                />
               </View>
             </View>
             <Text style={styles.userName}>{displayName}</Text>
@@ -212,7 +223,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerTitle: {
     fontSize: 18,

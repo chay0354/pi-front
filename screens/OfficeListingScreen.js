@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   PanResponder,
   Dimensions,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
@@ -21,6 +22,7 @@ import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {RadioIcon} from '../components/FormsElement/RadioIcon';
 import PublishValidationModal from '../components/PublishValidationModal';
 import {PRICE_COUNTER_STEP_DEFAULT} from '../utils/priceInput';
+import {flexStart} from '../index';
 
 /**
  * Age Range Slider Component
@@ -294,8 +296,9 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const [uploading, setUploading] = useState(false);
   const [publishValidationVisible, setPublishValidationVisible] =
     useState(false);
-  const [publishValidationMessages, setPublishValidationMessages] =
-    useState([]);
+  const [publishValidationMessages, setPublishValidationMessages] = useState(
+    [],
+  );
   const [uploadProgress, setUploadProgress] = useState({});
 
   // File input refs for web
@@ -447,10 +450,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         require('../assets/ad-uplaud/button-yelow.png'),
       );
       return {
-        gray:
-          gray?.width && gray?.height ? gray.width / gray.height : fbGray,
-        yellow:
-          yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
+        gray: gray?.width && gray?.height ? gray.width / gray.height : fbGray,
+        yellow: yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
       };
     } catch (_) {
       return {gray: fbGray, yellow: fbYellow};
@@ -484,13 +485,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             formData.append('file', mainImage.file);
             formData.append('folder', 'listings/images');
 
-            const response = await fetch(
-              `${getApiUrl()}/api/upload`,
-              {
-                method: 'POST',
-                body: formData,
-              },
-            );
+            const response = await fetch(`${getApiUrl()}/api/upload`, {
+              method: 'POST',
+              body: formData,
+            });
 
             const data = await response.json();
             if (data.success && data.url) {
@@ -533,13 +531,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               formData.append('file', file);
               formData.append('folder', 'listings/images');
 
-              const uploadResponse = await fetch(
-                `${getApiUrl()}/api/upload`,
-                {
-                  method: 'POST',
-                  body: formData,
-                },
-              );
+              const uploadResponse = await fetch(`${getApiUrl()}/api/upload`, {
+                method: 'POST',
+                body: formData,
+              });
 
               const uploadData = await uploadResponse.json();
               if (uploadData.success && uploadData.url) {
@@ -578,13 +573,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           formData.append('file', mainImage.file);
           formData.append('folder', 'listings/images');
 
-          const response = await fetch(
-            `${getApiUrl()}/api/upload`,
-            {
-              method: 'POST',
-              body: formData,
-            },
-          );
+          const response = await fetch(`${getApiUrl()}/api/upload`, {
+            method: 'POST',
+            body: formData,
+          });
 
           const data = await response.json();
           if (data.success && data.url) {
@@ -614,13 +606,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             formData.append('file', additionalImages[i].file);
             formData.append('folder', 'listings/images');
 
-            const response = await fetch(
-              `${getApiUrl()}/api/upload`,
-              {
-                method: 'POST',
-                body: formData,
-              },
-            );
+            const response = await fetch(`${getApiUrl()}/api/upload`, {
+              method: 'POST',
+              body: formData,
+            });
 
             const data = await response.json();
             if (data.success && data.url) {
@@ -650,13 +639,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           formData.append('file', videoFile.file);
           formData.append('folder', 'listings/videos');
 
-          const response = await fetch(
-            `${getApiUrl()}/api/upload`,
-            {
-              method: 'POST',
-              body: formData,
-            },
-          );
+          const response = await fetch(`${getApiUrl()}/api/upload`, {
+            method: 'POST',
+            body: formData,
+          });
 
           const data = await response.json();
           if (data.success && data.url) {
@@ -786,7 +772,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         <Text style={styles.headerTitle}>יצירת מודעה</Text>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
@@ -795,7 +782,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
           <Text style={styles.sectionTitle}>
             בחר קטגוריה<Text style={styles.required}>*</Text>
           </Text>
-          <ScrollView keyboardShouldPersistTaps="handled"
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryScrollView}>
@@ -2022,7 +2010,7 @@ const styles = StyleSheet.create({
   },
   videoOption: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     alignItems: 'center',
   },
   videoOptionText: {
@@ -2117,7 +2105,7 @@ const styles = StyleSheet.create({
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     paddingVertical: 12,
     marginBottom: 15,
   },
@@ -2210,7 +2198,7 @@ const styles = StyleSheet.create({
   amenityOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     paddingVertical: 12,
   },
   amenityText: {
@@ -2221,7 +2209,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityButtonContainer: {
     marginLeft: 8,
@@ -2237,7 +2225,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityButtonSelected: {
     borderRadius: 846.154,
@@ -2247,7 +2235,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityText: {
     color: '#fff',
@@ -2598,7 +2586,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   genderButtonTextSelected: {
     color: Colors.yellowIcons,
@@ -2628,7 +2616,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginBottom: 15,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   ageRangeSliderContainer: {
     width: '100%',

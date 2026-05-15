@@ -1,5 +1,12 @@
 import React, {useEffect, useState} from 'react';
-import {StyleSheet, Text, View, TouchableOpacity, TextInput} from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  TextInput,
+  I18nManager,
+} from 'react-native';
 import {Title} from './Title';
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';
@@ -18,9 +25,13 @@ export const CountUpdate = ({
   containerStyle,
   deviderStyle,
 }) => {
+  const rowEndAlign = 'flex-start';
+  const suffixSpacing = {marginRight: 6};
   const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
   const minVal = typeof min === 'number' ? min : 0;
-  const [draft, setDraft] = useState(String(Math.max(minVal, Number(count ?? 0))));
+  const [draft, setDraft] = useState(
+    String(Math.max(minVal, Number(count ?? 0))),
+  );
   const inputWidth = Math.max(20, String(draft || '').length * 11);
 
   useEffect(() => {
@@ -46,49 +57,52 @@ export const CountUpdate = ({
         variant === 'figmaOffice' && styles.counterInputFigma,
         counterInputStyle,
       ]}>
-        <TouchableOpacity
-          style={styles.counterButtonLeft}
-          onPress={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}>
-          <Text style={styles.counterButtonMinus}>−</Text>
-        </TouchableOpacity>
-        <View style={styles.counterDivider} />
-        <View style={styles.counterValueContainer}>
-          <View style={styles.counterValueRow}>
-            {isArea ? <Text style={styles.counterValueSuffix}>מ"ר</Text> : null}
-            <TextInput
-              style={[
-                styles.counterValueInput,
-                variant === 'figmaOffice' && styles.counterValueInputFigma,
-                {width: inputWidth},
-              ]}
-              value={draft}
-              onChangeText={setDraft}
-              onBlur={commitDraft}
-              onSubmitEditing={commitDraft}
-              keyboardType="numeric"
-              returnKeyType="done"
-              textAlign="center"
-            />
-          </View>
+      <TouchableOpacity
+        style={styles.counterButtonLeft}
+        onPress={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}>
+        <Text style={styles.counterButtonMinus}>−</Text>
+      </TouchableOpacity>
+      <View style={styles.counterDivider} />
+      <View style={styles.counterValueContainer}>
+        <View style={styles.counterValueRow}>
+          {isArea ? (
+            <Text style={[styles.counterValueSuffix, suffixSpacing]}>מ"ר</Text>
+          ) : null}
+          <TextInput
+            style={[
+              styles.counterValueInput,
+              variant === 'figmaOffice' && styles.counterValueInputFigma,
+              {width: inputWidth},
+            ]}
+            value={draft}
+            onChangeText={setDraft}
+            onBlur={commitDraft}
+            onSubmitEditing={commitDraft}
+            keyboardType="numeric"
+            returnKeyType="done"
+            textAlign="center"
+          />
         </View>
-        <View style={styles.counterDivider} />
-        <TouchableOpacity
-          style={styles.counterButtonRight}
-          onPress={() => safeSetCount((count ?? 0) + 1)}>
-          <Text style={styles.counterButtonPlus}>+</Text>
-        </TouchableOpacity>
       </View>
+      <View style={styles.counterDivider} />
+      <TouchableOpacity
+        style={styles.counterButtonRight}
+        onPress={() => safeSetCount((count ?? 0) + 1)}>
+        <Text style={styles.counterButtonPlus}>+</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   if (variant === 'figmaOffice') {
     return (
       <View style={[{marginBottom: isLast ? 0 : 0}, containerStyle]}>
         {title ? (
-          <View style={styles.figmaOfficeLabelRow}>
-            <Text style={styles.figmaOfficeLabelText}>{title}</Text>
-            {required ? (
-              <Text style={styles.figmaOfficeStar}>*</Text>
-            ) : null}
+          <View
+            style={[styles.figmaOfficeLabelRow, {justifyContent: rowEndAlign}]}>
+            <Text style={[styles.figmaOfficeLabelText, {textAlign:'left'}]}>
+              {title}
+            </Text>
+            {required ? <Text style={styles.figmaOfficeStar}>*</Text> : null}
           </View>
         ) : null}
         {counterPill}
@@ -130,7 +144,6 @@ const styles = StyleSheet.create({
   figmaOfficeLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 8,
     marginBottom: 20,
   },
@@ -138,7 +151,6 @@ const styles = StyleSheet.create({
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
   },
   figmaOfficeStar: {
     color: Colors.yellowIcons,
@@ -213,7 +225,6 @@ const styles = StyleSheet.create({
   counterValueSuffix: {
     color: '#fff',
     fontSize: 16,
-    marginRight: 6,
     fontWeight: '500',
   },
 });

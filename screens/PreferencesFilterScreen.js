@@ -8,11 +8,13 @@ import {
   Image,
   Dimensions,
   PanResponder,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
+import {flexStart} from '../index';
 
 // Figma: node 25:200959 (מגירה - העדפות)
 const BG = '#2B2A39';
@@ -76,11 +78,13 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         const locationX =
           rect && touch.pageX != null
             ? touch.pageX - rect.left
-            : touch.locationX ?? 0;
+            : (touch.locationX ?? 0);
         const w = sliderWidth || 1;
         const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        const minP = ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
-        const maxP = ((ageMaxRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
+        const minP =
+          ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
+        const maxP =
+          ((ageMaxRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
         const minDist = Math.abs(percent - minP);
         const maxDist = Math.abs(percent - maxP);
         activeThumbRef.current = minDist < maxDist ? 'min' : 'max';
@@ -93,7 +97,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         const locationX =
           rect && touch.pageX != null
             ? touch.pageX - rect.left
-            : touch.locationX ?? 0;
+            : (touch.locationX ?? 0);
         const w = sliderWidth || 1;
         const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
         updateFromPercent(percent, thumb === 'min');
@@ -174,7 +178,11 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => setGender(value)}
-        style={[styles.genderPillWrap, styles.genderPillInactive, styles.genderPill]}>
+        style={[
+          styles.genderPillWrap,
+          styles.genderPillInactive,
+          styles.genderPill,
+        ]}>
         {content}
       </TouchableOpacity>
     );
@@ -368,7 +376,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     marginBottom: 10,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   genderRow: {
     flexDirection: 'row',
@@ -495,7 +503,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
   },
   checkLabel: {
@@ -504,7 +512,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   footer: {
     paddingHorizontal: 24,

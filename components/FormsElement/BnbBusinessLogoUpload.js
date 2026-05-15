@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors} from '../../constants/styles';
-
+import {flexEnd} from '../../index';
 /**
  * Circular logo placeholder for BnB "business" flow only — gold ring, לוגו label, + control.
  */
@@ -42,7 +42,11 @@ export const BnbBusinessLogoUpload = ({
         onPress={onPress}
         activeOpacity={0.85}
         hitSlop={10}>
-        <MaterialCommunityIcons name="plus" size={17} color={Colors.whiteGeneral} />
+        <MaterialCommunityIcons
+          name="plus"
+          size={17}
+          color={Colors.whiteGeneral}
+        />
       </TouchableOpacity>
       {Platform.OS === 'web' && inputRef && (
         <input
@@ -65,7 +69,7 @@ const styles = StyleSheet.create({
   wrap: {
     width: SIZE + 6,
     height: SIZE + 6,
-    alignSelf: I18nManager.isRTL ? 'flex-start' : 'flex-end',
+    alignSelf: flexEnd,
     marginBottom: 16,
     marginTop: 6,
   },

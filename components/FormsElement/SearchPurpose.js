@@ -1,9 +1,17 @@
-import {StyleSheet, Text, View, TouchableOpacity, Image} from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Image,
+  I18nManager,
+} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
 
 export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
+  const sideSpacing = {marginLeft: 39};
   return (
     <FormContainer>
       <Title text="מטרת החיפוש" required />
@@ -17,7 +25,8 @@ export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
           styleDevider={{marginTop: 20}}
           isSelected={searchPurpose === 'enter'}
           radioOptionStyle={{paddingTop: 0}}>
-          <Text style={styles.radioOptionDescription}>
+          <Text
+            style={[styles.radioOptionDescription, {textAlign:'left'}, sideSpacing]}>
             אני מחפש להיכנס לדירת שותפים קיימת.
           </Text>
         </RadioWithText>
@@ -30,7 +39,8 @@ export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
           styleDevider={{marginTop: 20}}
           isSelected={searchPurpose === 'bring_in'}
           radioOptionStyle={{paddingTop: 15}}>
-          <Text style={styles.radioOptionDescription}>
+          <Text
+            style={[styles.radioOptionDescription, {textAlign:'left'}, sideSpacing]}>
             מתפנה לי חדר בדירת השותפים שבה אני גר אני מעוניין למצוא שותף חדש
             שיגור איתי.
           </Text>
@@ -42,7 +52,8 @@ export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
           index={2}
           isSelected={searchPurpose === 'partner'}
           radioOptionStyle={{paddingTop: 15}}>
-          <Text style={styles.radioOptionDescription}>
+          <Text
+            style={[styles.radioOptionDescription, {textAlign:'left'}, sideSpacing]}>
             אני מחפש ליצור חיבורים חדשים עם אנשים ולחפש ביחד דירת שותפים
           </Text>
         </RadioWithText>
@@ -54,8 +65,6 @@ export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
 const styles = StyleSheet.create({
   radioOptionDescription: {
     color: '#D2D0DC',
-    textAlign: 'right',
-    marginRight: 39,
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
   },

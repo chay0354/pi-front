@@ -11,11 +11,13 @@ import {
   useWindowDimensions,
   PanResponder,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {CalendarModal} from '../components/FormsElement/CalendarModal';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import {flexEnd} from '../index';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -53,7 +55,11 @@ function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
   }
   const node = sliderViewRef && sliderViewRef.current;
   const touch = ne.touches?.[0] || ne;
-  if (node && typeof node.getBoundingClientRect === 'function' && (touch?.clientX != null || touch?.pageX != null)) {
+  if (
+    node &&
+    typeof node.getBoundingClientRect === 'function' &&
+    (touch?.clientX != null || touch?.pageX != null)
+  ) {
     const rect = node.getBoundingClientRect();
     const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
     return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
@@ -61,7 +67,12 @@ function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
   return 0;
 }
 
-const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+const PriceFilterScreen = ({
+  initialFilter,
+  onClose,
+  onSave,
+  selectedCategory,
+}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
@@ -78,12 +89,18 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
     // No saved price filter: default 0 to 10,000,000+ (non-BnB) or BnB default scale.
     return isBnb ? Math.min(INITIAL_MAX_PRICE_BNB, maxPriceCap) : maxPriceCap;
   });
-  const [checkInDate, setCheckInDate] = useState(toIsoDate(initialFilter?.checkInDate));
-  const [checkOutDate, setCheckOutDate] = useState(toIsoDate(initialFilter?.checkOutDate));
+  const [checkInDate, setCheckInDate] = useState(
+    toIsoDate(initialFilter?.checkInDate),
+  );
+  const [checkOutDate, setCheckOutDate] = useState(
+    toIsoDate(initialFilter?.checkOutDate),
+  );
   const [freeCancellation, setFreeCancellation] = useState(
     initialFilter?.freeCancellation === true,
   );
-  const [hotDealOnly, setHotDealOnly] = useState(initialFilter?.hotDealOnly === true);
+  const [hotDealOnly, setHotDealOnly] = useState(
+    initialFilter?.hotDealOnly === true,
+  );
   const [calendarTarget, setCalendarTarget] = useState(null);
 
   const [minFocused, setMinFocused] = useState(false);
@@ -100,8 +117,14 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   maxPriceRef.current = maxPrice;
   const bottomInset = Math.max(insets.bottom, 8);
 
-  const minPercent = useMemo(() => (minPrice / maxPriceCap) * 100, [minPrice, maxPriceCap]);
-  const maxPercent = useMemo(() => (maxPrice / maxPriceCap) * 100, [maxPrice, maxPriceCap]);
+  const minPercent = useMemo(
+    () => (minPrice / maxPriceCap) * 100,
+    [minPrice, maxPriceCap],
+  );
+  const maxPercent = useMemo(
+    () => (maxPrice / maxPriceCap) * 100,
+    [maxPrice, maxPriceCap],
+  );
 
   const applyPriceFromPercent = useCallback(
     (percent, isMin) => {
@@ -109,7 +132,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
       const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
       let value = (percent / 100) * cap;
       if (isBnb) {
-        value = Math.round(value / BNB_PRICE_SLIDER_STEP) * BNB_PRICE_SLIDER_STEP;
+        value =
+          Math.round(value / BNB_PRICE_SLIDER_STEP) * BNB_PRICE_SLIDER_STEP;
       } else {
         value = Math.round(value / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
       }
@@ -144,7 +168,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           const cap = maxPriceCap;
           const minP = (minPriceRef.current / cap) * 100;
           const maxP = (maxPriceRef.current / cap) * 100;
-          const nearestMin = Math.abs(percent - minP) < Math.abs(percent - maxP);
+          const nearestMin =
+            Math.abs(percent - minP) < Math.abs(percent - maxP);
           activeThumbRef.current = nearestMin ? 'min' : 'max';
           applyPriceFromPercent(percent, activeThumbRef.current === 'min');
         },
@@ -234,7 +259,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
         </TouchableOpacity>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -245,72 +271,76 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
+          <Image
+            source={MENU_ICON}
+            style={styles.headerIcon}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>מחיר</Text>
         </View>
 
         <View style={styles.priceInputsRowBleed}>
-        <View style={styles.priceInputsRow}>
-          <View style={styles.priceInputGroup}>
-            <View style={styles.pricePill}>
-              <Text style={styles.pricePillPrefix}>
-                {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
-                  ? '+ ₪'
-                  : '₪'}
-              </Text>
-              <TextInput
-                value={
-                  maxFocused
-                    ? maxDraft
-                    : Math.max(0, Number(maxPrice) || 0).toLocaleString()
-                }
-                onFocus={() => {
-                  setMaxFocused(true);
-                  setMaxDraft(String(Math.max(0, Number(maxPrice) || 0)));
-                }}
-                onChangeText={text => setMaxDraft(digitsOnly(text))}
-                onBlur={commitMaxDraft}
-                onSubmitEditing={commitMaxDraft}
-                keyboardType="numeric"
-                inputMode="numeric"
-                placeholder="0"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                style={styles.pricePillInput}
-                textAlign="right"
-                selectTextOnFocus
-                returnKeyType="done"
-              />
+          <View style={styles.priceInputsRow}>
+            <View style={styles.priceInputGroup}>
+              <View style={styles.pricePill}>
+                <Text style={styles.pricePillPrefix}>
+                  {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
+                    ? '+ ₪'
+                    : '₪'}
+                </Text>
+                <TextInput
+                  value={
+                    maxFocused
+                      ? maxDraft
+                      : Math.max(0, Number(maxPrice) || 0).toLocaleString()
+                  }
+                  onFocus={() => {
+                    setMaxFocused(true);
+                    setMaxDraft(String(Math.max(0, Number(maxPrice) || 0)));
+                  }}
+                  onChangeText={text => setMaxDraft(digitsOnly(text))}
+                  onBlur={commitMaxDraft}
+                  onSubmitEditing={commitMaxDraft}
+                  keyboardType="numeric"
+                  inputMode="numeric"
+                  placeholder="0"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  style={styles.pricePillInput}
+                  textAlign={'left'}
+                  selectTextOnFocus
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+            <Text style={styles.priceDash}>-</Text>
+            <View style={styles.priceInputGroup}>
+              <View style={styles.pricePill}>
+                <Text style={styles.pricePillPrefix}>₪</Text>
+                <TextInput
+                  value={
+                    minFocused
+                      ? minDraft
+                      : Math.max(0, Number(minPrice) || 0).toLocaleString()
+                  }
+                  onFocus={() => {
+                    setMinFocused(true);
+                    setMinDraft(String(Math.max(0, Number(minPrice) || 0)));
+                  }}
+                  onChangeText={text => setMinDraft(digitsOnly(text))}
+                  onBlur={commitMinDraft}
+                  onSubmitEditing={commitMinDraft}
+                  keyboardType="numeric"
+                  inputMode="numeric"
+                  placeholder="0"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  style={styles.pricePillInput}
+                  textAlign={'left'}
+                  selectTextOnFocus
+                  returnKeyType="done"
+                />
+              </View>
             </View>
           </View>
-          <Text style={styles.priceDash}>-</Text>
-          <View style={styles.priceInputGroup}>
-            <View style={styles.pricePill}>
-              <Text style={styles.pricePillPrefix}>₪</Text>
-              <TextInput
-                value={
-                  minFocused
-                    ? minDraft
-                    : Math.max(0, Number(minPrice) || 0).toLocaleString()
-                }
-                onFocus={() => {
-                  setMinFocused(true);
-                  setMinDraft(String(Math.max(0, Number(minPrice) || 0)));
-                }}
-                onChangeText={text => setMinDraft(digitsOnly(text))}
-                onBlur={commitMinDraft}
-                onSubmitEditing={commitMinDraft}
-                keyboardType="numeric"
-                inputMode="numeric"
-                placeholder="0"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                style={styles.pricePillInput}
-                textAlign="right"
-                selectTextOnFocus
-                returnKeyType="done"
-              />
-            </View>
-          </View>
-        </View>
         </View>
 
         <View
@@ -336,10 +366,14 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
               ]}
             />
           </View>
-          <View style={[styles.sliderThumb, {left: `${minPercent}%`}]} pointerEvents="none">
+          <View
+            style={[styles.sliderThumb, {left: `${minPercent}%`}]}
+            pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
-          <View style={[styles.sliderThumb, {left: `${maxPercent}%`}]} pointerEvents="none">
+          <View
+            style={[styles.sliderThumb, {left: `${maxPercent}%`}]}
+            pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
         </View>
@@ -356,7 +390,9 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
                 activeOpacity={0.85}
                 style={styles.datePill}
                 onPress={() => setCalendarTarget('checkIn')}>
-                <Text style={styles.dateText}>{formatDateForDisplay(checkInDate)}</Text>
+                <Text style={styles.dateText}>
+                  {formatDateForDisplay(checkInDate)}
+                </Text>
                 <Image source={CALENDAR_ICON} style={styles.dateIcon} />
               </TouchableOpacity>
             </View>
@@ -369,7 +405,9 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
                 activeOpacity={0.85}
                 style={styles.datePill}
                 onPress={() => setCalendarTarget('checkOut')}>
-                <Text style={styles.dateText}>{formatDateForDisplay(checkOutDate)}</Text>
+                <Text style={styles.dateText}>
+                  {formatDateForDisplay(checkOutDate)}
+                </Text>
                 <Image source={CALENDAR_ICON} style={styles.dateIcon} />
               </TouchableOpacity>
             </View>
@@ -389,7 +427,8 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
               <FigmaCheckbox checked={hotDealOnly} />
             </TouchableOpacity>
             <Text style={styles.hotDealDescription}>
-              אופציה זו תמצא לכם את התמורה הכי משתלמת ביחס למחיר המוצע ומחירי מבצע.
+              אופציה זו תמצא לכם את התמורה הכי משתלמת ביחס למחיר המוצע ומחירי
+              מבצע.
             </Text>
           </>
         ) : null}
@@ -413,8 +452,10 @@ const PriceFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           visible={calendarTarget != null}
           onClose={() => setCalendarTarget(null)}
           onSelect={isoDate => {
-            if (calendarTarget === 'checkIn') setCheckInDate(toIsoDate(isoDate));
-            if (calendarTarget === 'checkOut') setCheckOutDate(toIsoDate(isoDate));
+            if (calendarTarget === 'checkIn')
+              setCheckInDate(toIsoDate(isoDate));
+            if (calendarTarget === 'checkOut')
+              setCheckOutDate(toIsoDate(isoDate));
           }}
         />
       ) : null}
@@ -570,7 +611,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 20,
   },
   requiredAsterisk: {
@@ -600,7 +641,7 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
     gap: 8,
     marginBottom: 20,
   },
@@ -611,14 +652,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Rubik-Regular',
     fontSize: 18,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   hotDealDescription: {
     color: '#9E9DA4',
     fontFamily: 'Rubik-Regular',
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 8,
     paddingRight: 32,
   },

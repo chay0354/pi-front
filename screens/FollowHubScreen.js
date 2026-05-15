@@ -10,10 +10,13 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {flexStart} from '../index';
+
 import {
   getFollowHubRows,
   getFollowStats,
@@ -37,12 +40,22 @@ const GOLD_CTA = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_CTA_LOCS = [0.0456, 0.5076, 0.8831];
 const GOLD_TEXT = '#1E1D27';
 
-const GoldPillButton = ({onPress, disabled, minWidth = 58, style, textStyle, label}) => (
+const GoldPillButton = ({
+  onPress,
+  disabled,
+  minWidth = 58,
+  style,
+  textStyle,
+  label,
+}) => (
   <TouchableOpacity
     onPress={onPress}
     disabled={disabled}
     activeOpacity={0.85}
-    style={[{minWidth, borderRadius: 1000, overflow: 'hidden', alignSelf: 'center'}, style]}>
+    style={[
+      {minWidth, borderRadius: 1000, overflow: 'hidden', alignSelf: 'center'},
+      style,
+    ]}>
     <LinearGradient
       colors={GOLD_CTA}
       locations={GOLD_CTA_LOCS}
@@ -90,14 +103,14 @@ const FollowHubScreen = ({
       {id: TAB_FOLLOWERS, label: 'עוקבים'},
       {id: TAB_FOLLOWING, label: 'עוקב'},
     ];
-    return isOwnProfile
-      ? [{id: TAB_REQUESTS, label: 'הצעות'}, ...base]
-      : base;
+    return isOwnProfile ? [{id: TAB_REQUESTS, label: 'הצעות'}, ...base] : base;
   }, [isOwnProfile]);
 
   const safeInitialTab = useMemo(() => {
     if (initialTab === TAB_REQUESTS && !isOwnProfile) return TAB_FOLLOWERS;
-    return tabs.some(t => t.id === initialTab) ? initialTab : tabs[0]?.id || TAB_FOLLOWERS;
+    return tabs.some(t => t.id === initialTab)
+      ? initialTab
+      : tabs[0]?.id || TAB_FOLLOWERS;
   }, [initialTab, isOwnProfile, tabs]);
 
   const [activeTab, setActiveTab] = useState(safeInitialTab);
@@ -242,7 +255,8 @@ const FollowHubScreen = ({
   /** On own "followers" tab: remove the row user's follow of this profile (they stop following you). */
   const handleRemoveFollower = useCallback(
     row => {
-      if (!isOwnProfile || !profileId || !row?.id || actioningId === row.id) return;
+      if (!isOwnProfile || !profileId || !row?.id || actioningId === row.id)
+        return;
       setConfirmUnfollowRow({...row, _action: 'removeFollower'});
     },
     [isOwnProfile, profileId, actioningId],
@@ -286,7 +300,8 @@ const FollowHubScreen = ({
    */
   const isMutualGoldRow = row => {
     if (!isOwnProfile) return false;
-    if (activeTab !== TAB_FOLLOWERS && activeTab !== TAB_FOLLOWING) return false;
+    if (activeTab !== TAB_FOLLOWERS && activeTab !== TAB_FOLLOWING)
+      return false;
     if (row?.is_mutual_follow !== true) return false;
     if (!row?.is_following_by_viewer) return false;
     if (row?.has_pending_request_by_viewer) return false;
@@ -330,7 +345,11 @@ const FollowHubScreen = ({
           style={styles.rowActionXBtn}
           activeOpacity={0.8}
           hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-          <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
+          <MaterialCommunityIcons
+            name="close"
+            size={18}
+            color="rgba(255,255,255,0.92)"
+          />
         </TouchableOpacity>
       );
     }
@@ -359,7 +378,11 @@ const FollowHubScreen = ({
               style={styles.rowActionXBtn}
               activeOpacity={0.8}
               hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-              <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
+              <MaterialCommunityIcons
+                name="close"
+                size={18}
+                color="rgba(255,255,255,0.92)"
+              />
             </TouchableOpacity>
           </View>
         );
@@ -372,7 +395,11 @@ const FollowHubScreen = ({
             style={styles.rowActionXBtn}
             activeOpacity={0.8}
             hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-            <MaterialCommunityIcons name="close" size={18} color="rgba(255,255,255,0.92)" />
+            <MaterialCommunityIcons
+              name="close"
+              size={18}
+              color="rgba(255,255,255,0.92)"
+            />
           </TouchableOpacity>
         );
       }
@@ -457,7 +484,11 @@ const FollowHubScreen = ({
       <View style={[styles.headerWrap, {paddingTop: insets.top + 12}]}>
         <View style={styles.topRow}>
           <TouchableOpacity onPress={onClose} style={styles.backBtn}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={28}
+              color="#fff"
+            />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{displayName || 'פרופיל'}</Text>
           <View style={styles.backBtn} />
@@ -470,10 +501,15 @@ const FollowHubScreen = ({
                 key={tab.id}
                 onPress={() => setActiveTab(tab.id)}
                 style={styles.tabTouch}>
-                <Text style={[styles.tabText, selected && styles.tabTextSelected]}>
+                <Text
+                  style={[styles.tabText, selected && styles.tabTextSelected]}>
                   {labelWithCount(tab.id)}
                 </Text>
-                {selected ? <View style={styles.tabLine} /> : <View style={styles.tabLinePlaceholder} />}
+                {selected ? (
+                  <View style={styles.tabLine} />
+                ) : (
+                  <View style={styles.tabLinePlaceholder} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -496,7 +532,10 @@ const FollowHubScreen = ({
         />
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled" style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        style={styles.list}
+        contentContainerStyle={styles.listContent}>
         {loadingRows ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator color="#FFC40A" />
@@ -561,10 +600,18 @@ const FollowHubScreen = ({
                     isMutualGoldRow(row) ? styles.avatarRingMutual : null,
                   ]}>
                   {row.image_url ? (
-                    <Image source={{uri: row.image_url}} style={styles.avatar} resizeMode="cover" />
+                    <Image
+                      source={{uri: row.image_url}}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <MaterialCommunityIcons name="account" size={18} color="rgba(255,255,255,0.6)" />
+                      <MaterialCommunityIcons
+                        name="account"
+                        size={18}
+                        color="rgba(255,255,255,0.6)"
+                      />
                     </View>
                   )}
                 </View>
@@ -582,7 +629,9 @@ const FollowHubScreen = ({
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>
-              {confirmUnfollowRow?._action === 'removeFollower' ? 'הסרת עוקב' : 'ביטול מעקב'}
+              {confirmUnfollowRow?._action === 'removeFollower'
+                ? 'הסרת עוקב'
+                : 'ביטול מעקב'}
             </Text>
             <Text style={styles.confirmText}>
               {confirmUnfollowRow?._action === 'removeFollower'
@@ -601,7 +650,9 @@ const FollowHubScreen = ({
                 onPress={confirmUnfollow}
                 activeOpacity={0.8}>
                 <Text style={styles.confirmBtnText}>
-                  {confirmUnfollowRow?._action === 'removeFollower' ? 'הסר' : 'הפסק מעקב'}
+                  {confirmUnfollowRow?._action === 'removeFollower'
+                    ? 'הסר'
+                    : 'הפסק מעקב'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -691,7 +742,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 10,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   searchIcon: {
@@ -811,7 +862,7 @@ const styles = StyleSheet.create({
   },
   rowInfo: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     justifyContent: 'center',
     marginHorizontal: 10,
     gap: 6,
@@ -821,7 +872,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   rowNameMutual: {
     color: '#FEE787',
@@ -831,12 +882,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   rowMetaRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
   },
   rowRatingWrap: {
@@ -849,7 +900,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   rowRatingStarIcon: {
     width: 16,

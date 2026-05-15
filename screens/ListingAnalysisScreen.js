@@ -7,12 +7,15 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {brokerCategories} from '../utils/constant';
 import {getListings} from '../utils/api';
+import {flexStart} from '../index';
+const inverseTextAlign = 'right';
 
 // Figma palette (node 35:547303 — ניתוח מודעות)
 const BG = '#27262F';
@@ -45,8 +48,7 @@ const DEFAULT_LISTING_QUOTA = 65;
 
 const categoryMeta = id => brokerCategories.find(c => c.id === id) || null;
 
-const isListingFrozen = l =>
-  l?.is_frozen === true || l?.is_frozen === 'true';
+const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
 
 /** Crops the category asset the same way EditPublishAdScreen does. */
 const CroppedCategoryImage = ({source, categoryId}) => {
@@ -180,10 +182,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
                 locations={GOLD_GRADIENT_LOCATIONS}
                 start={{x: 0.5, y: 0}}
                 end={{x: 0.5, y: 1}}
-                style={[
-                  styles.progressFill,
-                  {width: `${progress * 100}%`},
-                ]}
+                style={[styles.progressFill, {width: `${progress * 100}%`}]}
               />
             </View>
             <Text style={styles.summaryFooter}>
@@ -304,11 +303,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
-    textAlign: 'right',
+    textAlign: 'left',
     lineHeight: 22,
   },
   summaryCountWrap: {
-    textAlign: 'left',
+    textAlign: inverseTextAlign,
   },
   summaryCountCurrent: {
     color: GOLD_ACCENT,
@@ -398,11 +397,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     fontWeight: '600',
     minWidth: 28,
-    textAlign: 'left',
+    textAlign: inverseTextAlign,
   },
   rowSubtextCol: {
     flexShrink: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   rowSubtextTitle: {
     color: '#FFFFFF',
@@ -410,7 +409,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   rowSubtextNote: {
     color: TEXT_SECONDARY,
@@ -418,7 +417,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   rowRight: {
@@ -432,7 +431,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
-    textAlign: 'right',
+    textAlign: 'left',
     maxWidth: 110,
   },
   categoryImageWrap: {

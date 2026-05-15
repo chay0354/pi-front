@@ -98,13 +98,12 @@ const styles = StyleSheet.create({
   },
   row: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'nowrap',
     overflow: 'visible',
-    // Keep numeric order 1→5 left-to-right like the Figma frame, regardless of app direction.
-    writingDirection: 'ltr',
+    writingDirection: 'rtl',
   },
   tile: {
     backgroundColor: '#2B2A39',

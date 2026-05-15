@@ -13,6 +13,7 @@ import {
   Easing,
   Platform,
   Dimensions,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import {
   sendGroupChatMessage,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {flexEnd} from '../index';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
 const SHEET_HEIGHT = Math.min(640, Math.round(SCREEN_HEIGHT * 0.82));
@@ -119,7 +121,9 @@ const SharePostSheet = ({
 
   const myEmail = useMemo(
     () =>
-      currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null,
+      currentUser?.email
+        ? String(currentUser.email).trim().toLowerCase()
+        : null,
     [currentUser?.email],
   );
 
@@ -301,12 +305,14 @@ const SharePostSheet = ({
             </LinearGradient>
           )}
         </View>
-        <View style={styles.rowText}>
-          <Text style={styles.rowName} numberOfLines={1}>
+        <View style={[styles.rowText, {alignItems: flexEnd}]}>
+          <Text style={[styles.rowName, {textAlign: 'left'}]} numberOfLines={1}>
             {item.name}
           </Text>
           {item.preview ? (
-            <Text style={styles.rowPreview} numberOfLines={1}>
+            <Text
+              style={[styles.rowPreview, {textAlign: 'left'}]}
+              numberOfLines={1}>
               {item.preview}
             </Text>
           ) : null}
@@ -336,22 +342,14 @@ const SharePostSheet = ({
       statusBarTranslucent>
       <View style={StyleSheet.absoluteFill}>
         <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            styles.overlay,
-            {opacity: overlay},
-          ]}>
+          style={[StyleSheet.absoluteFill, styles.overlay, {opacity: overlay}]}>
           <TouchableOpacity
             activeOpacity={1}
             onPress={handleClose}
             style={StyleSheet.absoluteFill}
           />
         </Animated.View>
-        <Animated.View
-          style={[
-            styles.sheet,
-            {transform: [{translateY}]},
-          ]}>
+        <Animated.View style={[styles.sheet, {transform: [{translateY}]}]}>
           <View style={styles.grabberWrap}>
             <View style={styles.grabber} />
           </View>
@@ -370,16 +368,17 @@ const SharePostSheet = ({
                 />
               ) : (
                 <View
-                  style={[
-                    styles.previewImage,
-                    {backgroundColor: '#373548'},
-                  ]}
+                  style={[styles.previewImage, {backgroundColor: '#373548'}]}
                 />
               )}
             </View>
-            <View style={styles.previewTextWrap}>
-              <Text style={styles.previewLabel}>פוסט להעברה</Text>
-              <Text style={styles.previewCaption} numberOfLines={2}>
+            <View style={[styles.previewTextWrap, {alignItems: flexEnd}]}>
+              <Text style={[styles.previewLabel, {textAlign: 'left'}]}>
+                פוסט להעברה
+              </Text>
+              <Text
+                style={[styles.previewCaption, {textAlign: 'left'}]}
+                numberOfLines={2}>
                 {caption || 'פוסט'}
               </Text>
             </View>
@@ -397,7 +396,7 @@ const SharePostSheet = ({
               placeholder="חיפוש אנשי קשר"
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
-              textAlign="right"
+              textAlign={'left'}
               writingDirection="rtl"
             />
           </View>
@@ -408,7 +407,7 @@ const SharePostSheet = ({
             </View>
           ) : filtered.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyText}>
+              <Text style={[styles.emptyText, {textAlign: 'left'}]}>
                 {q ? 'לא נמצאו תוצאות' : 'אין שיחות לשתף אליהן עדיין'}
               </Text>
             </View>
@@ -481,18 +480,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#373548',
   },
   previewImage: {width: '100%', height: '100%'},
-  previewTextWrap: {flex: 1, alignItems: 'flex-end'},
+  previewTextWrap: {flex: 1},
   previewLabel: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: 12,
     marginBottom: 2,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   previewCaption: {
     color: '#fff',
     fontSize: 14,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   searchRow: {
@@ -536,18 +533,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitial: {color: '#1E1D27', fontSize: 18, fontFamily: 'Rubik-Medium'},
-  rowText: {flex: 1, alignItems: 'flex-end'},
+  rowText: {flex: 1},
   rowName: {
     color: '#fff',
     fontSize: 16,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   rowPreview: {
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
     marginTop: 2,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   sendBadge: {
@@ -563,7 +558,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: 14,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
 });

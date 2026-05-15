@@ -14,6 +14,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
+import {flexEnd} from '../index';
 
 /**
  * Polished notice when publish is blocked by missing required fields (ad upload flows).
@@ -37,7 +38,10 @@ const PublishValidationModal = ({
       onRequestClose={onClose}
       statusBarTranslucent={Platform.OS === 'android'}>
       <Pressable
-        style={[styles.backdrop, {paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12}]}
+        style={[
+          styles.backdrop,
+          {paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12},
+        ]}
         onPress={onClose}
         accessibilityLabel="סגור">
         <Pressable
@@ -59,11 +63,15 @@ const PublishValidationModal = ({
             showsVerticalScrollIndicator={messages.length > 6}
             keyboardShouldPersistTaps="handled">
             {messages.map((msg, i) => (
-              <View key={`${i}-${String(msg).slice(0, 24)}`} style={styles.row}>
+              <View
+                key={`${i}-${String(msg).slice(0, 24)}`}
+                style={[styles.row, {alignItems: flexEnd}]}>
                 <Text style={styles.bullet} accessibilityElementsHidden>
                   •
                 </Text>
-                <Text style={styles.itemText}>{msg}</Text>
+                <Text style={[styles.itemText, {textAlign: 'left'}]}>
+                  {msg}
+                </Text>
               </View>
             ))}
           </ScrollView>
@@ -150,7 +158,6 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
     gap: 10,
     paddingVertical: 2,
   },
@@ -167,7 +174,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
   },
   btnOuter: {
     alignSelf: 'stretch',

@@ -9,10 +9,12 @@ import {
   Pressable,
   TextInput,
   useWindowDimensions,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
+import {flexStart} from '../index';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -23,7 +25,12 @@ const GOLD_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const MENU_ICON = require('../assets/buttom-bar/rooms_number.png');
 const FILTER_CHECK = require('../assets/filter-check.png');
 
-const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+const RoomsFilterScreen = ({
+  initialFilter,
+  onClose,
+  onSave,
+  selectedCategory,
+}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
@@ -42,7 +49,9 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   const [balconyValue, setBalconyValue] = useState(initialFilter?.balcony ?? 1);
   const [elevator, setElevator] = useState(initialFilter?.elevator ?? false);
   const [mamad, setMamad] = useState(initialFilter?.mamad ?? false);
-  const [freeParking, setFreeParking] = useState(initialFilter?.freeParking ?? false);
+  const [freeParking, setFreeParking] = useState(
+    initialFilter?.freeParking ?? false,
+  );
   const bottomInset = Math.max(insets.bottom, 8);
 
   const handleSave = () => {
@@ -127,7 +136,9 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
               style={[styles.counterValueInput, {width: inputWidth}]}
               textAlign="center"
             />
-            {!!suffix && <Text style={styles.counterValueSuffix}>{suffix}</Text>}
+            {!!suffix && (
+              <Text style={styles.counterValueSuffix}>{suffix}</Text>
+            )}
           </View>
           <View style={styles.counterDivider} />
           <TouchableOpacity style={styles.counterButtonRight} onPress={onMinus}>
@@ -140,7 +151,10 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
   };
 
   const CheckRow = ({label, checked, onToggle}) => (
-    <TouchableOpacity style={styles.amenityOption} onPress={onToggle} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.amenityOption}
+      onPress={onToggle}
+      activeOpacity={0.8}>
       <Text style={styles.amenityText}>{label}</Text>
       <View style={styles.checkboxWrap}>
         {checked ? (
@@ -205,7 +219,8 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
         </TouchableOpacity>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -217,7 +232,11 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
         scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
+          <Image
+            source={MENU_ICON}
+            style={styles.headerIcon}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>חדרים</Text>
         </View>
 
@@ -252,10 +271,7 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
           onToggle={() => setParkingEnabled(!parkingEnabled)}
         />
         {parkingEnabled && (
-          <OptionPills
-            selected={parkingValue}
-            onSelect={setParkingValue}
-          />
+          <OptionPills selected={parkingValue} onSelect={setParkingValue} />
         )}
         <View style={styles.divider} />
 
@@ -292,7 +308,11 @@ const RoomsFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =
 
         {!isBnb && (
           <>
-            <CheckRow label='ממ"ד' checked={mamad} onToggle={() => setMamad(!mamad)} />
+            <CheckRow
+              label='ממ"ד'
+              checked={mamad}
+              onToggle={() => setMamad(!mamad)}
+            />
             <View style={styles.divider} />
           </>
         )}
@@ -359,7 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   counterInput: {
     flexDirection: 'row',
@@ -419,7 +439,7 @@ const styles = StyleSheet.create({
   amenityOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     paddingVertical: 10,
   },
   amenityText: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Regular'},
@@ -450,7 +470,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 16,
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityButtonContainer: {marginLeft: 8},
   amenityQuantityButton: {
@@ -462,7 +482,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityButtonSelected: {
     borderRadius: 846.154,
@@ -471,7 +491,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   amenityQuantityText: {
     color: '#fff',

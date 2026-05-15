@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {SvgXml} from 'react-native-svg';
@@ -19,7 +20,9 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
   const bottomInset = Math.max(insets.bottom, 8);
   const [area, setArea] = useState(initialFilter?.minArea ?? 50);
   const [rooms, setRooms] = useState(initialFilter?.minRooms ?? 2);
-  const [wholeFloor, setWholeFloor] = useState(initialFilter?.wholeFloor ?? false);
+  const [wholeFloor, setWholeFloor] = useState(
+    initialFilter?.wholeFloor ?? false,
+  );
   const [parking, setParking] = useState(initialFilter?.parking ?? false);
   const [elevator, setElevator] = useState(initialFilter?.elevator ?? false);
   const [mamad, setMamad] = useState(initialFilter?.mamad ?? false);
@@ -109,7 +112,9 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
               style={[styles.counterValueInput, {width: inputWidth}]}
               textAlign="center"
             />
-            {!!suffix && <Text style={styles.counterValueSuffix}> {suffix}</Text>}
+            {!!suffix && (
+              <Text style={styles.counterValueSuffix}> {suffix}</Text>
+            )}
           </View>
           <View style={styles.counterDividerV} />
           <TouchableOpacity style={styles.counterButtonRight} onPress={onMinus}>
@@ -158,12 +163,18 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
           <View style={styles.handleBar} />
         </TouchableOpacity>
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled"
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <SvgXml xml={TYPE_MENU_ICON_SVG} width={24} height={24} style={styles.headerIcon} />
+          <SvgXml
+            xml={TYPE_MENU_ICON_SVG}
+            width={24}
+            height={24}
+            style={styles.headerIcon}
+          />
           <Text style={styles.title}>סוג</Text>
         </View>
 
@@ -191,9 +202,21 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
             checked={wholeFloor}
             onToggle={() => setWholeFloor(!wholeFloor)}
           />
-          <CheckRow label="חניה" checked={parking} onToggle={() => setParking(!parking)} />
-          <CheckRow label="מעלית" checked={elevator} onToggle={() => setElevator(!elevator)} />
-          <CheckRow label="ממ״ד" checked={mamad} onToggle={() => setMamad(!mamad)} />
+          <CheckRow
+            label="חניה"
+            checked={parking}
+            onToggle={() => setParking(!parking)}
+          />
+          <CheckRow
+            label="מעלית"
+            checked={elevator}
+            onToggle={() => setElevator(!elevator)}
+          />
+          <CheckRow
+            label="ממ״ד"
+            checked={mamad}
+            onToggle={() => setMamad(!mamad)}
+          />
         </View>
       </ScrollView>
 
@@ -249,7 +272,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#464646',
     borderRadius: 3.123,
   },
-  header: {alignItems: 'center', marginBottom: 24, width: '100%', maxWidth: 366},
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+    width: '100%',
+    maxWidth: 366,
+  },
   headerIcon: {width: 24, height: 24},
   title: {
     color: '#fff',
@@ -269,7 +297,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     lineHeight: 18,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 20,
     paddingRight: 16,
     minHeight: 24,
@@ -351,7 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     flex: 1,
     minWidth: 0,
   },

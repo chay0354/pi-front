@@ -5,9 +5,9 @@ import {
   StyleSheet,
   PanResponder,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
-
 /** Match PreferencesFilterScreen (Figma drawer — גיל מועדף). */
 const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
@@ -75,11 +75,7 @@ export const AgeRangeSlider = ({
 
   const getTrackWidth = useCallback(() => {
     const el = sliderContainerRef.current;
-    if (
-      el &&
-      typeof el.getBoundingClientRect === 'function' &&
-      IS_WEB
-    ) {
+    if (el && typeof el.getBoundingClientRect === 'function' && IS_WEB) {
       const w = el.getBoundingClientRect().width;
       if (w > 0) return w;
     }
@@ -120,10 +116,7 @@ export const AgeRangeSlider = ({
           const w = sliderWidth > 0 ? sliderWidth : getTrackWidth();
           if (!w) return;
           const {locationX} = evt.nativeEvent;
-          const percent = Math.max(
-            0,
-            Math.min(100, (locationX / w) * 100),
-          );
+          const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
           const age = percentToAge(percent);
           if (thumb === 'min') {
             applyPair(age, maxValueRef.current);
@@ -214,10 +207,7 @@ export const AgeRangeSlider = ({
       if (!rect) return;
       const w = rect.width || sliderWidth || 1;
       const locationX = touch.clientX - rect.left;
-      const percent = Math.max(
-        0,
-        Math.min(100, (locationX / w) * 100),
-      );
+      const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
       const age = percentToAge(percent);
       if (thumb === 'min') {
         applyPair(age, maxValueRef.current);
@@ -234,7 +224,7 @@ export const AgeRangeSlider = ({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>גיל מועדף</Text>
+      <Text style={[styles.sectionLabel, {textAlign:'left'}]}>גיל מועדף</Text>
       <View style={styles.ageRangeRow}>
         <Text style={styles.ageRangeValue}>{minValue}</Text>
         <View style={styles.ageRangeSeparator} />
@@ -273,14 +263,20 @@ export const AgeRangeSlider = ({
           locations={GOLD_GRADIENT_LOCATIONS}
           start={{x: 0.5, y: 0}}
           end={{x: 0.5, y: 1}}
-          style={[styles.sliderThumb, {left: `${minPct}%`, pointerEvents: 'none'}]}
+          style={[
+            styles.sliderThumb,
+            {left: `${minPct}%`, pointerEvents: 'none'},
+          ]}
         />
         <LinearGradient
           colors={GOLD_GRADIENT}
           locations={GOLD_GRADIENT_LOCATIONS}
           start={{x: 0.5, y: 0}}
           end={{x: 0.5, y: 1}}
-          style={[styles.sliderThumb, {left: `${maxPct}%`, pointerEvents: 'none'}]}
+          style={[
+            styles.sliderThumb,
+            {left: `${maxPct}%`, pointerEvents: 'none'},
+          ]}
         />
       </View>
     </View>
@@ -300,7 +296,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     marginBottom: 10,
-    textAlign: 'right',
   },
   ageRangeRow: {
     flexDirection: 'row',

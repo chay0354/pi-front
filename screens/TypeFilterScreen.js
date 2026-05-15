@@ -7,10 +7,12 @@ import {
   ScrollView,
   Image,
   useWindowDimensions,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
+import {flexStart} from '../index';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -73,16 +75,19 @@ const TYPE_OPTIONS_NEW_FROM_DEVELOPER = [
   {id: 'religious_sector', label: 'מגזר דתי'},
 ];
 
-const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) => {
+const TypeFilterScreen = ({
+  initialFilter,
+  onClose,
+  onSave,
+  selectedCategory,
+}) => {
   const insets = useSafeAreaInsets();
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
-  const isCommerce =
-    selectedCategory === 8 || selectedCategory === '8';
+  const isCommerce = selectedCategory === 8 || selectedCategory === '8';
   const isLand = selectedCategory === 7 || selectedCategory === '7';
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
-  const isNewFromDeveloper =
-    selectedCategory === 1 || selectedCategory === '1';
+  const isNewFromDeveloper = selectedCategory === 1 || selectedCategory === '1';
   const options = useMemo(() => {
     if (isNewFromDeveloper) {
       return TYPE_OPTIONS_NEW_FROM_DEVELOPER;
@@ -186,12 +191,16 @@ const TypeFilterScreen = ({initialFilter, onClose, onSave, selectedCategory}) =>
         scrollEnabled
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Image source={MENU_ICON} style={styles.headerIcon} resizeMode="contain" />
+          <Image
+            source={MENU_ICON}
+            style={styles.headerIcon}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>סוג</Text>
         </View>
 
         <View style={[styles.radioList, compact && styles.radioListCompact]}>
-          {options.map((option) => (
+          {options.map(option => (
             <TouchableOpacity
               key={option.id}
               style={styles.radioRow}
@@ -286,7 +295,7 @@ const styles = StyleSheet.create({
   },
   radioList: {
     width: '100%',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 28,
     marginTop: 10,
   },
@@ -297,7 +306,7 @@ const styles = StyleSheet.create({
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
     width: '100%',
     minHeight: 24,
@@ -306,7 +315,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign:'left',
   },
   saveBtnWrap: {
     marginBottom: 12,

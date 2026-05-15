@@ -1,5 +1,11 @@
 import React from 'react';
-import {StyleSheet, Text, View, TouchableOpacity} from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  I18nManager,
+} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {Divider} from './Divider';
@@ -18,6 +24,9 @@ const createEmptyLand = () => ({
 
 /** Controlled by AdsForm (company category 7); parcels persist as `companyOffersLandSizes`. */
 export const CompanyOffersLandSizes = ({lands, setLands}) => {
+  const sideMargin = {marginLeft: 16};
+  const subLabelSpacing = {marginLeft: 12};
+  const optionSpacing = {marginRight: 20};
   const list = Array.isArray(lands) ? lands : [];
 
   const updateLand = (index, patch) => {
@@ -53,7 +62,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
           />
 
           <View style={styles.radioRow}>
-            <Text style={styles.subLabel}>שטח הקרקע *</Text>
+            <Text style={[styles.subLabel, subLabelSpacing]}>שטח הקרקע *</Text>
             <View style={{flexDirection: 'row'}}>
               <RadioWithText
                 key={1}
@@ -74,7 +83,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
                 index={0}
                 isSelected={land.unit === 'dunam'}
                 radioOptionStyle={{paddingTop: 0}}
-                containerStyle={{marginLeft: 20}}
+                containerStyle={optionSpacing}
               />
             </View>
           </View>
@@ -86,7 +95,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
             isDivider={false}
             containerStyle={{marginBottom: 0}}
           />
-          <Text style={styles.subFields}>מחיר*</Text>
+          <Text style={[styles.subFields, {textAlign:'left'}, sideMargin]}>מחיר*</Text>
           <CardPriceField
             title={'מחיר'}
             price={land.price}
@@ -97,7 +106,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
       ))}
 
       <TouchableOpacity style={[styles.radioOption]} onPress={addLand}>
-        <Text style={styles.radioOptionText}>הוסף קרקע</Text>
+        <Text style={[styles.radioOptionText, {textAlign:'left'}]}>הוסף קרקע</Text>
         <View style={[styles.radioSpacer]} />
         <RadioIcon isSelected={false} />
       </TouchableOpacity>
@@ -108,14 +117,12 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
 const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   landTitle: {
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
   },
   addButton: {
     marginHorizontal: 20,
@@ -138,26 +145,21 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSizes.fs14,
     fontFamily: 'Rubik-Regular',
-    marginRight: 12,
   },
   subFields: {
     fontSize: 14,
     color: '#D2D0DC',
     marginBottom: 10,
-    textAlign: 'right',
-    marginRight: 16,
     fontFamily: 'Rubik-Regular',
   },
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
   },
   radioOptionText: {
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
   },
   radioSpacer: {
     width: 8,
