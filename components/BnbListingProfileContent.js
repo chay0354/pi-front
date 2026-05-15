@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
+import {flexEnd, flexStart} from '../index';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CONTENT_W = Math.min(366, SCREEN_W - 48);
@@ -133,10 +134,7 @@ export default function BnbListingProfileContent({
     ).trim() || 'ללא כותרת';
 
   const addr = String(
-    listing?.address ||
-      listing?.location ||
-      listing?.search_address ||
-      '',
+    listing?.address || listing?.location || listing?.search_address || '',
   ).trim();
 
   const rooms =
@@ -169,9 +167,7 @@ export default function BnbListingProfileContent({
           : null;
 
   const cancelRaw = String(
-    listing?.cancellation_policy ||
-      listing?.cancellationPolicy ||
-      '',
+    listing?.cancellation_policy || listing?.cancellationPolicy || '',
   )
     .trim()
     .toLowerCase();
@@ -182,15 +178,12 @@ export default function BnbListingProfileContent({
 
   const description = String(listing?.description || '').trim();
 
-  const hospitalityCode = String(
-    listing?.hospitality_nature || '',
-  ).trim();
-  const hospitalityLabel =
-    HOSPITALITY_LABELS[hospitalityCode] || null;
+  const hospitalityCode = String(listing?.hospitality_nature || '').trim();
+  const hospitalityLabel = HOSPITALITY_LABELS[hospitalityCode] || null;
 
   const sf = listing?.service_facility || listing?.serviceFacility;
   const serviceKey =
-    sf && typeof sf === 'object' ? sf.selected ?? sf.key : null;
+    sf && typeof sf === 'object' ? (sf.selected ?? sf.key) : null;
   const serviceLabel =
     serviceKey && SERVICE_LABELS[String(serviceKey)]
       ? SERVICE_LABELS[String(serviceKey)]
@@ -199,7 +192,9 @@ export default function BnbListingProfileContent({
         : null;
 
   /** Split hospitality + services into two columns for grid */
-  const hospTiles = hospitalityLabel ? [{key: 'h', label: hospitalityLabel}] : [];
+  const hospTiles = hospitalityLabel
+    ? [{key: 'h', label: hospitalityLabel}]
+    : [];
 
   return (
     <View style={styles.wrap}>
@@ -227,12 +222,12 @@ export default function BnbListingProfileContent({
           <Text style={styles.listingTitle}>{title}</Text>
           {addr ? (
             <View style={styles.locRow}>
-              <Text style={styles.locText}>{addr}</Text>
               <SimpleLineIcons
                 name="location-pin"
                 size={18}
                 color={TEXT_SECONDARY}
               />
+              <Text style={styles.locText}>{addr}</Text>
             </View>
           ) : null}
         </View>
@@ -245,23 +240,25 @@ export default function BnbListingProfileContent({
           <View style={[styles.highlightCard, {width: CONTENT_W}]}>
             {roomsLine ? (
               <View style={styles.highlightRow}>
-                <Text style={styles.highlightText}>{roomsLine}</Text>
                 <Image
                   source={require('../assets/apr-details/icons_6.png')}
                   style={styles.highlightIcon}
                   resizeMode="contain"
                 />
+                <Text style={styles.highlightText}>{roomsLine}</Text>
               </View>
             ) : null}
-            {roomsLine && datesLine ? <View style={styles.highlightDivider} /> : null}
+            {roomsLine && datesLine ? (
+              <View style={styles.highlightDivider} />
+            ) : null}
             {datesLine ? (
               <View style={styles.highlightRow}>
-                <Text style={styles.highlightText}>{datesLine}</Text>
                 <MaterialCommunityIcons
                   name="calendar-month-outline"
                   size={28}
                   color="#FFFFFF"
                 />
+                <Text style={styles.highlightText}>{datesLine}</Text>
               </View>
             ) : null}
             {(roomsLine || datesLine) && showFreeCancel ? (
@@ -269,10 +266,10 @@ export default function BnbListingProfileContent({
             ) : null}
             {showFreeCancel ? (
               <View style={styles.cancelRow}>
-                <Text style={styles.highlightText}>ביטול ללא קנס</Text>
                 <View style={styles.checkCircle}>
                   <MaterialCommunityIcons name="check" size={14} color={DEEP} />
                 </View>
+                <Text style={styles.highlightText}>ביטול ללא קנס</Text>
               </View>
             ) : null}
           </View>
@@ -291,24 +288,33 @@ export default function BnbListingProfileContent({
       <Text style={styles.sectionHeading}>אופי האירוח</Text>
       {hospTiles.length > 0 ? (
         hospTiles.length === 1 ? (
-          <View style={[styles.natureChip, styles.natureChipSingle, {width: CONTENT_W}]}>
+          <View
+            style={[
+              styles.natureChip,
+              styles.natureChipSingle,
+              {width: CONTENT_W},
+            ]}>
             <Text style={styles.natureChipText}>{hospTiles[0].label}</Text>
           </View>
         ) : (
           <View style={[styles.twoColGrid, {width: CONTENT_W}]}>
             <View style={styles.col}>
-              {hospTiles.filter((_, i) => i % 2 === 0).map(t => (
-                <View key={t.key} style={styles.natureChip}>
-                  <Text style={styles.natureChipText}>{t.label}</Text>
-                </View>
-              ))}
+              {hospTiles
+                .filter((_, i) => i % 2 === 0)
+                .map(t => (
+                  <View key={t.key} style={styles.natureChip}>
+                    <Text style={styles.natureChipText}>{t.label}</Text>
+                  </View>
+                ))}
             </View>
             <View style={styles.col}>
-              {hospTiles.filter((_, i) => i % 2 === 1).map(t => (
-                <View key={t.key} style={styles.natureChip}>
-                  <Text style={styles.natureChipText}>{t.label}</Text>
-                </View>
-              ))}
+              {hospTiles
+                .filter((_, i) => i % 2 === 1)
+                .map(t => (
+                  <View key={t.key} style={styles.natureChip}>
+                    <Text style={styles.natureChipText}>{t.label}</Text>
+                  </View>
+                ))}
             </View>
           </View>
         )
@@ -344,8 +350,8 @@ export default function BnbListingProfileContent({
         style={[styles.reportBtn, {width: CONTENT_W}]}
         onPress={onReportPress}
         activeOpacity={0.85}>
-        <Text style={styles.reportBtnText}>דיווח</Text>
         <MaterialCommunityIcons name="alert-outline" size={22} color={CREAM} />
+        <Text style={styles.reportBtnText}>דיווח</Text>
       </TouchableOpacity>
     </View>
   );
@@ -353,19 +359,19 @@ export default function BnbListingProfileContent({
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: 'center',
+    alignItems: flexStart,
     paddingBottom: 24,
     width: '100%',
   },
   sectionTop: {
     gap: 20,
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
     marginBottom: 4,
   },
   tagsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexEnd,
     gap: 12,
     flexWrap: 'wrap',
     width: '100%',
@@ -401,24 +407,24 @@ const styles = StyleSheet.create({
   priceBlock: {
     width: '100%',
     gap: 18,
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
   },
   priceRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
+    alignItems: 'flex-start',
+    justifyContent: flexEnd,
     gap: 10,
     width: '100%',
   },
   pricePerNightLabels: {
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
   },
   pricePerNightSmall: {
     fontFamily: 'Rubik-Medium',
     fontSize: 14,
     lineHeight: 16,
     color: CREAM,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   priceVertRule: {
     width: 1,
@@ -430,20 +436,20 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 37,
     color: CREAM,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   listingTitle: {
     fontFamily: 'Rubik-Regular',
     fontSize: 18,
     lineHeight: 32,
     color: '#FFFFFF',
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
   },
   locRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 5,
     width: '100%',
   },
@@ -452,14 +458,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 16,
     color: TEXT_SECONDARY,
-    textAlign: 'right',
+    textAlign: 'left',
     flex: 1,
   },
   line: {
     height: 1,
     backgroundColor: DIVIDER,
     marginVertical: 20,
-    alignSelf: 'center',
+    alignSelf: flexStart,
   },
   highlightCard: {
     backgroundColor: CARD_BG,
@@ -471,7 +477,7 @@ const styles = StyleSheet.create({
   highlightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexEnd,
     gap: 6,
   },
   highlightText: {
@@ -479,7 +485,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 32,
     color: '#FFFFFF',
-    textAlign: 'right',
+    textAlign: 'left',
     flexShrink: 1,
   },
   highlightIcon: {
@@ -492,9 +498,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cancelRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
   },
   checkCircle: {
@@ -510,31 +516,31 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 32,
     color: '#FFFFFF',
-    textAlign: 'right',
-    alignSelf: 'center',
+    textAlign: 'left',
+    alignSelf: flexStart,
   },
   bodyMuted: {
     fontFamily: 'Rubik-Regular',
     fontSize: 14,
     color: TEXT_SECONDARY,
-    textAlign: 'right',
-    alignSelf: 'center',
+    textAlign: 'left',
+    alignSelf: flexStart,
   },
   sectionHeading: {
     fontFamily: 'Rubik-Regular',
     fontSize: 18,
     color: TEXT_SECONDARY,
-    textAlign: 'right',
+    textAlign: 'left',
     width: CONTENT_W,
     marginBottom: 12,
-    alignSelf: 'center',
+    alignSelf: flexStart,
   },
   twoColGrid: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 12,
     alignItems: 'flex-start',
-    justifyContent: 'center',
-    alignSelf: 'center',
+    justifyContent: flexStart,
+    alignSelf: flexStart,
   },
   col: {
     flex: 1,
@@ -549,7 +555,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   natureChipSingle: {
-    alignSelf: 'center',
+    alignSelf: flexStart,
   },
   natureChipText: {
     fontFamily: 'Rubik-Regular',
@@ -559,11 +565,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   serviceChipWrap: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 10,
-    justifyContent: 'flex-end',
-    alignSelf: 'center',
+    justifyContent: flexEnd,
+    alignSelf: flexStart,
   },
   serviceChip: {
     backgroundColor: CARD_BG,
@@ -575,29 +581,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontSize: 16,
     color: '#FFFFFF',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   mapBox: {
     width: CONTENT_W,
     height: 208,
     borderRadius: 12,
     overflow: 'hidden',
-    alignSelf: 'center',
+    alignSelf: flexStart,
     marginBottom: 20,
   },
   reportBtn: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     backgroundColor: '#322F42',
     borderRadius: 12,
     paddingVertical: 14,
-    alignSelf: 'center',
+    alignSelf: flexStart,
   },
   reportBtnText: {
     fontFamily: 'Rubik-Medium',
     fontSize: 18,
     color: CREAM,
+    textAlign: 'left',
   },
 });

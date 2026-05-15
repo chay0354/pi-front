@@ -1,4 +1,10 @@
-import React, {useState, useEffect, useCallback, useRef, useReducer} from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useReducer,
+} from 'react';
 import {
   View,
   Text,
@@ -13,6 +19,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -28,6 +35,7 @@ import {
 } from '../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
+import {flexEnd, flexStart} from '../index';
 
 /** Main chats list panel — matches Figma node 8:3115 */
 const CHAT_LIST_PANEL_BG = '#2B2A39';
@@ -77,7 +85,7 @@ function bucketGroupListByFirstLetter(rows) {
     if (b === '#') return -1;
     return a.localeCompare(b, 'he');
   });
-  return letters.map((letter) => ({letter, rows: map.get(letter)}));
+  return letters.map(letter => ({letter, rows: map.get(letter)}));
 }
 
 /** Resolves subscription type from user + nested subscription (API shapes vary). */
@@ -213,11 +221,16 @@ function normalizeChatListAvatarUri(value) {
     if (raw.startsWith('object/public/')) return `${origin}/storage/v1/${raw}`;
     if (raw.startsWith('/public/')) return `${origin}/storage/v1/object${raw}`;
     if (raw.startsWith('public/')) return `${origin}/storage/v1/object/${raw}`;
-    if (raw.startsWith('/profile-pics/')) return `${origin}/storage/v1/object/public${raw}`;
-    if (raw.startsWith('profile-pics/')) return `${origin}/storage/v1/object/public/${raw}`;
-    if (raw.startsWith('/company-logos/')) return `${origin}/storage/v1/object/public${raw}`;
-    if (raw.startsWith('company-logos/')) return `${origin}/storage/v1/object/public/${raw}`;
-    if (/^[^/]+\/.+/.test(raw)) return `${origin}/storage/v1/object/public/${raw}`;
+    if (raw.startsWith('/profile-pics/'))
+      return `${origin}/storage/v1/object/public${raw}`;
+    if (raw.startsWith('profile-pics/'))
+      return `${origin}/storage/v1/object/public/${raw}`;
+    if (raw.startsWith('/company-logos/'))
+      return `${origin}/storage/v1/object/public${raw}`;
+    if (raw.startsWith('company-logos/'))
+      return `${origin}/storage/v1/object/public/${raw}`;
+    if (/^[^/]+\/.+/.test(raw))
+      return `${origin}/storage/v1/object/public/${raw}`;
   }
   try {
     if (/^https?:\/\//i.test(raw)) return encodeURI(raw);
@@ -261,7 +274,15 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
       lookupTried,
       useProxyStream,
     });
-  }, [debugKey, trimmed, resolvedUri, sourceUri, userRef, lookupTried, useProxyStream]);
+  }, [
+    debugKey,
+    trimmed,
+    resolvedUri,
+    sourceUri,
+    userRef,
+    lookupTried,
+    useProxyStream,
+  ]);
 
   const handleImageError = useCallback(async () => {
     logProfilePic(`ChatListRowAvatar.error.${String(debugKey || 'row')}`, {
@@ -286,9 +307,7 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
       const res = await getChatParticipantDisplay(userRef);
       const fallback =
         normalizeChatListAvatarUri(
-          res?.profileImageUrl ||
-            res?.profile_picture_url ||
-            null,
+          res?.profileImageUrl || res?.profile_picture_url || null,
         ) || null;
       logProfilePic(`ChatListRowAvatar.lookup.${String(debugKey || 'row')}`, {
         row: debugKey || null,
@@ -307,11 +326,14 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
         setResolvedUri(null);
       }
     } catch (e) {
-      logProfilePic(`ChatListRowAvatar.lookupFail.${String(debugKey || 'row')}`, {
-        row: debugKey || null,
-        userRef,
-        error: e?.message ? String(e.message) : 'lookup_failed',
-      });
+      logProfilePic(
+        `ChatListRowAvatar.lookupFail.${String(debugKey || 'row')}`,
+        {
+          row: debugKey || null,
+          userRef,
+          error: e?.message ? String(e.message) : 'lookup_failed',
+        },
+      );
       setResolvedUri(null);
     }
   }, [debugKey, resolvedUri, sourceUri, userRef, lookupTried, useProxyStream]);
@@ -324,15 +346,16 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
           style={styles.avatarImage}
           resizeMode="cover"
           onLoad={() =>
-            logProfilePic(`ChatListRowAvatar.load.${String(debugKey || 'row')}`, {
-              row: debugKey || null,
-              uri: trimmed || null,
-              ok: true,
-            })
+            logProfilePic(
+              `ChatListRowAvatar.load.${String(debugKey || 'row')}`,
+              {
+                row: debugKey || null,
+                uri: trimmed || null,
+                ok: true,
+              },
+            )
           }
-          onError={(e) =>
-            handleImageError(e)
-          }
+          onError={e => handleImageError(e)}
         />
       </View>
     </View>
@@ -369,7 +392,10 @@ const ChatListScreen = ({
   const [groupSearch, setGroupSearch] = useState('');
   const [groupCandidates, setGroupCandidates] = useState([]);
   const [groupLoading, setGroupLoading] = useState(false);
-  const [groupPick, dispatchGroupPick] = useReducer(groupPickReducer, GROUP_PICK_INITIAL);
+  const [groupPick, dispatchGroupPick] = useReducer(
+    groupPickReducer,
+    GROUP_PICK_INITIAL,
+  );
   const groupSelected = groupPick.selected;
   const groupMemberMeta = groupPick.meta;
   const [groupWizardStep, setGroupWizardStep] = useState(1);
@@ -403,7 +429,9 @@ const ChatListScreen = ({
 
   useEffect(() => {
     if (!showNewChat || !groupFlow) return;
-    const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
+    const myEmail = currentUser?.email
+      ? String(currentUser.email).trim().toLowerCase()
+      : null;
     if (!myEmail) {
       setGroupCandidates([]);
       setGroupLoading(false);
@@ -415,13 +443,16 @@ const ChatListScreen = ({
     const audience = groupFlow === 'brokers' ? 'broker_only' : 'regular';
     const run = getUsersForGroupPicker(q, myEmail, audience);
     run
-      .then((res) => {
+      .then(res => {
         if (groupPickSeq.current !== seq) return;
         let list = res.users || [];
         // Safety guard: broker-group picker must display only broker users.
         if (groupFlow === 'brokers') {
           list = list.filter(
-            (u) => String(u?.subscriptionType || '').trim().toLowerCase() === 'broker',
+            u =>
+              String(u?.subscriptionType || '')
+                .trim()
+                .toLowerCase() === 'broker',
           );
         }
         setGroupCandidates(list);
@@ -445,22 +476,26 @@ const ChatListScreen = ({
       rowTitle: row?.title ?? null,
       rowProfile_picture_url: row?.profile_picture_url ?? null,
       rowProfileImageUrl: row?.profileImageUrl ?? null,
-      resolvedFromRow: normalizeChatListAvatarUri(getUserProfileImageUrl(row) || null),
+      resolvedFromRow: normalizeChatListAvatarUri(
+        getUserProfileImageUrl(row) || null,
+      ),
     });
     dispatchGroupPick({type: 'toggle', key, row});
   }, []);
 
-  const removeGroupMember = useCallback((email) => {
+  const removeGroupMember = useCallback(email => {
     const key = email != null ? String(email).trim().toLowerCase() : '';
     if (!key) return;
     dispatchGroupPick({type: 'remove', key});
   }, []);
 
-  const selectedGroupEmails = Object.keys(groupSelected).filter((k) => groupSelected[k]);
+  const selectedGroupEmails = Object.keys(groupSelected).filter(
+    k => groupSelected[k],
+  );
   const selectedCount = selectedGroupEmails.length;
 
   const handleGroupChipsCardLayout = useCallback(
-    (e) => {
+    e => {
       const l = e?.nativeEvent?.layout || {};
       logProfilePic('ChatListScreen.groupChips.card.layout', {
         x: l.x ?? null,
@@ -489,21 +524,26 @@ const ChatListScreen = ({
   useEffect(() => {
     if (!showNewChat || !groupFlow || selectedGroupEmails.length === 0) return;
     for (const em of selectedGroupEmails) {
-      const key = String(em || '').trim().toLowerCase();
+      const key = String(em || '')
+        .trim()
+        .toLowerCase();
       if (!key) continue;
       const existing = groupMemberMeta[key] || null;
-      const resolvedExisting = normalizeChatListAvatarUri(existing?.avatarUrl || null);
+      const resolvedExisting = normalizeChatListAvatarUri(
+        existing?.avatarUrl || null,
+      );
       if (resolvedExisting) continue;
       if (groupMetaLookupInFlight.current.has(key)) continue;
       groupMetaLookupInFlight.current.add(key);
       getChatParticipantDisplay(key)
-        .then((res) => {
+        .then(res => {
           const avatarUrl = normalizeChatListAvatarUri(
-            res?.profileImageUrl ||
-              res?.profile_picture_url ||
-              null,
+            res?.profileImageUrl || res?.profile_picture_url || null,
           );
-          const name = res?.name != null && String(res.name).trim() ? String(res.name).trim() : null;
+          const name =
+            res?.name != null && String(res.name).trim()
+              ? String(res.name).trim()
+              : null;
           logProfilePic(`ChatListScreen.groupPick.lookup.${key}`, {
             email: key,
             apiSuccess: !!res?.success,
@@ -532,13 +572,20 @@ const ChatListScreen = ({
 
   useEffect(() => {
     if (!showNewChat || !groupFlow || selectedGroupEmails.length === 0) return;
-    const perSelected = selectedGroupEmails.map((em) => {
-      const key = String(em || '').trim().toLowerCase();
+    const perSelected = selectedGroupEmails.map(em => {
+      const key = String(em || '')
+        .trim()
+        .toLowerCase();
       const rowFromList = groupCandidates.find(
-        (row) => String(row?.email || '').trim().toLowerCase() === key,
+        row =>
+          String(row?.email || '')
+            .trim()
+            .toLowerCase() === key,
       );
       const meta = groupMemberMeta[key] || null;
-      const resolvedCandidate = normalizeChatListAvatarUri(getUserProfileImageUrl(rowFromList) || null);
+      const resolvedCandidate = normalizeChatListAvatarUri(
+        getUserProfileImageUrl(rowFromList) || null,
+      );
       const resolvedMeta = normalizeChatListAvatarUri(meta?.avatarUrl || null);
       const resolvedFinal = resolvedCandidate || resolvedMeta || null;
       return {
@@ -558,7 +605,13 @@ const ChatListScreen = ({
       candidatesCount: groupCandidates.length,
       perSelected,
     });
-  }, [showNewChat, groupFlow, selectedGroupEmails, groupCandidates, groupMemberMeta]);
+  }, [
+    showNewChat,
+    groupFlow,
+    selectedGroupEmails,
+    groupCandidates,
+    groupMemberMeta,
+  ]);
 
   const resetGroupFlowState = useCallback(() => {
     setGroupFlow(null);
@@ -599,10 +652,15 @@ const ChatListScreen = ({
   }, [groupImageUploading]);
 
   const submitCreateGroup = useCallback(async () => {
-    const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
-    if (!myEmail || selectedCount < 1 || groupCreating || groupWizardStep !== 2) return;
-    const rawTitle = groupNameDraft != null ? String(groupNameDraft).trim() : '';
-    const defaultTitle = groupFlow === 'brokers' ? 'קבוצת מתווכים' : 'קבוצת לקוחות';
+    const myEmail = currentUser?.email
+      ? String(currentUser.email).trim().toLowerCase()
+      : null;
+    if (!myEmail || selectedCount < 1 || groupCreating || groupWizardStep !== 2)
+      return;
+    const rawTitle =
+      groupNameDraft != null ? String(groupNameDraft).trim() : '';
+    const defaultTitle =
+      groupFlow === 'brokers' ? 'קבוצת מתווכים' : 'קבוצת לקוחות';
     const title = rawTitle || defaultTitle;
     setGroupCreating(true);
     try {
@@ -668,7 +726,9 @@ const ChatListScreen = ({
     const seq = ++brokerSearchSeq.current;
     setBrokerSearchLoading(true);
     setBrokerSearchError(null);
-    const exclude = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
+    const exclude = currentUser?.email
+      ? String(currentUser.email).trim().toLowerCase()
+      : null;
     console.log('[pi-chat][broker-search] ChatListScreen immediate', {
       seq,
       query: q,
@@ -676,9 +736,12 @@ const ChatListScreen = ({
       platform: Platform.OS,
     });
     searchBrokers(q, exclude)
-      .then((res) => {
+      .then(res => {
         if (brokerSearchSeq.current !== seq) {
-          console.log('[pi-chat][broker-search] ChatListScreen stale response ignored', {seq, current: brokerSearchSeq.current});
+          console.log(
+            '[pi-chat][broker-search] ChatListScreen stale response ignored',
+            {seq, current: brokerSearchSeq.current},
+          );
           return;
         }
         const list = res.brokers || [];
@@ -689,11 +752,15 @@ const ChatListScreen = ({
         });
         setBrokerResults(list);
       })
-      .catch((err) => {
+      .catch(err => {
         if (brokerSearchSeq.current !== seq) return;
         setBrokerResults([]);
         const msg = err?.message ? String(err.message) : 'שגיאת חיפוש';
-        console.warn('[pi-chat][broker-search] ChatListScreen error', {seq, message: msg, err});
+        console.warn('[pi-chat][broker-search] ChatListScreen error', {
+          seq,
+          message: msg,
+          err,
+        });
         setBrokerSearchError(msg);
       })
       .finally(() => {
@@ -702,8 +769,9 @@ const ChatListScreen = ({
   }, [newChatSearch, showNewChat, currentUser?.email]);
 
   const openChatWithBroker = useCallback(
-    (b) => {
-      const email = b?.email != null ? String(b.email).trim().toLowerCase() : '';
+    b => {
+      const email =
+        b?.email != null ? String(b.email).trim().toLowerCase() : '';
       if (!email) return;
       setShowNewChat(false);
       onOpenChat?.({
@@ -718,63 +786,78 @@ const ChatListScreen = ({
     [onOpenChat],
   );
 
-  const fetchConversations = useCallback(async (isRefresh = false) => {
-    const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
-    if (!myEmail) {
-      setConversations([PI_CONV]);
-      setLoading(false);
-      return;
-    }
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const res = await getChatConversations(myEmail);
-      const list = res.conversations || [];
-      const asConv = list.map((c) => ({
-        id: c.otherUserEmail || c.id,
-        otherUserEmail: c.otherUserEmail || null,
-        isGroup: c.isGroup === true,
-        name: c.name || 'משתמש',
-        profileImageUrl:
-          getUserProfileImageUrl(c) ||
-          (c.groupImageUrl != null && String(c.groupImageUrl).trim() ? String(c.groupImageUrl).trim() : null) ||
-          (c.group_image_url != null && String(c.group_image_url).trim() ? String(c.group_image_url).trim() : null) ||
-          null,
-        preview: c.preview || '',
-        time: c.time || '',
-        lastMessageAt: c.lastMessageAt || null,
-        listingId: c.listingId || null,
-        listingDisplayNumber: c.listingDisplayNumber != null ? Number(c.listingDisplayNumber) : null,
-        listingCategoryLabel: c.listingCategoryLabel || null,
-        exclusiveOfferStatus: c.exclusiveOfferStatus || null,
-      }));
-      const cu = currentUserRef.current;
-      logProfilePic('ChatListScreen.fetchConversations', {
-        myEmail,
-        rawConversationCount: list.length,
-        loggedInUserResolvedPic: getUserProfileImageUrl(cu),
-        loggedInUserRaw: cu && {
-          profile_picture_url: cu.profile_picture_url,
-          profileImageUrl: cu.profileImageUrl,
-        },
-        perConversation: list.map((c, i) => ({
-          id: c.id,
-          isGroup: !!c.isGroup,
-          otherUserEmail: c.otherUserEmail ?? null,
-          apiProfileImageUrl: c.profileImageUrl ?? null,
-          resolvedFromApiRow: getUserProfileImageUrl(c),
-          storedOnUiRow: asConv[i]?.profileImageUrl ?? null,
-        })),
-      });
-      setConversations(asConv.length > 0 ? [...asConv, PI_CONV] : [PI_CONV]);
-    } catch (err) {
-      console.warn('[ChatList] fetchConversations error:', err?.message || err);
-      setConversations([PI_CONV]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [currentUser?.email]);
+  const fetchConversations = useCallback(
+    async (isRefresh = false) => {
+      const myEmail = currentUser?.email
+        ? String(currentUser.email).trim().toLowerCase()
+        : null;
+      if (!myEmail) {
+        setConversations([PI_CONV]);
+        setLoading(false);
+        return;
+      }
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      try {
+        const res = await getChatConversations(myEmail);
+        const list = res.conversations || [];
+        const asConv = list.map(c => ({
+          id: c.otherUserEmail || c.id,
+          otherUserEmail: c.otherUserEmail || null,
+          isGroup: c.isGroup === true,
+          name: c.name || 'משתמש',
+          profileImageUrl:
+            getUserProfileImageUrl(c) ||
+            (c.groupImageUrl != null && String(c.groupImageUrl).trim()
+              ? String(c.groupImageUrl).trim()
+              : null) ||
+            (c.group_image_url != null && String(c.group_image_url).trim()
+              ? String(c.group_image_url).trim()
+              : null) ||
+            null,
+          preview: c.preview || '',
+          time: c.time || '',
+          lastMessageAt: c.lastMessageAt || null,
+          listingId: c.listingId || null,
+          listingDisplayNumber:
+            c.listingDisplayNumber != null
+              ? Number(c.listingDisplayNumber)
+              : null,
+          listingCategoryLabel: c.listingCategoryLabel || null,
+          exclusiveOfferStatus: c.exclusiveOfferStatus || null,
+        }));
+        const cu = currentUserRef.current;
+        logProfilePic('ChatListScreen.fetchConversations', {
+          myEmail,
+          rawConversationCount: list.length,
+          loggedInUserResolvedPic: getUserProfileImageUrl(cu),
+          loggedInUserRaw: cu && {
+            profile_picture_url: cu.profile_picture_url,
+            profileImageUrl: cu.profileImageUrl,
+          },
+          perConversation: list.map((c, i) => ({
+            id: c.id,
+            isGroup: !!c.isGroup,
+            otherUserEmail: c.otherUserEmail ?? null,
+            apiProfileImageUrl: c.profileImageUrl ?? null,
+            resolvedFromApiRow: getUserProfileImageUrl(c),
+            storedOnUiRow: asConv[i]?.profileImageUrl ?? null,
+          })),
+        });
+        setConversations(asConv.length > 0 ? [...asConv, PI_CONV] : [PI_CONV]);
+      } catch (err) {
+        console.warn(
+          '[ChatList] fetchConversations error:',
+          err?.message || err,
+        );
+        setConversations([PI_CONV]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [currentUser?.email],
+  );
 
   useEffect(() => {
     fetchConversations();
@@ -789,7 +872,7 @@ const ChatListScreen = ({
   const q = search.trim().toLowerCase();
   const filtered = q
     ? conversations.filter(
-        (c) =>
+        c =>
           (c.name || '').toLowerCase().includes(q) ||
           (c.preview || '').toLowerCase().includes(q) ||
           (c.listingCategoryLabel || '').toLowerCase().includes(q) ||
@@ -799,15 +882,24 @@ const ChatListScreen = ({
       )
     : conversations;
 
-  const renderRowMeta = (conv) => {
+  const renderRowMeta = conv => {
     const isPi = conv.id === '1';
     const rel = formatRelativeTimeHebrew(conv.lastMessageAt) || conv.time || '';
     const isGroup = conv.isGroup === true;
-    const exStatus = conv.exclusiveOfferStatus != null ? String(conv.exclusiveOfferStatus).trim().toLowerCase() : '';
+    const exStatus =
+      conv.exclusiveOfferStatus != null
+        ? String(conv.exclusiveOfferStatus).trim().toLowerCase()
+        : '';
     const showExclusiveRow =
-      !isPi && !isGroup && (exStatus === 'pending' || exStatus === 'accepted' || exStatus === 'rejected');
-    const showListing = !isPi && !isGroup && !!conv.listingId && !showExclusiveRow;
-    const showCategory = !isPi && !isGroup && !!conv.listingCategoryLabel && !showExclusiveRow;
+      !isPi &&
+      !isGroup &&
+      (exStatus === 'pending' ||
+        exStatus === 'accepted' ||
+        exStatus === 'rejected');
+    const showListing =
+      !isPi && !isGroup && !!conv.listingId && !showExclusiveRow;
+    const showCategory =
+      !isPi && !isGroup && !!conv.listingCategoryLabel && !showExclusiveRow;
 
     if (isPi) {
       return (
@@ -824,14 +916,36 @@ const ChatListScreen = ({
     /* LTR row + flex-end: cluster sits toward avatar; visual order R→L is category | ad | time (time left of badges). */
     return (
       <View style={styles.metaRow}>
-        {rel ? (
-          <Text style={styles.metaTime} numberOfLines={1} ellipsizeMode="tail">
-            {rel}
-          </Text>
+        {showCategory ? (
+          <View style={styles.chatListCategoryPill}>
+            <Text
+              style={styles.badgeYellowText}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              {conv.listingCategoryLabel}
+            </Text>
+          </View>
+        ) : null}
+        {showListing ? (
+          <View style={styles.badgeGrey}>
+            <Text style={styles.badgeGreyText} numberOfLines={1}>
+              {conv.listingDisplayNumber != null &&
+              !Number.isNaN(conv.listingDisplayNumber)
+                ? `מודעה מס ${conv.listingDisplayNumber}`
+                : 'מודעה'}
+            </Text>
+          </View>
         ) : null}
         {showExclusiveRow ? (
-          <View style={[styles.chatListCategoryPill, styles.chatListCategoryPillFlexible]}>
-            <Text style={styles.badgeYellowText} numberOfLines={1} ellipsizeMode="tail">
+          <View
+            style={[
+              styles.chatListCategoryPill,
+              styles.chatListCategoryPillFlexible,
+            ]}>
+            <Text
+              style={styles.badgeYellowText}
+              numberOfLines={1}
+              ellipsizeMode="tail">
               {exStatus === 'accepted'
                 ? 'בלעדיות'
                 : exStatus === 'pending'
@@ -842,21 +956,10 @@ const ChatListScreen = ({
             </Text>
           </View>
         ) : null}
-        {showListing ? (
-          <View style={styles.badgeGrey}>
-            <Text style={styles.badgeGreyText} numberOfLines={1}>
-              {conv.listingDisplayNumber != null && !Number.isNaN(conv.listingDisplayNumber)
-                ? `מודעה מס ${conv.listingDisplayNumber}`
-                : 'מודעה'}
-            </Text>
-          </View>
-        ) : null}
-        {showCategory ? (
-          <View style={styles.chatListCategoryPill}>
-            <Text style={styles.badgeYellowText} numberOfLines={1} ellipsizeMode="tail">
-              {conv.listingCategoryLabel}
-            </Text>
-          </View>
+        {rel ? (
+          <Text style={styles.metaTime} numberOfLines={1} ellipsizeMode="tail">
+            {rel}
+          </Text>
         ) : null}
       </View>
     );
@@ -867,7 +970,9 @@ const ChatListScreen = ({
       <View style={styles.topSection}>
         <View style={[styles.headerRow, {paddingTop: insets.top + 10}]}>
           <Pressable
-            onPress={() => (typeof onClose === 'function' ? onClose() : undefined)}
+            onPress={() =>
+              typeof onClose === 'function' ? onClose() : undefined
+            }
             style={({pressed}) => [
               styles.headerBackBtn,
               Platform.OS === 'web' && {cursor: 'pointer'},
@@ -876,10 +981,18 @@ const ChatListScreen = ({
             hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
             accessibilityRole="button"
             accessibilityLabel="חזרה">
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={28}
+              color="#fff"
+            />
           </Pressable>
           <View style={styles.logoWrap}>
-            <Image source={require('../assets/image-copy-9.png')} style={styles.logoImage} resizeMode="contain" />
+            <Image
+              source={require('../assets/image-copy-9.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           {isBrokerUser ? (
             <TouchableOpacity
@@ -904,7 +1017,12 @@ const ChatListScreen = ({
             value={search}
             onChangeText={setSearch}
           />
-          <MaterialCommunityIcons name="magnify" size={22} color={SEARCH_CLUE} style={styles.searchIcon} />
+          <MaterialCommunityIcons
+            name="magnify"
+            size={22}
+            color={SEARCH_CLUE}
+            style={styles.searchIcon}
+          />
         </View>
       </View>
 
@@ -919,37 +1037,48 @@ const ChatListScreen = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => fetchConversations(true)} tintColor={GOLD} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchConversations(true)}
+              tintColor={GOLD}
+            />
           }>
           <View style={styles.scrollContentInner}>
             <View style={styles.topToListSpacer} />
             {filtered.map((conv, index) => {
-              const rawPeerPic = conv.id === '1' ? null : getUserProfileImageUrl(conv);
+              const rawPeerPic =
+                conv.id === '1' ? null : getUserProfileImageUrl(conv);
               const rowAvatarUrl = normalizeChatListAvatarUri(rawPeerPic);
-              const rowDebugKey = conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
+              const rowDebugKey =
+                conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
               const rowUserRef = conv.otherUserEmail || conv.id || null;
               return (
-              <TouchableOpacity
-                key={conv.id ?? conv.name ?? `conv-${index}`}
-                style={styles.messageRow}
-                onPress={() => onOpenChat && onOpenChat(conv)}
-                activeOpacity={0.75}>
-                <View style={styles.rowMain}>
-                  {renderRowMeta(conv)}
-                  <Text style={styles.messagePreview} numberOfLines={2}>
-                    {conv.preview != null && String(conv.preview).trim() !== ''
-                      ? String(conv.preview)
-                      : 'אין הודעות'}
-                  </Text>
-                </View>
-                <View style={styles.avatarCol}>
-                  <ChatListRowAvatar uri={rowAvatarUrl} debugKey={rowDebugKey} userRef={rowUserRef} />
-                  <Text style={styles.senderName} numberOfLines={1}>
-                    {conv.name != null ? String(conv.name) : 'משתמש'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
+                <TouchableOpacity
+                  key={conv.id ?? conv.name ?? `conv-${index}`}
+                  style={styles.messageRow}
+                  onPress={() => onOpenChat && onOpenChat(conv)}
+                  activeOpacity={0.75}>
+                  <View style={styles.rowMain}>
+                    {renderRowMeta(conv)}
+                    <Text style={styles.messagePreview} numberOfLines={2}>
+                      {conv.preview != null &&
+                      String(conv.preview).trim() !== ''
+                        ? String(conv.preview)
+                        : 'אין הודעות'}
+                    </Text>
+                  </View>
+                  <View style={styles.avatarCol}>
+                    <ChatListRowAvatar
+                      uri={rowAvatarUrl}
+                      debugKey={rowDebugKey}
+                      userRef={rowUserRef}
+                    />
+                    <Text style={styles.senderName} numberOfLines={1}>
+                      {conv.name != null ? String(conv.name) : 'משתמש'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
             })}
           </View>
         </ScrollView>
@@ -969,16 +1098,25 @@ const ChatListScreen = ({
                     <TouchableOpacity
                       onPress={onGroupWizardPrimary}
                       disabled={
-                        (groupWizardStep === 1 && (selectedCount < 1 || !currentUser?.email)) ||
-                        (groupWizardStep === 2 && (groupCreating || groupImageUploading || !currentUser?.email))
+                        (groupWizardStep === 1 &&
+                          (selectedCount < 1 || !currentUser?.email)) ||
+                        (groupWizardStep === 2 &&
+                          (groupCreating ||
+                            groupImageUploading ||
+                            !currentUser?.email))
                       }
                       style={styles.ncWizardPrimaryWrap}
                       activeOpacity={0.7}
                       hitSlop={{top: 12, bottom: 12, left: 8, right: 8}}
                       accessibilityRole="button"
-                      accessibilityLabel={groupWizardStep === 1 ? 'הבא' : 'שמור'}>
+                      accessibilityLabel={
+                        groupWizardStep === 1 ? 'הבא' : 'שמור'
+                      }>
                       {groupCreating && groupWizardStep === 2 ? (
-                        <ActivityIndicator size="small" color={CATEGORY_BADGE_BG} />
+                        <ActivityIndicator
+                          size="small"
+                          color={CATEGORY_BADGE_BG}
+                        />
                       ) : (
                         <>
                           <Text style={styles.ncWizardPrimaryText}>
@@ -988,8 +1126,15 @@ const ChatListScreen = ({
                       )}
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.ncTitle, styles.ncTitleWizard, styles.ncTitleWizardText]}>
-                    {groupFlow === 'customers' ? 'צור קבוצת לקוחות' : 'צור קבוצת מתווכים'}
+                  <Text
+                    style={[
+                      styles.ncTitle,
+                      styles.ncTitleWizard,
+                      styles.ncTitleWizardText,
+                    ]}>
+                    {groupFlow === 'customers'
+                      ? 'צור קבוצת לקוחות'
+                      : 'צור קבוצת מתווכים'}
                   </Text>
                   <View style={styles.ncWizardColEnd}>
                     <TouchableOpacity
@@ -1010,7 +1155,11 @@ const ChatListScreen = ({
                     style={styles.ncBackBtn}
                     activeOpacity={0.7}
                     hitSlop={{top: 16, bottom: 16, left: 16, right: 16}}>
-                    <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
+                    <MaterialCommunityIcons
+                      name="chevron-left"
+                      size={28}
+                      color="#fff"
+                    />
                   </TouchableOpacity>
                   <Text style={styles.ncTitle}>{"צ'אט חדש"}</Text>
                   <View style={styles.ncHeaderSpacer} />
@@ -1018,7 +1167,8 @@ const ChatListScreen = ({
               )}
             </View>
             {groupFlow && groupWizardStep === 1 ? (
-              <View style={[styles.ncSearchFullBleed, styles.ncGroupSearchOffset]}>
+              <View
+                style={[styles.ncSearchFullBleed, styles.ncGroupSearchOffset]}>
                 <View style={[styles.ncSearchWrap, styles.ncSearchWrapGold]}>
                   {groupSearch.length > 0 ? (
                     <TouchableOpacity
@@ -1031,7 +1181,10 @@ const ChatListScreen = ({
                     </TouchableOpacity>
                   ) : null}
                   <TextInput
-                    style={[styles.ncSearchInput, groupSearch.length > 0 && styles.ncSearchInputPadClear]}
+                    style={[
+                      styles.ncSearchInput,
+                      groupSearch.length > 0 && styles.ncSearchInputPadClear,
+                    ]}
                     placeholder={
                       groupFlow === 'brokers'
                         ? 'חפש מתווך לפי שם / משרד / טלפון'
@@ -1041,7 +1194,12 @@ const ChatListScreen = ({
                     value={groupSearch}
                     onChangeText={setGroupSearch}
                   />
-                  <MaterialCommunityIcons name="magnify" size={22} color={NC_TEXT_SECONDARY} style={styles.ncSearchIcon} />
+                  <MaterialCommunityIcons
+                    name="magnify"
+                    size={22}
+                    color={NC_TEXT_SECONDARY}
+                    style={styles.ncSearchIcon}
+                  />
                 </View>
               </View>
             ) : null}
@@ -1064,7 +1222,11 @@ const ChatListScreen = ({
                   {groupImageUploading ? (
                     <ActivityIndicator size="small" color={GOLD} />
                   ) : groupImageUrl ? (
-                    <Image source={{uri: groupImageUrl}} style={styles.ncGroupPickPreview} resizeMode="cover" />
+                    <Image
+                      source={{uri: groupImageUrl}}
+                      style={styles.ncGroupPickPreview}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <Image
                       source={NC_GROUP_CAMERA_ICON}
@@ -1078,19 +1240,28 @@ const ChatListScreen = ({
             {groupFlow && selectedCount > 0 ? (
               <View style={styles.ncChipsSection}>
                 <Text style={styles.ncChipsLabel}>
-                  {groupFlow === 'brokers' ? 'מתווכים שהתווספו' : 'אנשי קשר שהתווספו'}
+                  {groupFlow === 'brokers'
+                    ? 'מתווכים שהתווספו'
+                    : 'אנשי קשר שהתווספו'}
                 </Text>
-                <View style={styles.ncChipsCard} onLayout={handleGroupChipsCardLayout}>
+                <View
+                  style={styles.ncChipsCard}
+                  onLayout={handleGroupChipsCardLayout}>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     onContentSizeChange={handleGroupChipsContentSize}
                     contentContainerStyle={styles.ncChipsScrollContent}>
-                    {selectedGroupEmails.map((em) => {
-                      const key = String(em || '').trim().toLowerCase();
+                    {selectedGroupEmails.map(em => {
+                      const key = String(em || '')
+                        .trim()
+                        .toLowerCase();
                       const rowFromList = groupCandidates.find(
-                        (row) => String(row?.email || '').trim().toLowerCase() === key,
+                        row =>
+                          String(row?.email || '')
+                            .trim()
+                            .toLowerCase() === key,
                       );
                       const meta = groupMemberMeta[key] || {title: em};
                       const pic = normalizeChatListAvatarUri(
@@ -1101,7 +1272,8 @@ const ChatListScreen = ({
                           null,
                       );
                       const chipTitle =
-                        (rowFromList?.title != null && String(rowFromList.title).trim()) ||
+                        (rowFromList?.title != null &&
+                          String(rowFromList.title).trim()) ||
                         (meta.title != null && String(meta.title).trim()) ||
                         em;
                       return (
@@ -1110,7 +1282,11 @@ const ChatListScreen = ({
                             <View style={styles.ncChipAvatarRing}>
                               <View style={styles.ncChipAvatarInner}>
                                 {pic ? (
-                                  <Image source={{uri: pic}} style={styles.ncChipAvatarImg} resizeMode="cover" />
+                                  <Image
+                                    source={{uri: pic}}
+                                    style={styles.ncChipAvatarImg}
+                                    resizeMode="cover"
+                                  />
                                 ) : (
                                   <Image
                                     source={require('../assets/image-copy-10.png')}
@@ -1154,16 +1330,29 @@ const ChatListScreen = ({
                       </TouchableOpacity>
                     ) : null}
                     <TextInput
-                      style={[styles.ncSearchInput, newChatSearch.length > 0 && styles.ncSearchInputPadClear]}
+                      style={[
+                        styles.ncSearchInput,
+                        newChatSearch.length > 0 &&
+                          styles.ncSearchInputPadClear,
+                      ]}
                       placeholder="חפש מתווך לפי שם / משרד / טלפון"
                       placeholderTextColor={NC_TEXT_SECONDARY}
                       value={newChatSearch}
                       onChangeText={setNewChatSearch}
                     />
-                    <MaterialCommunityIcons name="magnify" size={22} color={NC_TEXT_SECONDARY} style={styles.ncSearchIcon} />
+                    <MaterialCommunityIcons
+                      name="magnify"
+                      size={22}
+                      color={NC_TEXT_SECONDARY}
+                      style={styles.ncSearchIcon}
+                    />
                   </View>
                 </View>
-                {brokerSearchError ? <Text style={styles.ncBrokerSearchError}>{brokerSearchError}</Text> : null}
+                {brokerSearchError ? (
+                  <Text style={styles.ncBrokerSearchError}>
+                    {brokerSearchError}
+                  </Text>
+                ) : null}
               </>
             ) : null}
           </View>
@@ -1172,12 +1361,19 @@ const ChatListScreen = ({
             groupWizardStep === 1 ? (
               <ScrollView
                 style={styles.ncScroll}
-                contentContainerStyle={[styles.ncScrollContent, styles.ncGroupScrollPad]}
+                contentContainerStyle={[
+                  styles.ncScrollContent,
+                  styles.ncGroupScrollPad,
+                ]}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}>
                 {!currentUser?.email ? (
-                  <Text style={styles.ncBrokerEmpty}>התחבר/י לחשבון כדי ליצור קבוצה.</Text>
-                ) : groupFlow === 'customers' && groupLoading && groupCandidates.length === 0 ? (
+                  <Text style={styles.ncBrokerEmpty}>
+                    התחבר/י לחשבון כדי ליצור קבוצה.
+                  </Text>
+                ) : groupFlow === 'customers' &&
+                  groupLoading &&
+                  groupCandidates.length === 0 ? (
                   <View style={styles.ncBrokerLoading}>
                     <ActivityIndicator size="small" color={GOLD} />
                   </View>
@@ -1192,32 +1388,62 @@ const ChatListScreen = ({
                       : 'לא נמצאו מתווכים.'}
                   </Text>
                 ) : groupSearch.trim().length > 0 ? (
-                  <View style={[styles.ncLetterSection, styles.ncSearchResultsSection]}>
-                    <Text style={[styles.ncLetterHeading, styles.ncSectionHeadingFigma]}>תוצאות חיפוש</Text>
+                  <View
+                    style={[
+                      styles.ncLetterSection,
+                      styles.ncSearchResultsSection,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.ncLetterHeading,
+                        styles.ncSectionHeadingFigma,
+                      ]}>
+                      תוצאות חיפוש
+                    </Text>
                     <View style={styles.ncBrokerCard}>
                       {groupCandidates.map((row, j) => {
-                        const email = row.email != null ? String(row.email).trim().toLowerCase() : '';
+                        const email =
+                          row.email != null
+                            ? String(row.email).trim().toLowerCase()
+                            : '';
                         const checked = !!(email && groupSelected[email]);
                         const pic = getUserProfileImageUrl(row);
-                        const title = row.title != null ? String(row.title) : email;
-                        const sub = row.subtitle != null ? String(row.subtitle) : '';
+                        const title =
+                          row.title != null ? String(row.title) : email;
+                        const sub =
+                          row.subtitle != null ? String(row.subtitle) : '';
                         return (
                           <Pressable
                             key={email || row.id || `g-search-${j}`}
-                            style={[styles.ncPickRow, j > 0 && styles.ncBrokerRowBorder]}
-                            onPress={() => email && toggleGroupMember(email, row)}
+                            style={[
+                              styles.ncPickRow,
+                              j > 0 && styles.ncBrokerRowBorder,
+                            ]}
+                            onPress={() =>
+                              email && toggleGroupMember(email, row)
+                            }
                             android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
                             <View style={styles.ncPickCheck}>
-                              <View style={[styles.ncPickCheckOuter, checked && styles.ncPickCheckOuterOn]}>
-                                {checked ? <View style={styles.ncPickCheckMark} /> : null}
+                              <View
+                                style={[
+                                  styles.ncPickCheckOuter,
+                                  checked && styles.ncPickCheckOuterOn,
+                                ]}>
+                                {checked ? (
+                                  <View style={styles.ncPickCheckMark} />
+                                ) : null}
                               </View>
                             </View>
                             <View style={styles.ncBrokerTextCol}>
-                              <Text style={styles.ncBrokerTitle} numberOfLines={1}>
+                              <Text
+                                style={styles.ncBrokerTitle}
+                                numberOfLines={1}>
                                 {title}
                               </Text>
                               {sub && sub !== title ? (
-                                <Text style={styles.ncBrokerSubtitle} numberOfLines={1}>
+                                <Text
+                                  style={styles.ncBrokerSubtitle}
+                                  numberOfLines={1}>
                                   {sub}
                                 </Text>
                               ) : null}
@@ -1225,7 +1451,11 @@ const ChatListScreen = ({
                             <View style={styles.ncBrokerAvatarRing}>
                               <View style={styles.ncBrokerAvatarInner}>
                                 {pic ? (
-                                  <Image source={{uri: pic}} style={styles.ncBrokerAvatarImg} resizeMode="cover" />
+                                  <Image
+                                    source={{uri: pic}}
+                                    style={styles.ncBrokerAvatarImg}
+                                    resizeMode="cover"
+                                  />
                                 ) : (
                                   <Image
                                     source={require('../assets/image-copy-10.png')}
@@ -1241,56 +1471,86 @@ const ChatListScreen = ({
                     </View>
                   </View>
                 ) : (
-                  bucketGroupListByFirstLetter(groupCandidates).map(({letter, rows}) => (
-                    <View key={letter} style={styles.ncLetterSection}>
-                      <Text style={styles.ncLetterHeading}>{letter === '#' ? '…' : letter}</Text>
-                      <View style={styles.ncBrokerCard}>
-                        {rows.map((row, j) => {
-                          const email = row.email != null ? String(row.email).trim().toLowerCase() : '';
-                          const checked = !!(email && groupSelected[email]);
-                          const pic = getUserProfileImageUrl(row);
-                          const title = row.title != null ? String(row.title) : email;
-                          const sub = row.subtitle != null ? String(row.subtitle) : '';
-                          return (
-                            <Pressable
-                              key={email || row.id || `g-${letter}-${j}`}
-                              style={[styles.ncPickRow, j > 0 && styles.ncBrokerRowBorder]}
-                              onPress={() => email && toggleGroupMember(email, row)}
-                              android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                              <View style={styles.ncPickCheck}>
-                                <View style={[styles.ncPickCheckOuter, checked && styles.ncPickCheckOuterOn]}>
-                                  {checked ? <View style={styles.ncPickCheckMark} /> : null}
+                  bucketGroupListByFirstLetter(groupCandidates).map(
+                    ({letter, rows}) => (
+                      <View key={letter} style={styles.ncLetterSection}>
+                        <Text style={styles.ncLetterHeading}>
+                          {letter === '#' ? '…' : letter}
+                        </Text>
+                        <View style={styles.ncBrokerCard}>
+                          {rows.map((row, j) => {
+                            const email =
+                              row.email != null
+                                ? String(row.email).trim().toLowerCase()
+                                : '';
+                            const checked = !!(email && groupSelected[email]);
+                            const pic = getUserProfileImageUrl(row);
+                            const title =
+                              row.title != null ? String(row.title) : email;
+                            const sub =
+                              row.subtitle != null ? String(row.subtitle) : '';
+                            return (
+                              <Pressable
+                                key={email || row.id || `g-${letter}-${j}`}
+                                style={[
+                                  styles.ncPickRow,
+                                  j > 0 && styles.ncBrokerRowBorder,
+                                ]}
+                                onPress={() =>
+                                  email && toggleGroupMember(email, row)
+                                }
+                                android_ripple={{
+                                  color: 'rgba(255,255,255,0.06)',
+                                }}>
+                                <View style={styles.ncPickCheck}>
+                                  <View
+                                    style={[
+                                      styles.ncPickCheckOuter,
+                                      checked && styles.ncPickCheckOuterOn,
+                                    ]}>
+                                    {checked ? (
+                                      <View style={styles.ncPickCheckMark} />
+                                    ) : null}
+                                  </View>
                                 </View>
-                              </View>
-                              <View style={styles.ncBrokerTextCol}>
-                                <Text style={styles.ncBrokerTitle} numberOfLines={1}>
-                                  {title}
-                                </Text>
-                                {sub && sub !== title ? (
-                                  <Text style={styles.ncBrokerSubtitle} numberOfLines={1}>
-                                    {sub}
+                                <View style={styles.ncBrokerTextCol}>
+                                  <Text
+                                    style={styles.ncBrokerTitle}
+                                    numberOfLines={1}>
+                                    {title}
                                   </Text>
-                                ) : null}
-                              </View>
-                              <View style={styles.ncBrokerAvatarRing}>
-                                <View style={styles.ncBrokerAvatarInner}>
-                                  {pic ? (
-                                    <Image source={{uri: pic}} style={styles.ncBrokerAvatarImg} resizeMode="cover" />
-                                  ) : (
-                                    <Image
-                                      source={require('../assets/image-copy-10.png')}
-                                      style={styles.ncBrokerAvatarImg}
-                                      resizeMode="cover"
-                                    />
-                                  )}
+                                  {sub && sub !== title ? (
+                                    <Text
+                                      style={styles.ncBrokerSubtitle}
+                                      numberOfLines={1}>
+                                      {sub}
+                                    </Text>
+                                  ) : null}
                                 </View>
-                              </View>
-                            </Pressable>
-                          );
-                        })}
+                                <View style={styles.ncBrokerAvatarRing}>
+                                  <View style={styles.ncBrokerAvatarInner}>
+                                    {pic ? (
+                                      <Image
+                                        source={{uri: pic}}
+                                        style={styles.ncBrokerAvatarImg}
+                                        resizeMode="cover"
+                                      />
+                                    ) : (
+                                      <Image
+                                        source={require('../assets/image-copy-10.png')}
+                                        style={styles.ncBrokerAvatarImg}
+                                        resizeMode="cover"
+                                      />
+                                    )}
+                                  </View>
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
                       </View>
-                    </View>
-                  ))
+                    ),
+                  )
                 )}
               </ScrollView>
             ) : (
@@ -1318,21 +1578,32 @@ const ChatListScreen = ({
                         return (
                           <TouchableOpacity
                             key={b.id || b.email || `b-${i}`}
-                            style={[styles.ncBrokerRow, i > 0 && styles.ncBrokerRowBorder]}
+                            style={[
+                              styles.ncBrokerRow,
+                              i > 0 && styles.ncBrokerRowBorder,
+                            ]}
                             onPress={() => openChatWithBroker(b)}
                             activeOpacity={0.75}>
                             <View style={styles.ncBrokerTextCol}>
-                              <Text style={styles.ncBrokerTitle} numberOfLines={1}>
+                              <Text
+                                style={styles.ncBrokerTitle}
+                                numberOfLines={1}>
                                 {b.title}
                               </Text>
-                              <Text style={styles.ncBrokerSubtitle} numberOfLines={2}>
+                              <Text
+                                style={styles.ncBrokerSubtitle}
+                                numberOfLines={2}>
                                 {b.subtitle}
                               </Text>
                             </View>
                             <View style={styles.ncBrokerAvatarRing}>
                               <View style={styles.ncBrokerAvatarInner}>
                                 {pic ? (
-                                  <Image source={{uri: pic}} style={styles.ncBrokerAvatarImg} resizeMode="cover" />
+                                  <Image
+                                    source={{uri: pic}}
+                                    style={styles.ncBrokerAvatarImg}
+                                    resizeMode="cover"
+                                  />
                                 ) : (
                                   <Image
                                     source={require('../assets/image-copy-10.png')}
@@ -1350,11 +1621,17 @@ const ChatListScreen = ({
                 </>
               ) : null}
 
-              <Text style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>מתווכים</Text>
+              <Text
+                style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
+                מתווכים
+              </Text>
 
               <View style={styles.ncCard}>
                 <Pressable
-                  style={({pressed}) => [styles.ncRow, pressed && styles.ncRowPressed]}
+                  style={({pressed}) => [
+                    styles.ncRow,
+                    pressed && styles.ncRowPressed,
+                  ]}
                   onPress={() => {
                     if (!canOpenGroups) {
                       Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצות');
@@ -1368,10 +1645,17 @@ const ChatListScreen = ({
                     setGroupFlow('customers');
                   }}
                   android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                  <MaterialCommunityIcons name="chevron-left" size={22} color="#FFFFFF" style={styles.ncChevron} />
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={22}
+                    color="#FFFFFF"
+                    style={styles.ncChevron}
+                  />
                   <View style={styles.ncRowTextWrap}>
                     <Text style={styles.ncRowTitle}>צור קבוצת לקוחות</Text>
-                    <Text style={styles.ncRowSubtitle}>יצר קבוצה ייעודית ללקוחות שלך</Text>
+                    <Text style={styles.ncRowSubtitle}>
+                      יצר קבוצה ייעודית ללקוחות שלך
+                    </Text>
                   </View>
                   <View style={styles.ncIconBubble}>
                     <Image
@@ -1383,7 +1667,10 @@ const ChatListScreen = ({
                 </Pressable>
                 <View style={styles.ncRowDivider} />
                 <Pressable
-                  style={({pressed}) => [styles.ncRow, pressed && styles.ncRowPressed]}
+                  style={({pressed}) => [
+                    styles.ncRow,
+                    pressed && styles.ncRowPressed,
+                  ]}
                   onPress={() => {
                     if (!canOpenGroups) {
                       Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצות');
@@ -1397,11 +1684,17 @@ const ChatListScreen = ({
                     setGroupFlow('brokers');
                   }}
                   android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                  <MaterialCommunityIcons name="chevron-left" size={22} color="#FFFFFF" style={styles.ncChevron} />
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={22}
+                    color="#FFFFFF"
+                    style={styles.ncChevron}
+                  />
                   <View style={styles.ncRowTextWrap}>
                     <Text style={styles.ncRowTitle}>צור קבוצת מתווכים</Text>
                     <Text style={styles.ncRowSubtitle}>
-                      שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד בקבוצה ייעודית.
+                      שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד בקבוצה
+                      ייעודית.
                     </Text>
                   </View>
                   <View style={styles.ncIconBubble}>
@@ -1416,14 +1709,18 @@ const ChatListScreen = ({
 
               <Pressable
                 style={styles.ncToggleRow}
-                onPress={() => setBlockCollabOffers((v) => !v)}
+                onPress={() => setBlockCollabOffers(v => !v)}
                 android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
                 <View style={styles.ncToggleOuter}>
                   {blockCollabOffers ? (
-                    <MaterialCommunityIcons name="check" size={15} color={NC_TOGGLE_AMBER} />
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={15}
+                      color={NC_TOGGLE_AMBER}
+                    />
                   ) : null}
                 </View>
+                <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
               </Pressable>
             </ScrollView>
           )}
@@ -1436,21 +1733,25 @@ const ChatListScreen = ({
 const isWeb = Platform.OS === 'web';
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: CHAT_LIST_PANEL_BG, ...(isWeb && {minHeight: '100%'})},
+  container: {
+    flex: 1,
+    backgroundColor: CHAT_LIST_PANEL_BG,
+    ...(isWeb && {minHeight: '100%'}),
+  },
   topSection: {
     backgroundColor: '#1E1D27',
     borderBottomWidth: 0,
     paddingBottom: 14,
   },
   headerRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#1E1D27',
     paddingTop: 54,
     paddingBottom: 10,
   },
-  headerBtn: {padding: 0},
+  headerBtn: {padding: 0, marginLeft: 10},
   headerBackBtn: {
     width: 44,
     height: 44,
@@ -1472,7 +1773,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     marginHorizontal: 10,
     marginTop: 10,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderRadius: 1000,
@@ -1484,26 +1785,40 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    paddingRight: 44,
+    paddingLeft: 44,
     color: '#fff',
     fontSize: 20,
     letterSpacing: 0.2,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
+    writingDirection: 'rtl',
   },
   searchIcon: {position: 'absolute', right: 16},
-  loadingWrap: {flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12},
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
   loadingText: {color: TEXT_LIGHT, fontSize: 14},
   scroll: {flex: 1},
-  scrollContent: {paddingBottom: 32, backgroundColor: CHAT_LIST_PANEL_BG, flexGrow: 1},
-  scrollContentInner: {width: '100%', flexDirection: 'column', alignItems: 'stretch'},
+  scrollContent: {
+    paddingBottom: 32,
+    backgroundColor: CHAT_LIST_PANEL_BG,
+    flexGrow: 1,
+  },
+  scrollContentInner: {
+    width: '100%',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
   topToListSpacer: {
     height: 8,
     backgroundColor: '#1c1b22',
     width: '100%',
   },
   messageRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     minHeight: 125,
     paddingVertical: 10,
@@ -1518,14 +1833,14 @@ const styles = StyleSheet.create({
   rowMain: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
     justifyContent: 'center',
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 7,
     marginBottom: 18,
     width: '100%',
@@ -1585,7 +1900,7 @@ const styles = StyleSheet.create({
   messagePreview: {
     color: '#fff',
     fontSize: 18,
-    textAlign: 'right',
+    textAlign: 'left',
     lineHeight: 22,
     width: '100%',
     fontFamily: 'Rubik-Regular',
@@ -1639,7 +1954,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   ncHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -1651,14 +1966,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
     minWidth: 0,
   },
   ncWizardColEnd: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     minWidth: 0,
   },
   ncTitleWizard: {flex: 2, minWidth: 0},
@@ -1715,7 +2030,7 @@ const styles = StyleSheet.create({
   },
   ncSearchWrap: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderRadius: 1000,
@@ -1747,14 +2062,15 @@ const styles = StyleSheet.create({
   ncSearchInput: {
     flex: 1,
     width: '100%',
-    minWidth: 0,
+    // minWidth: 0,
     paddingVertical: 10,
-    paddingLeft: 16,
-    paddingRight: 46,
+    paddingRight: 16,
+    paddingLeft: 46,
     color: '#FFFFFF',
     fontSize: 20,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
+    writingDirection: 'rtl',
   },
   ncSearchInputPadClear: {
     paddingLeft: 52,
@@ -1764,7 +2080,7 @@ const styles = StyleSheet.create({
     color: '#E57373',
     fontSize: 13,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 8,
     paddingHorizontal: 16,
     width: '100%',
@@ -1773,7 +2089,7 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 10,
     width: '100%',
   },
@@ -1795,7 +2111,7 @@ const styles = StyleSheet.create({
     color: NC_TEXT_SECONDARY,
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     paddingVertical: 20,
     paddingHorizontal: 16,
     width: '100%',
@@ -1814,7 +2130,7 @@ const styles = StyleSheet.create({
   ncBrokerTextCol: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     paddingRight: 10,
   },
   ncBrokerTitle: {
@@ -1822,14 +2138,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
     lineHeight: 21,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
   },
   ncBrokerSubtitle: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     lineHeight: 16,
     letterSpacing: 0.14,
   },
@@ -1861,7 +2177,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   ncRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingVertical: 20,
     paddingHorizontal: 16,
@@ -1872,20 +2188,20 @@ const styles = StyleSheet.create({
   ncRowTextWrap: {
     flex: 1,
     paddingHorizontal: 16,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   ncRowTitle: {
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 12,
   },
   ncRowSubtitle: {
     color: NC_TEXT_SECONDARY,
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     lineHeight: 16,
     letterSpacing: 0.5447,
   },
@@ -1934,11 +2250,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     borderBottomWidth: 1,
     borderBottomColor: '#8C85B3',
     paddingBottom: 4,
     paddingTop: 0,
+    writingDirection: 'rtl',
   },
   ncGroupCameraBtn: {
     width: 60,
@@ -1964,7 +2281,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     letterSpacing: 0,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 6,
     marginBottom: 8,
   },
@@ -1975,12 +2292,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 118,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   ncChipsScrollContent: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     minWidth: '100%',
     gap: 12,
   },
@@ -2051,7 +2368,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: 0,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 16,
     paddingHorizontal: 2,
   },
@@ -2120,7 +2437,7 @@ const styles = StyleSheet.create({
   ncToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     paddingVertical: 6,
     alignSelf: 'stretch',
     paddingHorizontal: 2,
@@ -2130,8 +2447,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
-    marginRight: 12,
+    textAlign: 'left',
+    marginLeft: 12,
     flexShrink: 1,
   },
   ncToggleOuter: {

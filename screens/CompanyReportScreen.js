@@ -8,11 +8,13 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {submitCompanyReport} from '../utils/api';
+import {flexStart} from '../index';
 
 // Figma 15:9841 — חברה | 10:35105 — professional | 34:9182 — broker
 const BG = '#2B2A39';
@@ -231,8 +233,8 @@ const CompanyReportScreen = ({
               style={styles.checkRow}
               onPress={() => toggleReason(r.key)}
               activeOpacity={0.8}>
-              <Text style={styles.checkLabel}>{r.label}</Text>
               <FigmaCheckbox checked={reasons[r.key]} />
+              <Text style={styles.checkLabel}>{r.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -269,7 +271,7 @@ const CompanyReportScreen = ({
           onChangeText={setReporterPhone}
           placeholder="הזן מספר טלפון"
           placeholderTextColor={PLACEHOLDER}
-          textAlign="right"
+          textAlign="rihgt"
           keyboardType="phone-pad"
         />
 
@@ -287,7 +289,10 @@ const CompanyReportScreen = ({
         />
 
         <TouchableOpacity
-          style={[styles.sendWrap, (!canSubmit || submitting) && styles.sendDisabled]}
+          style={[
+            styles.sendWrap,
+            (!canSubmit || submitting) && styles.sendDisabled,
+          ]}
           onPress={handleSubmit}
           disabled={!canSubmit || submitting}
           activeOpacity={0.9}>
@@ -344,7 +349,7 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 32,
   },
   reasonsBlock: {gap: 32, marginBottom: 26},
@@ -352,7 +357,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
   },
   checkLabel: {
@@ -360,7 +365,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -372,7 +377,7 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 10,
     paddingRight: 16,
     letterSpacing: 0.14,
@@ -388,6 +393,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Rubik-Regular',
     marginBottom: 28,
+    writingDirection: 'rtl',
   },
   inputPill: {
     borderWidth: 1,
@@ -400,6 +406,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Rubik-Regular',
     marginBottom: 28,
+    writingDirection: 'rtl',
   },
   sendWrap: {
     width: '100%',

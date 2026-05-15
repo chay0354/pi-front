@@ -26,6 +26,7 @@ import {
 } from '../utils/constant';
 import {getListings, getBoostQuota, boostListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {flexStart} from '../index';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 
@@ -35,7 +36,7 @@ const BORDER_GOLD = '#D4AF37';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 // Detect feed-post rows so this screen shows only real ads (not free-form posts).
-const isPostListingRecord = (item) => {
+const isPostListingRecord = item => {
   if (!item) return false;
   const type = String(
     item.propertyType ||
@@ -101,13 +102,12 @@ const UI_TO_LISTING_CATEGORY_ID = {
   10: 3, // שותפים
 };
 
-const LISTING_TO_UI_CATEGORY_ID = Object.entries(UI_TO_LISTING_CATEGORY_ID).reduce(
-  (acc, [uiId, listingId]) => {
-    acc[listingId] = Number(uiId);
-    return acc;
-  },
-  {},
-);
+const LISTING_TO_UI_CATEGORY_ID = Object.entries(
+  UI_TO_LISTING_CATEGORY_ID,
+).reduce((acc, [uiId, listingId]) => {
+  acc[listingId] = Number(uiId);
+  return acc;
+}, {});
 
 const toUiCategoryId = value => {
   const n = Number(value);
@@ -163,7 +163,11 @@ const EditPublishAdScreen = ({
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [frozenListingIds, setFrozenListingIds] = useState([]);
   const [boostConfirmListing, setBoostConfirmListing] = useState(null);
-  const [boostQuota, setBoostQuota] = useState({quota: 2, used: 0, remaining: 2});
+  const [boostQuota, setBoostQuota] = useState({
+    quota: 2,
+    used: 0,
+    remaining: 2,
+  });
   const [boostSubmitting, setBoostSubmitting] = useState(false);
   /** Local overrides so the UI reflects a successful boost before re-fetch. */
   const [boostedOverrides, setBoostedOverrides] = useState({});
@@ -300,8 +304,7 @@ const EditPublishAdScreen = ({
     resolveListingCategoryId(selectedCategoryId);
   const isBnbCategory = Number(selectedListingCategoryId) === 5;
   const isPartnersCategory = Number(selectedListingCategoryId) === 3;
-  const isOfficesListingCategory =
-    Number(selectedListingCategoryId) === 2;
+  const isOfficesListingCategory = Number(selectedListingCategoryId) === 2;
   const isRegularUser =
     (currentUser?.subscription_type || '').toLowerCase() ===
     subscriptionTypes.user;
@@ -322,29 +325,29 @@ const EditPublishAdScreen = ({
     if (isRegularUser) {
       return (
         selectedListingCategoryId != null &&
-        regularUserAdListingCategoryIds.has(
-          Number(selectedListingCategoryId),
-        )
+        regularUserAdListingCategoryIds.has(Number(selectedListingCategoryId))
       );
     }
     if (isBroker) {
       return (
         selectedListingCategoryId != null &&
-        brokerSheetAdListingCategoryIds.has(
-          Number(selectedListingCategoryId),
-        )
+        brokerSheetAdListingCategoryIds.has(Number(selectedListingCategoryId))
       );
     }
     if (isCompany) {
       return (
         selectedListingCategoryId != null &&
-        companySheetAdListingCategoryIds.has(
-          Number(selectedListingCategoryId),
-        )
+        companySheetAdListingCategoryIds.has(Number(selectedListingCategoryId))
       );
     }
     return true;
-  }, [isRegularUser, isBroker, isCompany, isProfessional, selectedListingCategoryId]);
+  }, [
+    isRegularUser,
+    isBroker,
+    isCompany,
+    isProfessional,
+    selectedListingCategoryId,
+  ]);
   const filteredListings = selectedCategoryId
     ? mergedListings.filter(
         l =>
@@ -389,14 +392,15 @@ const EditPublishAdScreen = ({
   const computeExposureLevel = listing => {
     if (!listing) return 'low';
     const listingId = listing?.id ?? listing?.ad_number;
-    const overrideExpiry = listingId != null ? boostedOverrides[String(listingId)] : null;
-    const expiryRaw = overrideExpiry || listing.boost_expires_at || listing.boostExpiresAt;
+    const overrideExpiry =
+      listingId != null ? boostedOverrides[String(listingId)] : null;
+    const expiryRaw =
+      overrideExpiry || listing.boost_expires_at || listing.boostExpiresAt;
     if (expiryRaw) {
       const expiryTs = new Date(expiryRaw).getTime();
       if (Number.isFinite(expiryTs) && expiryTs > Date.now()) return 'high';
     }
-    const frozen =
-      listing.is_frozen === true || listing.is_frozen === 'true';
+    const frozen = listing.is_frozen === true || listing.is_frozen === 'true';
     if (frozen) return 'low';
     const createdRaw =
       listing.created_at ||
@@ -455,7 +459,9 @@ const EditPublishAdScreen = ({
       setBoostQuota({
         quota: Number(res?.quota ?? boostQuota.quota),
         used: Number(res?.used ?? boostQuota.used + 1),
-        remaining: Number(res?.remaining ?? Math.max(0, boostQuota.remaining - 1)),
+        remaining: Number(
+          res?.remaining ?? Math.max(0, boostQuota.remaining - 1),
+        ),
       });
       if (res?.boost_expires_at) {
         setBoostedOverrides(prev => ({
@@ -503,7 +509,8 @@ const EditPublishAdScreen = ({
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const reviewCount = listing.review_count != null ? Number(listing.review_count) : 0;
+    const reviewCount =
+      listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -645,7 +652,8 @@ const EditPublishAdScreen = ({
     const imageSource = getFirstImage(listing);
     const views = listing.views ?? listing.view_count ?? 0;
     const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const reviewCount = listing.review_count != null ? Number(listing.review_count) : 0;
+    const reviewCount =
+      listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -685,16 +693,14 @@ const EditPublishAdScreen = ({
           </View>
           <View style={styles.advertisementNo}>
             <Text style={styles.advertisementNoText}>
-              {postRecord
-                ? `פוסט מס׳ ${index + 1}`
-                : `מודעה מס׳ ${index + 1}`}
+              {postRecord ? `פוסט מס׳ ${index + 1}` : `מודעה מס׳ ${index + 1}`}
             </Text>
           </View>
         </View>
         <View style={{padding: 16}}>
           <View
             style={{
-              flexDirection: 'row',
+              flexDirection: 'row-reverse',
               justifyContent: 'space-between',
             }}>
             <Image
@@ -899,13 +905,6 @@ const EditPublishAdScreen = ({
           {filteredListings && filteredListings.length > 0 && (
             <View style={styles.actionBar}>
               <TouchableOpacity
-                style={styles.createBtn}
-                onPress={openCreateSheet}
-                activeOpacity={0.9}>
-                <Text style={styles.createBtnText}>צור מודעה</Text>
-                <MaterialCommunityIcons name="plus" size={24} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.viewToggle]}
                 onPress={() =>
                   setViewMode(viewMode === 'grid' ? 'list' : 'grid')
@@ -919,6 +918,13 @@ const EditPublishAdScreen = ({
                   style={styles.viewToggleIcon}
                   resizeMode="contain"
                 />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={openCreateSheet}
+                activeOpacity={0.9}>
+                <MaterialCommunityIcons name="plus" size={24} color="#fff" />
+                <Text style={styles.createBtnText}>צור מודעה</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -943,7 +949,9 @@ const EditPublishAdScreen = ({
                   size={56}
                   color={TEXT_LIGHT}
                 /> */}
-                <Text style={styles.emptyText}>אין מודעות או פוסטים בקטגוריה זו</Text>
+                <Text style={styles.emptyText}>
+                  אין מודעות או פוסטים בקטגוריה זו
+                </Text>
                 <Text style={styles.emptySubtext}>
                   זה הזמן ליצור מודעה או פוסט חדש!
                 </Text>
@@ -1215,7 +1223,8 @@ const EditPublishAdScreen = ({
             <Text style={styles.removeModalTitle}>להקפיץ את המודעה?</Text>
             <Text style={styles.removeModalMessage}>
               המודעה תקבל חשיפה גבוהה למשך 24 שעות.{'\n'}
-              נותרו לך {boostQuota.remaining} הקפצות מתוך {boostQuota.quota} החודש.
+              נותרו לך {boostQuota.remaining} הקפצות מתוך {boostQuota.quota}{' '}
+              החודש.
             </Text>
             <View style={styles.removeModalButtons}>
               <TouchableOpacity
@@ -1228,7 +1237,9 @@ const EditPublishAdScreen = ({
               <TouchableOpacity
                 style={[
                   styles.freezeModalConfirmBtn,
-                  (boostSubmitting || boostQuota.remaining <= 0) && {opacity: 0.5},
+                  (boostSubmitting || boostQuota.remaining <= 0) && {
+                    opacity: 0.5,
+                  },
                 ]}
                 disabled={boostSubmitting || boostQuota.remaining <= 0}
                 onPress={handleConfirmBoost}
@@ -1303,7 +1314,7 @@ const EditPublishAdScreen = ({
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: BG},
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
@@ -1343,7 +1354,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     marginTop: 5,
     marginBottom: 12,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   categoryScroll: {
     marginBottom: 24,
@@ -1420,20 +1431,20 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BG,
     borderRadius: 12,
     overflow: 'hidden',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     height: 192,
     marginBottom: 22,
   },
   adCardListLeft: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
   },
   adCardListDescription: {
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   adCardListRight: {
     width: 108,
@@ -1447,7 +1458,7 @@ const styles = StyleSheet.create({
   editBadgeList: {
     position: 'absolute',
     bottom: 12,
-    right: 12,
+    left: 12,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -1472,7 +1483,7 @@ const styles = StyleSheet.create({
   editBadge: {
     position: 'absolute',
     top: 12,
-    left: 12,
+    right: 12,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -1482,7 +1493,7 @@ const styles = StyleSheet.create({
   },
   topRightTextWrap: {
     position: 'absolute',
-    right: 12,
+    left: 12,
     top: 12,
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -1501,7 +1512,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1D27CC',
     height: 30,
     justifyContent: 'center',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     paddingRight: 12,
   },
   advertisementNoText: {
@@ -1514,16 +1525,16 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontFamily: 'Rubik-SemiBold',
     marginLeft: 10,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 16,
-    marginLeft: 10,
-    justifyContent: 'flex-end',
+    marginRight: 10,
+    justifyContent: flexStart,
     position: 'absolute',
     bottom: 5,
-    right: 0,
+    left: 0,
   },
   statItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
   statText: {
@@ -1534,14 +1545,14 @@ const styles = StyleSheet.create({
   statTextList: {fontSize: 14},
   exposureImage: {width: 45, height: 101},
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     marginTop: 22,
     gap: 4,
   },
   actionBtnImage: {width: 22, height: 22},
   actionBtn: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
@@ -1646,7 +1657,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 28,
     lineHeight: 28,
-    marginLeft: 8,
+    marginRight: 8,
   },
   createSheetOptionContent: {
     flex: 1,
@@ -1655,7 +1666,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   createSheetTextContainer: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     flex: 1,
     marginRight: 12,
   },
@@ -1663,14 +1674,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   createSheetSubtitle: {
     color: '#FFFFFF',
     opacity: 0.85,
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 4,
   },
   createSheetIcon: {

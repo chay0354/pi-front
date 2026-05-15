@@ -15,6 +15,7 @@ import {
   Modal,
   Linking,
   AppState,
+  I18nManager,
 } from 'react-native';
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
@@ -45,8 +46,11 @@ import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
-import ExclusiveOfferResponseCard, {formatPrice} from '../components/ExclusiveOfferResponseCard';
+import ExclusiveOfferResponseCard, {
+  formatPrice,
+} from '../components/ExclusiveOfferResponseCard';
 import {usePresence} from '../hooks/PresenceContext';
+import {flexEnd, flexStart} from '../index';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -80,12 +84,11 @@ const CHAT_CATEGORY_LABELS = {
 };
 
 /** Whether this is the Pi welcome conversation (id=1, name=pi). */
-const isWelcomeConversation = (conv) =>
+const isWelcomeConversation = conv =>
   conv && conv.id === '1' && conv.name === 'pi';
 
 /** Chat with a real user: conversation.id = other user's email (or UUID if list row lacked email). */
-const isUserConversation = (conv) =>
-  conv && conv.id && conv.id !== '1';
+const isUserConversation = conv => conv && conv.id && conv.id !== '1';
 
 const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -94,7 +97,7 @@ const WELCOME_PI_AVATAR = require('../assets/chat/welcome-pi-avatar.png');
 /** Matches SharePostSheet fallback body — hide under bubble when post card is shown. */
 const SHARE_POST_DEFAULT_CAPTION = 'פוסט משותף';
 /** Many feed posts use description `'פוסט'` (PostEditor); SharePostSheet sends that as caption → must still open rich card. */
-const isSharePlaceholderCaption = (raw) => {
+const isSharePlaceholderCaption = raw => {
   const t = String(raw || '').trim();
   if (!t) return true;
   if (t === SHARE_POST_DEFAULT_CAPTION) return true;
@@ -122,17 +125,20 @@ const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
   const fromMeta =
     meta.conversationId != null ? String(meta.conversationId).trim() : '';
   const fromRes =
-    conversationIdFromResponse != null ? String(conversationIdFromResponse).trim() : '';
+    conversationIdFromResponse != null
+      ? String(conversationIdFromResponse).trim()
+      : '';
   const cid = fromMeta || fromRes;
   return cid ? {...meta, conversationId: cid} : {...meta};
 };
 
 /** Prefer API otherUserEmail; else id if it looks like an email, not a conversation UUID. */
-const resolveOtherPartyEmail = (conv) => {
+const resolveOtherPartyEmail = conv => {
   if (!conv) return null;
-  const fromApi = conv.otherUserEmail != null ? String(conv.otherUserEmail).trim() : '';
+  const fromApi =
+    conv.otherUserEmail != null ? String(conv.otherUserEmail).trim() : '';
   const fromId = conv.id != null ? String(conv.id).trim() : '';
-  const pick = (s) => {
+  const pick = s => {
     if (!s) return null;
     if (CHAT_PEER_UUID_RE.test(s)) return null;
     return s.toLowerCase();
@@ -147,7 +153,7 @@ const resolveOtherPartyRef = conv => {
   return fromApi || fromId || null;
 };
 
-const normalizeAvatarUrl = (value) => {
+const normalizeAvatarUrl = value => {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -164,7 +170,7 @@ const normalizeAvatarUrl = (value) => {
 };
 
 /** Strip formatting for `tel:` — keeps leading + and digits. */
-const toTelUrl = (raw) => {
+const toTelUrl = raw => {
   if (raw == null || !String(raw).trim()) return null;
   const cleaned = String(raw).replace(/[^\d+]/g, '');
   if (!cleaned || cleaned === '+') return null;
@@ -172,7 +178,7 @@ const toTelUrl = (raw) => {
 };
 
 /** API + realtime may use camelCase or snake_case; keeps chat bubbles (image/audio) rendering reliably. */
-const normalizeChatMessage = (m) => {
+const normalizeChatMessage = m => {
   if (!m || typeof m !== 'object') return m;
   const mediaUrl =
     m.mediaUrl != null && String(m.mediaUrl).trim() !== ''
@@ -219,7 +225,15 @@ const isExclusiveOfferFromPeerForViewer = (m, viewerEmail) => {
   return false;
 };
 
-const ChatScreen = ({onClose, sharedListing = null, conversation = null, currentUser = null, onMessageSent, onPiWelcomeOpened, onOpenPost}) => {
+const ChatScreen = ({
+  onClose,
+  sharedListing = null,
+  conversation = null,
+  currentUser = null,
+  onMessageSent,
+  onPiWelcomeOpened,
+  onOpenPost,
+}) => {
   const insets = useSafeAreaInsets();
   const msg = DEFAULT_WELCOME_MESSAGE;
   const isWelcome = isWelcomeConversation(conversation);
@@ -228,19 +242,30 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const otherUserEmail = isUser ? resolveOtherPartyEmail(conversation) : null;
   const isGroupThread = conversation?.isGroup === true;
   const groupConversationId =
-    isGroupThread && conversation?.id != null ? String(conversation.id).trim() : null;
-  const isDirectPeer = isUser && !isWelcome && !isGroupThread && !!otherUserEmail;
+    isGroupThread && conversation?.id != null
+      ? String(conversation.id).trim()
+      : null;
+  const isDirectPeer =
+    isUser && !isWelcome && !isGroupThread && !!otherUserEmail;
   const isBrokerUser = useMemo(() => {
     const t1 =
-      currentUser?.subscription_type != null ? String(currentUser.subscription_type).trim().toLowerCase() : '';
-    const t2 = currentUser?.type != null ? String(currentUser.type).trim().toLowerCase() : '';
+      currentUser?.subscription_type != null
+        ? String(currentUser.subscription_type).trim().toLowerCase()
+        : '';
+    const t2 =
+      currentUser?.type != null
+        ? String(currentUser.type).trim().toLowerCase()
+        : '';
     return t1 === 'broker' || t2 === 'broker';
   }, [currentUser?.subscription_type, currentUser?.type]);
-  const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
+  const myEmail = currentUser?.email
+    ? String(currentUser.email).trim().toLowerCase()
+    : null;
   const contextListingId =
     sharedListing?.id != null && String(sharedListing.id).trim() !== ''
       ? String(sharedListing.id).trim()
-      : conversation?.listingId != null && String(conversation.listingId).trim() !== ''
+      : conversation?.listingId != null &&
+          String(conversation.listingId).trim() !== ''
         ? String(conversation.listingId).trim()
         : null;
   const listingDisplayNumber =
@@ -268,7 +293,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
-  const [groupMemberAvatarOverrides, setGroupMemberAvatarOverrides] = useState({});
+  const [groupMemberAvatarOverrides, setGroupMemberAvatarOverrides] = useState(
+    {},
+  );
   const [showGroupDescModal, setShowGroupDescModal] = useState(false);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   const [showPeerContactDetails, setShowPeerContactDetails] = useState(false);
@@ -285,7 +312,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const [exclusiveLoadingListing, setExclusiveLoadingListing] = useState(false);
   const [exclusiveMessage, setExclusiveMessage] = useState('');
   const [exclusiveOfferMeta, setExclusiveOfferMeta] = useState(null);
-  const [exclusiveOfferListingPreview, setExclusiveOfferListingPreview] = useState(null);
+  const [exclusiveOfferListingPreview, setExclusiveOfferListingPreview] =
+    useState(null);
   const [exclusiveRespondLoading, setExclusiveRespondLoading] = useState(false);
   const [groupDescDraft, setGroupDescDraft] = useState('');
   const [savingGroupDesc, setSavingGroupDesc] = useState(false);
@@ -298,9 +326,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     ? conversation?.name != null && String(conversation.name).trim()
       ? String(conversation.name).trim()
       : 'קבוצה'
-    : (resolvedDisplay?.name != null ? resolvedDisplay.name : conversation?.name) ?? DEFAULT_WELCOME_MESSAGE.senderName;
+    : ((resolvedDisplay?.name != null
+        ? resolvedDisplay.name
+        : conversation?.name) ?? DEFAULT_WELCOME_MESSAGE.senderName);
   const profileImageUrl =
-    getUserProfileImageUrl(resolvedDisplay) || getUserProfileImageUrl(conversation);
+    getUserProfileImageUrl(resolvedDisplay) ||
+    getUserProfileImageUrl(conversation);
   const profileAvatarUrl = normalizeAvatarUrl(profileImageUrl);
   const senderAvatarSource =
     !senderAvatarFailed && profileAvatarUrl
@@ -308,7 +339,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       : DEFAULT_CHAT_AVATAR;
 
   const peerPhone =
-    resolvedDisplay?.phone != null && String(resolvedDisplay.phone).trim() !== ''
+    resolvedDisplay?.phone != null &&
+    String(resolvedDisplay.phone).trim() !== ''
       ? String(resolvedDisplay.phone).trim()
       : null;
 
@@ -323,39 +355,51 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     }
   }, [peerPhone]);
 
-  const showPeerPhoneIcon =
-    isDirectPeer && peerPhone && !!toTelUrl(peerPhone);
+  const showPeerPhoneIcon = isDirectPeer && peerPhone && !!toTelUrl(peerPhone);
 
   const {isEmailOnline} = usePresence();
   const showPeerOnlineSubtitle =
-    isDirectPeer &&
-    otherUserEmail &&
-    isEmailOnline(otherUserEmail);
+    isDirectPeer && otherUserEmail && isEmailOnline(otherUserEmail);
 
   const groupTitleResolved =
-    (groupDetail?.title != null && String(groupDetail.title).trim()) || displayName;
+    (groupDetail?.title != null && String(groupDetail.title).trim()) ||
+    displayName;
   const groupAvatarResolved =
-    getUserProfileImageUrl(groupDetail) ||
-    profileImageUrl;
+    getUserProfileImageUrl(groupDetail) || profileImageUrl;
 
   const senderNameByEmail = useMemo(() => {
     const m = new Map();
     for (const row of groupMembersList) {
-      if (row?.email) m.set(String(row.email).trim().toLowerCase(), row.name || row.email);
+      if (row?.email)
+        m.set(String(row.email).trim().toLowerCase(), row.name || row.email);
     }
     return m;
   }, [groupMembersList]);
   const groupMemberEmailsSet = useMemo(
-    () => new Set(groupMembersList.map((m) => String(m?.email || '').trim().toLowerCase()).filter(Boolean)),
+    () =>
+      new Set(
+        groupMembersList
+          .map(m =>
+            String(m?.email || '')
+              .trim()
+              .toLowerCase(),
+          )
+          .filter(Boolean),
+      ),
     [groupMembersList],
   );
   const groupAddAudience = useMemo(() => {
-    const isBrokerType = (st) => String(st || '').trim().toLowerCase() === 'broker';
-    const others = groupMembersList.filter((m) => {
-      const em = String(m?.email || '').trim().toLowerCase();
+    const isBrokerType = st =>
+      String(st || '')
+        .trim()
+        .toLowerCase() === 'broker';
+    const others = groupMembersList.filter(m => {
+      const em = String(m?.email || '')
+        .trim()
+        .toLowerCase();
       return em && em !== myEmail;
     });
-    const hasNonBroker = others.some((m) => !isBrokerType(m?.subscriptionType));
+    const hasNonBroker = others.some(m => !isBrokerType(m?.subscriptionType));
     return hasNonBroker ? 'regular' : 'broker_only';
   }, [groupMembersList, myEmail]);
 
@@ -375,7 +419,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         if (!refRaw) continue;
         const ref = refRaw.toLowerCase();
         const existing = normalizeAvatarUrl(getUserProfileImageUrl(member));
-        const overrideExisting = normalizeAvatarUrl(groupMemberAvatarOverrides[ref] || null);
+        const overrideExisting = normalizeAvatarUrl(
+          groupMemberAvatarOverrides[ref] || null,
+        );
         if (existing || overrideExisting) continue;
         try {
           const res = await getChatParticipantDisplay(refRaw);
@@ -393,7 +439,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             resolved,
           });
           if (!cancelled && resolved) {
-            setGroupMemberAvatarOverrides((prev) =>
+            setGroupMemberAvatarOverrides(prev =>
               prev[ref] === resolved ? prev : {...prev, [ref]: resolved},
             );
           }
@@ -409,14 +455,22 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [isGroupThread, groupMembersList, groupMemberAvatarOverrides]);
 
   useEffect(() => {
-    if (!showAddMembersModal || !isGroupThread || !groupConversationId || !myEmail) return;
+    if (
+      !showAddMembersModal ||
+      !isGroupThread ||
+      !groupConversationId ||
+      !myEmail
+    )
+      return;
     let cancelled = false;
     setAddMembersLoading(true);
     getUsersForGroupPicker(addMembersSearch, myEmail, groupAddAudience)
-      .then((res) => {
+      .then(res => {
         if (cancelled) return;
-        const list = (res?.users || []).filter((u) => {
-          const em = String(u?.email || '').trim().toLowerCase();
+        const list = (res?.users || []).filter(u => {
+          const em = String(u?.email || '')
+            .trim()
+            .toLowerCase();
           return !!em && !groupMemberEmailsSet.has(em);
         });
         setAddMembersCandidates(list);
@@ -430,13 +484,24 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     return () => {
       cancelled = true;
     };
-  }, [showAddMembersModal, isGroupThread, groupConversationId, myEmail, addMembersSearch, groupAddAudience, groupMemberEmailsSet]);
+  }, [
+    showAddMembersModal,
+    isGroupThread,
+    groupConversationId,
+    myEmail,
+    addMembersSearch,
+    groupAddAudience,
+    groupMemberEmailsSet,
+  ]);
 
   const getChatDisplays = useCallback(() => {
     const receiverPic = getUserProfileImageUrl(conversation);
     const receiverDisplay =
       conversation?.name || receiverPic
-        ? {name: conversation?.name || null, profileImageUrl: receiverPic || null}
+        ? {
+            name: conversation?.name || null,
+            profileImageUrl: receiverPic || null,
+          }
         : null;
     const senderName =
       currentUser?.name ||
@@ -446,7 +511,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       currentUser?.broker_office_name;
     const senderPic = getUserProfileImageUrl(currentUser);
     const senderDisplay =
-      senderName || senderPic ? {name: senderName || null, profileImageUrl: senderPic || null} : null;
+      senderName || senderPic
+        ? {name: senderName || null, profileImageUrl: senderPic || null}
+        : null;
     return {receiverDisplay, senderDisplay};
   }, [conversation, currentUser]);
 
@@ -467,15 +534,17 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     }
     if (isGroupThread && groupConversationId) {
       getGroupChatMessages(myEmail, groupConversationId)
-        .then((res) => {
-          console.log('[ChatScreen.fetchMessages] group res', { count: res?.messages?.length || 0 });
+        .then(res => {
+          console.log('[ChatScreen.fetchMessages] group res', {
+            count: res?.messages?.length || 0,
+          });
           if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
           if (res.conversation_id) setConversationId(res.conversation_id);
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
           setExclusiveOfferMeta(null);
         })
-        .catch((e) => {
+        .catch(e => {
           console.error('[ChatScreen.fetchMessages] group fetch failed', e);
           setMessages([]);
           setGroupDetail(null);
@@ -485,24 +554,33 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       return;
     }
     if (!isDirectPeer || !otherUserEmail) {
-      console.warn('[ChatScreen.fetchMessages] aborting: not directPeer or missing otherUserEmail', {
-        isDirectPeer,
-        otherUserEmail,
-      });
+      console.warn(
+        '[ChatScreen.fetchMessages] aborting: not directPeer or missing otherUserEmail',
+        {
+          isDirectPeer,
+          otherUserEmail,
+        },
+      );
       return;
     }
     getChatMessages(myEmail, otherUserEmail)
-      .then((res) => {
-        console.log('[ChatScreen.fetchMessages] direct res', { count: res?.messages?.length || 0 });
+      .then(res => {
+        console.log('[ChatScreen.fetchMessages] direct res', {
+          count: res?.messages?.length || 0,
+        });
         if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (res.conversation_id) setConversationId(res.conversation_id);
-        setExclusiveOfferMeta((prev) => {
+        setExclusiveOfferMeta(prev => {
           const cid =
-            res.conversation_id != null ? String(res.conversation_id).trim() : '';
+            res.conversation_id != null
+              ? String(res.conversation_id).trim()
+              : '';
           const incoming = res.exclusiveOffer;
           if (incoming != null) return enrichExclusiveOfferMeta(incoming, cid);
           if (prev) {
-            const pst = String(prev.status || '').trim().toLowerCase();
+            const pst = String(prev.status || '')
+              .trim()
+              .toLowerCase();
             const keep =
               pst === 'pending' || pst === 'rejected' || pst === 'accepted';
             if (!keep) return null;
@@ -511,12 +589,18 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           return null;
         });
       })
-      .catch((e) => {
+      .catch(e => {
         console.error('[ChatScreen.fetchMessages] direct fetch failed', e);
         setMessages([]);
         setExclusiveOfferMeta(null);
       });
-  }, [isGroupThread, groupConversationId, isDirectPeer, myEmail, otherUserEmail]);
+  }, [
+    isGroupThread,
+    groupConversationId,
+    isDirectPeer,
+    myEmail,
+    otherUserEmail,
+  ]);
 
   const fetchMessagesRef = useRef(fetchMessages);
   fetchMessagesRef.current = fetchMessages;
@@ -529,7 +613,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     if (!isUser || !otherUserRef) return;
     let cancelled = false;
     getChatParticipantDisplay(otherUserRef)
-      .then((res) => {
+      .then(res => {
         logProfilePic('ChatScreen.getChatParticipantDisplay', {
           otherUserRef,
           success: res?.success,
@@ -575,7 +659,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       return;
     }
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) {
-      console.warn('[ChatScreen.initialLoad] aborting: not direct and not group');
+      console.warn(
+        '[ChatScreen.initialLoad] aborting: not direct and not group',
+      );
       return;
     }
     let cancelled = false;
@@ -587,20 +673,25 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       return getChatMessages(myEmail, otherUserEmail);
     };
     load()
-      .then((res) => {
+      .then(res => {
         console.log('[ChatScreen.initialLoad] res', {
           count: res?.messages?.length || 0,
           conversation_id: res?.conversation_id,
         });
-        if (!cancelled && res.messages) setMessages(res.messages.map(normalizeChatMessage));
-        if (!cancelled && res.conversation_id) setConversationId(res.conversation_id);
+        if (!cancelled && res.messages)
+          setMessages(res.messages.map(normalizeChatMessage));
+        if (!cancelled && res.conversation_id)
+          setConversationId(res.conversation_id);
         if (!cancelled && isGroupThread) {
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
           setExclusiveOfferMeta(null);
         }
         if (!cancelled && !isGroupThread && res.exclusiveOffer !== undefined) {
-          const cid = res.conversation_id != null ? String(res.conversation_id).trim() : '';
+          const cid =
+            res.conversation_id != null
+              ? String(res.conversation_id).trim()
+              : '';
           setExclusiveOfferMeta(
             res.exclusiveOffer
               ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
@@ -608,7 +699,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           );
         }
       })
-      .catch((e) => {
+      .catch(e => {
         console.error('[ChatScreen.initialLoad] fetch failed', e);
         if (!cancelled) setMessages([]);
         if (!cancelled && isGroupThread) {
@@ -621,29 +712,48 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         if (!cancelled) setLoading(false);
       });
     const t = setTimeout(() => {
-      if (!cancelled && myEmail && (isGroupThread ? groupConversationId : otherUserEmail)) {
-        load().then((res) => {
-          if (!cancelled && res.messages && res.messages.length > 0) {
-            setMessages(res.messages.map(normalizeChatMessage));
-            if (res.conversation_id) setConversationId(res.conversation_id);
-            if (isGroupThread) {
-              if (res.group) setGroupDetail(res.group);
-              if (Array.isArray(res.members)) setGroupMembersList(res.members);
+      if (
+        !cancelled &&
+        myEmail &&
+        (isGroupThread ? groupConversationId : otherUserEmail)
+      ) {
+        load()
+          .then(res => {
+            if (!cancelled && res.messages && res.messages.length > 0) {
+              setMessages(res.messages.map(normalizeChatMessage));
+              if (res.conversation_id) setConversationId(res.conversation_id);
+              if (isGroupThread) {
+                if (res.group) setGroupDetail(res.group);
+                if (Array.isArray(res.members))
+                  setGroupMembersList(res.members);
+              }
+              if (!isGroupThread && res.exclusiveOffer !== undefined) {
+                const cid =
+                  res.conversation_id != null
+                    ? String(res.conversation_id).trim()
+                    : '';
+                setExclusiveOfferMeta(
+                  res.exclusiveOffer
+                    ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
+                    : null,
+                );
+              }
             }
-            if (!isGroupThread && res.exclusiveOffer !== undefined) {
-              const cid = res.conversation_id != null ? String(res.conversation_id).trim() : '';
-              setExclusiveOfferMeta(
-                res.exclusiveOffer
-                  ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
-                  : null,
-              );
-            }
-          }
-        }).catch(() => {});
+          })
+          .catch(() => {});
       }
     }, 800);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [isDirectPeer, isGroupThread, groupConversationId, myEmail, otherUserEmail]);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [
+    isDirectPeer,
+    isGroupThread,
+    groupConversationId,
+    myEmail,
+    otherUserEmail,
+  ]);
 
   useEffect(() => {
     if (!isDirectPeer) {
@@ -654,13 +764,16 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
 
   useEffect(() => {
     const lid = exclusiveOfferMeta?.listingId;
-    const st = exclusiveOfferMeta?.status != null ? String(exclusiveOfferMeta.status).trim().toLowerCase() : '';
+    const st =
+      exclusiveOfferMeta?.status != null
+        ? String(exclusiveOfferMeta.status).trim().toLowerCase()
+        : '';
     if (!lid || !['pending', 'rejected'].includes(st)) {
       setExclusiveOfferListingPreview(null);
       return;
     }
     let cancelled = false;
-    getListingPreview(lid).then((listing) => {
+    getListingPreview(lid).then(listing => {
       if (!cancelled) setExclusiveOfferListingPreview(listing || null);
     });
     return () => {
@@ -678,11 +791,14 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     }
   }, [isGroupThread, groupConversationId]);
 
-  const savedGroupDescription = (groupDetail?.description != null && String(groupDetail.description).trim())
-    ? String(groupDetail.description).trim()
-    : '';
+  const savedGroupDescription =
+    groupDetail?.description != null && String(groupDetail.description).trim()
+      ? String(groupDetail.description).trim()
+      : '';
   const canSaveGroupDesc =
-    groupDescDraft.trim() !== savedGroupDescription && (myEmail != null) && !!groupConversationId;
+    groupDescDraft.trim() !== savedGroupDescription &&
+    myEmail != null &&
+    !!groupConversationId;
 
   const openGroupDescModal = useCallback(() => {
     setGroupDescDraft(savedGroupDescription);
@@ -690,7 +806,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [savedGroupDescription]);
 
   const saveGroupDescription = useCallback(async () => {
-    if (!canSaveGroupDesc || savingGroupDesc || !myEmail || !groupConversationId) return;
+    if (
+      !canSaveGroupDesc ||
+      savingGroupDesc ||
+      !myEmail ||
+      !groupConversationId
+    )
+      return;
     setSavingGroupDesc(true);
     try {
       await updateGroupDescription({
@@ -699,7 +821,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         description: groupDescDraft.trim(),
       });
       const next = groupDescDraft.trim();
-      setGroupDetail((prev) => ({...(prev || {}), description: next || null}));
+      setGroupDetail(prev => ({...(prev || {}), description: next || null}));
       setShowGroupDescModal(false);
     } catch (e) {
       Alert.alert('', e?.message ? String(e.message) : 'שמירת התיאור נכשלה');
@@ -721,15 +843,25 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     setShowAddMembersModal(true);
   }, [isGroupThread, groupConversationId]);
 
-  const toggleAddMember = useCallback((email) => {
-    const key = String(email || '').trim().toLowerCase();
+  const toggleAddMember = useCallback(email => {
+    const key = String(email || '')
+      .trim()
+      .toLowerCase();
     if (!key) return;
-    setAddMembersSelected((prev) => ({...prev, [key]: !prev[key]}));
+    setAddMembersSelected(prev => ({...prev, [key]: !prev[key]}));
   }, []);
 
   const submitAddMembers = useCallback(async () => {
-    const picked = Object.keys(addMembersSelected).filter((k) => addMembersSelected[k]);
-    if (!myEmail || !groupConversationId || picked.length === 0 || addMembersSubmitting) return;
+    const picked = Object.keys(addMembersSelected).filter(
+      k => addMembersSelected[k],
+    );
+    if (
+      !myEmail ||
+      !groupConversationId ||
+      picked.length === 0 ||
+      addMembersSubmitting
+    )
+      return;
     try {
       setAddMembersSubmitting(true);
       await addMembersToChatGroup({
@@ -746,14 +878,20 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     } finally {
       setAddMembersSubmitting(false);
     }
-  }, [addMembersSelected, myEmail, groupConversationId, addMembersSubmitting, fetchMessages]);
+  }, [
+    addMembersSelected,
+    myEmail,
+    groupConversationId,
+    addMembersSubmitting,
+    fetchMessages,
+  ]);
 
   const refreshGroupFromServer = useCallback(() => {
     fetchMessages();
   }, [fetchMessages]);
 
   const handleSaveGroupTitleModal = useCallback(
-    async (nextTitle) => {
+    async nextTitle => {
       if (!myEmail || !groupConversationId) return;
       setGroupManageBusy(true);
       try {
@@ -770,7 +908,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   );
 
   const handleRemoveMemberModal = useCallback(
-    (memberEmail) =>
+    memberEmail =>
       removeMemberFromChatGroup({
         userEmail: myEmail,
         conversationId: groupConversationId,
@@ -801,7 +939,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   );
 
   useEffect(() => {
-    if (!conversationId || !myEmail || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    if (!conversationId || !myEmail || !SUPABASE_URL || !SUPABASE_ANON_KEY)
+      return;
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const channel = supabase
       .channel(`chat:${conversationId}`)
@@ -813,7 +952,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
           table: 'chat_messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        payload => {
           const row = payload?.new;
           if (!row || !row.id) return;
           /** Replica payloads sometimes omit columns — full fetch keeps UI consistent */
@@ -821,7 +960,10 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             fetchMessagesRef.current();
             return;
           }
-          const senderEmail = row.sender_id != null ? String(row.sender_id).trim().toLowerCase() : '';
+          const senderEmail =
+            row.sender_id != null
+              ? String(row.sender_id).trim().toLowerCase()
+              : '';
           const newMsg = normalizeChatMessage({
             id: row.id,
             senderId: row.sender_id,
@@ -833,13 +975,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             createdAt: row.created_at,
             isMe: senderEmail === myEmail,
           });
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
-        }
+        },
       )
-      .subscribe((status) => {
+      .subscribe(status => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.warn('[ChatScreen] realtime channel:', status);
         }
@@ -857,7 +999,8 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       if (!lid) return;
       if (seen.has(lid)) return;
       seen.add(lid);
-      if (Object.prototype.hasOwnProperty.call(listingPreviewCache, lid)) return;
+      if (Object.prototype.hasOwnProperty.call(listingPreviewCache, lid))
+        return;
       pending.push(lid);
     });
     if (pending.length === 0) return;
@@ -899,7 +1042,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   useEffect(() => {
     if (!myEmail) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
-    const onAppState = (next) => {
+    const onAppState = next => {
       if (next === 'active') fetchMessagesRef.current();
     };
     const sub = AppState.addEventListener('change', onAppState);
@@ -951,15 +1094,21 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       setSending(true);
       setInputText('');
       try {
-        const res = await sendGroupChatMessage(groupConversationId, myEmail, text, null);
+        const res = await sendGroupChatMessage(
+          groupConversationId,
+          myEmail,
+          text,
+          null,
+        );
         if (res.message) {
           const nm = normalizeChatMessage(res.message);
-          setMessages((prev) => [...prev, {...nm, id: nm.id || Date.now()}]);
+          setMessages(prev => [...prev, {...nm, id: nm.id || Date.now()}]);
           if (onMessageSent) onMessageSent();
         }
       } catch (e) {
         setInputText(text);
-        if (typeof alert !== 'undefined') alert(e?.message || 'שליחת ההודעה נכשלה');
+        if (typeof alert !== 'undefined')
+          alert(e?.message || 'שליחת ההודעה נכשלה');
       } finally {
         setSending(false);
       }
@@ -985,12 +1134,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       );
       if (res.message) {
         const nm = normalizeChatMessage(res.message);
-        setMessages((prev) => [...prev, {...nm, id: nm.id || Date.now()}]);
+        setMessages(prev => [...prev, {...nm, id: nm.id || Date.now()}]);
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
       setInputText(text);
-      if (typeof alert !== 'undefined') alert(e?.message || 'שליחת ההודעה נכשלה');
+      if (typeof alert !== 'undefined')
+        alert(e?.message || 'שליחת ההודעה נכשלה');
     } finally {
       setSending(false);
     }
@@ -1087,17 +1237,27 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       const up = await uploadChatMedia({uri, type: mime, name});
       let res;
       if (isGroupThread && groupConversationId) {
-        res = await sendGroupChatMessage(groupConversationId, myEmail, '', {type: 'image', url: up.url});
-      } else {
-        const {receiverDisplay, senderDisplay} = getChatDisplays();
-        res = await sendChatMessage(myEmail, otherUserEmail, '', receiverDisplay, senderDisplay, {
+        res = await sendGroupChatMessage(groupConversationId, myEmail, '', {
           type: 'image',
           url: up.url,
         });
+      } else {
+        const {receiverDisplay, senderDisplay} = getChatDisplays();
+        res = await sendChatMessage(
+          myEmail,
+          otherUserEmail,
+          '',
+          receiverDisplay,
+          senderDisplay,
+          {
+            type: 'image',
+            url: up.url,
+          },
+        );
       }
       if (res.message) {
         const nm = normalizeChatMessage(res.message);
-        setMessages((prev) => [
+        setMessages(prev => [
           ...prev,
           {
             ...nm,
@@ -1130,7 +1290,9 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
-      const {recording} = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      const {recording} = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
       recordingRef.current = recording;
       recordStartedAtRef.current = Date.now();
       setIsRecording(true);
@@ -1166,21 +1328,32 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       });
       let res;
       if (isGroupThread && groupConversationId) {
-        res = await sendGroupChatMessage(groupConversationId, myEmail, '', {type: 'audio', url: up.url});
+        res = await sendGroupChatMessage(groupConversationId, myEmail, '', {
+          type: 'audio',
+          url: up.url,
+        });
       } else if (otherUserEmail) {
         const {receiverDisplay, senderDisplay} = getChatDisplays();
         const listingForVoice =
           contextListingId && messages.length === 0 ? contextListingId : null;
-        res = await sendChatMessage(myEmail, otherUserEmail, '', receiverDisplay, senderDisplay, {
-          type: 'audio',
-          url: up.url,
-        }, listingForVoice);
+        res = await sendChatMessage(
+          myEmail,
+          otherUserEmail,
+          '',
+          receiverDisplay,
+          senderDisplay,
+          {
+            type: 'audio',
+            url: up.url,
+          },
+          listingForVoice,
+        );
       } else {
         return;
       }
       if (res.message) {
         const nm = normalizeChatMessage(res.message);
-        setMessages((prev) => [
+        setMessages(prev => [
           ...prev,
           {
             ...nm,
@@ -1217,7 +1390,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       const {sound} = await Audio.Sound.createAsync({uri: url});
       soundRef.current = sound;
       setPlayingMessageId(messageId);
-      sound.setOnPlaybackStatusUpdate((st) => {
+      sound.setOnPlaybackStatusUpdate(st => {
         if (st.isLoaded && st.didJustFinish) {
           setPlayingMessageId(null);
           sound.unloadAsync().catch(() => {});
@@ -1250,20 +1423,35 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [conversationId, exclusiveOfferMeta?.conversationId]);
 
   const showExclusiveOwnerCard = useMemo(() => {
-    if (!isDirectPeer || !exclusiveOfferMeta || !exclusiveRespondConversationId) return false;
+    if (!isDirectPeer || !exclusiveOfferMeta || !exclusiveRespondConversationId)
+      return false;
     const st = String(exclusiveOfferMeta.status || '').toLowerCase();
     if (st !== 'pending' && st !== 'rejected') return false;
     const me = (myEmail || '').trim().toLowerCase();
     const ow = (exclusiveOfferMeta.ownerEmail || '').trim().toLowerCase();
     return !!me && !!ow && me === ow;
-  }, [isDirectPeer, exclusiveRespondConversationId, exclusiveOfferMeta, myEmail]);
+  }, [
+    isDirectPeer,
+    exclusiveRespondConversationId,
+    exclusiveOfferMeta,
+    myEmail,
+  ]);
 
   const renderMessages = () => {
     if (isWelcome) {
       return (
-        <View style={[styles.messageRow, styles.messageRowWelcome]}>
+        <View
+          style={[
+            styles.messageRow,
+            styles.messageRowThem,
+            styles.messageRowWelcome,
+          ]}>
           <View style={styles.senderLogoWrap}>
-            <Image source={WELCOME_PI_AVATAR} style={styles.senderLogo} resizeMode="cover" />
+            <Image
+              source={WELCOME_PI_AVATAR}
+              style={styles.senderLogo}
+              resizeMode="cover"
+            />
           </View>
           <View style={[styles.bubbleWrap, styles.bubbleWrapWelcome]}>
             <View style={styles.welcomeBubble}>
@@ -1299,7 +1487,11 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       );
     }
     if (messages.length === 0) {
-      return <Text style={styles.emptyChatText}>אין הודעות עדיין. שלח/י הודעה להתחיל.</Text>;
+      return (
+        <Text style={styles.emptyChatText}>
+          אין הודעות עדיין. שלח/י הודעה להתחיל.
+        </Text>
+      );
     }
     return messages.map((m, idx) => {
       const msg = normalizeChatMessage(m);
@@ -1318,212 +1510,268 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
        */
       const showSharedPostCard =
         !hasAudio &&
-        (msg.listingShare === true ||
-          (!!msg.listingId && legacyInferredShare));
-      const sid = m.senderId != null ? String(m.senderId).trim().toLowerCase() : '';
+        (msg.listingShare === true || (!!msg.listingId && legacyInferredShare));
+      const sid =
+        m.senderId != null ? String(m.senderId).trim().toLowerCase() : '';
       const peerPic =
         isGroupThread && sid
           ? getUserProfileImageUrl(
-              groupMembersList.find((row) => String(row.email).trim().toLowerCase() === sid),
+              groupMembersList.find(
+                row => String(row.email).trim().toLowerCase() === sid,
+              ),
             )
           : null;
       const isExclusiveOffer =
-        typeof msg.body === 'string' && msg.body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
+        typeof msg.body === 'string' &&
+        msg.body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
       return (
-      <React.Fragment key={m.id}>
-      <View
-        style={[styles.messageRow, m.isMe && styles.messageRowMe]}>
-        {!m.isMe && (
-          <View style={styles.senderLogoWrap}>
-            {isGroupThread ? (
-              peerPic ? (
-                <Image source={{uri: peerPic}} style={styles.senderLogo} resizeMode="cover" />
-              ) : (
-                <Image source={DEFAULT_CHAT_AVATAR} style={styles.senderLogo} resizeMode="cover" />
-              )
-            ) : (
-              <Image
-                source={senderAvatarSource}
-                style={styles.senderLogo}
-                resizeMode="cover"
-                onError={() => setSenderAvatarFailed(true)}
-              />
-            )}
-          </View>
-        )}
-        <View style={[styles.bubbleWrap, m.isMe && styles.bubbleWrapMe]}>
-          <View style={[styles.bubble, m.isMe ? styles.bubbleMe : styles.bubbleThem]}>
-            {showSharedPostCard ? (() => {
-              const lid = msg.listingId ? String(msg.listingId).trim() : '';
-              const cached = lid ? listingPreviewCache[lid] : null;
-              const ownImage =
-                msg.mediaType === 'image' && msg.mediaUrl ? msg.mediaUrl : null;
-              const sharedImage = (() => {
-                if (!sharedListing) return null;
-                const sid =
-                  sharedListing.id != null ? String(sharedListing.id).trim() : '';
-                if (!sid || sid !== String(msg.listingId).trim()) return null;
-                const imgs = Array.isArray(sharedListing.images)
-                  ? sharedListing.images
-                  : Array.isArray(sharedListing.listing_images)
-                    ? sharedListing.listing_images
-                    : [];
-                for (const it of imgs) {
-                  if (!it) continue;
-                  if (typeof it === 'string' && it.trim()) return it.trim();
-                  const u =
-                    (typeof it.uri === 'string' && it.uri.trim()) ||
-                    (typeof it.image_url === 'string' && it.image_url.trim()) ||
-                    (typeof it.url === 'string' && it.url.trim()) ||
-                    null;
-                  if (u && !/^text-post-placeholder$/i.test(u)) return u;
-                }
-                return (
-                  sharedListing.main_image_url ||
-                  sharedListing.mainImageUrl ||
-                  sharedListing.image_url ||
-                  sharedListing.cover_url ||
-                  null
-                );
-              })();
-              const resolvedMediaUrl =
-                ownImage || sharedImage || (cached && cached.mediaUrl) || null;
-              const previewLines = sharedPostPreviewText(cached, bodyTrim);
-              return (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => {
-                  if (typeof onOpenPost === 'function') {
-                    onOpenPost({
-                      id: msg.listingId,
-                      mediaUrl: resolvedMediaUrl,
-                      body: m.body,
-                    });
-                  }
-                }}
-                style={styles.sharedPostCard}>
-                <View style={styles.sharedPostImageWrap}>
-                  {resolvedMediaUrl ? (
+        <React.Fragment key={m.id}>
+          <View
+            style={[
+              styles.messageRow,
+              !m.isMe && styles.messageRowThem,
+              m.isMe && styles.messageRowMe,
+            ]}>
+            {!m.isMe && (
+              <View style={styles.senderLogoWrap}>
+                {isGroupThread ? (
+                  peerPic ? (
                     <Image
-                      source={{uri: resolvedMediaUrl}}
-                      style={styles.sharedPostImage}
+                      source={{uri: peerPic}}
+                      style={styles.senderLogo}
                       resizeMode="cover"
                     />
-                  ) : previewLines ? (
-                    <View style={styles.sharedPostImagePlaceholder}>
-                      <Text
-                        style={styles.sharedPostPlaceholderBody}
-                        numberOfLines={8}>
-                        {previewLines}
-                      </Text>
-                    </View>
                   ) : (
-                    <View style={styles.sharedPostImagePlaceholder}>
-                      <MaterialCommunityIcons
-                        name="image-outline"
-                        size={36}
-                        color="rgba(255,255,255,0.6)"
-                      />
-                    </View>
-                  )}
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.55)']}
-                    style={styles.sharedPostGradient}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.sharedPostBadge}>
-                    <MaterialCommunityIcons
-                      name="play-circle"
-                      size={12}
-                      color="#1E1D27"
+                    <Image
+                      source={DEFAULT_CHAT_AVATAR}
+                      style={styles.senderLogo}
+                      resizeMode="cover"
                     />
-                    <Text style={styles.sharedPostBadgeText}>פוסט</Text>
-                  </View>
-                </View>
-                <View style={styles.sharedPostFooter}>
-                  <MaterialCommunityIcons
-                    name="chevron-left"
-                    size={18}
-                    color="rgba(255,255,255,0.85)"
+                  )
+                ) : (
+                  <Image
+                    source={senderAvatarSource}
+                    style={styles.senderLogo}
+                    resizeMode="cover"
+                    onError={() => setSenderAvatarFailed(true)}
                   />
-                  <Text
-                    style={styles.sharedPostFooterText}
-                    numberOfLines={resolvedMediaUrl && previewLines ? 2 : 1}>
-                    {resolvedMediaUrl && previewLines
-                      ? previewLines
-                      : 'צפייה בפוסט'}
+                )}
+              </View>
+            )}
+            <View
+              style={[
+                styles.bubbleWrap,
+                !m.isMe && styles.bubbleWrapThem,
+                m.isMe && styles.bubbleWrapMe,
+              ]}>
+              <View
+                style={[
+                  styles.bubble,
+                  m.isMe ? styles.bubbleMe : styles.bubbleThem,
+                ]}>
+                {showSharedPostCard ? (
+                  (() => {
+                    const lid = msg.listingId
+                      ? String(msg.listingId).trim()
+                      : '';
+                    const cached = lid ? listingPreviewCache[lid] : null;
+                    const ownImage =
+                      msg.mediaType === 'image' && msg.mediaUrl
+                        ? msg.mediaUrl
+                        : null;
+                    const sharedImage = (() => {
+                      if (!sharedListing) return null;
+                      const sid =
+                        sharedListing.id != null
+                          ? String(sharedListing.id).trim()
+                          : '';
+                      if (!sid || sid !== String(msg.listingId).trim())
+                        return null;
+                      const imgs = Array.isArray(sharedListing.images)
+                        ? sharedListing.images
+                        : Array.isArray(sharedListing.listing_images)
+                          ? sharedListing.listing_images
+                          : [];
+                      for (const it of imgs) {
+                        if (!it) continue;
+                        if (typeof it === 'string' && it.trim())
+                          return it.trim();
+                        const u =
+                          (typeof it.uri === 'string' && it.uri.trim()) ||
+                          (typeof it.image_url === 'string' &&
+                            it.image_url.trim()) ||
+                          (typeof it.url === 'string' && it.url.trim()) ||
+                          null;
+                        if (u && !/^text-post-placeholder$/i.test(u)) return u;
+                      }
+                      return (
+                        sharedListing.main_image_url ||
+                        sharedListing.mainImageUrl ||
+                        sharedListing.image_url ||
+                        sharedListing.cover_url ||
+                        null
+                      );
+                    })();
+                    const resolvedMediaUrl =
+                      ownImage ||
+                      sharedImage ||
+                      (cached && cached.mediaUrl) ||
+                      null;
+                    const previewLines = sharedPostPreviewText(
+                      cached,
+                      bodyTrim,
+                    );
+                    return (
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          if (typeof onOpenPost === 'function') {
+                            onOpenPost({
+                              id: msg.listingId,
+                              mediaUrl: resolvedMediaUrl,
+                              body: m.body,
+                            });
+                          }
+                        }}
+                        style={styles.sharedPostCard}>
+                        <View style={styles.sharedPostImageWrap}>
+                          {resolvedMediaUrl ? (
+                            <Image
+                              source={{uri: resolvedMediaUrl}}
+                              style={styles.sharedPostImage}
+                              resizeMode="cover"
+                            />
+                          ) : previewLines ? (
+                            <View style={styles.sharedPostImagePlaceholder}>
+                              <Text
+                                style={styles.sharedPostPlaceholderBody}
+                                numberOfLines={8}>
+                                {previewLines}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.sharedPostImagePlaceholder}>
+                              <MaterialCommunityIcons
+                                name="image-outline"
+                                size={36}
+                                color="rgba(255,255,255,0.6)"
+                              />
+                            </View>
+                          )}
+                          <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.55)']}
+                            style={styles.sharedPostGradient}
+                            pointerEvents="none"
+                          />
+                          <View style={styles.sharedPostBadge}>
+                            <MaterialCommunityIcons
+                              name="play-circle"
+                              size={12}
+                              color="#1E1D27"
+                            />
+                            <Text style={styles.sharedPostBadgeText}>פוסט</Text>
+                          </View>
+                        </View>
+                        <View style={styles.sharedPostFooter}>
+                          <MaterialCommunityIcons
+                            name="chevron-left"
+                            size={18}
+                            color="rgba(255,255,255,0.85)"
+                          />
+                          <Text
+                            style={styles.sharedPostFooterText}
+                            numberOfLines={
+                              resolvedMediaUrl && previewLines ? 2 : 1
+                            }>
+                            {resolvedMediaUrl && previewLines
+                              ? previewLines
+                              : 'צפייה בפוסט'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })()
+                ) : msg.mediaType === 'image' && msg.mediaUrl ? (
+                  <Image
+                    source={{uri: msg.mediaUrl}}
+                    style={styles.bubbleImage}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                {msg.mediaType === 'audio' && msg.mediaUrl ? (
+                  <TouchableOpacity
+                    style={[styles.voiceRow, m.isMe && styles.voiceRowMe]}
+                    onPress={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
+                    activeOpacity={0.7}>
+                    <MaterialCommunityIcons
+                      name={playingMessageId === m.id ? 'pause' : 'play'}
+                      size={22}
+                      color={m.isMe ? '#fff' : CHAT_BG}
+                    />
+                    <Text
+                      style={[
+                        styles.voiceLabel,
+                        m.isMe && styles.voiceLabelMe,
+                      ]}>
+                      הודעה קולית
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {isGroupThread && !m.isMe && m.senderId ? (
+                  <Text style={styles.bubbleSenderLabel} numberOfLines={1}>
+                    {senderNameByEmail.get(
+                      String(m.senderId).trim().toLowerCase(),
+                    ) || String(m.senderId)}
                   </Text>
-                </View>
-              </TouchableOpacity>
-              );
-            })() : msg.mediaType === 'image' && msg.mediaUrl ? (
-              <Image
-                source={{uri: msg.mediaUrl}}
-                style={styles.bubbleImage}
-                resizeMode="cover"
-              />
-            ) : null}
-            {msg.mediaType === 'audio' && msg.mediaUrl ? (
-              <TouchableOpacity
-                style={[styles.voiceRow, m.isMe && styles.voiceRowMe]}
-                onPress={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
-                activeOpacity={0.7}>
-                <MaterialCommunityIcons
-                  name={playingMessageId === m.id ? 'pause' : 'play'}
-                  size={22}
-                  color={m.isMe ? '#fff' : CHAT_BG}
-                />
-                <Text style={[styles.voiceLabel, m.isMe && styles.voiceLabelMe]}>הודעה קולית</Text>
-              </TouchableOpacity>
-            ) : null}
-            {isGroupThread && !m.isMe && m.senderId ? (
-              <Text style={styles.bubbleSenderLabel} numberOfLines={1}>
-                {senderNameByEmail.get(String(m.senderId).trim().toLowerCase()) || String(m.senderId)}
-              </Text>
-            ) : null}
-            {bodyTrim &&
-            !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) ? (
-              <Text style={styles.bubbleText}>{bodyTrim}</Text>
-            ) : null}
-            <Text style={styles.bubbleTime}>
-              {m.createdAt
-                ? new Date(m.createdAt).toLocaleTimeString('he-IL', {hour: '2-digit', minute: '2-digit'})
-                : ''}
-            </Text>
+                ) : null}
+                {bodyTrim &&
+                !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) ? (
+                  <Text style={styles.bubbleText}>{bodyTrim}</Text>
+                ) : null}
+                <Text style={styles.bubbleTime}>
+                  {m.createdAt
+                    ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : ''}
+                </Text>
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
-      {isExclusiveOffer && m.isMe ? (
-        <View style={styles.exclusiveStatusBanner}>
-          <Text style={styles.exclusiveStatusText}>
-            הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה
-          </Text>
-        </View>
-      ) : null}
-      {showExclusiveOwnerCard &&
-      idx === lastExclusiveBrokerMessageIndex &&
-      isExclusiveOffer &&
-      isExclusiveOfferFromPeerForViewer(m, myEmail) ? (
-        <View style={styles.exclusiveOfferOwnerAnchor}>
-          <ExclusiveOfferResponseCard
-            purposeLabel={exclusiveOfferListingPreview?.purposeLabel}
-            priceFormatted={formatPrice(exclusiveOfferListingPreview?.price)}
-            addressLine={exclusiveOfferListingPreview?.address}
-            imageUri={
-              exclusiveOfferListingPreview?.mediaUrl
-                ? normalizeAvatarUrl(exclusiveOfferListingPreview.mediaUrl)
-                : null
-            }
-            monthsCommitted={exclusiveOfferMeta?.monthsCommitted}
-            decisionStatus={exclusiveOfferMeta?.status}
-            loading={exclusiveRespondLoading}
-            onAccept={() => handleExclusiveRespond(true)}
-            onReject={() => handleExclusiveRespond(false)}
-          />
-        </View>
-      ) : null}
-      </React.Fragment>
-    );
+          {isExclusiveOffer && m.isMe ? (
+            <View style={styles.exclusiveStatusBanner}>
+              <Text style={styles.exclusiveStatusText}>
+                הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה
+              </Text>
+            </View>
+          ) : null}
+          {showExclusiveOwnerCard &&
+          idx === lastExclusiveBrokerMessageIndex &&
+          isExclusiveOffer &&
+          isExclusiveOfferFromPeerForViewer(m, myEmail) ? (
+            <View style={styles.exclusiveOfferOwnerAnchor}>
+              <ExclusiveOfferResponseCard
+                purposeLabel={exclusiveOfferListingPreview?.purposeLabel}
+                priceFormatted={formatPrice(
+                  exclusiveOfferListingPreview?.price,
+                )}
+                addressLine={exclusiveOfferListingPreview?.address}
+                imageUri={
+                  exclusiveOfferListingPreview?.mediaUrl
+                    ? normalizeAvatarUrl(exclusiveOfferListingPreview.mediaUrl)
+                    : null
+                }
+                monthsCommitted={exclusiveOfferMeta?.monthsCommitted}
+                decisionStatus={exclusiveOfferMeta?.status}
+                loading={exclusiveRespondLoading}
+                onAccept={() => handleExclusiveRespond(true)}
+                onReject={() => handleExclusiveRespond(false)}
+              />
+            </View>
+          ) : null}
+        </React.Fragment>
+      );
     });
   };
 
@@ -1546,7 +1794,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const hasSentExclusiveOfferInThread = useMemo(() => {
     if (!messages || messages.length === 0) return false;
     return messages.some(
-      (m) =>
+      m =>
         m?.isMe &&
         typeof m?.body === 'string' &&
         m.body.includes(EXCLUSIVE_OFFER_BODY_MARKER),
@@ -1568,7 +1816,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   }, [isDirectPeer, exclusiveOfferMeta, myEmail, isAwaitingExclusiveResponse]);
 
   const handleExclusiveRespond = useCallback(
-    async (accept) => {
+    async accept => {
       const conv = exclusiveRespondConversationId;
       if (!myEmail || !conv || exclusiveRespondLoading) return;
       try {
@@ -1584,7 +1832,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             : accept
               ? 'accepted'
               : 'rejected';
-        setExclusiveOfferMeta((prev) =>
+        setExclusiveOfferMeta(prev =>
           prev
             ? {
                 ...prev,
@@ -1601,17 +1849,23 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         setExclusiveRespondLoading(false);
       }
     },
-    [myEmail, exclusiveRespondConversationId, exclusiveRespondLoading, fetchMessages],
+    [
+      myEmail,
+      exclusiveRespondConversationId,
+      exclusiveRespondLoading,
+      fetchMessages,
+    ],
   );
 
   const composerActive =
-    (isWelcome || (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
+    (isWelcome ||
+      (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
     !composerBlockedExclusive;
   const canSubmitMessage =
     !sending &&
     !composerBlockedExclusive &&
     (inputText || '').trim().length > 0 &&
-    (isWelcome || (isDirectPeer || (isGroupThread && groupConversationId)));
+    (isWelcome || isDirectPeer || (isGroupThread && groupConversationId));
 
   const offerLocationText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
@@ -1662,7 +1916,12 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
 
   const offerPriceText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
-    const raw = src.price ?? src.listing_price ?? src.asking_price ?? src.rent_price ?? null;
+    const raw =
+      src.price ??
+      src.listing_price ??
+      src.asking_price ??
+      src.rent_price ??
+      null;
     const num = Number(raw);
     if (!Number.isFinite(num) || num <= 0) return '₪0';
     return `₪${num.toLocaleString('en-US')}`;
@@ -1682,12 +1941,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
   const timelineThumbPercent = useMemo(() => {
     const n = Number(exclusiveMonths);
     const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
-    return (10 - clamped) * (100 / 9);
+    return ((10 - clamped) / 9) * 100;
   }, [exclusiveMonths]);
-  const timelineActiveWidthPercent = `${Math.max(
-    0,
-    Math.min(100, 100 - timelineThumbPercent),
-  )}%`;
+  const timelineActiveWidthPercent = useMemo(() => {
+    const n = Number(exclusiveMonths);
+    const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+    return `${Math.max(0, Math.min(100, ((clamped - 1) / 9) * 100))}%`;
+  }, [exclusiveMonths]);
 
   const exclusiveSenderName = useMemo(() => {
     const name =
@@ -1713,10 +1973,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
     let cancelled = false;
     setExclusiveLoadingListing(true);
     getListings({})
-      .then((res) => {
+      .then(res => {
         if (cancelled) return;
         const rows = Array.isArray(res?.listings) ? res.listings : [];
-        const found = rows.find((r) => String(r?.id || '').trim() === String(contextListingId).trim()) || null;
+        const found =
+          rows.find(
+            r => String(r?.id || '').trim() === String(contextListingId).trim(),
+          ) || null;
         setExclusiveListingData(found);
       })
       .catch(() => {
@@ -1741,14 +2004,15 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
         {isGroupThread ? (
           <>
             <TouchableOpacity
-              onPress={onClose}
-              style={styles.groupHeaderBack}
-              activeOpacity={0.7}
-              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
-              <MaterialCommunityIcons
-                name="chevron-left"
-                size={28}
-                color="#fff"
+              style={styles.headerIconBtn}
+              onPress={() => setShowGroupManageModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel="מידע">
+              <Image
+                source={require('../assets/chat/info.png')}
+                style={styles.headerInfoIcon}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
               />
             </TouchableOpacity>
             <View style={styles.groupHeaderCenter}>
@@ -1770,15 +2034,14 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               </Text>
             </View>
             <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={() => setShowGroupManageModal(true)}
-              accessibilityRole="button"
-              accessibilityLabel="מידע">
-              <Image
-                source={require('../assets/chat/info.png')}
-                style={styles.headerInfoIcon}
-                resizeMode="contain"
-                accessibilityIgnoresInvertColors
+              onPress={onClose}
+              style={styles.groupHeaderBack}
+              activeOpacity={0.7}
+              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={28}
+                color="#fff"
               />
             </TouchableOpacity>
           </>
@@ -1851,7 +2114,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
       <KeyboardAvoidingView
         style={styles.chatArea}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+        keyboardVerticalOffset={0}>
         <View style={styles.chatBackground}>
           <Image
             source={require('../assets/pi-chat/background.png')}
@@ -2111,34 +2374,6 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             style={styles.offerScroll}
             contentContainerStyle={styles.offerScrollContent}>
             <View style={styles.offerListingCard}>
-              <View style={styles.offerListingTextCol}>
-                <View style={styles.offerTagsRow}>
-                  {listingDisplayNumber ? (
-                    <View style={styles.offerTagDark}>
-                      <Text
-                        style={
-                          styles.offerTagDarkText
-                        }>{`מודעה מס ${listingDisplayNumber}`}</Text>
-                    </View>
-                  ) : null}
-                  {listingCategoryLabel ? (
-                    <View style={styles.offerTagCategory}>
-                      <Text style={styles.offerTagCategoryText}>
-                        {listingCategoryLabel}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.offerPrice}>{offerPriceText}</Text>
-                <View style={styles.offerLocationRow}>
-                  <MaterialCommunityIcons
-                    name="map-marker-outline"
-                    size={18}
-                    color="#D2D0DC"
-                  />
-                  <Text style={styles.offerLocation}>{offerLocationText}</Text>
-                </View>
-              </View>
               <View style={styles.offerImageWrap}>
                 {offerImageUri ? (
                   <Image
@@ -2161,6 +2396,34 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                   </View>
                 ) : null}
               </View>
+              <View style={styles.offerListingTextCol}>
+                <View style={styles.offerTagsRow}>
+                  {listingCategoryLabel ? (
+                    <View style={styles.offerTagCategory}>
+                      <Text style={styles.offerTagCategoryText}>
+                        {listingCategoryLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {listingDisplayNumber ? (
+                    <View style={styles.offerTagDark}>
+                      <Text
+                        style={
+                          styles.offerTagDarkText
+                        }>{`מודעה מס ${listingDisplayNumber}`}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.offerPrice}>{offerPriceText}</Text>
+                <View style={styles.offerLocationRow}>
+                  <MaterialCommunityIcons
+                    name="map-marker-outline"
+                    size={18}
+                    color="#D2D0DC"
+                  />
+                  <Text style={styles.offerLocation}>{offerLocationText}</Text>
+                </View>
+              </View>
             </View>
 
             <View style={styles.offerCard}>
@@ -2169,13 +2432,13 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 תוך כמה חודשים אתם מתחייבים למצוא שוכר?
               </Text>
               <View style={styles.offerScaleNumbers}>
-                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                   <Text key={n} style={styles.offerScaleNumber}>
                     {n}
                   </Text>
                 ))}
               </View>
-              <View style={styles.offerTimeline}>
+              <View style={[styles.offerTimeline, styles.offerTimelineLtr]}>
                 <View style={styles.offerTimelineTrack} />
                 <View
                   style={[
@@ -2191,7 +2454,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
                 />
               </View>
               <View style={styles.offerScaleActions}>
-                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                   <Pressable
                     key={`pick-${n}`}
                     style={styles.offerPickHit}
@@ -2274,18 +2537,17 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
             </TouchableOpacity>
           </View>
           <View style={styles.addMembersSearchWrap}>
+            <MaterialCommunityIcons
+              name="magnify"
+              size={22}
+              color="rgba(255,255,255,0.55)"
+            />
             <TextInput
               style={styles.addMembersSearchInput}
               placeholder="חפש"
               placeholderTextColor="rgba(255,255,255,0.45)"
               value={addMembersSearch}
               onChangeText={setAddMembersSearch}
-            />
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color="rgba(255,255,255,0.55)"
-              style={styles.addMembersSearchIcon}
             />
           </View>
           <ScrollView
@@ -2450,7 +2712,7 @@ const ChatScreen = ({onClose, sharedListing = null, conversation = null, current
               onChangeText={setGroupDescDraft}
               multiline
               maxLength={2000}
-              textAlign="right"
+              textAlign={'right'}
               writingDirection="rtl"
               {...(Platform.OS === 'web' ? {id: 'pi-group-desc-input'} : {})}
             />
@@ -2467,7 +2729,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BG,
-    ...(isWeb && { height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }),
+    ...(isWeb && {
+      height: '100vh',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -2505,7 +2772,7 @@ const styles = StyleSheet.create({
   },
   headerTitleWrap: {
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
     flex: 1,
     minWidth: 0,
     direction: 'ltr',
@@ -2525,15 +2792,15 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   headerRight: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
     marginLeft: 4,
   },
-  headerIconBtn: { padding: 6 },
-  headerInfoIcon: { width: 26, height: 26 },
-  headerPhoneIcon: { width: 24, height: 24 },
+  headerIconBtn: {padding: 6},
+  headerInfoIcon: {width: 26, height: 26},
+  headerPhoneIcon: {width: 24, height: 24},
   groupHeaderBack: {
     width: 44,
     height: 44,
@@ -2648,7 +2915,7 @@ const styles = StyleSheet.create({
     ...(isWeb && {minHeight: '100vh'}),
   },
   groupDescModalHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
@@ -2659,16 +2926,15 @@ const styles = StyleSheet.create({
   },
   groupDescModalHeaderColStart: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexStart,
     minWidth: 0,
   },
   groupDescModalHeaderColEnd: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     minWidth: 0,
   },
   groupDescModalTitle: {
@@ -2680,7 +2946,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   groupDescHeaderBtn: {paddingVertical: 8, paddingHorizontal: 4},
-  groupDescSaveRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
+  groupDescSaveRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 2,
+  },
   groupDescSaveText: {
     color: GOLD,
     fontSize: 16,
@@ -2726,7 +2996,7 @@ const styles = StyleSheet.create({
     ...(isWeb && {minHeight: '100vh'}),
   },
   addMembersHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 52,
@@ -2767,7 +3037,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
-    justifyContent: 'center',
+    // justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   addMembersSearchInput: {
     color: '#fff',
@@ -2777,10 +3050,8 @@ const styles = StyleSheet.create({
     paddingRight: 46,
     paddingVertical: 8,
     textAlign: 'right',
-  },
-  addMembersSearchIcon: {
-    position: 'absolute',
-    right: 14,
+    flex: 1,
+    writingDirection: 'rtl',
   },
   addMembersScroll: {
     flex: 1,
@@ -2799,7 +3070,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.65)',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     paddingTop: 12,
   },
   addMemberRow: {
@@ -2814,7 +3085,7 @@ const styles = StyleSheet.create({
   },
   addMemberCheckCol: {
     width: 38,
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   addMemberCheckOuter: {
     width: 22,
@@ -2837,20 +3108,20 @@ const styles = StyleSheet.create({
   },
   addMemberTextCol: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     minWidth: 0,
   },
   addMemberName: {
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   addMemberSub: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   addMemberAvatarRing: {
@@ -2914,7 +3185,7 @@ const styles = StyleSheet.create({
   },
   offerHeaderRow: {
     height: 40,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
@@ -2951,11 +3222,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 16,
   },
-  offerListingTextCol: {flex: 1, alignItems: 'flex-end'},
+  offerListingTextCol: {flex: 1},
   offerTagsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexEnd,
     gap: 8,
     marginBottom: 10,
     flexWrap: 'wrap',
@@ -2983,12 +3254,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   offerPrice: {
+    textAlign: 'left',
     color: '#F7F3E6',
     fontSize: 34 / 1.55,
     fontFamily: 'Rubik-Medium',
     marginBottom: 6,
   },
-  offerLocationRow: {flexDirection: 'row-reverse', alignItems: 'center', gap: 4},
+  offerLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   offerLocation: {
     color: '#D2D0DC',
     fontSize: 14,
@@ -3020,13 +3296,13 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   offerCardSubtitle: {
     color: '#D2D0DC',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   offerScaleNumbers: {
     flexDirection: 'row',
@@ -3044,6 +3320,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginHorizontal: 4,
+  },
+  offerTimelineLtr: {
+    direction: 'ltr',
   },
   offerTimelineTrack: {
     height: 4,
@@ -3079,7 +3358,7 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 4,
   },
   offerMessageInput: {
@@ -3101,7 +3380,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 28,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   offerMessageHighlightGold: {
     color: '#FFC40A',
@@ -3117,7 +3396,7 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 10,
   },
   offerHowText: {
@@ -3125,7 +3404,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   offerFooter: {
     position: 'absolute',
@@ -3144,7 +3423,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 12,
     ...(isWeb
-      ? {backgroundImage: 'linear-gradient(182.012deg, rgb(254, 231, 135) 4.5575%, rgb(189, 153, 71) 50.763%, rgb(156, 101, 34) 88.314%)'}
+      ? {
+          backgroundImage:
+            'linear-gradient(182.012deg, rgb(254, 231, 135) 4.5575%, rgb(189, 153, 71) 50.763%, rgb(156, 101, 34) 88.314%)',
+        }
       : {backgroundColor: '#D4AF37'}),
   },
   offerSubmitText: {
@@ -3157,14 +3439,14 @@ const styles = StyleSheet.create({
   chatArea: {
     flex: 1,
     minHeight: 0,
-    ...(isWeb && { position: 'relative', overflow: 'hidden' }),
+    ...(isWeb && {position: 'relative', overflow: 'hidden'}),
   },
   chatBackground: {
     flex: 1,
     minHeight: 0,
     backgroundColor: CHAT_BG,
     overflow: 'hidden',
-    ...(isWeb && { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }),
+    ...(isWeb && {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0}),
   },
   // Full image visible: scale to fit the area without cropping (letterboxing uses CHAT_BG).
   chatBackgroundImage: {
@@ -3174,37 +3456,54 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  scroll: { flex: 1, minHeight: 0 },
+  scroll: {flex: 1, minHeight: 0},
   scrollContent: {
     padding: 16,
     paddingBottom: Platform.OS === 'web' ? 100 : 24,
     flexGrow: 1,
   },
-  dateLabel: { textAlign: 'center', color: '#fff', fontSize: 14, lineHeight: 18, marginBottom: 16 },
-  loadingWrap: { alignItems: 'center', paddingVertical: 24, gap: 8 },
-  loadingText: { color: TEXT_LIGHT, fontSize: 14 },
-  emptyChatText: { textAlign: 'center', color: TEXT_LIGHT, fontSize: 15, marginTop: 24 },
+  dateLabel: {
+    textAlign: 'center',
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  loadingWrap: {alignItems: 'center', paddingVertical: 24, gap: 8},
+  loadingText: {color: TEXT_LIGHT, fontSize: 14},
+  emptyChatText: {
+    textAlign: 'center',
+    color: TEXT_LIGHT,
+    fontSize: 15,
+    marginTop: 24,
+  },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
     gap: 10,
     marginBottom: 12,
   },
-  messageRowWelcome: { gap: 6, alignItems: 'flex-end' },
-  messageRowMe: { justifyContent: 'flex-end' },
-  senderLogoWrap: { marginBottom: 4, width: 32, height: 32 },
-  senderLogo: { width: 32, height: 32, borderRadius: 16 },
-  senderLogoPlaceholder: { backgroundColor: CARD_BG, alignItems: 'center', justifyContent: 'center' },
-  bubbleWrap: { flex: 1, maxWidth: '85%', alignSelf: 'flex-start' },
+  messageRowThem: {flexDirection: 'row-reverse'},
+  messageRowWelcome: {gap: 6, alignItems: flexStart},
+  messageRowMe: {justifyContent: flexStart},
+  senderLogoWrap: {marginBottom: 4, width: 32, height: 32},
+  senderLogo: {width: 32, height: 32, borderRadius: 16},
+  senderLogoPlaceholder: {
+    backgroundColor: CARD_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubbleWrap: {flex: 1, maxWidth: '85%', alignSelf: flexEnd},
+  bubbleWrapThem: {maxWidth: '76%'},
   bubbleWrapWelcome: {
     flex: 0,
-    width: 268,
-    maxWidth: 268,
-    minWidth: 268,
-    alignSelf: 'flex-start',
+    width: 248,
+    maxWidth: 248,
+    minWidth: 248,
+    alignSelf: flexEnd,
   },
-  bubbleWrapMe: { alignSelf: 'flex-end' },
+  bubbleWrapMe: {alignSelf: flexStart},
   bubble: {
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -3212,9 +3511,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderTopLeftRadius: 4,
   },
-  bubbleThem: { backgroundColor: BUBBLE_GOLD, alignSelf: 'flex-start' },
-  bubbleMe: { backgroundColor: BUBBLE_ME, borderTopLeftRadius: 16, borderTopRightRadius: 4, alignSelf: 'flex-end' },
-  bubbleText: { color: CHAT_BG, fontSize: 15, textAlign: 'right', lineHeight: 22 },
+  bubbleThem: {backgroundColor: BUBBLE_GOLD, alignSelf: flexEnd},
+  bubbleMe: {
+    backgroundColor: BUBBLE_ME,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 4,
+    alignSelf: flexEnd,
+  },
+  bubbleText: {color: CHAT_BG, fontSize: 15, textAlign: 'left', lineHeight: 22},
   exclusiveStatusBanner: {
     alignSelf: 'stretch',
     backgroundColor: '#2B2A39',
@@ -3240,7 +3544,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   welcomeBubble: {
-    width: 268,
+    width: 248,
     backgroundColor: FIGMA_WELCOME_BUBBLE_BG,
     borderRadius: 10,
     paddingHorizontal: 10,
@@ -3250,14 +3554,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 14,
     elevation: 6,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   welcomeBubbleText: {
     width: '100%',
     color: FIGMA_MAIN_DEEP_BLUE,
     fontSize: 17,
     lineHeight: 21,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     writingDirection: 'rtl',
@@ -3265,21 +3569,21 @@ const styles = StyleSheet.create({
   welcomeTimeRow: {
     width: '100%',
     marginTop: 6,
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
   },
   welcomeBubbleTime: {
     color: FIGMA_MAIN_DEEP_BLUE,
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: 0.54,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
   },
   bubbleSenderLabel: {
     color: 'rgba(55,53,72,0.65)',
     fontSize: 11,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
     fontFamily: 'Rubik-Regular',
   },
@@ -3316,7 +3620,7 @@ const styles = StyleSheet.create({
   sharedPostPlaceholderBody: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
     width: '100%',
@@ -3348,7 +3652,7 @@ const styles = StyleSheet.create({
   sharedPostFooter: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -3357,7 +3661,7 @@ const styles = StyleSheet.create({
   sharedPostFooterText: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   voiceRow: {
@@ -3365,20 +3669,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 6,
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
   },
-  voiceRowMe: { alignSelf: 'flex-end' },
-  voiceLabel: { color: CHAT_BG, fontSize: 15, fontFamily: 'Rubik-Medium' },
-  voiceLabelMe: { color: '#fff' },
+  voiceRowMe: {alignSelf: flexStart},
+  voiceLabel: {color: CHAT_BG, fontSize: 15, fontFamily: 'Rubik-Medium'},
+  voiceLabelMe: {color: '#fff'},
   bubbleTime: {
     position: 'absolute',
     bottom: 8,
-    right: 12,
+    left: 12,
     color: 'rgba(55,53,72,0.7)',
     fontSize: 11,
+    textAlign: 'left',
   },
   inputRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingTop: 12,
@@ -3401,8 +3706,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  inputBarIconDisabled: { opacity: 0.45 },
-  inputBarAssetIcon: { width: 22, height: 22 },
+  inputBarIconDisabled: {opacity: 0.45},
+  inputBarAssetIcon: {width: 22, height: 22},
   inputPillWrap: {
     flex: 1,
     minWidth: 0,
@@ -3430,6 +3735,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     textAlign: 'right',
+    writingDirection: 'rtl',
     backgroundColor: 'transparent',
     ...(Platform.OS === 'ios' && {
       paddingTop: 2,

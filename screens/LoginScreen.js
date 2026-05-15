@@ -102,13 +102,16 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={[styles.contentContainer, {paddingTop: insets.top + 28}]}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {paddingTop: insets.top + 28},
+        ]}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, styles.alignEnd]}>
           <TouchableOpacity
             onPress={onClose}
             style={styles.closeBtn}
@@ -131,21 +134,23 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
         </View>
 
         <View style={styles.formCard}>
-          <Text style={styles.headerTitle}>התחברות</Text>
-          <Text style={styles.instructionText}>
+          <Text style={[styles.headerTitle, {textAlign:'left'}]}>התחברות</Text>
+          <Text style={[styles.instructionText, {textAlign:'left'}]}>
             הזן את כתובת המייל או מספר המנוי שלך
           </Text>
 
           {errorMessage && (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
+              <Text style={[styles.errorText, {textAlign:'left'}]}>
+                {errorMessage}
+              </Text>
             </View>
           )}
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>כתובת מייל</Text>
+            <Text style={[styles.label, {textAlign:'left'}]}>כתובת מייל</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, {textAlign:'left'}]}
               placeholder="הזן כתובת מייל"
               placeholderTextColor={Colors.grey200}
               value={email}
@@ -157,9 +162,9 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>מספר מנוי</Text>
+            <Text style={[styles.label, {textAlign:'left'}]}>מספר מנוי</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input]}
               placeholder="הזן מספר מנוי"
               placeholderTextColor={Colors.grey200}
               value={subscriberNumber}
@@ -192,7 +197,9 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
             style={styles.onboardingTestButton}
             onPress={handleStartOnboarding}
             activeOpacity={0.85}>
-            <Text style={styles.onboardingTestButtonText}>test onbording</Text>
+            <Text style={styles.onboardingTestButtonText}>
+              מבחן עלייה למטוס
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -226,6 +233,7 @@ const OnboardingOverlay = ({imageSource, onNext, onSkip}) => {
         onPress={onSkip}
         style={[
           styles.onboardingSkipZone,
+          styles.onboardingSkipZoneRtl,
           {width: skipWidth, height: skipHeight},
         ]}
       />
@@ -260,8 +268,13 @@ const styles = StyleSheet.create({
   },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
     marginBottom: 10,
+  },
+  alignStart: {
+    justifyContent: 'flex-start',
+  },
+  alignEnd: {
+    justifyContent: 'flex-end',
   },
   closeBtn: {
     width: 38,
@@ -300,13 +313,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'Rubik-Medium',
     color: Colors.white100,
-    textAlign: 'right',
     marginBottom: 10,
   },
   instructionText: {
     fontSize: 16,
     color: Colors.textSecondary,
-    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
     marginBottom: 16,
   },
@@ -321,7 +332,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ffcccc',
     fontSize: FontSizes.sm,
-    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
   },
   inputContainer: {
@@ -331,7 +341,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.white100,
     marginBottom: 8,
-    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
   },
   input: {
@@ -410,8 +419,13 @@ const styles = StyleSheet.create({
   onboardingSkipZone: {
     position: 'absolute',
     top: 0,
-    right: 0,
     backgroundColor: 'transparent',
+  },
+  onboardingSkipZoneRtl: {
+    right: 0,
+  },
+  onboardingSkipZoneLtr: {
+    left: 0,
   },
   onboardingNextZone: {
     position: 'absolute',

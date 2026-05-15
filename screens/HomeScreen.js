@@ -6,12 +6,14 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  I18nManager,
 } from 'react-native';
 import Menu1 from '../components/Menu1';
 import MenuIcon from '../components/MenuIcon';
 import Carusel from '../components/Carusel';
 import ProfilePic from '../components/ProfilePic';
 import {Colors, Spacing} from '../constants/styles';
+import {flexEnd, flexStart} from '../index';
 
 /**
  * HomeScreen Component
@@ -205,7 +207,7 @@ const styles = StyleSheet.create({
   frame: {
     alignSelf: 'stretch',
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
     paddingBottom: 3,
     width: '100%',
   },
@@ -267,7 +269,7 @@ const styles = StyleSheet.create({
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
     paddingTop: 14,
     gap: 32,
     width: '100%',
@@ -325,7 +327,7 @@ const styles = StyleSheet.create({
     maxWidth: 414,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
     paddingLeft: 0,
     gap: Spacing.m3,
     alignSelf: 'center',
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4.3,
   },
   parent: {

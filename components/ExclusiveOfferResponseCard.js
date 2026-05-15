@@ -1,7 +1,15 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator} from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {flexEnd} from '../index';
 
 const CARD_BG = '#2b2a39';
 const CREAM = '#f7f3e6';
@@ -12,7 +20,7 @@ const WHITE_PILL = '#ffffff';
 const GOLD_GRADIENT = ['#fee787', '#bd9947', '#9c6522'];
 const GOLD_LOCATIONS = [0.045, 0.508, 0.883];
 
-const formatPrice = (n) => {
+const formatPrice = n => {
   if (n == null || !Number.isFinite(Number(n))) return null;
   try {
     return `₪${Number(n).toLocaleString('he-IL')}`;
@@ -35,7 +43,9 @@ const ExclusiveOfferResponseCard = ({
   onAccept,
   onReject,
 }) => {
-  const st = String(decisionStatus || 'pending').trim().toLowerCase();
+  const st = String(decisionStatus || 'pending')
+    .trim()
+    .toLowerCase();
   const isAccepted = st === 'accepted';
   const isRejected = st === 'rejected';
 
@@ -48,30 +58,44 @@ const ExclusiveOfferResponseCard = ({
   return (
     <View style={styles.wrap}>
       <View style={styles.topCard}>
-        <View style={styles.topTextCol}>
-          <View style={styles.whitePill}>
+        <View style={[styles.topTextCol, {alignItems: flexEnd}]}>
+          <View style={[styles.whitePill, {alignSelf: flexEnd}]}>
             <Text style={styles.whitePillText} numberOfLines={1}>
               {pill}
             </Text>
           </View>
           {priceFormatted ? (
-            <Text style={styles.price} numberOfLines={1}>
+            <Text style={[styles.price, {textAlign: 'left'}]} numberOfLines={1}>
               {priceFormatted}
             </Text>
           ) : null}
-          <View style={styles.addrRow}>
-            <Text style={styles.address} numberOfLines={2}>
+          <View style={[styles.addrRow, {justifyContent: flexEnd}]}>
+            <Text
+              style={[styles.address, {textAlign: 'left'}]}
+              numberOfLines={2}>
               {addressLine || '—'}
             </Text>
-            <MaterialCommunityIcons name="map-marker-outline" size={20} color="#fff" />
+            <MaterialCommunityIcons
+              name="map-marker-outline"
+              size={20}
+              color="#fff"
+            />
           </View>
         </View>
         <View style={styles.thumbWrap}>
           {imageUri ? (
-            <Image source={{uri: imageUri}} style={styles.thumb} resizeMode="cover" />
+            <Image
+              source={{uri: imageUri}}
+              style={styles.thumb}
+              resizeMode="cover"
+            />
           ) : (
             <View style={styles.thumbPlaceholder}>
-              <MaterialCommunityIcons name="home-city-outline" size={32} color="rgba(255,255,255,0.35)" />
+              <MaterialCommunityIcons
+                name="home-city-outline"
+                size={32}
+                color="rgba(255,255,255,0.35)"
+              />
             </View>
           )}
         </View>
@@ -166,7 +190,6 @@ const styles = StyleSheet.create({
   },
   topTextCol: {
     flex: 1,
-    alignItems: 'flex-end',
     minWidth: 0,
   },
   whitePill: {
@@ -175,7 +198,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 100,
     marginBottom: 8,
-    alignSelf: 'flex-end',
   },
   whitePillText: {
     fontSize: 14,
@@ -186,20 +208,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Medium',
     color: CREAM,
-    textAlign: 'right',
     marginBottom: 8,
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    justifyContent: 'flex-end',
   },
   address: {
     flex: 1,
     fontSize: 14,
     color: '#fff',
-    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
   },
   thumbWrap: {

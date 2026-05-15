@@ -46,7 +46,7 @@ function getNativeApiUrl() {
 }
 
 const API_URL = normalizeApiBaseUrl(isWeb ? getApiUrl() : getNativeApiUrl());
-console.log('API_URL', API_URL);
+// console.log('API_URL', API_URL);
 
 /** Resolved API base URL (for debugging broker search / connectivity). */
 export function getResolvedApiUrl() {
@@ -428,7 +428,7 @@ export const getSubscription = async subscriptionId => {
 
     if (typeof __DEV__ !== 'undefined' && __DEV__ && data.subscription) {
       const sub = data.subscription;
-      console.log('[api.getSubscription] subscription keys:', Object.keys(sub), 'description' in sub ? 'description=' + JSON.stringify((sub.description || '').slice(0, 80)) : 'no description key');
+      // console.log('[api.getSubscription] subscription keys:', Object.keys(sub), 'description' in sub ? 'description=' + JSON.stringify((sub.description || '').slice(0, 80)) : 'no description key');
     }
     return data;
   } catch (error) {
@@ -990,9 +990,9 @@ export const getListings = async (options = {}) => {
     }
 
     const url = `${API_URL}/api/listings?${params.toString()}`;
-    console.log('🌐 [api.js] Fetching listings from:', url);
-    console.log('🌐 [api.js] API_URL:', API_URL);
-    console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo, listingCondition, searchPurpose, feedPost, hospitalityNature, landInMortgage, permit});
+    // console.log('🌐 [api.js] Fetching listings from:', url);
+    // console.log('🌐 [api.js] API_URL:', API_URL);
+    // console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo, listingCondition, searchPurpose, feedPost, hospitalityNature, landInMortgage, permit});
 
     const response = await apiFetch(url, {
       method: 'GET',

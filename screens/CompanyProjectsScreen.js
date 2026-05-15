@@ -9,11 +9,13 @@ import {
   ActivityIndicator,
   Dimensions,
   SafeAreaView,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getListings} from '../utils/api';
+import {flexEnd} from '../index';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const H_PAD = 16;
@@ -211,7 +213,11 @@ const CompanyProjectsScreen = ({
       <View style={{height: insets.top}} />
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
-          <MaterialCommunityIcons name="chevron-left" size={28} color={Colors.white100} />
+          <MaterialCommunityIcons
+            name="chevron-left"
+            size={28}
+            color={Colors.white100}
+          />
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>
           {companyName || 'חברה'}
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
@@ -268,7 +274,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexEnd,
   },
   headerSpacer: {width: 44},
   title: {

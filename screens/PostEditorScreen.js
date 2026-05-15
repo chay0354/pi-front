@@ -272,7 +272,8 @@ const DraggableTextBlock = React.memo(
             TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
             {
               color: visual.textColor,
-              textAlign: block.align ?? 'center',
+              textAlign: block.align ?? 'right',
+              writingDirection: 'rtl',
               fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
               lineHeight: Math.round(
                 (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
@@ -433,7 +434,7 @@ const PostEditorScreen = ({
   const [backgroundImageUri, setBackgroundImageUri] = useState(null);
   const [backgroundVideoAsset, setBackgroundVideoAsset] = useState(null);
   const [selectedFormat, setSelectedFormat] = useState(null);
-  const [textAlignMode, setTextAlignMode] = useState('left');
+  const [textAlignMode, setTextAlignMode] = useState('right');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
   const [colorPageIndex, setColorPageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(COLOR_PAGES[0][0]);
@@ -728,7 +729,7 @@ const PostEditorScreen = ({
     setEditingTextBlockId(id);
     setSelectedTextStyleIndex(block.textStyleIndex ?? 0);
     setSelectedColor(block.color ?? COLOR_PAGES[0][0]);
-    setTextAlignMode(block.align ?? 'left');
+    setTextAlignMode(block.align ?? 'right');
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
       if (editingInputRef.current?.focus) editingInputRef.current.focus();
@@ -911,17 +912,8 @@ const PostEditorScreen = ({
   };
 
   return (
-    <View style={[styles.container]}>
-      <View
-        style={{
-          backgroundColor: '#1E1D27',
-          paddingTop: top,
-          paddingBottom: 18,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 20,
-        }}>
+    <View style={styles.container}>
+      <View style={[styles.topNav, {paddingTop: top}]}>
         <TouchableOpacity
           onPress={onClose}
           style={styles.backBtn}
@@ -1058,6 +1050,7 @@ const PostEditorScreen = ({
           <View
             style={styles.stage}
             onLayout={e => setStageLayout(e.nativeEvent.layout)}>
+            <View style={styles.stageLtr} pointerEvents="box-none">
             {stageLayout.width > 0 &&
               stageLayout.height > 0 &&
               mediaImages.map((img, idx) => (
@@ -1087,7 +1080,9 @@ const PostEditorScreen = ({
               ))}
 
             {editingTextBlockId && !isCapturing && (
-              <View style={styles.editingOverlay} pointerEvents="box-none">
+              <View
+                style={[styles.editingOverlay, styles.stageLtrDirection]}
+                pointerEvents="box-none">
                 {(() => {
                   const visual = getTextVisualStyle(
                     editingBlock?.color ?? selectedColor,
@@ -1147,7 +1142,7 @@ const PostEditorScreen = ({
                               ?.text ?? ''
                           }
                           onChangeText={t => syncEditingToBlock({text: t})}
-                          placeholder="Type something..."
+                          placeholder="הקלד משהו..."
                           placeholderTextColor="rgba(255,255,255,0.55)"
                           selectionColor={visual.textColor}
                           style={[
@@ -1157,6 +1152,7 @@ const PostEditorScreen = ({
                               color: visual.textColor,
                               backgroundColor: visual.backgroundColor,
                               textAlign: textAlignMode,
+                              writingDirection: 'rtl',
                               fontSize: editingFontSize,
                               lineHeight: Math.round(editingFontSize * 1.15),
                             },
@@ -1174,6 +1170,7 @@ const PostEditorScreen = ({
                 })()}
               </View>
             )}
+            </View>
           </View>
 
           {showTextFormatToolbar && (
@@ -1442,6 +1439,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    writingDirection: 'rtl',
+  },
+  topNav: {
+    backgroundColor: '#1E1D27',
+    paddingBottom: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  stageLtr: {
+    ...StyleSheet.absoluteFillObject,
+    direction: 'ltr',
+  },
+  stageLtrDirection: {
+    direction: 'ltr',
   },
   backgroundContainer: {
     flex: 1,
@@ -1450,6 +1463,7 @@ const styles = StyleSheet.create({
   editorRoot: {
     flex: 1,
     position: 'relative',
+    writingDirection: 'rtl',
   },
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
@@ -1491,7 +1505,7 @@ const styles = StyleSheet.create({
     height: 30,
   },
   tabs: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
   },
@@ -1501,7 +1515,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   headerContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginHorizontal: 22,
@@ -1521,7 +1535,7 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   previewContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 18,
@@ -1537,7 +1551,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     marginHorizontal: 22,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#2B2A39',
@@ -1592,7 +1606,7 @@ const styles = StyleSheet.create({
   },
   polygonSliderContainer: {
     position: 'absolute',
-    left: -28,
+    right: -28,
     top: 10,
     width: 40,
     height: POLYGON_TRACK_HEIGHT,
@@ -1608,7 +1622,7 @@ const styles = StyleSheet.create({
   editingInputRow: {
     width: '100%',
     maxWidth: 620,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
   },
   polygonIndicator: {
@@ -1639,6 +1653,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#FFFFFF',
     textAlign: 'center',
+    writingDirection: 'rtl',
     paddingHorizontal: 20,
     borderRadius: 20,
     paddingVertical: 12,
@@ -1684,14 +1699,14 @@ const styles = StyleSheet.create({
   textStylesRow: {
     marginHorizontal: 22,
     marginBottom: 26,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   colorsRow: {
     marginHorizontal: 22,
     marginBottom: 12,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
   },
   eyedropperBtn: {
@@ -1701,7 +1716,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginLeft: 8,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
@@ -1710,7 +1725,7 @@ const styles = StyleSheet.create({
     height: 28,
   },
   colorsList: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flex: 1,
     justifyContent: 'space-between',
   },
@@ -1718,7 +1733,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   colorsListPage: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
   },

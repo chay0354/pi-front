@@ -11,11 +11,13 @@ import {
   Dimensions,
   SafeAreaView,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getCompaniesDirectory} from '../utils/api';
+import {flexStart, textAlign} from '../index';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const H_PAD = 20;
@@ -88,10 +90,22 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
 
   return (
     <View style={styles.safe}>
-      <View style={[styles.topSection, topSectionElevation, {paddingTop: insets.top}]}>
+      <View
+        style={[
+          styles.topSection,
+          topSectionElevation,
+          {paddingTop: insets.top},
+        ]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backBtn} hitSlop={12}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color={Colors.white100} />
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.backBtn}
+            hitSlop={12}>
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={28}
+              color={Colors.white100}
+            />
           </TouchableOpacity>
           <Text style={styles.title}>פרויקטים נבחרים</Text>
           <View style={styles.headerSpacer} />
@@ -104,7 +118,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
             placeholderTextColor={Colors.grey200}
             value={query}
             onChangeText={setQuery}
-            textAlign="right"
+            textAlign={"right"}
           />
           <MaterialCommunityIcons
             name="magnify"
@@ -145,7 +159,11 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
                     onPress={() => onOpenCompany?.(c)}>
                     <View style={styles.logoClip}>
                       {c.logo_url ? (
-                        <Image source={{uri: c.logo_url}} style={styles.logoImg} resizeMode="cover" />
+                        <Image
+                          source={{uri: c.logo_url}}
+                          style={styles.logoImg}
+                          resizeMode="cover"
+                        />
                       ) : (
                         <View style={styles.logoPlaceholder}>
                           <Text style={styles.logoLetter} numberOfLines={1}>
@@ -157,7 +175,9 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
                     <Text style={styles.companyName} numberOfLines={2}>
                       {c.name}
                     </Text>
-                    <Text style={styles.projectCount}>{c.project_count} פרויקטים</Text>
+                    <Text style={styles.projectCount}>
+                      {c.project_count} פרויקטים
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -184,7 +204,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
@@ -193,7 +213,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: flexStart,
   },
   headerSpacer: {
     width: 44,
@@ -220,7 +240,7 @@ const styles = StyleSheet.create({
     color: Colors.white100,
     fontSize: 15,
     paddingVertical: 10,
-    textAlign: 'right',
+    textAlign,
     writingDirection: 'rtl',
   },
   searchIcon: {
@@ -275,16 +295,16 @@ const styles = StyleSheet.create({
   },
   companyName: {
     color: Colors.white100,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
     textAlign: 'center',
     width: '100%',
-    minHeight: 34,
   },
   projectCount: {
     color: Colors.grey200,
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 14,
+    marginTop: 6,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'center',
   },
   centered: {

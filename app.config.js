@@ -43,6 +43,8 @@ module.exports = {
         : {}),
       buildNumber: '1',
       infoPlist: {
+        CFBundleDevelopmentRegion: 'he',
+        UIViewSemanticContentAttribute: 'ForceRightToLeft',
         NSCameraUsageDescription: 'אנחנו צריכים גישה למצלמה כדי להעלות תמונות',
         NSPhotoLibraryUsageDescription:
           'אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים',
@@ -55,6 +57,7 @@ module.exports = {
     android: {
       package: 'com.pi.frontend',
       versionCode: 6,
+      supportsRTL: true,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',

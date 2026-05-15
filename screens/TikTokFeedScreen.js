@@ -62,6 +62,8 @@ import {
   uploadFile,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {flexEnd, flexStart} from '../index';
+
 import {
   formatCompanyApartmentsLabel,
   formatCompanyBuildingsLabel,
@@ -196,7 +198,7 @@ const ListCardImages = ({images, width, height = 252}) => {
           bottom: 10,
           left: 0,
           right: 0,
-          flexDirection: 'row',
+          flexDirection: 'row-reverse',
           justifyContent: 'center',
           alignItems: 'center',
           gap: 6,
@@ -4114,17 +4116,10 @@ const TikTokFeedScreen = ({
             }
             onClose?.();
           }}>
-          <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
+          <MaterialCommunityIcons name="chevron-right" size={26} color="#fff" />
         </TouchableOpacity>
         {showUserSearchPanel ? (
           <View style={styles.userSearchInputWrap}>
-            <TouchableOpacity
-              style={styles.userSearchClearBtn}
-              onPress={() => setUserSearchQuery('')}
-              hitSlop={8}
-              activeOpacity={0.8}>
-              <MaterialCommunityIcons name="close" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
             <TextInput
               style={styles.userSearchInput}
               value={userSearchQuery}
@@ -4136,6 +4131,13 @@ const TikTokFeedScreen = ({
               autoCapitalize="none"
               autoCorrect={false}
             />
+            <TouchableOpacity
+              style={styles.userSearchClearBtn}
+              onPress={() => setUserSearchQuery('')}
+              hitSlop={8}
+              activeOpacity={0.8}>
+              <MaterialCommunityIcons name="close" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.topBarCenter}>
@@ -4943,19 +4945,22 @@ const TikTokFeedScreen = ({
                             />
                             {isPostWithOverlay && (
                               <View
-                                style={[
-                                  styles.postDescriptionOverlay,
-                                  {
-                                    left: video.overlayX ?? 80,
-                                    top: video.overlayY ?? 80,
-                                    pointerEvents: 'none',
-                                  },
-                                ]}>
-                                <Text
-                                  style={styles.postDescriptionOverlayText}
-                                  numberOfLines={6}>
-                                  {video.description}
-                                </Text>
+                                style={styles.postOverlayLtr}
+                                pointerEvents="none">
+                                <View
+                                  style={[
+                                    styles.postDescriptionOverlay,
+                                    {
+                                      left: video.overlayX ?? 80,
+                                      top: video.overlayY ?? 80,
+                                    },
+                                  ]}>
+                                  <Text
+                                    style={styles.postDescriptionOverlayText}
+                                    numberOfLines={6}>
+                                    {video.description}
+                                  </Text>
+                                </View>
                               </View>
                             )}
                           </View>
@@ -4992,7 +4997,10 @@ const TikTokFeedScreen = ({
               <Animated.View
                 style={[
                   styles.actionIconsContainer,
-                  {transform: [{translateY: feedOverlayTranslateY}]},
+                  {
+                    transform: [{translateY: feedOverlayTranslateY}],
+                    bottom: insets.bottom + 80,
+                  },
                 ]}
                 pointerEvents="box-none">
                 {isCompanyListing ? (
@@ -5000,6 +5008,11 @@ const TikTokFeedScreen = ({
                     style={styles.companyOverlayInfo}
                     pointerEvents="box-none">
                     <View style={styles.companyTopRow} pointerEvents="box-none">
+                      <Image
+                        source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
+                        style={styles.companyPreSaleBadge}
+                        resizeMode="contain"
+                      />
                       <TouchableOpacity
                         style={styles.actionIconButton}
                         onPress={() => toggleLiked(currentVideo)}>
@@ -5017,11 +5030,6 @@ const TikTokFeedScreen = ({
                           resizeMode="contain"
                         />
                       </TouchableOpacity>
-                      <Image
-                        source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
-                        style={styles.companyPreSaleBadge}
-                        resizeMode="contain"
-                      />
                     </View>
                     <View
                       style={styles.companyAddressWrap}
@@ -5041,10 +5049,10 @@ const TikTokFeedScreen = ({
                       pointerEvents="box-none">
                       <View style={styles.companyStatItem}>
                         <Text style={styles.companyStatText}>
-                          {formatCompanyApartmentsLabel(companyApartmentsCount)}
+                          {formatCompanyBuildingsLabel(companyBuildingsCount)}
                         </Text>
                         <Image
-                          source={TIKTOK_OVERLAY_ICONS.companyDoor}
+                          source={TIKTOK_OVERLAY_ICONS.companyBuilding}
                           style={styles.companyStatIcon}
                         />
                       </View>
@@ -5059,10 +5067,10 @@ const TikTokFeedScreen = ({
                       </View>
                       <View style={styles.companyStatItem}>
                         <Text style={styles.companyStatText}>
-                          {formatCompanyBuildingsLabel(companyBuildingsCount)}
+                          {formatCompanyApartmentsLabel(companyApartmentsCount)}
                         </Text>
                         <Image
-                          source={TIKTOK_OVERLAY_ICONS.companyBuilding}
+                          source={TIKTOK_OVERLAY_ICONS.companyDoor}
                           style={styles.companyStatIcon}
                         />
                       </View>
@@ -5073,35 +5081,16 @@ const TikTokFeedScreen = ({
                     <View
                       style={styles.postActionsRow}
                       pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={styles.postActionItem}
-                        onPress={() => toggleLiked(currentVideo)}
-                        activeOpacity={0.85}>
+                      <View style={styles.postActionItem}>
                         <Image
-                          source={TIKTOK_OVERLAY_ICONS.postLike}
-                          style={styles.postActionIcon}
-                          tintColor={
-                            isItemLiked(currentVideo) ? '#FFC40A' : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.postActionCountText}>
-                          {formatCount(currentVideo?.post_like_count ?? 0)}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.postActionItem}
-                        onPress={() => openCommentsForPost(currentVideo)}
-                        activeOpacity={0.85}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.postComment}
+                          source={TIKTOK_OVERLAY_ICONS.postView}
                           style={styles.postActionIcon}
                           resizeMode="contain"
                         />
                         <Text style={styles.postActionCountText}>
-                          {formatCount(getDisplayedCommentCount(currentVideo))}
+                          {formatCount(currentVideo?.view_count ?? 0)}
                         </Text>
-                      </TouchableOpacity>
+                      </View>
                       <TouchableOpacity
                         style={styles.postActionItem}
                         onPress={() => {
@@ -5123,16 +5112,35 @@ const TikTokFeedScreen = ({
                           )}
                         </Text>
                       </TouchableOpacity>
-                      <View style={styles.postActionItem}>
+                      <TouchableOpacity
+                        style={styles.postActionItem}
+                        onPress={() => openCommentsForPost(currentVideo)}
+                        activeOpacity={0.85}>
                         <Image
-                          source={TIKTOK_OVERLAY_ICONS.postView}
+                          source={TIKTOK_OVERLAY_ICONS.postComment}
                           style={styles.postActionIcon}
                           resizeMode="contain"
                         />
                         <Text style={styles.postActionCountText}>
-                          {formatCount(currentVideo?.view_count ?? 0)}
+                          {formatCount(getDisplayedCommentCount(currentVideo))}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.postActionItem}
+                        onPress={() => toggleLiked(currentVideo)}
+                        activeOpacity={0.85}>
+                        <Image
+                          source={TIKTOK_OVERLAY_ICONS.postLike}
+                          style={styles.postActionIcon}
+                          tintColor={
+                            isItemLiked(currentVideo) ? '#FFC40A' : undefined
+                          }
+                          resizeMode="contain"
+                        />
+                        <Text style={styles.postActionCountText}>
+                          {formatCount(currentVideo?.post_like_count ?? 0)}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ) : isBnbListing ? (
@@ -5302,18 +5310,18 @@ const TikTokFeedScreen = ({
                     <View
                       style={styles.brokerLocationRow}
                       pointerEvents="box-none">
-                      <Text
-                        style={styles.brokerLocationText}
-                        numberOfLines={1}
-                        pointerEvents="none">
-                        {brokerLocationText}
-                      </Text>
                       <Image
                         source={TIKTOK_OVERLAY_ICONS.location}
                         style={styles.brokerLocationIcon}
                         resizeMode="contain"
                         pointerEvents="none"
                       />
+                      <Text
+                        style={styles.brokerLocationText}
+                        numberOfLines={1}
+                        pointerEvents="none">
+                        {brokerLocationText}
+                      </Text>
                     </View>
                   </View>
                 ) : (
@@ -5825,6 +5833,7 @@ const TikTokFeedScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   style={styles.commentInput}
                   textAlign="right"
+                  writingDirection="rtl"
                   returnKeyType="send"
                   onSubmitEditing={submitPostComment}
                   editable={!commentSubmitting}
@@ -5917,6 +5926,13 @@ const styles = StyleSheet.create({
     height: '100%',
     width: '100%',
     maxWidth: 414,
+    writingDirection: 'rtl',
+  },
+  postOverlayLtr: {
+    ...StyleSheet.absoluteFillObject,
+    direction: 'ltr',
+    zIndex: 30,
+    elevation: 30,
   },
   topBar: {
     /** Web: `fixed` keeps back + filters in the viewport when the document or a parent scrolls (same idea as `FeedBottomBar`). */
@@ -5926,7 +5942,7 @@ const styles = StyleSheet.create({
     right: 0,
     width: '100%',
     height: TOP_BAR_HEIGHT,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -5952,7 +5968,7 @@ const styles = StyleSheet.create({
   },
   topBarCenter: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -5972,7 +5988,7 @@ const styles = StyleSheet.create({
   likedBadge: {
     position: 'absolute',
     top: 0,
-    left: 0,
+    right: 0,
     minWidth: 16,
     height: 16,
     paddingHorizontal: 3,
@@ -5999,7 +6015,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFC40A',
     borderRadius: 20,
     backgroundColor: '#1E1D27',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingHorizontal: 10,
     marginHorizontal: 0,
@@ -6009,7 +6025,7 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 4,
+    marginLeft: 4,
   },
   userSearchInput: {
     flex: 1,
@@ -6032,7 +6048,7 @@ const styles = StyleSheet.create({
     zIndex: 190,
   },
   userSearchSectionHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 30,
@@ -6058,9 +6074,9 @@ const styles = StyleSheet.create({
   },
   userSearchRow: {
     height: 83,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 18,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
@@ -6069,14 +6085,14 @@ const styles = StyleSheet.create({
   },
   userSearchRowContent: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
   },
   userSearchTextWrap: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 8,
   },
   userSearchName: {
@@ -6087,7 +6103,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   userSearchMetaRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 4,
   },
@@ -6240,32 +6256,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listCardImage: {
-    width: '100%',
-    height: '100%',
-  },
-  listCardImagePlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listCardDots: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  listCardDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  listCardDotActive: {
-    backgroundColor: '#FFC40A',
-  },
   listCardProfileBtn: {
     position: 'absolute',
     top: 10,
@@ -6274,7 +6264,7 @@ const styles = StyleSheet.create({
   listCardProfile: {
     position: 'absolute',
     top: 10,
-    right: 10,
+    left: 10,
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -6298,9 +6288,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   listCardPurposeRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
   },
   listCardPurposeBadge: {
@@ -6334,9 +6324,9 @@ const styles = StyleSheet.create({
     height: 18,
   },
   listCardStatsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 10,
   },
@@ -6365,9 +6355,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   listCardLocationRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
   },
   listCardLocationText: {
@@ -6378,7 +6368,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingTop: 50,
     paddingHorizontal: 20,
@@ -6386,7 +6376,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   backButton: {
-    marginRight: 15,
+    marginLeft: 15,
   },
   backArrow: {
     color: '#fff',
@@ -6395,7 +6385,7 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     top: 50,
-    right: 20,
+    left: 20,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -6446,12 +6436,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
   postDescriptionOverlay: {
     position: 'absolute',
     maxWidth: '75%',
-    zIndex: 30,
-    elevation: 30,
   },
   postDescriptionOverlayText: {
     color: '#fff',
@@ -6459,6 +6448,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     ...webTextShadow('rgba(0,0,0,0.9)', 1, 1, 4),
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   videoImageContainer: {
     width: '100%',
@@ -6488,7 +6478,7 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 20,
     paddingBottom: 40,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
@@ -6518,10 +6508,10 @@ const styles = StyleSheet.create({
   },
   bottomInfo: {
     flex: 1,
-    paddingRight: 20,
+    paddingLeft: 20,
   },
   userInfo: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -6557,7 +6547,7 @@ const styles = StyleSheet.create({
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   videoMeta: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: 8,
   },
@@ -6579,7 +6569,7 @@ const styles = StyleSheet.create({
   },
   navigationButtons: {
     position: 'absolute',
-    right: 20,
+    left: 20,
     display: 'none',
     top: '50%',
     transform: [{translateY: -60}],
@@ -6614,7 +6604,7 @@ const styles = StyleSheet.create({
   iconsContainer: {
     width: '100%',
     maxWidth: 414,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -6630,7 +6620,7 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     position: 'absolute',
-    left: 10,
+    right: 10,
     top: SIDEBAR_TOP,
     bottom: 80,
     flexDirection: 'column',
@@ -6768,23 +6758,23 @@ const styles = StyleSheet.create({
   actionIconsContainer: {
     position: 'absolute',
     bottom: 94,
-    right: 20,
+    left: 20,
     flexDirection: 'column',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     zIndex: 100,
   },
   propertyInfo: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   companyOverlayInfo: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     width: 366,
     maxWidth: '96%',
   },
   companyTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 14,
     marginBottom: 12,
   },
@@ -6792,7 +6782,7 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderRadius: 20,
     backgroundColor: '#fff',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -6813,23 +6803,23 @@ const styles = StyleSheet.create({
   },
   companyAddressWrap: {
     marginBottom: 10,
-    width: '100%',
+    // width: '100%',
   },
   companyAddressText: {
     color: '#F7F3E6',
     fontSize: 24,
     fontFamily: 'Rubik-SemiBold',
     lineHeight: 31,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   companyStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
   },
   companyStatItem: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
   },
@@ -6845,18 +6835,18 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   brokerOverlayInfo: {
-    width: 334,
-    alignItems: 'flex-end',
+    // width: 334,
+    alignItems: flexStart,
   },
   partnersOverlayInfo: {
     width: 334,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 16,
   },
   partnersTopRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 14,
   },
   partnersPurposePill: {
@@ -6884,9 +6874,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   brokerTopRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 14,
     marginBottom: 12,
   },
@@ -6895,8 +6885,8 @@ const styles = StyleSheet.create({
     height: 32,
   },
   brokerHeartButton: {
-    marginRight: 0,
-    marginLeft: 14,
+    marginLeft: 0,
+    marginRight: 14,
   },
   brokerPurposePill: {
     backgroundColor: '#FFFFFF',
@@ -6919,7 +6909,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
     marginBottom: 5,
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
@@ -6927,7 +6917,7 @@ const styles = StyleSheet.create({
   brokerLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     width: '100%',
     gap: 3,
   },
@@ -6946,20 +6936,20 @@ const styles = StyleSheet.create({
   },
   bnbOverlayInfo: {
     width: 334,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   bnbTopRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 12,
     marginBottom: 18,
     width: '100%',
   },
   bnbTagsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 8,
   },
   bnbHotDealTag: {
@@ -7010,9 +7000,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   bnbPriceRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-end',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     width: '100%',
     gap: 7,
   },
@@ -7051,19 +7041,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 32,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
     marginTop: 2,
   },
   postActionsInfo: {
     width: 334,
     maxWidth: '96%',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   postActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 2,
   },
   postActionItem: {
@@ -7153,13 +7143,13 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   commentHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
   },
   commentAuthorWrap: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     width: 293.2,
   },
   commentAuthorText: {
@@ -7192,6 +7182,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     letterSpacing: 0.2,
     textAlign: 'right',
+    writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
   },
   commentBodyImage: {
@@ -7223,7 +7214,7 @@ const styles = StyleSheet.create({
   commentImageRemoveBtn: {
     position: 'absolute',
     top: 4,
-    right: 4,
+    left: 4,
     backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: 14,
   },
@@ -7245,7 +7236,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   commentCardFooter: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -7256,12 +7247,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   commentActionsWrap: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 30,
   },
   commentLikeWrap: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 9.292,
   },
@@ -7290,7 +7281,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   reactionsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -7312,7 +7303,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.32,
   },
   commentInputRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 20,
     paddingHorizontal: 16,
@@ -7344,6 +7335,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   commentsHomeIndicatorWrap: {
     width: '100%',
@@ -7360,12 +7352,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   topRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: 10,
   },
   actionIconButton: {
-    marginRight: 15,
+    marginLeft: 15,
   },
   actionIcon: {
     width: 40,
@@ -7394,13 +7386,13 @@ const styles = StyleSheet.create({
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   locationContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
   },
   locationIcon: {
     width: 18,
     height: 18,
-    marginRight: 5,
+    marginLeft: 5,
   },
   locationText: {
     color: '#fff',
@@ -7409,7 +7401,7 @@ const styles = StyleSheet.create({
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   viewsLikesRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginTop: 6,
   },
@@ -7453,20 +7445,20 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   bottomSheetOption: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 15,
   },
   bottomSheetOptionContent: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     flex: 1,
   },
   bottomSheetTextContainer: {
     flex: 1,
-    alignItems: 'flex-end',
-    marginRight: 15,
+    alignItems: flexStart,
+    marginLeft: 15,
   },
   bottomSheetTitle: {
     color: '#fff',
@@ -7485,7 +7477,7 @@ const styles = StyleSheet.create({
   bottomSheetArrow: {
     color: '#fff',
     fontSize: 24,
-    marginRight: 10,
+    marginLeft: 10,
   },
   bottomSheetDivider: {
     height: 1,
@@ -7501,6 +7493,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
   imageSwiper: {
     width: '100%',
@@ -7535,7 +7528,7 @@ const styles = StyleSheet.create({
     top: TOP_BAR_HEIGHT + 8,
     left: 0,
     right: 0,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,

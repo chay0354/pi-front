@@ -7,9 +7,11 @@ import {
   Image,
   TouchableOpacity,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {flexStart} from '../index';
 
 /** Figma 10:31152 — full-screen ביקורות list (RTL). */
 const BG = '#1E1D27';
@@ -83,24 +85,16 @@ const ReviewRow = ({r}) => {
               />
             </View>
           )}
-          <Image
-            source={starSource}
-            style={starStyle}
-            resizeMode="contain"
-          />
+          <Image source={starSource} style={starStyle} resizeMode="contain" />
         </View>
         <View style={styles.nameCol}>
-          <Text style={styles.reviewerName}>
-            {r.reviewer_name || 'משתמש'}
-          </Text>
+          <Text style={styles.reviewerName}>{r.reviewer_name || 'משתמש'}</Text>
           <Text style={styles.reviewDate}>
             {formatReviewDate(r.created_at)}
           </Text>
         </View>
       </View>
-      {r.comment ? (
-        <Text style={styles.reviewBody}>{r.comment}</Text>
-      ) : null}
+      {r.comment ? <Text style={styles.reviewBody}>{r.comment}</Text> : null}
     </View>
   );
 };
@@ -138,7 +132,10 @@ const ProfileReviewsScreen = ({reviews = [], onClose}) => {
           <Text style={styles.empty}>אין ביקורות</Text>
         ) : (
           reviews.map((r, i) => (
-            <ReviewRow key={r.id != null ? String(r.id) : `review-${i}`} r={r} />
+            <ReviewRow
+              key={r.id != null ? String(r.id) : `review-${i}`}
+              r={r}
+            />
           ))
         )}
       </ScrollView>
@@ -155,7 +152,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
@@ -191,18 +188,18 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: CARD,
     borderRadius: 12,
-    padding: 20,
+    padding: 10,
     marginBottom: GAP_CARDS,
   },
   cardTop: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 15,
     marginBottom: 20,
   },
   nameCol: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 10,
   },
   reviewerName: {
@@ -210,7 +207,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     color: CREAM,
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
   },
   reviewDate: {
@@ -218,7 +215,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 16,
     color: SECONDARY,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: 0.5447,
     width: '100%',
   },
@@ -267,7 +264,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 32,
     color: '#FFFFFF',
-    textAlign: 'right',
+    textAlign: 'left',
   },
 });
 

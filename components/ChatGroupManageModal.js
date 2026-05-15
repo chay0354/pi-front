@@ -12,9 +12,11 @@ import {
   SafeAreaView,
   Platform,
   Image,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar} from './ProfileAvatar';
+import {flexEnd} from '../index';
 
 const BG = '#1e1d27';
 const GOLD = '#D4AF37';
@@ -26,7 +28,7 @@ const DEFAULT_AVATAR = require('../assets/image-copy-10.png');
 
 const GROUP_FALLBACK = require('../assets/pi-chat/igroupicon-big.png');
 
-const roleLabel = (role) => {
+const roleLabel = role => {
   const r = role != null ? String(role).trim().toLowerCase() : '';
   if (r === 'owner') return 'יוצר';
   if (r === 'manager') return 'מנהל';
@@ -65,21 +67,39 @@ const ChatGroupManageModal = ({
   const myNorm = myEmail ? String(myEmail).trim().toLowerCase() : '';
   const sortedMembers = useMemo(() => {
     const list = Array.isArray(members) ? [...members] : [];
-    list.sort((a, b) => String(a?.name || a?.email || '').localeCompare(String(b?.name || b?.email || ''), 'he'));
+    list.sort((a, b) =>
+      String(a?.name || a?.email || '').localeCompare(
+        String(b?.name || b?.email || ''),
+        'he',
+      ),
+    );
     return list;
   }, [members]);
 
-  const myMember = sortedMembers.find((m) => String(m?.email || '').trim().toLowerCase() === myNorm);
-  const myRole = myMember?.groupRole != null ? String(myMember.groupRole).trim().toLowerCase() : 'member';
+  const myMember = sortedMembers.find(
+    m =>
+      String(m?.email || '')
+        .trim()
+        .toLowerCase() === myNorm,
+  );
+  const myRole =
+    myMember?.groupRole != null
+      ? String(myMember.groupRole).trim().toLowerCase()
+      : 'member';
 
   const canManageOthers =
     isBrokerUser && (myRole === 'owner' || myRole === 'manager');
 
-  const openMemberActions = (m) => {
-    const email = String(m?.email || '').trim().toLowerCase();
+  const openMemberActions = m => {
+    const email = String(m?.email || '')
+      .trim()
+      .toLowerCase();
     if (!email) return;
     const isSelf = email === myNorm;
-    const targetRole = m?.groupRole != null ? String(m.groupRole).trim().toLowerCase() : 'member';
+    const targetRole =
+      m?.groupRole != null
+        ? String(m.groupRole).trim().toLowerCase()
+        : 'member';
     const name = m?.name || email;
 
     if (isSelf) {
@@ -92,26 +112,25 @@ const ChatGroupManageModal = ({
             text: 'עזוב את הקבוצה',
             style: 'destructive',
             onPress: () => {
-              Alert.alert(
-                'לעזוב את הקבוצה?',
-                'לא תקבל עוד הודעות מצ׳אט זה.',
-                [
-                  {text: 'ביטול', style: 'cancel'},
-                  {
-                    text: 'עזוב',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        const res = await onLeaveGroup?.();
-                        if (res?.conversationDeleted) onConversationDeleted?.();
-                        else await onRefresh?.();
-                      } catch (e) {
-                        Alert.alert('', e?.message ? String(e.message) : 'פעולה נכשלה');
-                      }
-                    },
+              Alert.alert('לעזוב את הקבוצה?', 'לא תקבל עוד הודעות מצ׳אט זה.', [
+                {text: 'ביטול', style: 'cancel'},
+                {
+                  text: 'עזוב',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const res = await onLeaveGroup?.();
+                      if (res?.conversationDeleted) onConversationDeleted?.();
+                      else await onRefresh?.();
+                    } catch (e) {
+                      Alert.alert(
+                        '',
+                        e?.message ? String(e.message) : 'פעולה נכשלה',
+                      );
+                    }
                   },
-                ],
-              );
+                },
+              ]);
             },
           },
         ],
@@ -127,21 +146,28 @@ const ChatGroupManageModal = ({
         text: 'הסר מהקבוצה',
         style: 'destructive',
         onPress: () => {
-          Alert.alert('להסיר מהקבוצה?', `${name} לא יוכל/ת להמשיך לצפות בצ׳אט.`, [
-            {text: 'ביטול', style: 'cancel'},
-            {
-              text: 'הסר',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await onRemoveMember?.(email);
-                  await onRefresh?.();
-                } catch (e) {
-                  Alert.alert('', e?.message ? String(e.message) : 'ההסרה נכשלה');
-                }
+          Alert.alert(
+            'להסיר מהקבוצה?',
+            `${name} לא יוכל/ת להמשיך לצפות בצ׳אט.`,
+            [
+              {text: 'ביטול', style: 'cancel'},
+              {
+                text: 'הסר',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await onRemoveMember?.(email);
+                    await onRefresh?.();
+                  } catch (e) {
+                    Alert.alert(
+                      '',
+                      e?.message ? String(e.message) : 'ההסרה נכשלה',
+                    );
+                  }
+                },
               },
-            },
-          ]);
+            ],
+          );
         },
       });
     }
@@ -197,7 +223,8 @@ const ChatGroupManageModal = ({
     }
   };
 
-  const showTitleEditor = isBrokerUser && (myRole === 'owner' || myRole === 'manager');
+  const showTitleEditor =
+    isBrokerUser && (myRole === 'owner' || myRole === 'manager');
 
   return (
     <Modal
@@ -216,7 +243,11 @@ const ChatGroupManageModal = ({
                 accessibilityLabel="חזור"
                 hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
                 activeOpacity={0.75}>
-                <MaterialCommunityIcons name="chevron-left" size={28} color={WHITE} />
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={28}
+                  color={WHITE}
+                />
               </TouchableOpacity>
               <View style={styles.navTitleSlot}>
                 <Text style={styles.navTitle}>ניהול קבוצה</Text>
@@ -231,26 +262,43 @@ const ChatGroupManageModal = ({
             keyboardShouldPersistTaps="handled">
             <View style={styles.hero}>
               {avatarUri ? (
-                <Image source={{uri: avatarUri}} style={styles.heroAvatar} resizeMode="cover" />
+                <Image
+                  source={{uri: avatarUri}}
+                  style={styles.heroAvatar}
+                  resizeMode="cover"
+                />
               ) : (
-                <Image source={GROUP_FALLBACK} style={styles.heroAvatar} resizeMode="contain" />
+                <Image
+                  source={GROUP_FALLBACK}
+                  style={styles.heroAvatar}
+                  resizeMode="contain"
+                />
               )}
 
               {editingTitle && showTitleEditor ? (
                 <View style={styles.titleEditBlock}>
                   <TextInput
-                    style={styles.titleInput}
+                    style={[styles.titleInput, {textAlign: 'left'}]}
                     value={titleDraft}
                     onChangeText={setTitleDraft}
                     placeholder="שם הקבוצה"
                     placeholderTextColor="rgba(255,255,255,0.35)"
                     maxLength={120}
                   />
-                  <View style={styles.titleEditActions}>
-                    <TouchableOpacity onPress={() => setEditingTitle(false)} style={styles.titleBtnGhost}>
+                  <View
+                    style={[
+                      styles.titleEditActions,
+                      {justifyContent: flexEnd},
+                    ]}>
+                    <TouchableOpacity
+                      onPress={() => setEditingTitle(false)}
+                      style={styles.titleBtnGhost}>
                       <Text style={styles.titleBtnGhostText}>ביטול</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleSaveTitle} style={styles.titleBtnGold} disabled={busy}>
+                    <TouchableOpacity
+                      onPress={handleSaveTitle}
+                      style={styles.titleBtnGold}
+                      disabled={busy}>
                       {busy ? (
                         <ActivityIndicator color={BG} size="small" />
                       ) : (
@@ -270,29 +318,45 @@ const ChatGroupManageModal = ({
                       hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
                       accessibilityRole="button"
                       accessibilityLabel="ערוך שם קבוצה">
-                      <MaterialCommunityIcons name="pencil-outline" size={20} color={GOLD} />
+                      <MaterialCommunityIcons
+                        name="pencil-outline"
+                        size={20}
+                        color={GOLD}
+                      />
                     </TouchableOpacity>
                   ) : null}
                 </View>
               )}
 
               <Text style={styles.memberCount}>
-                {sortedMembers.length} {sortedMembers.length === 1 ? 'חבר' : 'חברים'}
+                {sortedMembers.length}{' '}
+                {sortedMembers.length === 1 ? 'חבר' : 'חברים'}
               </Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardLabel}>תיאור</Text>
               {description ? (
-                <Text style={styles.descText} numberOfLines={5}>
+                <Text
+                  style={[styles.descText, {textAlign: 'left'}]}
+                  numberOfLines={5}>
                   {description}
                 </Text>
               ) : (
                 <Text style={styles.descEmpty}>אין תיאור לקבוצה</Text>
               )}
-              <TouchableOpacity style={styles.linkBtn} onPress={onEditDescription} activeOpacity={0.75}>
-                <Text style={styles.linkBtnText}>{description ? 'ערוך תיאור' : 'הוסף תיאור'}</Text>
-                <MaterialCommunityIcons name="chevron-left" size={20} color={GOLD} />
+              <TouchableOpacity
+                style={[styles.linkBtn, {justifyContent: flexEnd}]}
+                onPress={onEditDescription}
+                activeOpacity={0.75}>
+                <Text style={styles.linkBtnText}>
+                  {description ? 'ערוך תיאור' : 'הוסף תיאור'}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={20}
+                  color={GOLD}
+                />
               </TouchableOpacity>
             </View>
 
@@ -303,22 +367,31 @@ const ChatGroupManageModal = ({
                 activeOpacity={0.85}
                 accessibilityRole="button"
                 accessibilityLabel="הוסף חברים לקבוצה">
-                <MaterialCommunityIcons name="account-plus-outline" size={22} color={BG} />
+                <MaterialCommunityIcons
+                  name="account-plus-outline"
+                  size={22}
+                  color={BG}
+                />
                 <Text style={styles.primaryBtnText}>הוסף חברים</Text>
               </TouchableOpacity>
             ) : null}
 
-            <Text style={styles.sectionHeading}>חברי הקבוצה</Text>
+            <Text style={[styles.sectionHeading, {textAlign: 'left'}]}>
+              חברי הקבוצה
+            </Text>
             <View style={styles.memberCard}>
               {sortedMembers.map((m, i) => {
-                const email = String(m?.email || '').trim().toLowerCase();
+                const email = String(m?.email || '')
+                  .trim()
+                  .toLowerCase();
                 const isSelf = email === myNorm;
                 const pic = m?.profileImageUrl || null;
                 const display = m?.name || email;
                 const rl = roleLabel(m?.groupRole);
                 const showMenu =
                   isSelf ||
-                  (canManageOthers && String(m?.groupRole || '').toLowerCase() !== 'owner') ||
+                  (canManageOthers &&
+                    String(m?.groupRole || '').toLowerCase() !== 'owner') ||
                   (isBrokerUser && myRole === 'owner' && !isSelf);
 
                 return (
@@ -334,7 +407,7 @@ const ChatGroupManageModal = ({
                       size={48}
                       placeholderImage={DEFAULT_AVATAR}
                     />
-                    <View style={styles.memberMid}>
+                    <View style={[styles.memberMid, {alignItems: flexEnd}]}>
                       <Text style={styles.memberName} numberOfLines={1}>
                         {display}
                         {isSelf ? ' (את/ה)' : ''}
@@ -346,7 +419,11 @@ const ChatGroupManageModal = ({
                       ) : null}
                     </View>
                     {showMenu ? (
-                      <MaterialCommunityIcons name="dots-vertical" size={22} color={LABEL} />
+                      <MaterialCommunityIcons
+                        name="dots-vertical"
+                        size={22}
+                        color={LABEL}
+                      />
                     ) : (
                       <View style={styles.dotsSpacer} />
                     )}
@@ -359,7 +436,11 @@ const ChatGroupManageModal = ({
               style={styles.leaveOutline}
               onPress={() => openMemberActions({...myMember, email: myNorm})}
               activeOpacity={0.8}>
-              <MaterialCommunityIcons name="exit-to-app" size={20} color="#ff8a8a" />
+              <MaterialCommunityIcons
+                name="exit-to-app"
+                size={20}
+                color="#ff8a8a"
+              />
               <Text style={styles.leaveOutlineText}>עזוב את הקבוצה</Text>
             </TouchableOpacity>
 
@@ -379,7 +460,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   navRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingHorizontal: 8,
     minHeight: 48,
@@ -398,7 +479,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: CARD,
   },
-  titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8},
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
   heroTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -415,12 +501,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 17,
     color: NAME_COLOR,
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   titleEditActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 12,
     marginTop: 12,
   },
@@ -443,14 +527,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
+    alignItems: 'flex-start',
   },
   cardLabel: {fontSize: 13, color: LABEL, marginBottom: 8},
-  descText: {fontSize: 15, color: NAME_COLOR, lineHeight: 22, textAlign: 'right'},
-  descEmpty: {fontSize: 14, color: 'rgba(255,255,255,0.45)', fontStyle: 'italic'},
+  descText: {fontSize: 15, color: NAME_COLOR, lineHeight: 22},
+  descEmpty: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.45)',
+    fontStyle: 'italic',
+  },
   linkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     marginTop: 12,
     gap: 4,
   },
@@ -471,7 +559,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: LABEL,
     marginBottom: 10,
-    textAlign: 'right',
     alignSelf: 'stretch',
   },
   memberCard: {
@@ -490,7 +577,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  memberMid: {flex: 1, alignItems: 'flex-end'},
+  memberMid: {flex: 1},
   memberName: {fontSize: 16, color: NAME_COLOR, fontWeight: '600'},
   roleChip: {
     marginTop: 4,

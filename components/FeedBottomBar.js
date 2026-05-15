@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 const ACTIVE_FILTER_COLOR = '#FFC40A';
 /** Bottom-bar filter icons (סוג, מטר, land …) — use a single-color / alpha template so `tintColor` matches מחיר/עיר. */
@@ -42,7 +42,12 @@ const BOTTOM_BAR_ITEMS = [
 function getSlotsForCategory(categoryNum) {
   if (!Number.isFinite(categoryNum)) {
     return {
-      rooms: {kind: 'rooms', label: 'חדרים', icon: ICONS.rooms, filterKey: 'rooms'},
+      rooms: {
+        kind: 'rooms',
+        label: 'חדרים',
+        icon: ICONS.rooms,
+        filterKey: 'rooms',
+      },
       apartment: {
         kind: 'apartmentType',
         label: 'סוג דירה',
@@ -54,8 +59,18 @@ function getSlotsForCategory(categoryNum) {
   switch (categoryNum) {
     case 2: // משרדים — 2nd: מטר; 4th: סוג → OfficeFilter (Figma מגירה)
       return {
-        rooms: {kind: 'meter', label: 'מטר', icon: ICONS.meter, filterKey: 'meter'},
-        apartment: {kind: 'office', label: 'סוג', icon: ICONS.type, filterKey: 'office'},
+        rooms: {
+          kind: 'meter',
+          label: 'מטר',
+          icon: ICONS.meter,
+          filterKey: 'meter',
+        },
+        apartment: {
+          kind: 'office',
+          label: 'סוג',
+          icon: ICONS.type,
+          filterKey: 'office',
+        },
       };
     case 3: // שותפים
       return {
@@ -75,30 +90,75 @@ function getSlotsForCategory(categoryNum) {
     case 4: // גלובל
     case 5: // BnB
       return {
-        rooms: {kind: 'rooms', label: 'חדרים', icon: ICONS.rooms, filterKey: 'rooms'},
-        apartment: {kind: 'type', label: 'סוג', icon: ICONS.type, filterKey: 'type'},
+        rooms: {
+          kind: 'rooms',
+          label: 'חדרים',
+          icon: ICONS.rooms,
+          filterKey: 'rooms',
+        },
+        apartment: {
+          kind: 'type',
+          label: 'סוג',
+          icon: ICONS.type,
+          filterKey: 'type',
+        },
       };
     case 7: // קרקעות
       return {
-        rooms: {kind: 'landType', label: 'סוג', icon: ICONS.type, filterKey: 'type'},
-        apartment: {kind: 'donam', label: 'דונם', icon: ICONS.donam, filterKey: 'donam'},
+        rooms: {
+          kind: 'landType',
+          label: 'סוג',
+          icon: ICONS.type,
+          filterKey: 'type',
+        },
+        apartment: {
+          kind: 'donam',
+          label: 'דונם',
+          icon: ICONS.donam,
+          filterKey: 'donam',
+        },
       };
     case 8: // מסחר
       return {
-        rooms: {kind: 'meter', label: 'מטר', icon: ICONS.meter, filterKey: 'meter'},
-        apartment: {kind: 'type', label: 'סוג', icon: ICONS.type, filterKey: 'type'},
+        rooms: {
+          kind: 'meter',
+          label: 'מטר',
+          icon: ICONS.meter,
+          filterKey: 'meter',
+        },
+        apartment: {
+          kind: 'type',
+          label: 'סוג',
+          icon: ICONS.type,
+          filterKey: 'type',
+        },
       };
     case 1: // חדש מקבלן — fourth slot is global סוג (TypeFilter), not סוג דירה
       return {
-        rooms: {kind: 'rooms', label: 'חדרים', icon: ICONS.rooms, filterKey: 'rooms'},
-        apartment: {kind: 'type', label: 'סוג', icon: ICONS.type, filterKey: 'type'},
+        rooms: {
+          kind: 'rooms',
+          label: 'חדרים',
+          icon: ICONS.rooms,
+          filterKey: 'rooms',
+        },
+        apartment: {
+          kind: 'type',
+          label: 'סוג',
+          icon: ICONS.type,
+          filterKey: 'type',
+        },
       };
     case 6: // מגזר דתי
     case 10: // דירות
     case 12: // יוקרה
     default:
       return {
-        rooms: {kind: 'rooms', label: 'חדרים', icon: ICONS.rooms, filterKey: 'rooms'},
+        rooms: {
+          kind: 'rooms',
+          label: 'חדרים',
+          icon: ICONS.rooms,
+          filterKey: 'rooms',
+        },
         apartment: {
           kind: 'apartmentType',
           label: 'סוג דירה',
@@ -168,7 +228,9 @@ const FeedBottomBar = ({
       'commercial_space',
       'whole_floor',
     ]);
-    const hasResidentialTypeSelected = selectedTypeIds.some(t => residentialTypeIds.has(t));
+    const hasResidentialTypeSelected = selectedTypeIds.some(t =>
+      residentialTypeIds.has(t),
+    );
     const hasOfficeOrCommercialTypeSelected = selectedTypeIds.some(t =>
       officeCommercialTypeIds.has(t),
     );
@@ -427,7 +489,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomBarRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     width: '100%',

@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  I18nManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
 import FeedBottomBar from '../components/FeedBottomBar';
+import {flexStart} from '../index';
 
 /** Figma palette for מסך מועדפים (Favorites screen). */
 const BG = '#1E1D27';
@@ -89,7 +91,10 @@ const listingTitle = item => {
   if (pn) return pn;
   const addr = (item.address || '').trim();
   if (addr) {
-    const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
+    const parts = addr
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
     if (parts.length > 1) return parts[parts.length - 1];
     return parts[0] || 'מודעה';
   }
@@ -199,34 +204,6 @@ const FavoritesScreen = ({
         style={styles.card}
         onPress={() => onOpenListing?.(item)}>
         <View style={styles.row}>
-          <View style={styles.textCol}>
-            <Text style={styles.title} numberOfLines={1}>
-              {String(item?.subscription_type || '').toLowerCase() === 'company'
-                ? item?.project_name && String(item.project_name).trim()
-                  ? String(item.project_name).trim()
-                  : listingTitle(item)
-                : formatPrice(item)}
-            </Text>
-            <View style={styles.addrRow}>
-              <Text style={styles.address} numberOfLines={1}>
-                {listingAddress(item)}
-              </Text>
-              <Image
-                source={require('../assets/liked-ads/location.png')}
-                style={styles.locationIcon}
-                resizeMode="contain"
-              />
-            </View>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.ctaBtn}
-              onPress={e => {
-                e?.stopPropagation?.();
-                onOpenListing?.(item);
-              }}>
-              <Text style={styles.ctaText}>צפה במודעה</Text>
-            </TouchableOpacity>
-          </View>
           <View style={styles.imageWrap}>
             {uri ? (
               <Image source={{uri}} style={styles.thumb} resizeMode="cover" />
@@ -256,6 +233,34 @@ const FavoritesScreen = ({
               </View>
             </TouchableOpacity>
           </View>
+          <View style={styles.textCol}>
+            <Text style={styles.title} numberOfLines={1}>
+              {String(item?.subscription_type || '').toLowerCase() === 'company'
+                ? item?.project_name && String(item.project_name).trim()
+                  ? String(item.project_name).trim()
+                  : listingTitle(item)
+                : formatPrice(item)}
+            </Text>
+            <View style={styles.addrRow}>
+              <Text style={styles.address} numberOfLines={1}>
+                {listingAddress(item)}
+              </Text>
+              <Image
+                source={require('../assets/liked-ads/location.png')}
+                style={styles.locationIcon}
+                resizeMode="contain"
+              />
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.ctaBtn}
+              onPress={e => {
+                e?.stopPropagation?.();
+                onOpenListing?.(item);
+              }}>
+              <Text style={styles.ctaText}>צפה במודעה</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -263,7 +268,14 @@ const FavoritesScreen = ({
 
   return (
     <View style={styles.root}>
-      <View style={[styles.topBar, {height: 54 + insets.top, paddingTop: insets.top + (Platform.OS === 'web' ? 8 : 2)}]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            height: 54 + insets.top,
+            paddingTop: insets.top + (Platform.OS === 'web' ? 8 : 2),
+          },
+        ]}>
         <Pressable
           onPress={() => {
             if (typeof onBack === 'function') {
@@ -301,7 +313,9 @@ const FavoritesScreen = ({
                     TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
                     f.id,
                   ).catch(() => {});
-                  if (typeof onNavigateToTikTokAfterTopBarFilter === 'function') {
+                  if (
+                    typeof onNavigateToTikTokAfterTopBarFilter === 'function'
+                  ) {
                     onNavigateToTikTokAfterTopBarFilter();
                   } else {
                     onClose?.();
@@ -430,7 +444,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     height: 52,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -446,7 +460,7 @@ const styles = StyleSheet.create({
   },
   topBarCenter: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -515,7 +529,7 @@ const styles = StyleSheet.create({
   textCol: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 6,
   },
   title: {
@@ -523,13 +537,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
     width: '100%',
   },
@@ -544,16 +558,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   pricePill: {
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
   },
   priceText: {
     color: '#F7F3E6',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   ctaBtn: {
     alignSelf: 'stretch',

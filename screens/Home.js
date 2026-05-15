@@ -6,6 +6,7 @@ import {
   Image,
   Animated,
   Platform,
+  I18nManager,
 } from 'react-native';
 import React, {
   useContext,
@@ -23,6 +24,7 @@ import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getStoriesFeed} from '../utils/api';
 
 import {userCategories} from '../utils/constant';
+import {flexStart} from '../index';
 
 const Home = ({
   onOpenSettings,
@@ -128,12 +130,12 @@ const Home = ({
           }}
         />
         <View style={[styles.profileBarHeader, {marginTop: 20}]}>
+          <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           <TouchableOpacity
             onPress={() => onOpenSelectedProjects?.()}
             style={styles.profileBarHeaderButton}>
             <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
           </TouchableOpacity>
-          <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
         </View>
         <View style={styles.projectCardWrap}>
           <View style={styles.videoContainer}>
@@ -158,14 +160,14 @@ const Home = ({
 
       <View style={styles.profileBar}>
         <View style={styles.profileBarHeader}>
+          <Text style={styles.profileBarHeaderText}>
+            בעלי מקצוע בתחום הנדל״ן
+          </Text>
           <TouchableOpacity
             onPress={() => onOpenProfessionalsDirectory?.()}
             style={styles.profileBarHeaderButton}>
             <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
           </TouchableOpacity>
-          <Text style={styles.profileBarHeaderText}>
-            בעלי מקצוע בתחום הנדל״ן
-          </Text>
         </View>
         <HomeStoryStrip
           rings={storyRings}
@@ -255,11 +257,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   menu: {
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
     width: 28,
     height: 20,
     marginTop: 20,
-    marginEnd: 26,
+    marginStart: 26,
   },
   safeArea: {
     flex: 1,
@@ -293,7 +295,7 @@ const styles = StyleSheet.create({
   },
   videoLogo: {
     position: 'absolute',
-    left: 10,
+    right: 10,
     top: 10,
     width: 45,
     height: 45,
@@ -301,7 +303,7 @@ const styles = StyleSheet.create({
   },
   popularLogo: {
     position: 'absolute',
-    right: -16,
+    left: -16,
     top: 5,
     width: 95,
     height: 48,

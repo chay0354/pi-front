@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     }),
   },
   navRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 72,

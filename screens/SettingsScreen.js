@@ -9,6 +9,7 @@ import {
   Linking,
   Alert,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ProfileAvatar} from '../components';
@@ -17,6 +18,8 @@ import {ContextHook} from '../hooks/ContextHook';
 import {subscriptionTypes} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {getCurrentUser, getFollowHubRows, toSubscriptionId} from '../utils/api';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {flexStart} from '../index';
 
 /** Set URLs when pages are ready; empty string shows a short “בקרוב” alert */
 const LEGAL_DEFAULTS = {
@@ -28,8 +31,7 @@ const LEGAL_DEFAULTS = {
 
 // Figma node 74:6022 assets (messages pill / PiChat badge)
 const PI_CHAT_BAR = require('../assets/menu/pichat.png');
-const FIGMA_NAV_CHEVRON_ICON =
-  'https://www.figma.com/api/mcp/asset/de89ae2d-1d73-4568-9437-ba7ce08b581d';
+
 const MENU_ICONS = {
   edit: require('../assets/pencil-icon.png'),
   updates: require('../assets/menu/updates.png'),
@@ -219,13 +221,7 @@ const SettingsScreen = ({
     ? getUserProfileImageUrl(currentUser)
     : null;
   const renderChevron = () => (
-    <View style={styles.chevron}>
-      <Image
-        source={{uri: FIGMA_NAV_CHEVRON_ICON}}
-        style={styles.chevronIcon}
-        resizeMode="contain"
-      />
-    </View>
+    <MaterialCommunityIcons name="chevron-left" size={20} color={'#A5A5A5'} />
   );
   const renderMenuIcon = type => (
     <View style={styles.menuIconBase}>
@@ -304,16 +300,18 @@ const SettingsScreen = ({
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.profileDivider} />
           {currentUser.subscription_type !== subscriptionTypes.user &&
           currentUser.subscriber_number != null &&
           String(currentUser.subscriber_number).trim() !== '' ? (
-            <View style={styles.profileBottom}>
-              <Text style={styles.subscriberNumber}>
-                {String(currentUser.subscriber_number)}
-              </Text>
-              <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
-            </View>
+            <>
+              <View style={styles.profileDivider} />
+              <View style={styles.profileBottom}>
+                <Text style={styles.subscriberNumber}>
+                  {String(currentUser.subscriber_number)}
+                </Text>
+                <Text style={styles.subscriberNumberLabel}>מספר מנוי</Text>
+              </View>
+            </>
           ) : null}
         </View>
       ) : null}
@@ -390,24 +388,32 @@ const SettingsScreen = ({
             style={[styles.cardItem, styles.cardItemDivider]}
             onPress={onOpenEditPublishAd}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>ערוך / פרסם פוסט</Text>
-            {renderMenuIcon('edit')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>ערוך / פרסם פוסט</Text>
+              {renderMenuIcon('edit')}
+            </View>
           </TouchableOpacity>
           {isLoggedBroker ? (
             <TouchableOpacity
               style={[styles.cardItem, styles.cardItemDivider]}
               onPress={openBrokerUpdates}>
               {renderChevron()}
-              <Text style={styles.cardItemText}>עדכון נכסים חדשים שעולים</Text>
-              {renderMenuIcon('updates')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>
+                  עדכון נכסים חדשים שעולים
+                </Text>
+                {renderMenuIcon('updates')}
+              </View>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
             style={styles.cardItem}
             onPress={() => onOpenFavorites && onOpenFavorites()}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>מועדפים</Text>
-            {renderMenuIcon('favorites')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>מועדפים</Text>
+              {renderMenuIcon('favorites')}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -423,15 +429,19 @@ const SettingsScreen = ({
                 handleSubscriptionPress(subscriptionTypes.company)
               }>
               {renderChevron()}
-              <Text style={styles.cardItemText}>מנוי לחברות</Text>
-              {renderMenuIcon('company')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>מנוי לחברות</Text>
+                {renderMenuIcon('company')}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.cardItem, styles.cardItemDivider]}
               onPress={() => handleSubscriptionPress(subscriptionTypes.broker)}>
               {renderChevron()}
-              <Text style={styles.cardItemText}>מנוי למתווכים</Text>
-              {renderMenuIcon('broker')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>מנוי למתווכים</Text>
+                {renderMenuIcon('broker')}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cardItem}
@@ -439,8 +449,10 @@ const SettingsScreen = ({
                 handleSubscriptionPress(subscriptionTypes.professional)
               }>
               {renderChevron()}
-              <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
-              {renderMenuIcon('professional')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
+                {renderMenuIcon('professional')}
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -456,15 +468,19 @@ const SettingsScreen = ({
               onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()
             }>
             {renderChevron()}
-            <Text style={styles.cardItemText}>שחזור קוד סודי</Text>
-            {renderMenuIcon('secret')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>שחזור קוד סודי</Text>
+              {renderMenuIcon('secret')}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => onOpenFeedback && onOpenFeedback()}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>הצעות לשיפור</Text>
-            {renderMenuIcon('feedback')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>הצעות לשיפור</Text>
+              {renderMenuIcon('feedback')}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -481,8 +497,10 @@ const SettingsScreen = ({
             }}
             activeOpacity={0.8}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>תנאי שימוש</Text>
-            {renderMenuIcon('terms')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>תנאי שימוש</Text>
+              {renderMenuIcon('terms')}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
@@ -500,16 +518,20 @@ const SettingsScreen = ({
             }}
             activeOpacity={0.8}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>הצהרת נגישות</Text>
-            {renderMenuIcon('accessibility')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>הצהרת נגישות</Text>
+              {renderMenuIcon('accessibility')}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
             onPress={openContact}
             activeOpacity={0.8}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>צור קשר</Text>
-            {renderMenuIcon('contact')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>צור קשר</Text>
+              {renderMenuIcon('contact')}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
@@ -518,21 +540,27 @@ const SettingsScreen = ({
             }
             activeOpacity={0.8}>
             {renderChevron()}
-            <Text style={styles.cardItemText}>ביטול עסקה</Text>
-            {renderMenuIcon('cancel')}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>ביטול עסקה</Text>
+              {renderMenuIcon('cancel')}
+            </View>
           </TouchableOpacity>
 
           {currentUser ? (
             <TouchableOpacity style={styles.cardItem} onPress={handleLogout}>
               {renderChevron()}
-              <Text style={styles.cardItemText}>התנתק</Text>
-              {renderMenuIcon('logout')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>התנתק</Text>
+                {renderMenuIcon('logout')}
+              </View>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.cardItem} onPress={onOpenLogin}>
               {renderChevron()}
-              <Text style={styles.cardItemText}>התחבר</Text>
-              {renderMenuIcon('secret')}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>התחבר</Text>
+                {renderMenuIcon('secret')}
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -564,7 +592,7 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     top: '50%',
-    left: 0,
+    right: 0,
     width: 40,
     height: 40,
     marginTop: -20,
@@ -615,7 +643,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 2,
     marginBottom: 2,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     gap: 8,
   },
   followingPreviewTitle: {
@@ -623,11 +651,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
+    alignSelf: flexStart,
   },
   followingPreviewAvatars: {
     width: '100%',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     minHeight: 34,
@@ -650,12 +679,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   chatBadge: {
     position: 'absolute',
-    top: -2,
-    right: 2,
+    top: -6,
+    left: 3,
     minWidth: 24,
     height: 24,
     minHeight: 24,
@@ -670,8 +699,6 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.5,
     shadowRadius: 5,
-    borderWidth: 2,
-    borderColor: '#1E1D27',
   },
   chatBadgeText: {
     color: '#1a1a2e',
@@ -693,9 +720,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     marginBottom: -8,
+    textAlign: 'left',
   },
   cardItem: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     minHeight: 28,
     paddingVertical: 0,
@@ -708,25 +736,28 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   chevron: {
-    width: 11,
-    height: 16,
+    width: 5,
+    height: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
-    flexShrink: 0,
   },
   chevronIcon: {
     width: 6,
     height: 11,
   },
+  cardItemTextWrap: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
   cardItemText: {
-    flex: 1,
+    // flex: 1,
     fontSize: 16,
     color: Colors.white100,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     lineHeight: 32,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   menuIconBase: {
     width: 28,
@@ -746,8 +777,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#FEE787',
-    position: 'relative',
-    minHeight: 153,
+    minHeight: 113,
     shadowColor: '#595132',
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.4,
@@ -768,15 +798,15 @@ const styles = StyleSheet.create({
     height: 26.667,
   },
   profileContentRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     gap: 10,
   },
   profileMainInfoWrap: {
     flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
+    // minWidth: 0,
+    flexDirection: 'row-reverse',
+    // alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 10,
   },
@@ -810,24 +840,24 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   profileInfo: {
-    width: 200,
-    maxWidth: 200,
-    alignItems: 'flex-end',
+    flex: 1,
+    // maxWidth: 200,
+    alignItems: flexStart,
     justifyContent: 'center',
-    gap: 2,
+    gap: 4,
   },
   profileName: {
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     color: Colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
     width: '100%',
   },
   profileEmail: {
     fontSize: 14,
     color: 'rgba(210,208,220,0.5)',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: 0.5447,
     lineHeight: 16,
     width: '100%',
@@ -854,7 +884,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   profileBottom: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
   },

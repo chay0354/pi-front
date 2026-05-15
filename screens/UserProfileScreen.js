@@ -13,6 +13,7 @@ import {
   Platform,
   Alert,
   Share,
+  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
 import {SvgXml} from 'react-native-svg';
@@ -57,6 +58,7 @@ import {
 } from '../utils/heroNavFigmaIcons';
 import ProfileAvatar from '../components/ProfileAvatar';
 import BnbListingProfileContent from '../components/BnbListingProfileContent';
+import {flexEnd, flexStart} from '../index';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -1175,6 +1177,7 @@ const UserProfileScreen = ({
     fromCompanyProjects && user?.id != null ? String(user.id) : null;
   const [companyHeroFavorited, setCompanyHeroFavorited] = useState(false);
   const companyHeroLikePendingRef = useRef(false);
+  console.log('I18nManager.isRTL', I18nManager.isRTL);
   useEffect(() => {
     if (!companyListingId || !currentUser?.id) {
       setCompanyHeroFavorited(false);
@@ -1598,9 +1601,8 @@ const UserProfileScreen = ({
     showFixedCompanyHero || showFixedProHero || showFixedBackOnly;
 
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
-
   return (
-    <View style={[styles.container, {paddingTop: top + 10}]}>
+    <View style={[styles.container, {paddingTop: heroNavPaddingTop}]}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         style={styles.scroll}
@@ -1614,7 +1616,7 @@ const UserProfileScreen = ({
           !useFixedListingTopNav && (
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.backBtn, {top: top + 10}]}
+              style={[styles.backBtn, {right: 10}]}
               hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
               <MaterialCommunityIcons
                 name="chevron-left"
@@ -1921,11 +1923,9 @@ const UserProfileScreen = ({
                       )}
                     </View>
                     {!isProfessional && (
-                      <View style={styles.lastAdPriceRow}>
-                        <Text style={styles.lastAdPrice}>
-                          {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
-                        </Text>
-                      </View>
+                      <Text style={styles.lastAdPrice}>
+                        {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
+                      </Text>
                     )}
                     {(() => {
                       const addr = firstNonEmpty(
@@ -1939,12 +1939,12 @@ const UserProfileScreen = ({
                       if (!addr) return null;
                       return (
                         <View style={styles.lastAdLocationRow}>
-                          <Text style={styles.lastAdLocationText}>{addr}</Text>
                           <SimpleLineIcons
                             name="location-pin"
                             size={18}
                             color="rgba(255,255,255,0.9)"
                           />
+                          <Text style={styles.lastAdLocationText}>{addr}</Text>
                         </View>
                       );
                     })()}
@@ -2003,9 +2003,6 @@ const UserProfileScreen = ({
                             פורסם ע"י
                           </Text>
                           <View style={styles.brokerCardBottomLocation}>
-                            <Text style={styles.lastAdPostedByName}>
-                              {displayName}
-                            </Text>
                             {lastAd.profileImageUrl || displayImage ? (
                               <Image
                                 source={{
@@ -2027,6 +2024,9 @@ const UserProfileScreen = ({
                                 />
                               </View>
                             )}
+                            <Text style={styles.lastAdPostedByName}>
+                              {displayName}
+                            </Text>
                           </View>
                         </View>
                         <Text
@@ -2045,14 +2045,14 @@ const UserProfileScreen = ({
                             <View
                               key={`feat-${item.iconKey}-${index}`}
                               style={styles.lastAdFeatureChip}>
-                              <Text style={styles.smartInfoBtnLabel}>
-                                {item.label}
-                              </Text>
                               <Image
                                 source={getFeatureIconSource(item.iconKey)}
                                 style={styles.smartInfoBtnIcon}
                                 resizeMode="contain"
                               />
+                              <Text style={styles.smartInfoBtnLabel}>
+                                {item.label}
+                              </Text>
                             </View>
                           ))}
                         </View>
@@ -2071,7 +2071,7 @@ const UserProfileScreen = ({
                                 : 'גודל: —';
                             const priceStr =
                               card.price != null
-                                ? `החל מ-${Number(card.price).toLocaleString('he-IL')}₪`
+                                ? `החל מ-₪${Number(card.price).toLocaleString('he-IL')}`
                                 : null;
                             const roomsStr =
                               card.rooms != null
@@ -2323,12 +2323,12 @@ const UserProfileScreen = ({
                     }}
                     activeOpacity={0.8}
                     disabled={smartInfoLoading}>
-                    <Text style={styles.smartInfoBtnLabel}>{item.label}</Text>
                     <Image
                       source={buttonSources[index]}
                       style={styles.smartInfoBtnIcon}
                       resizeMode="contain"
                     />
+                    <Text style={styles.smartInfoBtnLabel}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -2367,14 +2367,14 @@ const UserProfileScreen = ({
                 </View>
                 {brokerAddress ? (
                   <View style={styles.brokerCardBottomLocationRow}>
-                    <Text style={styles.brokerCardBottomAddress}>
-                      {brokerAddress}
-                    </Text>
                     <SimpleLineIcons
                       name="location-pin"
                       size={16}
                       color="#FFFFFF"
                     />
+                    <Text style={styles.brokerCardBottomAddress}>
+                      {brokerAddress}
+                    </Text>
                   </View>
                 ) : null}
                 {user?._fromTikTokPost && isBroker && openedFromPost ? (
@@ -2498,7 +2498,6 @@ const UserProfileScreen = ({
                 <FlatList
                   data={userListings.filter(l => !isPostListingRecord(l))}
                   horizontal
-                  inverted
                   showsHorizontalScrollIndicator={false}
                   style={styles.myPropertiesFlatList}
                   contentContainerStyle={styles.myPropertiesListContent}
@@ -2609,14 +2608,14 @@ const UserProfileScreen = ({
                   <TouchableOpacity
                     style={[styles.contactDetailsRow]}
                     onPress={() => {}}>
-                    <Text style={styles.contactDetailsLink}>
-                      {contactEmail}
-                    </Text>
                     <Image
                       source={require('../assets/web-icon.png')}
                       style={styles.contactDetailsIconImage}
                       resizeMode="contain"
                     />
+                    <Text style={styles.contactDetailsLink}>
+                      {contactEmail}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {contactPhones.map((phone, i) => (
@@ -2624,28 +2623,28 @@ const UserProfileScreen = ({
                     key={i}
                     style={styles.contactDetailsRow}
                     onPress={() => {}}>
-                    <Text style={styles.contactDetailsLink}>
-                      {String(phone).trim()}
-                    </Text>
                     <Image
                       source={contactPhoneIconSource}
                       style={styles.contactDetailsIconImage}
                       resizeMode="contain"
                     />
+                    <Text style={styles.contactDetailsLink}>
+                      {String(phone).trim()}
+                    </Text>
                   </TouchableOpacity>
                 ))}
                 {contactEmail ? (
                   <TouchableOpacity
                     style={[styles.contactDetailsRow, {marginBottom: 0}]}
                     onPress={() => {}}>
-                    <Text style={styles.contactDetailsLink}>
-                      {contactEmail}
-                    </Text>
                     <Image
                       source={contactEmailIconSource}
                       style={styles.contactDetailsIconImage}
                       resizeMode="contain"
                     />
+                    <Text style={styles.contactDetailsLink}>
+                      {contactEmail}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -2870,7 +2869,7 @@ const UserProfileScreen = ({
           pointerEvents="box-none"
           collapsable={false}>
           {showFixedCompanyHero ? (
-            <>
+            <View style={styles.heroNavFixedContent}>
               <TouchableOpacity
                 onPress={onClose}
                 activeOpacity={0.8}
@@ -2902,7 +2901,7 @@ const UserProfileScreen = ({
                   <SvgXml xml={HERO_NAV_SHARE_XML} width={24} height={24} />
                 </TouchableOpacity>
               </View>
-            </>
+            </View>
           ) : showFixedProHero ? (
             <>
               <TouchableOpacity
@@ -2935,7 +2934,7 @@ const UserProfileScreen = ({
                   }
                 }}
                 activeOpacity={0.8}
-                style={styles.heroCircleBtn}
+                style={[styles.heroCircleBtn, {top: 10}]}
                 hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
                 <MaterialCommunityIcons
                   name="share-variant"
@@ -2947,8 +2946,9 @@ const UserProfileScreen = ({
           ) : (
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.backBtn, {top: top + 10}]}
-              hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
+              activeOpacity={0.8}
+              style={[styles.backBtn, {top: top + 10, left: 10}]}
+              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
               <MaterialCommunityIcons
                 name="chevron-left"
                 size={28}
@@ -3066,8 +3066,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
-    left: 10,
-    top: 0,
     zIndex: 100,
   },
   profileBlock: {
@@ -3114,7 +3112,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFFCC',
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 65,
@@ -3133,7 +3131,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'center',
     width: '100%',
     backgroundColor: Colors.mainDeepBlue,
@@ -3151,7 +3149,7 @@ const styles = StyleSheet.create({
   },
   myPropertiesSection: {marginTop: 20, marginBottom: 24, paddingHorizontal: 0},
   myPropertiesHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
@@ -3161,7 +3159,7 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   myPropertiesSeeAllText: {
     color: GOLD,
@@ -3224,13 +3222,13 @@ const styles = StyleSheet.create({
     color: '#F7F3E6',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 5,
   },
   myPropertiesCardLocation: {
     color: '#FFFFFFCC',
     fontSize: 12,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   smartInfoBlock: {
@@ -3252,7 +3250,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   smartInfoGrid: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     width: '100%',
@@ -3263,7 +3261,7 @@ const styles = StyleSheet.create({
     width: '48.5%',
     height: 52,
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
     backgroundColor: CARD_BG,
     borderRadius: 10,
@@ -3288,6 +3286,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     borderWidth: 1,
     borderColor: '#8C85B3',
+    writingDirection: 'rtl',
     ...(Platform.OS === 'web' ? {scrollbarColor: '#555 #1e1d27'} : {}),
   },
 
@@ -3306,9 +3305,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   brokerCardBottomHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'flex-start',
-    justifyContent: 'flex-end',
+    justifyContent: flexEnd,
     gap: 24,
     width: '100%',
     marginBottom: 4,
@@ -3321,19 +3320,19 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomNameBlock: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: flexEnd,
   },
   brokerCardBottomName: {
     color: '#F7F3E6',
     fontSize: 28,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   brokerCardBottomLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 4,
     width: '100%',
     marginBottom: 8,
@@ -3341,18 +3340,18 @@ const styles = StyleSheet.create({
   brokerCardBottomLocation: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 6,
   },
   brokerCardBottomAddress: {
     color: '#FFFFFF',
     fontSize: 18,
     lineHeight: 32,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   companyStatsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -3360,7 +3359,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     paddingHorizontal: 0,
   },
-  companyStatItem: {flexDirection: 'row-reverse', alignItems: 'center', gap: 6},
+  companyStatItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
   companyStatIconImage: {width: 26, height: 26},
   companyStatText: {
     color: '#fff',
@@ -3372,22 +3371,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     marginBottom: 24,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   brokerCardBottomAboutTitle: {
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     marginBottom: 6,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   brokerCardBottomTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
+    justifyContent: flexEnd,
     gap: 8,
     marginBottom: 12,
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
   },
   brokerCardBottomTag: {
     borderWidth: 1,
@@ -3405,12 +3404,13 @@ const styles = StyleSheet.create({
     color: Colors.grey200,
     fontSize: 13,
     fontStyle: 'italic',
+    textAlign: 'right',
   },
   brokerCardBottomBio: {
     color: '#fff',
     fontSize: 18,
     lineHeight: 32,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   brokerCardBottomContentDivider: {
@@ -3441,30 +3441,30 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 16,
   },
   contactDetailsContent: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  contactDetailsRight: {flex: 1, alignItems: 'flex-end'},
+  contactDetailsRight: {flex: 1, alignItems: flexStart},
   contactDetailsProfileAvatar: {
-    alignSelf: 'flex-end',
+    alignSelf: flexStart,
     marginBottom: 12,
   },
   contactDetailsAgencyName: {
     color: '#fff',
     fontSize: 12,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 14,
   },
   contactDetailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     marginBottom: 10,
   },
   contactDetailsLink: {
@@ -3472,7 +3472,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     fontSize: 16,
     textDecorationLine: 'underline',
-    marginRight: 8,
+    marginLeft: 8,
   },
   contactDetailsIconImage: {
     width: 24,
@@ -3508,7 +3508,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 28,
     backgroundColor: '#4D4966',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -3545,7 +3545,7 @@ const styles = StyleSheet.create({
   profilePiChatBadge: {
     position: 'absolute',
     top: -2,
-    right: 2,
+    left: 2,
     minWidth: 24,
     height: 24,
     minHeight: 24,
@@ -3660,6 +3660,7 @@ const styles = StyleSheet.create({
     height: 52,
     marginBottom: 30,
     marginHorizontal: 12,
+    writingDirection: 'rtl',
   },
   reviewsPlaceholder: {
     color: 'rgba(255,255,255,0.5)',
@@ -3675,13 +3676,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
   reviewCardHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
   },
   reviewCardAvatarWrap: {
     position: 'relative',
-    marginLeft: 12,
+    marginRight: 12,
     width: 60,
     alignItems: 'center',
   },
@@ -3719,19 +3720,19 @@ const styles = StyleSheet.create({
     color: '#F7F3E6',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   reviewCardDate: {
     color: '#D2D0DC',
     fontSize: 12,
     marginTop: 4,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   reviewCardBody: {
     color: '#FFFFFF',
     fontSize: 16,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
     marginTop: 10,
   },
@@ -3752,7 +3753,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 24,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
@@ -3771,7 +3772,7 @@ const styles = StyleSheet.create({
     zIndex: 10000,
     elevation: 24,
     paddingHorizontal: 24,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     ...Platform.select({
@@ -3782,7 +3783,14 @@ const styles = StyleSheet.create({
     }),
   },
   listingHeroNavBackOnly: {
-    justifyContent: 'flex-start',
+    justifyContent: flexEnd,
+  },
+  heroNavFixedContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 10,
   },
   heroCircleBtn: {
     width: 40,
@@ -3793,7 +3801,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTopBarRight: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 16,
   },
@@ -3804,7 +3812,7 @@ const styles = StyleSheet.create({
   lastAdImage: {height: LAST_AD_IMAGE_HEIGHT},
   lastAdGrid: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flexWrap: 'wrap',
   },
   // aspectRatio = width/height; below 1 yields taller cells than 1:1 (opened-from-post grid).
@@ -3831,14 +3839,14 @@ const styles = StyleSheet.create({
   },
   lastAdImagePlaceholder: {alignItems: 'center', justifyContent: 'center'},
   lastAdPiAndPurposeRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: 8,
   },
   lastAdPiBadge: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 2,
   },
@@ -3859,7 +3867,7 @@ const styles = StyleSheet.create({
     bottom: 12,
     left: 0,
     right: 0,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'center',
     gap: 6,
   },
@@ -3878,7 +3886,7 @@ const styles = StyleSheet.create({
   lastAdExpandWrap: {
     position: 'absolute',
     bottom: 16,
-    right: 16,
+    left: 16,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -3895,7 +3903,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 25,
     paddingBottom: 16,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   preSaleBadgeImage: {
     width: 115,
@@ -3916,31 +3924,32 @@ const styles = StyleSheet.create({
     color: '#F7F3E6',
     fontSize: 28,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
     flexShrink: 1,
     marginLeft: 12,
   },
-  lastAdPriceRow: {
-    justifyContent: 'flex-end',
-    marginBottom: 6,
-  },
+  // direction: 'ltr',
+  // alignSelf: 'flex-start',
+  // alignItems: 'flex-start',
+  // maxWidth: '100%',
   lastAdPrice: {
     color: '#F7F3E6',
     fontSize: 28,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
+    marginBottom: 6,
   },
   lastAdLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 6,
     marginBottom: 10,
   },
   lastAdLocationText: {
     color: 'rgba(255,255,255,0.9)',
     fontSize: 16,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   lastAdDivider: {
@@ -3954,17 +3963,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignSelf: 'stretch',
     width: '100%',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   constructionStatusTitle: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 10,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   constructionStatusRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'nowrap',
@@ -4000,11 +4009,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
     marginBottom: 18,
   },
-  lastAdPostedBy: {alignItems: 'flex-end', marginBottom: 8},
+  lastAdPostedBy: {marginBottom: 8},
   lastAdPostedByLabel: {
     color: '#D2D0DC',
     fontSize: 11,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 7,
     fontFamily: 'Rubik-Regular',
   },
@@ -4012,7 +4021,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   lastAdPostedByAvatar: {width: 24, height: 24, borderRadius: 12},
   lastAdPostedByAvatarPlaceholder: {
@@ -4024,7 +4033,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     lineHeight: 22,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   lastAdDividerWhite: {
@@ -4048,7 +4057,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 10,
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
   },
   projectOffersSection: {
     marginTop: 0,
@@ -4060,7 +4069,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 12,
   },
   projectOfferCard: {
@@ -4071,10 +4080,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: '100%',
     alignSelf: 'stretch',
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   projectOfferCardHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 6,
@@ -4083,12 +4092,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   projectOfferCardDetails: {
     color: '#fff',
     fontSize: 14,
-    textAlign: 'right',
+    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
     marginBottom: 4,
   },
@@ -4096,7 +4105,7 @@ const styles = StyleSheet.create({
     color: '#F7F3E6',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   fullScreenImageModal: {
     position: 'absolute',
@@ -4138,7 +4147,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 0,
     right: 0,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'center',
     gap: 8,
   },

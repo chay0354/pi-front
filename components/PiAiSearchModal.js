@@ -15,7 +15,12 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors, BorderRadius} from '../constants/styles';
-import {getListings, getReviews, likeListing, unlikeListing} from '../utils/api';
+import {
+  getListings,
+  getReviews,
+  likeListing,
+  unlikeListing,
+} from '../utils/api';
 import {
   loadTikTokLikedState,
   persistLikedListingIds,
@@ -40,6 +45,7 @@ import {
   shouldShowListingPiRating,
   displayPiRatingFromReviews,
 } from '../utils/listingGridCardFigma';
+import {flexEnd, flexStart} from '../index';
 
 // Palette mirrored from EditPublishAdScreen so this screen matches the rest
 // of the publishing flow.
@@ -84,7 +90,12 @@ const formatResultsCountHe = n => {
  * Full-screen Pi AI search: describe a property, search published listings,
  * results render as grid cards.
  */
-const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}) => {
+const PiAiSearchModal = ({
+  visible,
+  onClose,
+  onOpenUserProfile,
+  embedded = false,
+}) => {
   const insets = useSafeAreaInsets();
   const {currentUser} = useContext(ContextHook);
   const [query, setQuery] = useState('');
@@ -120,22 +131,19 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
     load();
   }, [currentUser?.id]);
 
-  const syncLikesFromListings = useCallback(
-    (listings, uid) => {
-      if (!uid || !listings?.length) return;
-      setLikedListingIds(prev => {
-        const next = new Set(prev);
-        listings.forEach(l => {
-          if (l?.id == null) return;
-          if (l.liked === true) next.add(l.id);
-          else if (l.liked === false) next.delete(l.id);
-        });
-        persistLikedListingIds(uid, next).catch(() => {});
-        return next;
+  const syncLikesFromListings = useCallback((listings, uid) => {
+    if (!uid || !listings?.length) return;
+    setLikedListingIds(prev => {
+      const next = new Set(prev);
+      listings.forEach(l => {
+        if (l?.id == null) return;
+        if (l.liked === true) next.add(l.id);
+        else if (l.liked === false) next.delete(l.id);
       });
-    },
-    [],
-  );
+      persistLikedListingIds(uid, next).catch(() => {});
+      return next;
+    });
+  }, []);
 
   /**
    * When the surface opens, load all published ads and show them. Search only
@@ -162,11 +170,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
         const listings = res?.listings || [];
         setAllListings(listings);
         setQuery('');
-        setEmptyMessage(
-          listings.length
-            ? ''
-            : 'אין מודעות שפורסמו כרגע.',
-        );
+        setEmptyMessage(listings.length ? '' : 'אין מודעות שפורסמו כרגע.');
         setResults([]);
         if (uid) {
           syncLikesFromListings(listings, uid);
@@ -210,7 +214,8 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
         subs.map(async subId => {
           const idKey = String(subId);
           const listing = results.find(
-            l => l?.subscription_id != null && String(l.subscription_id) === idKey,
+            l =>
+              l?.subscription_id != null && String(l.subscription_id) === idKey,
           ) || {subscription_id: subId};
           try {
             const {reviews} = await getReviews(idKey);
@@ -291,7 +296,13 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
     } finally {
       setLoading(false);
     }
-  }, [query, allListings, loading, syncLikesFromListings, hasSearchedWithQuery]);
+  }, [
+    query,
+    allListings,
+    loading,
+    syncLikesFromListings,
+    hasSearchedWithQuery,
+  ]);
 
   const handleClose = () => {
     setError('');
@@ -310,8 +321,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
     async listing => {
       const listingId = listing?.id;
       if (listingId == null) return;
-      const userId =
-        currentUser?.id != null ? String(currentUser.id) : null;
+      const userId = currentUser?.id != null ? String(currentUser.id) : null;
       if (!userId) return;
       const isCurrentlyLiked = likedListingIds.has(listingId);
       const willBeLiked = !isCurrentlyLiked;
@@ -378,8 +388,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
       subKey !== '' && piDisplayBySubId[subKey] !== undefined
         ? piDisplayBySubId[subKey]
         : brokerPiRatingFromListing(listing);
-    const piBadgeImage =
-      displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
+    const piBadgeImage = displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
     const showPiRating = shouldShowListingPiRating(listing);
 
     const stats = buildCardStats(listing);
@@ -398,7 +407,11 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
             />
           </View>
           <Text
-            style={[styles.listResultStatText, styles.listResultStatTextCell]}>
+            style={[
+              styles.listResultStatText,
+              styles.listResultStatTextCell,
+              {textAlign: 'left'},
+            ]}>
             {s.label}
           </Text>
         </View>
@@ -430,7 +443,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
           {key === 'rooms' && roomsD != null ? (
             <Text
               style={[...textRow, styles.listResultStatTextCell]}
-              textAlign="right"
+              textAlign={'left'}
               writingDirection="rtl">
               <Text style={styles.listResultStatValueText}>{roomsD}</Text>
               <Text style={styles.listResultStatLabelText}> חדרים</Text>
@@ -438,7 +451,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
           ) : key === 'area' && areaD != null ? (
             <Text
               style={[...textRow, styles.listResultStatTextCell]}
-              textAlign="right"
+              textAlign={'left'}
               writingDirection="rtl">
               <Text style={styles.listResultStatValueText}>{areaD}</Text>
               <Text style={styles.listResultStatLabelText}> {HEB_M2}</Text>
@@ -446,7 +459,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
           ) : key === 'floor' && floorD != null ? (
             <Text
               style={[...textRow, styles.listResultStatTextCell]}
-              textAlign="right"
+              textAlign={'left'}
               writingDirection="rtl">
               <Text style={styles.listResultStatLabelText}>קומה </Text>
               <Text style={styles.listResultStatValueText}>{floorD}</Text>
@@ -458,7 +471,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
                 styles.listResultStatAptTextWrap,
                 styles.listResultStatTextCell,
               ]}
-              textAlign="right"
+              textAlign={'left'}
               writingDirection="rtl">
               {s.label}
             </Text>
@@ -481,17 +494,31 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
               resizeMode="cover"
             />
           ) : (
-            <View style={[styles.listResultThumb, styles.listResultThumbPlaceholder]}>
-              <Text style={styles.listResultThumbPlaceholderText}>ללא תמונה</Text>
+            <View
+              style={[
+                styles.listResultThumb,
+                styles.listResultThumbPlaceholder,
+              ]}>
+              <Text style={styles.listResultThumbPlaceholderText}>
+                ללא תמונה
+              </Text>
             </View>
           )}
         </View>
-        <View style={styles.listResultMid}>
-          <Text style={styles.listResultPrice} numberOfLines={2}>
+        <View style={[styles.listResultMid, {alignItems: flexStart}]}>
+          <Text
+            style={[styles.listResultPrice, {textAlign: 'left'}]}
+            numberOfLines={2}>
             {cardPriceLabel}
           </Text>
-          <View style={styles.listResultAddressRow}>
-            <Text style={styles.listResultAddress} numberOfLines={2}>
+          <View
+            style={[
+              styles.listResultAddressRow,
+              {alignItems: flexEnd, justifyContent: flexEnd},
+            ]}>
+            <Text
+              style={[styles.listResultAddress, {textAlign: 'left'}]}
+              numberOfLines={2}>
               {addr}
             </Text>
             <Image
@@ -514,11 +541,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
                 accessibilityRole="button"
                 accessibilityState={{selected: listRowLiked}}>
                 {listRowLiked ? (
-                  <MaterialCommunityIcons
-                    name="heart"
-                    size={24}
-                    color={GOLD}
-                  />
+                  <MaterialCommunityIcons name="heart" size={24} color={GOLD} />
                 ) : (
                   <Image
                     source={require('../assets/liked-ads/like.png')}
@@ -547,11 +570,7 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
                 accessibilityRole="button"
                 accessibilityState={{selected: listRowLiked}}>
                 {listRowLiked ? (
-                  <MaterialCommunityIcons
-                    name="heart"
-                    size={24}
-                    color={GOLD}
-                  />
+                  <MaterialCommunityIcons name="heart" size={24} color={GOLD} />
                 ) : (
                   <Image
                     source={require('../assets/liked-ads/like.png')}
@@ -562,13 +581,16 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
               </TouchableOpacity>
               <View style={[styles.purposeChip, styles.listResultPurposeChip]}>
                 <Text
-                  style={[styles.purposeChipText, styles.listResultPurposeText]}>
+                  style={[
+                    styles.purposeChipText,
+                    styles.listResultPurposeText,
+                  ]}>
                   {purposeLabel(listing)}
                 </Text>
               </View>
             </View>
           )}
-          <View style={styles.listResultStatsRow}>
+          <View style={[styles.listResultStatsRow, {justifyContent: flexEnd}]}>
             {isCompany ? (
               <>
                 {renderListCompanyStat(apartmentsStat)}
@@ -606,179 +628,178 @@ const PiAiSearchModal = ({visible, onClose, onOpenUserProfile, embedded = false}
   };
 
   const body = (
-    <View
-      style={[
-        styles.fullScreen,
-        {paddingTop: insets.top, paddingBottom: insets.bottom},
-      ]}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleClose}
-            hitSlop={12}
-            style={styles.closeBtn}
-            accessibilityLabel="סגור">
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={28}
-              color={Colors.white100}
-            />
-          </TouchableOpacity>
-          <View style={styles.topBarLogoWrap} pointerEvents="none">
-            <Image
-              source={require('../assets/home-ai/צילום_מסך_2026-04-26_124946-removebg-preview.png')}
-              style={styles.topBarLogo}
-              resizeMode="contain"
-              accessibilityLabel="Pi AI"
-            />
-          </View>
+    <View style={[styles.fullScreen, {paddingBottom: insets.bottom}]}>
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={handleClose}
+          hitSlop={12}
+          style={styles.closeBtn}
+          accessibilityLabel="סגור">
+          <MaterialCommunityIcons
+            name="chevron-left"
+            size={28}
+            color={Colors.white100}
+          />
+        </TouchableOpacity>
+        <View style={styles.topBarLogoWrap} pointerEvents="none">
+          <Image
+            source={require('../assets/home-ai/צילום_מסך_2026-04-26_124946-removebg-preview.png')}
+            style={styles.topBarLogo}
+            resizeMode="contain"
+            accessibilityLabel="Pi AI"
+          />
         </View>
+      </View>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.kbWrap}>
-          <View style={styles.body}>
-            <View style={styles.searchStack}>
-              <View style={styles.searchFieldWrap}>
-                <View
-                  style={styles.searchFieldLeftArt}
-                  pointerEvents="none"
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants">
-                  <Image
-                    source={require('../assets/home-ai/צילום_מסך_2026-04-27_124221-removebg-preview.png')}
-                    style={styles.searchFieldLeftArtImage}
-                    resizeMode="contain"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.kbWrap}>
+        <View style={styles.body}>
+          <View style={styles.searchStack}>
+            <View style={styles.searchFieldWrap}>
+              <TouchableOpacity
+                onPress={runSearch}
+                disabled={loading}
+                hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                accessibilityLabel="חיפוש"
+                accessibilityRole="button">
+                {loading ? (
+                  <ActivityIndicator color={Colors.blue100} size="small" />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="magnify"
+                    size={22}
+                    color="rgba(255,255,255,0.55)"
                   />
-                </View>
-                <TextInput
-                  style={styles.searchFieldInput}
-                  placeholder="תמצא לי דירה,משרד,צימר,שותף"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={query}
-                  onChangeText={setQuery}
-                  editable={!loading}
-                  textAlign="right"
-                  writingDirection="rtl"
-                  returnKeyType="search"
-                  onSubmitEditing={runSearch}
-                />
-                <TouchableOpacity
-                  onPress={runSearch}
-                  disabled={loading}
-                  style={styles.searchFieldIconBtn}
-                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
-                  accessibilityLabel="חיפוש"
-                  accessibilityRole="button">
-                  {loading ? (
-                    <ActivityIndicator
-                      color={Colors.blue100}
-                      size="small"
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="magnify"
-                      size={22}
-                      color="rgba(255,255,255,0.55)"
-                    />
-                  )}
-                </TouchableOpacity>
-              </View>
-              {hasSearchedWithQuery ? (
-                <View style={styles.layoutToggleRow}>
-                  <View style={styles.layoutToggleEndGroup}>
-                    <Text
-                      style={styles.layoutResultsCount}
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.2}>
-                      {formatResultsCountHe(results.length)}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        setResultsLayout(prev => (prev === 'grid' ? 'list' : 'grid'))
-                      }
-                      style={styles.layoutToggleBtn}
-                      activeOpacity={0.85}
-                      accessibilityLabel={
-                        resultsLayout === 'grid'
-                          ? 'מעבר לתצוגת רשימה'
-                          : 'מעבר לתצוגת רשת'
-                      }
-                      accessibilityRole="button">
-                      <Image
-                        source={
-                          resultsLayout === 'grid'
-                            ? require('../assets/swipereight.png')
-                            : require('../assets/swiperleft.png')
-                        }
-                        style={styles.layoutToggleIcon}
-                        resizeMode="contain"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : null}
+                )}
+              </TouchableOpacity>
+              <TextInput
+                style={styles.searchFieldInput}
+                placeholder="תמצא לי דירה,משרד,צימר,שותף"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                value={query}
+                onChangeText={setQuery}
+                editable={!loading}
+                returnKeyType="search"
+                onSubmitEditing={runSearch}
+              />
+              <Image
+                source={require('../assets/home-ai/צילום_מסך_2026-04-27_124221-removebg-preview.png')}
+                style={styles.searchFieldLeftArtImage}
+                resizeMode="contain"
+              />
             </View>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            <ScrollView
-              style={styles.resultsScroll}
-              contentContainerStyle={[
-                styles.resultsContent,
-                !hasSearchedWithQuery && !loading
-                  ? styles.resultsContentWelcome
-                  : resultsLayout === 'grid'
-                    ? styles.resultsContentGrid
-                    : styles.resultsContentList,
-              ]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              showsHorizontalScrollIndicator={false}
-              dataSet={
-                Platform.OS === 'web' ? {class: 'pi-ai-scroll'} : undefined
-              }>
-              {loading && results.length === 0 && !emptyMessage ? (
-                <View style={styles.resultsLoadingWrap}>
-                  <ActivityIndicator color={Colors.blue100} size="large" />
-                </View>
-              ) : !hasSearchedWithQuery && !loading ? (
-                <View style={styles.welcomeColumn}>
-                  <Image
-                    source={require('../assets/home-ai/צילום_מסך_2026-04-27_124444-removebg-preview.png')}
-                    style={styles.welcomeHeroImage}
-                    resizeMode="contain"
-                  />
+            {hasSearchedWithQuery ? (
+              <View
+                style={[styles.layoutToggleRow, {justifyContent: flexStart}]}>
+                <View
+                  style={[
+                    styles.layoutToggleEndGroup,
+                    {justifyContent: flexStart},
+                  ]}>
                   <Text
-                    style={styles.welcomePromptTitle}
-                    maxFontSizeMultiplier={1.35}>
-                    תארו מה אתם מחפשים
+                    style={[styles.layoutResultsCount, {textAlign: 'left'}]}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.2}>
+                    {formatResultsCountHe(results.length)}
                   </Text>
-                  <Text
-                    style={styles.welcomePromptExample}
-                    maxFontSizeMultiplier={1.35}>
-                    דירת 3 חדרים בתל אביב להשכרה עם נוף לים…
-                  </Text>
-                  {emptyMessage ? (
-                    <Text
-                      style={[styles.hintText, styles.welcomeNoCatalogHint]}>
-                      {emptyMessage}
-                    </Text>
-                  ) : null}
+                  <TouchableOpacity
+                    onPress={() =>
+                      setResultsLayout(prev =>
+                        prev === 'grid' ? 'list' : 'grid',
+                      )
+                    }
+                    style={styles.layoutToggleBtn}
+                    activeOpacity={0.85}
+                    accessibilityLabel={
+                      resultsLayout === 'grid'
+                        ? 'מעבר לתצוגת רשימה'
+                        : 'מעבר לתצוגת רשת'
+                    }
+                    accessibilityRole="button">
+                    <Image
+                      source={
+                        resultsLayout === 'grid'
+                          ? require('../assets/swipereight.png')
+                          : require('../assets/swiperleft.png')
+                      }
+                      style={styles.layoutToggleIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
                 </View>
-              ) : results.length > 0 ? (
-                <>
-                  {results.map(listing =>
-                    resultsLayout === 'grid'
-                      ? renderGridCard(listing)
-                      : renderListCard(listing),
-                  )}
-                </>
-              ) : emptyMessage ? (
-                <Text style={styles.hintText}>{emptyMessage}</Text>
-              ) : null}
-            </ScrollView>
+              </View>
+            ) : null}
           </View>
-        </KeyboardAvoidingView>
+
+          {error ? (
+            <Text style={[styles.errorText, {textAlign: 'left'}]}>{error}</Text>
+          ) : null}
+
+          <ScrollView
+            style={styles.resultsScroll}
+            contentContainerStyle={[
+              styles.resultsContent,
+              !hasSearchedWithQuery && !loading
+                ? styles.resultsContentWelcome
+                : resultsLayout === 'grid'
+                  ? styles.resultsContentGrid
+                  : styles.resultsContentList,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+            dataSet={
+              Platform.OS === 'web' ? {class: 'pi-ai-scroll'} : undefined
+            }>
+            {loading && results.length === 0 && !emptyMessage ? (
+              <View style={styles.resultsLoadingWrap}>
+                <ActivityIndicator color={Colors.blue100} size="large" />
+              </View>
+            ) : !hasSearchedWithQuery && !loading ? (
+              <View style={styles.welcomeColumn}>
+                <Image
+                  source={require('../assets/home-ai/צילום_מסך_2026-04-27_124444-removebg-preview.png')}
+                  style={styles.welcomeHeroImage}
+                  resizeMode="contain"
+                />
+                <Text
+                  style={styles.welcomePromptTitle}
+                  maxFontSizeMultiplier={1.35}>
+                  תארו מה אתם מחפשים
+                </Text>
+                <Text
+                  style={styles.welcomePromptExample}
+                  maxFontSizeMultiplier={1.35}>
+                  דירת 3 חדרים בתל אביב להשכרה עם נוף לים…
+                </Text>
+                {emptyMessage ? (
+                  <Text
+                    style={[
+                      styles.hintText,
+                      styles.welcomeNoCatalogHint,
+                      {textAlign: 'left'},
+                    ]}>
+                    {emptyMessage}
+                  </Text>
+                ) : null}
+              </View>
+            ) : results.length > 0 ? (
+              <>
+                {results.map(listing =>
+                  resultsLayout === 'grid'
+                    ? renderGridCard(listing)
+                    : renderListCard(listing),
+                )}
+              </>
+            ) : emptyMessage ? (
+              <Text style={[styles.hintText, {textAlign: 'left'}]}>
+                {emptyMessage}
+              </Text>
+            ) : null}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 
@@ -802,7 +823,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   topBar: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -845,19 +866,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 6,
   },
-  /** Grid/list control below search field, aligned to the physical right. */
+  /** Grid/list control below search field, aligned to the RTL start side. */
   layoutToggleRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    writingDirection: 'ltr',
+    writingDirection: 'rtl',
   },
   /** Count (RTL) immediately to the left of the view-toggle icon, both on the end side. */
   layoutToggleEndGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     flexShrink: 1,
     minWidth: 0,
     gap: 6,
@@ -868,7 +887,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   /** Icon only — no pill/border; comfortable tap target. */
@@ -886,6 +904,9 @@ const styles = StyleSheet.create({
   },
   /** Same pattern as ChatScreen add-members / FollowHub search pill (48px, icon right). */
   searchFieldWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     width: '100%',
     minHeight: 48,
     height: 48,
@@ -897,44 +918,23 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   searchFieldInput: {
-    width: '100%',
     minHeight: 48,
     color: Colors.white100,
     fontSize: 16,
+    flex: 1,
     fontFamily: 'Rubik-Regular',
-    /* Room for left inset art (physical left) + search icon (right) */
-    paddingLeft: 72,
-    paddingRight: 46,
-    paddingVertical: 10,
-    textAlign: 'right',
     writingDirection: 'rtl',
-  },
-  searchFieldLeftArt: {
-    position: 'absolute',
-    left: 6,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 1,
+    textAlign: 'right',
+    marginLeft: 10,
   },
   searchFieldLeftArtImage: {
     height: 22,
     width: 56,
     ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
   },
-  searchFieldIconBtn: {
-    position: 'absolute',
-    right: 10,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 4,
-  },
   errorText: {
     color: Colors.grey200,
     fontSize: 14,
-    textAlign: 'right',
     marginBottom: 8,
   },
   resultsScroll: {
@@ -1002,17 +1002,17 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 8,
   },
-  /** Row: heart sits to the left of chip/badge (`justifyContent: 'flex-end'`, `writingDirection: 'ltr'`). */
+  /** Row: heart and badges follow the app's RTL layout direction. */
   listResultPurposeRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
     gap: 8,
     rowGap: 6,
     marginTop: 2,
-    writingDirection: 'ltr',
+    writingDirection: 'rtl',
   },
   listResultHeartInPurposeRow: {
     width: 32,
@@ -1072,7 +1072,6 @@ const styles = StyleSheet.create({
   listResultMid: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'flex-end',
     justifyContent: 'center',
     gap: 4,
     overflow: 'visible',
@@ -1083,15 +1082,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
-    textAlign: 'right',
     width: '100%',
     writingDirection: 'rtl',
   },
   listResultAddressRow: {
     width: '100%',
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
     gap: 4,
   },
   listResultAddress: {
@@ -1101,7 +1097,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 21,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
   listResultLocationIcon: {
@@ -1130,7 +1125,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     gap: 4,
     width: '100%',
     marginTop: 6,
@@ -1176,7 +1170,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.2,
-    textAlign: 'right',
     writingDirection: 'rtl',
     flexShrink: 0,
     ...Platform.select({
@@ -1185,9 +1178,7 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  listResultStatTextInline: {
-    textAlign: 'right',
-  },
+  listResultStatTextInline: {},
   listResultStatAptTextWrap: {
     flexShrink: 0,
     ...Platform.select({
@@ -1280,7 +1271,6 @@ const styles = StyleSheet.create({
     color: Colors.grey200,
     fontSize: 13,
     lineHeight: 20,
-    textAlign: 'right',
     writingDirection: 'rtl',
     width: '100%',
   },
