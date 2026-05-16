@@ -646,7 +646,10 @@ export default function App() {
                   setProfileReturnScreen(screenName.tikTokFeed);
                   setProfileUser(
                     user && typeof user === 'object'
-                      ? {...user, _fromTikTokPost: true}
+                      ? enrichListingForUserProfile({
+                          ...user,
+                          _fromTikTokPost: true,
+                        })
                       : user,
                   );
                   // Clear App-level trigger so remounting the feed after profile back does not run
@@ -1774,18 +1777,8 @@ export default function App() {
             {currentScreen === screenName.subscriptionForm && (
               <SubscriptionFormScreen
                 onClose={() => setCurrentScreen(screenName.subscription)}
-                onNext={(
-                  subscriptionId,
-                  email,
-                  verificationCode,
-                  localProfileImage,
-                ) => {
-                  setSubscriptionData({
-                    subscriptionId,
-                    email,
-                    verificationCode,
-                    localProfileImage,
-                  });
+                onNext={draft => {
+                  setSubscriptionData(draft);
                   setCurrentScreen(screenName.verification);
                 }}
                 subscriptionType={subscriptionTypes.broker}
@@ -1794,18 +1787,8 @@ export default function App() {
             {currentScreen === screenName.subscriptionFormCompany && (
               <SubscriptionFormScreen
                 onClose={() => setCurrentScreen(screenName.subscriptionCompany)}
-                onNext={(
-                  subscriptionId,
-                  email,
-                  verificationCode,
-                  localProfileImage,
-                ) => {
-                  setSubscriptionData({
-                    subscriptionId,
-                    email,
-                    verificationCode,
-                    localProfileImage,
-                  });
+                onNext={draft => {
+                  setSubscriptionData(draft);
                   setCurrentScreen(screenName.verificationCompany);
                 }}
                 subscriptionType={subscriptionTypes.company}
@@ -1816,18 +1799,8 @@ export default function App() {
                 onClose={() =>
                   setCurrentScreen(screenName.subscriptionProfessional)
                 }
-                onNext={(
-                  subscriptionId,
-                  email,
-                  verificationCode,
-                  localProfileImage,
-                ) => {
-                  setSubscriptionData({
-                    subscriptionId,
-                    email,
-                    verificationCode,
-                    localProfileImage,
-                  });
+                onNext={draft => {
+                  setSubscriptionData(draft);
                   setCurrentScreen(screenName.verificationProfessional);
                 }}
                 subscriptionType={subscriptionTypes.professional}
@@ -1836,7 +1809,10 @@ export default function App() {
             {currentScreen === screenName.verification && (
               <VerificationScreen
                 onClose={() => setCurrentScreen(screenName.subscriptionForm)}
-                onNext={() => setCurrentScreen(screenName.verificationCode)}
+                onVerified={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntro);
+                }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
                   setCurrentScreen(screenName.ratingIntro);
@@ -1844,6 +1820,8 @@ export default function App() {
                 subscriptionType={subscriptionTypes.broker}
                 email={subscriptionData?.email}
                 subscriptionId={subscriptionData?.subscriptionId}
+                pendingSubmit={subscriptionData?.pendingSubmit}
+                localProfileImage={subscriptionData?.localProfileImage}
               />
             )}
             {currentScreen === screenName.verificationCompany && (
@@ -1851,9 +1829,10 @@ export default function App() {
                 onClose={() =>
                   setCurrentScreen(screenName.subscriptionFormCompany)
                 }
-                onNext={() =>
-                  setCurrentScreen(screenName.verificationCodeCompany)
-                }
+                onVerified={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntroCompany);
+                }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
                   setCurrentScreen(screenName.ratingIntroCompany);
@@ -1861,6 +1840,8 @@ export default function App() {
                 subscriptionType={subscriptionTypes.company}
                 email={subscriptionData?.email}
                 subscriptionId={subscriptionData?.subscriptionId}
+                pendingSubmit={subscriptionData?.pendingSubmit}
+                localProfileImage={subscriptionData?.localProfileImage}
               />
             )}
             {currentScreen === screenName.verificationProfessional && (
@@ -1868,9 +1849,10 @@ export default function App() {
                 onClose={() =>
                   setCurrentScreen(screenName.subscriptionFormProfessional)
                 }
-                onNext={() =>
-                  setCurrentScreen(screenName.verificationCodeProfessional)
-                }
+                onVerified={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntroProfessional);
+                }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
                   setCurrentScreen(screenName.ratingIntroProfessional);
@@ -1878,6 +1860,8 @@ export default function App() {
                 subscriptionType={subscriptionTypes.professional}
                 email={subscriptionData?.email}
                 subscriptionId={subscriptionData?.subscriptionId}
+                pendingSubmit={subscriptionData?.pendingSubmit}
+                localProfileImage={subscriptionData?.localProfileImage}
               />
             )}
             {currentScreen === screenName.verificationCode && (

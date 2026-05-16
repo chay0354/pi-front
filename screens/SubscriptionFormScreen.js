@@ -19,7 +19,6 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
-import {submitSubscription} from '../utils/api';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
 import {flexEnd, flexStart} from '../index';
 
@@ -395,6 +394,8 @@ const SubscriptionFormScreen = ({
                 specializations: selectedSpecializations,
               }),
         agreedToTerms: true,
+        // Step 2 sends the email via resend-code; never on this submit.
+        deferVerificationEmail: true,
       };
 
       // Prepare files (profile pic chosen on this screen → uploaded to profile-pics when you press Next)
@@ -438,39 +439,22 @@ const SubscriptionFormScreen = ({
       );
       if (video && activeTab === 'video') files.video = video;
 
-      // Submit to backend
-      const response = await submitSubscription(formData, files);
+      const userEmail =
+        subscriptionType === subscriptionTypes.company ? companyEmail : email;
+      const localProfileImage =
+        (companyLogo && companyLogo.uri) ||
+        (profilePicture && profilePicture.uri) ||
+        null;
 
-      console.log('Form submission response:', response);
-
-      if (response && response.success) {
-        const userEmail =
-          subscriptionType === subscriptionTypes.company ? companyEmail : email;
-        console.log('Navigating to verification screen with:', {
-          subscriptionId: response.subscriptionId,
+      // Defer API submit until step 2 "שלח קוד אימות" — avoids email on screen open.
+      if (onNext) {
+        onNext({
           email: userEmail,
-          verificationCode: response.verificationCode,
+          localProfileImage,
+          pendingSubmit: {formData, files},
         });
-
-        // Store email and subscription ID for verification.
-        // Also pass the local profile/logo URI so later screens can show
-        // the user's image even before the server URL is fetched.
-        const localProfileImage =
-          (companyLogo && companyLogo.uri) ||
-          (profilePicture && profilePicture.uri) ||
-          null;
-        if (onNext) {
-          onNext(
-            response.subscriptionId,
-            userEmail,
-            response.verificationCode,
-            localProfileImage,
-          );
-        } else {
-          console.error('onNext callback is not defined!');
-        }
       } else {
-        throw new Error('Form submission failed - no success response');
+        console.error('onNext callback is not defined!');
       }
     } catch (error) {
       console.error('Error submitting form:', error);

@@ -190,9 +190,8 @@ const Home = ({
     />
   );
 
-  // Android: horizontal ScrollViews (category carousel) mis-handle touches inside a 3D
-  // transformed ancestor (perspective + rotateY). Keep the same opacity crossfade; skip 3D on Android only.
-  const use3dFlip = Platform.OS !== 'android';
+  // Horizontal carousel breaks inside 3D transforms on Android and web; opacity-only flip there.
+  const use3dFlip = Platform.OS === 'ios';
   const frontTransform = use3dFlip
     ? [{perspective: 1200}, {rotateY: frontRotate}]
     : undefined;

@@ -1,3 +1,4 @@
+import './i18nManagerWebPatch';
 import './rtlInit';
 import {registerRootComponent} from 'expo';
 import {I18nManager} from 'react-native';

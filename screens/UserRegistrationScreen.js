@@ -13,6 +13,7 @@ import {
   I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
@@ -34,8 +35,12 @@ const UserRegistrationScreen = ({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [profileImage, setProfileImage] = useState(null);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const MIN_PASSWORD_LENGTH = 8;
   const PROFILE_PLACEHOLDER = require('../assets/add-image-1.png');
   const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
   const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
@@ -90,6 +95,16 @@ const UserRegistrationScreen = ({
       setErrorMessage('אנא הזן מספר טלפון');
       return;
     }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setErrorMessage(
+        `הסיסמה חייבת להכיל לפחות ${MIN_PASSWORD_LENGTH} תווים`,
+      );
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('הסיסמאות אינן תואמות');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -117,6 +132,7 @@ const UserRegistrationScreen = ({
           name,
           phone: phoneTrim,
           profilePictureUrl,
+          password,
         });
       } catch (regErr) {
         console.error('registerRegularUser threw:', regErr);
@@ -223,6 +239,52 @@ const UserRegistrationScreen = ({
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
+                  autoCapitalize="none"
+                  textAlign="left"
+                />
+              </View>
+
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>סיסמה</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <View style={styles.passwordRow}>
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(v => !v)}
+                    style={styles.passwordToggle}
+                    activeOpacity={0.8}>
+                    <MaterialCommunityIcons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="בחרו סיסמה"
+                    placeholderTextColor="rgba(255,255,255,0.35)"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    textAlign="left"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>אימות סיסמה</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="הזינו שוב את הסיסמה"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   textAlign="left"
                 />
@@ -444,6 +506,35 @@ const styles = StyleSheet.create({
     height: 52,
     textAlign: 'left',
     writingDirection: 'rtl',
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#8C85B3',
+    borderRadius: 1000,
+    height: 52,
+    paddingLeft: 10,
+    paddingRight: 16,
+    overflow: 'hidden',
+  },
+  passwordToggle: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 20,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
+    height: '100%',
+    backgroundColor: 'transparent',
   },
   phoneRow: {
     flexDirection: 'row',

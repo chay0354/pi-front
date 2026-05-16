@@ -29,6 +29,8 @@ import {
   cleanAddress,
   purposeLabel,
   shouldShowListingPiRating,
+  shouldShowCommercialLogoBadge,
+  getCompanyLogoUrlFromListing,
 } from '../utils/listingGridCardFigma';
 import {flexEnd, flexStart} from '../index';
 
@@ -55,6 +57,8 @@ const ListingGridCardFigma = ({
     showPreSaleBadge,
     cardPriceLabel,
     profileUri,
+    showCommercialLogo,
+    commercialLogoUrl,
     showPiRating,
     piBadgeImage,
     dotCount,
@@ -73,7 +77,12 @@ const ListingGridCardFigma = ({
       ? String(listing?.project_name || '').trim() || formatPriceHe(listing)
       : formatPriceHe(listing);
     const pUri = getUserProfileImageUrl(listing);
-    const showPi = shouldShowListingPiRating(listing);
+    const showCommercialLogo = shouldShowCommercialLogoBadge(listing);
+    const commercialLogoUrl = showCommercialLogo
+      ? getCompanyLogoUrlFromListing(listing)
+      : null;
+    const showPi =
+      shouldShowListingPiRating(listing) && !showCommercialLogo;
     const badgeImg = displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
     const dCount = g.length > 0 ? Math.min(5, g.length) : primary ? 1 : 0;
     const b = st.find(s => s.key === 'buildings');
@@ -87,6 +96,8 @@ const ListingGridCardFigma = ({
       showPreSaleBadge: preSale,
       cardPriceLabel: priceLabel,
       profileUri: pUri,
+      showCommercialLogo: showCommercialLogo && !!commercialLogoUrl,
+      commercialLogoUrl,
       showPiRating: showPi,
       piBadgeImage: badgeImg,
       dotCount: dCount,
@@ -246,10 +257,24 @@ const ListingGridCardFigma = ({
         <View
           style={[
             styles.gridCardTopRowFigma,
-            !showPiRating && styles.gridCardTopRowFigmaNoPi,
-            !showPiRating && {justifyContent: flexEnd},
+            !showPiRating &&
+              !showCommercialLogo &&
+              styles.gridCardTopRowFigmaNoPi,
+            !showPiRating &&
+              !showCommercialLogo && {justifyContent: flexEnd},
           ]}>
-          {showPiRating ? (
+          {showCommercialLogo ? (
+            <View
+              style={styles.gridCardCommercialLogoWrap}
+              pointerEvents="box-none">
+              <Image
+                source={{uri: commercialLogoUrl}}
+                style={styles.gridCardCommercialLogo}
+                resizeMode="cover"
+                accessibilityLabel="לוגו חברה"
+              />
+            </View>
+          ) : showPiRating ? (
             <View style={styles.gridCardPiBadge} pointerEvents="box-none">
               <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
               <Image
@@ -475,6 +500,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flexShrink: 0,
+  },
+  gridCardCommercialLogoWrap: {
+    width: 87,
+    height: 87,
+    borderRadius: 43.5,
+    overflow: 'hidden',
+    backgroundColor: '#343347',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridCardCommercialLogo: {
+    width: '100%',
+    height: '100%',
+    ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   gridCardPiBadge: {
     flexDirection: 'row',

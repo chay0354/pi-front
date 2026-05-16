@@ -60,11 +60,27 @@ export const companySheetAdListingCategoryIds = new Set([
   2, 4, 6, 7, 8, 10, 12,
 ]);
 
-/** Requires backend ALLOW_SKIP_EMAIL_VERIFICATION=1. Also enable via EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY=1 for non-__DEV__ builds. */
-export const showSkipEmailVerificationTest =
-  (typeof __DEV__ !== 'undefined' && __DEV__) ||
+const skipEmailVerifyEnvFlag =
   process.env.EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY === 'true' ||
   process.env.EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY === '1';
+
+function isLocalApiBase() {
+  const base = String(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001');
+  return (
+    /localhost|127\.0\.0\.1|10\.0\.2\.2/i.test(base) ||
+    (typeof __DEV__ !== 'undefined' && __DEV__)
+  );
+}
+
+/**
+ * "דלג על אימות מייל (בדיקה)" — backend POST /api/subscription/verify-skip-test.
+ * Production Vercel returns 403 unless ALLOW_SKIP_EMAIL_VERIFICATION=1 there.
+ * In __DEV__, show only when API is local (typical pi-back on :3000); use
+ * EXPO_PUBLIC_SHOW_SKIP_EMAIL_VERIFY=1 to force UI on remote API (needs matching backend env).
+ */
+export const showSkipEmailVerificationTest =
+  skipEmailVerifyEnvFlag ||
+  (typeof __DEV__ !== 'undefined' && __DEV__ && isLocalApiBase());
 
 export const userCategories = [
   // Figma order (node 682:90532): 10 categories, keep existing carousel animation/layout unchanged.

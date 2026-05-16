@@ -34,7 +34,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar, SharePostSheet} from '../components';
 import FeedBottomBar from '../components/FeedBottomBar';
-import {SvgXml} from 'react-native-svg';
+import {SvgXml} from '../utils/svgXml';
 import {Colors} from '../constants/styles';
 import {officeSidebarSvgs} from '../assets/office-filters/svgIcons';
 import {bnbSidebarSvgs} from '../assets/bnb-filters/svgIcons';
@@ -62,6 +62,8 @@ import {
   uploadFile,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
+import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {flexEnd, flexStart} from '../index';
 
 import {
@@ -1711,6 +1713,15 @@ const TikTokFeedScreen = ({
                 listing.feed_post === 't';
               const isPostListing = isPostByType || hasPostMediaMarker;
 
+              const landIds =
+                listingCategory === 7
+                  ? parseLandBlockParcelFromListing(listing)
+                  : {land_parcel: null, land_block: null};
+              const landOfferParcels =
+                listingCategory === 7
+                  ? normalizeLandOfferParcels(listing)
+                  : [];
+
               return {
                 id: listing.id,
                 subscription_type: listing.subscription_type || null,
@@ -1726,8 +1737,12 @@ const TikTokFeedScreen = ({
                 isTextOnlyPost: !!isTextOnly,
                 displayOption: normalizeListingDisplayOption(listing),
                 location:
-                  String(listing.location || listing.address || '').trim() ||
-                  'מיקום לא זמין',
+                  String(
+                    listing.location ||
+                      listing.land_address ||
+                      listing.address ||
+                      '',
+                  ).trim() || 'מיקום לא זמין',
                 address: String(listing.address || '').trim(), // for city/location filter
                 name: listing.name || listing.title || null,
                 title: listing.title || listing.name || null,
@@ -1747,6 +1762,20 @@ const TikTokFeedScreen = ({
                   listing.agricultural_land,
                 ),
                 landOwnership: normalizeLandOwnership(listing.land_ownership),
+                plan_approval: listing.plan_approval || null,
+                land_in_mortgage: listing.land_in_mortgage || null,
+                permit: listing.permit || null,
+                agricultural_land: listing.agricultural_land || null,
+                land_ownership: listing.land_ownership || null,
+                land_address: listing.land_address || null,
+                land_parcel:
+                  listing.land_parcel || landIds.land_parcel || null,
+                land_block: listing.land_block || landIds.land_block || null,
+                company_offers_land_sizes:
+                  landOfferParcels.length > 0
+                    ? landOfferParcels
+                    : listing.company_offers_land_sizes || null,
+                proposed_land: listing.proposed_land || null,
                 description: listing.description || '',
                 propertyType:
                   rawPropertyType === 'office'
@@ -1882,6 +1911,29 @@ const TikTokFeedScreen = ({
                 hospitality_nature:
                   listing.hospitality_nature != null
                     ? String(listing.hospitality_nature).trim()
+                    : null,
+                price_per_night:
+                  listing.price_per_night != null
+                    ? listing.price_per_night
+                    : null,
+                accommodation_offers:
+                  listing.accommodation_offers &&
+                  typeof listing.accommodation_offers === 'object'
+                    ? listing.accommodation_offers
+                    : null,
+                service_facility:
+                  listing.service_facility &&
+                  typeof listing.service_facility === 'object'
+                    ? listing.service_facility
+                    : null,
+                cancellation_policy:
+                  listing.cancellation_policy != null
+                    ? listing.cancellation_policy
+                    : null,
+                contact_details:
+                  listing.contact_details &&
+                  typeof listing.contact_details === 'object'
+                    ? listing.contact_details
                     : null,
               };
             });
@@ -3642,6 +3694,9 @@ const TikTokFeedScreen = ({
     !isPostVideo(currentVideo) &&
     String(currentVideo.subscription_type || '').toLowerCase() ===
       subscriptionTypes.company;
+  /** קרקעות (7) + company — Figma 1:171137 (purpose, price, location; not building stats). */
+  const isCompanyLandListing =
+    isCompanyListing && Number(currentVideo?.category) === 7;
   const isBrokerListing =
     currentVideo &&
     !isPostVideo(currentVideo) &&
@@ -3675,6 +3730,12 @@ const TikTokFeedScreen = ({
   ).trim();
   const brokerLocationText = String(
     currentVideo?.address || 'מיקום לא זמין',
+  ).trim();
+  const companyLandLocationText = String(
+    currentVideo?.location ||
+      currentVideo?.land_address ||
+      currentVideo?.address ||
+      'מיקום לא זמין',
   ).trim();
   const brokerPriceText = (() => {
     const explicit = String(currentVideo?.price || '').trim();
@@ -4444,6 +4505,9 @@ const TikTokFeedScreen = ({
                   const isCompanyListing =
                     String(listing?.subscription_type || '').toLowerCase() ===
                     'company';
+                  const isCompanyLandListing =
+                    isCompanyListing &&
+                    (Number(listing?.category) === 7 || isLandCategory);
                   const gd =
                     listing?.general_details &&
                     typeof listing.general_details === 'object'
@@ -4546,7 +4610,13 @@ const TikTokFeedScreen = ({
                               />
                             )}
                           </TouchableOpacity>
-                          {isCompanyListing ? (
+                          {isCompanyLandListing ? (
+                            <View style={styles.listCardPurposeBadge}>
+                              <Text style={styles.listCardPurposeBadgeText}>
+                                {listing.purpose || 'למכירה'}
+                              </Text>
+                            </View>
+                          ) : isCompanyListing ? (
                             listing.saleAtPresale ? (
                               <Image
                                 source={require('../assets/pre-sale.png')}
@@ -4562,12 +4632,39 @@ const TikTokFeedScreen = ({
                             </View>
                           )}
                         </View>
-                        <Text style={styles.listCardAddress} numberOfLines={2}>
-                          {listing.address ||
-                            listing.location ||
-                            'תל אביב, שד׳ חן 90'}
-                        </Text>
-                        {isCompanyListing ? (
+                        {isCompanyLandListing ? (
+                          <>
+                            <Text
+                              style={styles.listCardLandPrice}
+                              numberOfLines={1}>
+                              {listing.price || '₪0'}
+                            </Text>
+                            <View style={styles.listCardLocationRow}>
+                              <Text
+                                style={styles.listCardLocationText}
+                                numberOfLines={2}>
+                                {listing.location ||
+                                  listing.land_address ||
+                                  listing.address ||
+                                  'מיקום לא זמין'}
+                              </Text>
+                              <Image
+                                source={require('../assets/liked-ads/location.png')}
+                                style={styles.listCardLocationIcon}
+                                resizeMode="contain"
+                              />
+                            </View>
+                          </>
+                        ) : (
+                          <Text
+                            style={styles.listCardAddress}
+                            numberOfLines={2}>
+                            {listing.address ||
+                              listing.location ||
+                              'תל אביב, שד׳ חן 90'}
+                          </Text>
+                        )}
+                        {isCompanyListing && !isCompanyLandListing ? (
                           <View style={styles.listCardStatsRow}>
                             <View style={styles.listCardStatItem}>
                               <Text style={styles.listCardStatText}>
@@ -4612,7 +4709,7 @@ const TikTokFeedScreen = ({
                               />
                             </View>
                           </View>
-                        ) : (
+                        ) : !isCompanyListing ? (
                           <View style={styles.listCardLocationRow}>
                             <Text
                               style={styles.listCardLocationText}
@@ -4627,7 +4724,7 @@ const TikTokFeedScreen = ({
                               resizeMode="contain"
                             />
                           </View>
-                        )}
+                        ) : null}
                       </View>
                     </TouchableOpacity>
                   );
@@ -5003,7 +5100,62 @@ const TikTokFeedScreen = ({
                   },
                 ]}
                 pointerEvents="box-none">
-                {isCompanyListing ? (
+                {isCompanyLandListing ? (
+                  <View
+                    style={styles.brokerOverlayInfo}
+                    pointerEvents="box-none">
+                    <View style={styles.brokerTopRow} pointerEvents="box-none">
+                      <TouchableOpacity
+                        style={[
+                          styles.actionIconButton,
+                          styles.brokerHeartButton,
+                        ]}
+                        onPress={() => toggleLiked(currentVideo)}>
+                        <Image
+                          source={TIKTOK_OVERLAY_ICONS.heart}
+                          style={[
+                            styles.actionIcon,
+                            styles.brokerActionIcon,
+                            isItemLiked(currentVideo) && styles.actionIconLiked,
+                          ]}
+                          tintColor={
+                            isItemLiked(currentVideo)
+                              ? 'rgba(255, 196, 10, 1)'
+                              : undefined
+                          }
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.brokerPurposePill}>
+                        <Text style={styles.brokerPurposeText}>
+                          {brokerPurposeText}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={styles.brokerPriceText}
+                      numberOfLines={1}
+                      pointerEvents="none">
+                      {brokerPriceText}
+                    </Text>
+                    <View
+                      style={styles.brokerLocationRow}
+                      pointerEvents="box-none">
+                      <Image
+                        source={TIKTOK_OVERLAY_ICONS.location}
+                        style={styles.brokerLocationIcon}
+                        resizeMode="contain"
+                        pointerEvents="none"
+                      />
+                      <Text
+                        style={styles.brokerLocationText}
+                        numberOfLines={2}
+                        pointerEvents="none">
+                        {companyLandLocationText}
+                      </Text>
+                    </View>
+                  </View>
+                ) : isCompanyListing ? (
                   <View
                     style={styles.companyOverlayInfo}
                     pointerEvents="box-none">
@@ -6353,6 +6505,14 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
     textAlign: 'right',
+  },
+  listCardLandPrice: {
+    color: '#F7F3E6',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'right',
+    marginBottom: 4,
   },
   listCardLocationRow: {
     flexDirection: 'row-reverse',

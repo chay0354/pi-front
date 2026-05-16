@@ -44,6 +44,8 @@ import {
   brokerPiRatingFromListing,
   shouldShowListingPiRating,
   displayPiRatingFromReviews,
+  shouldShowCommercialLogoBadge,
+  getCompanyLogoUrlFromListing,
 } from '../utils/listingGridCardFigma';
 import {flexEnd, flexStart} from '../index';
 
@@ -389,7 +391,12 @@ const PiAiSearchModal = ({
         ? piDisplayBySubId[subKey]
         : brokerPiRatingFromListing(listing);
     const piBadgeImage = displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
-    const showPiRating = shouldShowListingPiRating(listing);
+    const showCommercialLogo = shouldShowCommercialLogoBadge(listing);
+    const commercialLogoUrl = showCommercialLogo
+      ? getCompanyLogoUrlFromListing(listing)
+      : null;
+    const showPiRating =
+      shouldShowListingPiRating(listing) && !showCommercialLogo;
 
     const stats = buildCardStats(listing);
     const buildingsStat = stats.find(s => s.key === 'buildings');
@@ -610,7 +617,20 @@ const PiAiSearchModal = ({
             )}
           </View>
         </View>
-        {showPiRating ? (
+        {showCommercialLogo && commercialLogoUrl ? (
+          <View style={styles.listResultActions}>
+            <View
+              style={styles.listResultCommercialLogoWrap}
+              pointerEvents="box-none">
+              <Image
+                source={{uri: commercialLogoUrl}}
+                style={styles.listResultCommercialLogo}
+                resizeMode="cover"
+                accessibilityLabel="לוגו חברה"
+              />
+            </View>
+          </View>
+        ) : showPiRating ? (
           <View style={styles.listResultActions}>
             <View style={styles.listResultPiRow} pointerEvents="box-none">
               <Text style={styles.listResultPiText}>{String(displayPi)}</Text>
@@ -1239,6 +1259,23 @@ const styles = StyleSheet.create({
     height: 60,
     marginLeft: -14,
     marginTop: 0,
+    ...Platform.select({
+      web: {objectFit: 'cover'},
+      default: {},
+    }),
+  },
+  listResultCommercialLogoWrap: {
+    width: 87,
+    height: 87,
+    borderRadius: 43.5,
+    overflow: 'hidden',
+    backgroundColor: '#343347',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listResultCommercialLogo: {
+    width: '100%',
+    height: '100%',
     ...Platform.select({
       web: {objectFit: 'cover'},
       default: {},

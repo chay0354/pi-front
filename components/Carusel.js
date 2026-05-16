@@ -37,13 +37,11 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
       : item.imageRight;
 
   const onPress = useCallback(() => {
-    if (
-      (isCenter || index === 0 || index === listLength - 1) &&
-      onCategorySelect
-    ) {
-      onCategorySelect(item.id);
-    } else {
+    if (!isCenter) {
       scrollToIndex(index);
+    }
+    if (isCenter || index === 0 || index === listLength - 1) {
+      onCategorySelect?.(item.id);
     }
   }, [isCenter, index, listLength, onCategorySelect, scrollToIndex, item.id]);
 
@@ -55,7 +53,8 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
     <TouchableOpacity
       style={[styles.categoryItem, {width: itemWidth}]}
       onPress={onPress}
-      activeOpacity={0.7}>
+      activeOpacity={0.7}
+      delayPressIn={0}>
       <Image
         source={source}
         resizeMode="contain"
@@ -75,7 +74,6 @@ const Carusel = ({
   onCategorySelect,
 }) => {
   const {width: screenWidth} = useWindowDimensions();
-  // Use provided list or full list so all users can see all categories
   const list =
     categoriesList && categoriesList.length > 0
       ? categoriesList
@@ -83,7 +81,6 @@ const Carusel = ({
   const scrollViewRef = useRef(null);
   const hasInitialScrollDone = useRef(false);
   const lastScrollPositionRef = useRef(0);
-  /** Android: throttling onScroll setState avoids JS backlog that delays touch / scroll for seconds after a fling. */
   const androidScrollNextEmitRef = useRef(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const initialCenterIndex = Math.min(2, Math.max(0, list.length - 1));
@@ -95,34 +92,35 @@ const Carusel = ({
     onCategorySelectRef.current?.(id);
   }, []);
 
-  // Use real carousel viewport width for stable center math (web + native).
   const viewportWidth = carouselWidth > 0 ? carouselWidth : screenWidth;
   const itemWidth = viewportWidth > 0 ? viewportWidth / 3 : 120;
 
-  const runSnapToCenter = scrollPosition => {
-    if (viewportWidth <= 0) return;
-    const viewportCenter = scrollPosition + viewportWidth / 2;
-    let closestIndex = 0;
-    let minDistance = Infinity;
-    list.forEach((_, index) => {
-      const itemCenter = (index + 0.5) * itemWidth;
-      const distance = Math.abs(viewportCenter - itemCenter);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = index;
-      }
-    });
-    setCenterIndex(closestIndex);
-    const snapScrollX = Math.max(0, (closestIndex - 1) * itemWidth);
-    if (scrollViewRef.current && Math.abs(scrollPosition - snapScrollX) > 1) {
-      scrollViewRef.current.scrollTo({
-        x: snapScrollX,
-        // Android: animated correction fights the gesture handler and can leave the scroll view
-        // ignoring touches until the animation finishes.
-        animated: Platform.OS !== 'android',
+  const runSnapToCenter = useCallback(
+    scrollPosition => {
+      if (viewportWidth <= 0) return;
+      const viewportCenter = scrollPosition + viewportWidth / 2;
+      let closestIndex = 0;
+      let minDistance = Infinity;
+      list.forEach((_, index) => {
+        const itemCenter = (index + 0.5) * itemWidth;
+        const distance = Math.abs(viewportCenter - itemCenter);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = index;
+        }
       });
-    }
-  };
+      setCenterIndex(closestIndex);
+      const snapScrollX = Math.max(0, (closestIndex - 1) * itemWidth);
+      if (scrollViewRef.current && Math.abs(scrollPosition - snapScrollX) > 1) {
+        scrollViewRef.current.scrollTo({
+          x: snapScrollX,
+          animated: Platform.OS !== 'android',
+        });
+        lastScrollPositionRef.current = snapScrollX;
+      }
+    },
+    [viewportWidth, itemWidth, list],
+  );
 
   const handleScroll = useCallback(
     event => {
@@ -175,10 +173,7 @@ const Carusel = ({
   }, []);
 
   const handleScrollEndDrag = () => {
-    if (Platform.OS === 'web') {
-      runSnapToCenter(lastScrollPositionRef.current);
-    } else if (Platform.OS === 'android') {
-      // Short drags often never fire onMomentumScrollEnd; snap + sync center or touches stay wrong.
+    if (Platform.OS === 'android' || Platform.OS === 'web') {
       runSnapToCenter(lastScrollPositionRef.current);
     }
   };
@@ -193,16 +188,16 @@ const Carusel = ({
       if (!scrollViewRef.current || viewportWidth <= 0) {
         return;
       }
-      const scrollX = Math.max(0, (index - 1) * itemWidth);
-      scrollViewRef.current.scrollTo({
-        x: scrollX,
-        animated,
-      });
+      const maxIndex = Math.max(0, list.length - 1);
+      const clamped = Math.max(0, Math.min(index, maxIndex));
+      const scrollX = Math.max(0, (clamped - 1) * itemWidth);
+      setCenterIndex(clamped);
+      lastScrollPositionRef.current = scrollX;
+      scrollViewRef.current.scrollTo({x: scrollX, animated});
     },
-    [viewportWidth, itemWidth],
+    [viewportWidth, itemWidth, list.length],
   );
 
-  // Initial scroll once per mount: center the intended item when we have valid dimensions.
   useEffect(() => {
     if (viewportWidth <= 0 || hasInitialScrollDone.current) {
       return;
@@ -220,12 +215,12 @@ const Carusel = ({
       }
     };
 
-    // Delay so ScrollView has been laid out (web, Android, iOS)
     const t = setTimeout(runAfterLayout, 150);
     return () => clearTimeout(t);
   }, [viewportWidth, itemWidth, initialCenterIndex]);
 
   const snapInterval = itemWidth;
+  const contentWidth = Math.max(viewportWidth, list.length * itemWidth);
 
   const categoryIdsKey = list.map(c => c.id).join(',');
   const listRef = useRef(list);
@@ -257,7 +252,12 @@ const Carusel = ({
             setCarouselWidth(width);
           }
         }}
+        contentContainerStyle={[
+          styles.carouselContent,
+          {width: contentWidth, minWidth: contentWidth},
+        ]}
         horizontal
+        scrollEnabled
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
         snapToInterval={snapInterval}
@@ -269,7 +269,7 @@ const Carusel = ({
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
         scrollEventThrottle={Platform.OS === 'android' ? 64 : 16}
-        nestedScrollEnabled={Platform.OS === 'android'}
+        nestedScrollEnabled
         removeClippedSubviews={false}
         {...(Platform.OS === 'android' ? {overScrollMode: 'never'} : {})}>
         {list.map((item, index) => (
@@ -290,12 +290,19 @@ const Carusel = ({
 };
 
 const styles = StyleSheet.create({
+  carouselContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   categoryItem: {
     height: 220,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+    flexShrink: 0,
   },
   tikImageBase: {
     width: CATEGORY_SLOT_W,

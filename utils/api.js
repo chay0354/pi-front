@@ -7,50 +7,32 @@ import { Platform } from 'react-native';
 
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
-/** Strip trailing slashes so `${base}/api/...` never becomes `//api` (Vercel 308 + CORS issues). */
+/** Strip trailing slashes so `${base}/api/...` never becomes `//api`. */
 export function normalizeApiBaseUrl(url) {
   const s = String(url || '').trim().replace(/\/+$/, '');
-  return s || 'http://localhost:3000';
-}
-
-// On web: when opened via network IP (e.g. http://192.168.1.5:8084), use same host for API so it works from other devices
-export function getApiUrl() {
-  // if (isWeb && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-  //   return normalizeApiBaseUrl(`${window.location.protocol}//${window.location.hostname}:3000`);
-  // }
-  return normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
-}
-
-/**
- * On a physical device, localhost points at the phone — use the machine running Metro (LAN IP) or Android emulator host.
- */
-function getNativeApiUrl() {
-  const fromEnv = normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000');
-  const looksLocal = /localhost|127\.0\.0\.1/i.test(fromEnv);
-  if (!looksLocal) return fromEnv;
-
-  const debuggerHost =
-    Constants.expoGoConfig?.debuggerHost ||
-    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
-    Constants.manifest?.debuggerHost;
-  if (debuggerHost) {
-    const host = String(debuggerHost).split(':')[0];
-    if (host && !/^localhost$/i.test(host) && host !== '127.0.0.1') {
-      return normalizeApiBaseUrl(`http://${host}:3000`);
-    }
+  if (!s) {
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is missing. Set it in pi-front/.env and restart Expo (npx expo start -c).',
+    );
   }
-  if (Platform.OS === 'android') {
-    return normalizeApiBaseUrl('http://10.0.2.2:3000');
-  }
-  return fromEnv;
+  return s;
 }
 
-const API_URL = normalizeApiBaseUrl(isWeb ? getApiUrl() : getNativeApiUrl());
-// console.log('API_URL', API_URL);
-
-/** Resolved API base URL (for debugging broker search / connectivity). */
+/** API base URL — only from EXPO_PUBLIC_API_URL in pi-front/.env (see app.config.js extra.apiUrl). */
 export function getResolvedApiUrl() {
-  return isWeb ? getApiUrl() : getNativeApiUrl();
+  const fromEnv = String(process.env.EXPO_PUBLIC_API_URL || '').trim();
+  const fromExtra = String(Constants.expoConfig?.extra?.apiUrl || '').trim();
+  return normalizeApiBaseUrl(fromEnv || fromExtra);
+}
+
+const API_URL = getResolvedApiUrl();
+
+/** @deprecated Use getResolvedApiUrl — same value, from .env only */
+export const getApiUrl = getResolvedApiUrl;
+
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  console.log('[api] EXPO_PUBLIC_API_URL =', process.env.EXPO_PUBLIC_API_URL);
+  console.log('[api] API base =', API_URL);
 }
 
 const DEFAULT_API_TIMEOUT_MS = 30000;
@@ -105,6 +87,22 @@ export async function apiFetch(input, options = {}) {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
     if (externalSignal) externalSignal.removeEventListener?.('abort', onExternalAbort);
+  }
+}
+
+/** Parse JSON API bodies; surface clear errors when the server returns HTML (e.g. 404 route). */
+async function parseApiJsonResponse(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (response.status === 404) {
+      throw new Error(
+        'שירות ההתחברות לא זמין בשרת. יש לפרוס גרסה מעודכנת של pi-back (כולל /api/auth/login).',
+      );
+    }
+    throw new Error('תגובה לא תקינה מהשרת');
   }
 }
 
@@ -270,12 +268,15 @@ export const verifyEmail = async (
   email,
   verificationCode,
   subscriptionId = null,
+  password = null,
 ) => {
   try {
+    const body = {email, verificationCode, subscriptionId};
+    if (password) body.password = password;
     console.log('Calling verify API:', {
       email,
-      verificationCode,
       subscriptionId,
+      hasPassword: Boolean(password),
       API_URL,
     });
     const response = await apiFetch(`${API_URL}/api/subscription/verify`, {
@@ -283,11 +284,7 @@ export const verifyEmail = async (
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        email,
-        verificationCode,
-        subscriptionId,
-      }),
+      body: JSON.stringify(body),
     });
 
     // console.log('Verify API response status:', response.status);
@@ -310,21 +307,91 @@ export const verifyEmail = async (
 };
 
 /**
+ * B2B registration stage 2: save password before sending verification email.
+ * Prefer resendVerificationCode(subId, password) — works on deployed backends.
+ * This route exists only after pi-back is deployed with set-password handler.
+ */
+export const setSubscriptionPassword = async (subscriptionId, password) => {
+  const response = await apiFetch(`${API_URL}/api/subscription/set-password`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subscriptionId, password}),
+  });
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    if (response.status === 404) {
+      const err = new Error('set-password endpoint not available');
+      err.status = 404;
+      throw err;
+    }
+    throw new Error('Invalid response from set-password');
+  }
+  if (!response.ok || !data.success) {
+    const err = new Error(data.error || 'Failed to save password');
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+};
+
+/**
+ * B2B sign-in with email and password.
+ */
+export const loginWithPassword = async (email, password) => {
+  const emailNorm = String(email || '').trim().toLowerCase();
+  const pwd = String(password || '');
+  if (!emailNorm) {
+    throw new Error('אנא הזן כתובת מייל');
+  }
+  if (!pwd) {
+    throw new Error('אנא הזן סיסמה');
+  }
+
+  console.log('[api] loginWithPassword: request', {
+    email: emailNorm,
+    apiBase: API_URL,
+  });
+
+  const response = await apiFetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: emailNorm, password: pwd}),
+  });
+  const data = await parseApiJsonResponse(response);
+  console.log('[api] loginWithPassword: response', {
+    ok: response.ok,
+    status: response.status,
+    success: data?.success,
+  });
+  if (!response.ok || !data.success) {
+    const err = new Error(data.error || 'מייל או סיסמה שגויים');
+    err.code = data.code;
+    throw err;
+  }
+  return data;
+};
+
+/**
  * Test only: mark subscription verified without code. Backend must set ALLOW_SKIP_EMAIL_VERIFICATION=1.
  */
-export const verifyEmailSkipTest = async (email, subscriptionId) => {
+export const verifyEmailSkipTest = async (
+  email,
+  subscriptionId,
+  password = null,
+) => {
   if (!subscriptionId) {
     throw new Error('subscriptionId is required');
   }
+  const body = {email: email || undefined, subscriptionId};
+  if (password) body.password = password;
   const response = await apiFetch(`${API_URL}/api/subscription/verify-skip-test`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      email: email || undefined,
-      subscriptionId,
-    }),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -348,17 +415,35 @@ export const verifyEmailSkipTest = async (email, subscriptionId) => {
  * @param {string} email - User email
  * @returns {Promise} API response
  */
-export const resendVerificationCode = async (email, subscriptionId = null) => {
+export const resendVerificationCode = async (
+  email,
+  subscriptionId = null,
+  password = null,
+) => {
   try {
+    const body = {email, subscriptionId};
+    if (password) body.password = password;
+    console.log('[api] resendVerificationCode: request', {
+      email,
+      subscriptionId,
+      hasPassword: Boolean(password),
+      url: `${API_URL}/api/subscription/resend-code`,
+    });
     const response = await apiFetch(`${API_URL}/api/subscription/resend-code`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({email, subscriptionId}),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();
+    console.log('[api] resendVerificationCode: response', {
+      ok: response.ok,
+      status: response.status,
+      success: data?.success,
+      error: data?.error,
+    });
 
     if (!response.ok) {
       throw new Error(data.error || 'Failed to resend code');
@@ -366,7 +451,7 @@ export const resendVerificationCode = async (email, subscriptionId = null) => {
 
     return data;
   } catch (error) {
-    console.error('Error resending code:', error);
+    console.error('[api] resendVerificationCode: failed', error);
     throw error;
   }
 };
@@ -526,10 +611,24 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
  * returning the full subscription (with a real UUID `id`).
  * Idempotent: returns existing record if one is found by email.
  */
-export const registerRegularUser = async ({email, name = null, phone = null, profilePictureUrl = null} = {}) => {
+export const registerRegularUser = async ({
+  email,
+  name = null,
+  phone = null,
+  profilePictureUrl = null,
+  password = null,
+} = {}) => {
   const normalizedEmail = email && String(email).trim() ? String(email).trim().toLowerCase() : '';
+  const pwd = password != null ? String(password) : '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     return { success: false, error: 'Invalid email', subscription: null };
+  }
+  if (pwd.length < 8) {
+    return {
+      success: false,
+      error: 'הסיסמה חייבת להכיל לפחות 8 תווים',
+      subscription: null,
+    };
   }
   try {
     const response = await apiFetch(`${API_URL}/api/users/register-regular`, {
@@ -540,6 +639,7 @@ export const registerRegularUser = async ({email, name = null, phone = null, pro
         name,
         phone,
         profile_picture_url: profilePictureUrl,
+        password: pwd,
       }),
     });
     const data = await response.json().catch(() => ({}));

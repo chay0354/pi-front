@@ -245,7 +245,38 @@ export const shouldShowListingPiRating = listing => {
   const t = subscriptionTypeFromListing(listing);
   if (!t) return false;
   if (t === 'user') return false;
+  if (shouldShowCommercialLogoBadge(listing)) return false;
   return t === 'company' || t === 'broker' || t === 'professional';
+};
+
+export const isCommercialCategoryListing = listing =>
+  Number(listing?.category) === 8;
+
+/** מסחר (8): broker/company show office logo instead of Pi score. */
+export const shouldShowCommercialLogoBadge = listing => {
+  if (!isCommercialCategoryListing(listing)) return false;
+  const t = subscriptionTypeFromListing(listing);
+  return t === 'company' || t === 'broker';
+};
+
+export const getCompanyLogoUrlFromListing = listing => {
+  if (!listing || typeof listing !== 'object') return null;
+  const t = subscriptionTypeFromListing(listing);
+  const candidates = [
+    listing.company_logo_url,
+    listing.companyLogoUrl,
+    listing.creator_company_logo_url,
+    listing.creatorCompanyLogoUrl,
+    listing.logo_url,
+    listing.logoUrl,
+    listing.business_logo_url,
+    t === 'company' ? listing.creator_profile_image_url : null,
+    t === 'company' ? listing.creatorProfileImageUrl : null,
+  ];
+  for (const c of candidates) {
+    if (c != null && String(c).trim() !== '') return String(c).trim();
+  }
+  return null;
 };
 
 export const isPreSaleListing = listing => {

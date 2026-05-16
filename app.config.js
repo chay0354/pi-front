@@ -56,7 +56,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 6,
+      versionCode: 7,
       supportsRTL: true,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
@@ -93,8 +93,7 @@ module.exports = {
             compileSdkVersion: 34,
             targetSdkVersion: 34,
             minSdkVersion: 23,
-            // Must match RN 0.73 prebuild (see react-native/template/android/build.gradle: kotlin 1.8.x).
-            // Kotlin 1.9.x here has caused release Gradle failures on EAS for some projects.
+            ndkVersion: '26.1.10909125',
             kotlinVersion: '1.8.22',
           },
         },
@@ -102,6 +101,7 @@ module.exports = {
       withAndroidIndexDevEntry,
     ],
     extra: {
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || '',
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
       },

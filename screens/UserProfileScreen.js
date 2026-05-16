@@ -13,7 +13,6 @@ import {
   Platform,
   Alert,
   Share,
-  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
 import {SvgXml} from 'react-native-svg';
@@ -58,6 +57,10 @@ import {
 } from '../utils/heroNavFigmaIcons';
 import ProfileAvatar from '../components/ProfileAvatar';
 import BnbListingProfileContent from '../components/BnbListingProfileContent';
+import PartnersListingProfileContent from '../components/PartnersListingProfileContent';
+import CompanyLandListingProfileContent from '../components/CompanyLandListingProfileContent';
+import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
+import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {flexEnd, flexStart} from '../index';
 
 const TEAL = '#2DD4BF';
@@ -1165,7 +1168,43 @@ const UserProfileScreen = ({
   const listingCategoryNum = Number(user?.category ?? lastAd?.category ?? 0);
   const isBnbListingAdProfile =
     isListingFromFeed && !openedFromPost && listingCategoryNum === 5;
-  const showLocationMap = isListingFromFeed && !openedFromPost;
+  /** שותפים ad from feed (category 3, not a post) — Figma 9:145202 layout only for this case */
+  const isPartnersListingAdProfile =
+    isListingFromFeed &&
+    !openedFromPost &&
+    listingCategoryNum === 3 &&
+    !isPostListingRecord(lastAd || user);
+  /** קרקעות ad from feed (category 7) — Figma land profile for company and broker only */
+  const isLandListingAdProfile =
+    isListingFromFeed &&
+    !openedFromPost &&
+    listingCategoryNum === 7 &&
+    !isPostListingRecord(lastAd || user) &&
+    (isCompany || isBroker);
+  const isDedicatedListingAdProfile =
+    isBnbListingAdProfile ||
+    isPartnersListingAdProfile ||
+    isLandListingAdProfile;
+  const showLandProfileContactAndReviews = isLandListingAdProfile;
+  const showListingContactAndReviews =
+    !isDedicatedListingAdProfile || showLandProfileContactAndReviews;
+
+  const landListingPayload = React.useMemo(() => {
+    if (!isLandListingAdProfile || !lastAd) return lastAd;
+    const ids = parseLandBlockParcelFromListing(lastAd);
+    const parcels = normalizeLandOfferParcels(lastAd);
+    return {
+      ...lastAd,
+      land_parcel: ids.land_parcel ?? lastAd.land_parcel ?? null,
+      land_block: ids.land_block ?? lastAd.land_block ?? null,
+      company_offers_land_sizes:
+        parcels.length > 0
+          ? parcels
+          : lastAd.company_offers_land_sizes ?? lastAd.companyOffersLandSizes ?? null,
+    };
+  }, [isLandListingAdProfile, lastAd]);
+  const showLocationMap =
+    isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile;
   const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
   /** Company profile opened from Selected Projects (פרויקטים נבחרים) → company listing → profile. */
   const openedFromCompaniesDirectory = Boolean(user?._fromCompanyProjects);
@@ -1177,7 +1216,6 @@ const UserProfileScreen = ({
     fromCompanyProjects && user?.id != null ? String(user.id) : null;
   const [companyHeroFavorited, setCompanyHeroFavorited] = useState(false);
   const companyHeroLikePendingRef = useRef(false);
-  console.log('I18nManager.isRTL', I18nManager.isRTL);
   useEffect(() => {
     if (!companyListingId || !currentUser?.id) {
       setCompanyHeroFavorited(false);
@@ -1660,7 +1698,7 @@ const UserProfileScreen = ({
               {displayEmail != null && displayEmail !== '' ? (
                 <Text style={styles.userEmail}>{displayEmail}</Text>
               ) : null}
-              {!isBnbListingAdProfile ? (
+              {!isDedicatedListingAdProfile ? (
                 <View style={styles.statsRow}>
                   <TouchableOpacity
                     style={styles.stat}
@@ -1885,7 +1923,8 @@ const UserProfileScreen = ({
               )}
             </View>
 
-            {!openedFromPost && (isBnbListingAdProfile || !isProfessional) && (
+            {!openedFromPost &&
+              (isDedicatedListingAdProfile || !isProfessional) && (
               <View style={styles.lastAdBody}>
                 {isBnbListingAdProfile ? (
                   <BnbListingProfileContent
@@ -1893,10 +1932,44 @@ const UserProfileScreen = ({
                     mapAddress={firstNonEmpty(
                       lastAd?.address,
                       lastAd?.location,
+                      lastAd?.search_address,
+                      lastAd?.contact_details?.address,
                       user?.address,
                       brokerAddress,
                     )}
+                    adAddress={adAddress}
                     onReportPress={handleReportPress}
+                  />
+                ) : isPartnersListingAdProfile ? (
+                  <PartnersListingProfileContent
+                    listing={lastAd}
+                    displayName={displayName}
+                    mapAddress={firstNonEmpty(
+                      lastAd?.address,
+                      lastAd?.location,
+                      brokerAddress,
+                    )}
+                    adAddress={adAddress}
+                    onReportPress={handleReportPress}
+                  />
+                ) : isLandListingAdProfile ? (
+                  <CompanyLandListingProfileContent
+                    listing={landListingPayload}
+                    displayName={displayName}
+                    displayPiRating={displayPiRating}
+                    publisherAvatarUri={
+                      lastAd?.profileImageUrl || displayImage || null
+                    }
+                    mapAddress={firstNonEmpty(
+                      lastAd?.address,
+                      lastAd?.location,
+                      lastAd?.search_address,
+                      lastAd?.land_address,
+                      brokerAddress,
+                    )}
+                    adAddress={adAddress}
+                    onReportPress={handleReportPress}
+                    hideReportButton={showLandProfileContactAndReviews}
                   />
                 ) : (
                   <>
@@ -2286,7 +2359,7 @@ const UserProfileScreen = ({
           </View>
         )}
 
-        {!openedFromPost && !isProfessional && !isBnbListingAdProfile && (
+        {!openedFromPost && !isProfessional && !isDedicatedListingAdProfile && (
           <>
             <View style={styles.profileDivider} />
             {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
@@ -2350,10 +2423,10 @@ const UserProfileScreen = ({
         {!isRegularUserAdView &&
           !openedFromPost &&
           !isProfessional &&
-          !isBnbListingAdProfile && (
+          !isDedicatedListingAdProfile && (
             <View style={styles.brokerCardOverlayLine} />
           )}
-        {!isRegularUserAdView && !isBnbListingAdProfile && (
+        {!isRegularUserAdView && !isDedicatedListingAdProfile && (
           <View style={styles.brokerCardBottom}>
             {!isCompany || showCompanyPostSpecialties ? (
               <>
@@ -2434,7 +2507,7 @@ const UserProfileScreen = ({
 
         {!isRegularUserAdView &&
           !hideMyPropertiesSection &&
-          !isBnbListingAdProfile && (
+          !isDedicatedListingAdProfile && (
             <View style={styles.myPropertiesSection}>
               <View style={styles.myPropertiesHeader}>
                 <Text style={styles.myPropertiesTitle}>
@@ -2584,10 +2657,10 @@ const UserProfileScreen = ({
           )}
 
         {/* Contact Details – פרטי התקשרות */}
-        {!isRegularUserAdView && !isBnbListingAdProfile && (
+        {!isRegularUserAdView && showListingContactAndReviews && (
           <View style={styles.contactDetailsDivider} />
         )}
-        {!isRegularUserAdView && !isBnbListingAdProfile && (
+        {!isRegularUserAdView && showListingContactAndReviews && (
           <View style={styles.contactDetailsSection}>
             <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
             <View style={styles.contactDetailsContent}>
@@ -2660,12 +2733,12 @@ const UserProfileScreen = ({
             </View>
           </View>
         )}
-        {!isRegularUserAdView && !isBnbListingAdProfile && (
+        {!isRegularUserAdView && showListingContactAndReviews && (
           <View style={styles.contactDetailsDivider} />
         )}
 
         {/* Rating & Reviews – כמות כוכבי פאי / ביקורות (לא מציגים דירוג עצמי בפרופיל שלך) */}
-        {!isRegularUserAdView && !isBnbListingAdProfile ? (
+        {!isRegularUserAdView && showListingContactAndReviews ? (
           <View style={styles.reviewsSection}>
             {!isOwnProfile ? (
               <>
@@ -2792,7 +2865,10 @@ const UserProfileScreen = ({
                   color="#F7F3E6"
                 />
               </TouchableOpacity>
-              {(isCompany || isProfessional) && !user?._fromTikTokPost && (
+              {(isCompany ||
+                isBroker ||
+                isProfessional) &&
+                !user?._fromTikTokPost && (
                 <>
                   <View style={styles.profilePiChatWrap}>
                     <TouchableOpacity
@@ -2842,7 +2918,7 @@ const UserProfileScreen = ({
               )}
             </View>
           </View>
-        ) : isRegularUserAdView && !isBnbListingAdProfile ? (
+        ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
           <View style={styles.profileCtaSection}>
             <TouchableOpacity
               style={styles.profileCtaWarningBtn}

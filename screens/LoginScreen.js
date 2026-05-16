@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
-import {getCurrentUser} from '../utils/api';
+import {loginWithPassword} from '../utils/api';
 
 const ONBOARDING_IMAGES = [
   require('../assets/onbording/1.png'),
@@ -37,7 +37,8 @@ const ONBOARDING_IMAGES = [
 const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
-  const [subscriberNumber, setSubscriberNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -65,37 +66,43 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
   const handleLogin = async () => {
     setErrorMessage(null);
 
-    if (!email.trim() && !subscriberNumber.trim()) {
-      setErrorMessage('אנא הזן כתובת מייל או מספר מנוי');
+    if (!email.trim()) {
+      setErrorMessage('אנא הזן כתובת מייל');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('אנא הזן סיסמה');
       return;
     }
 
     setIsLoggingIn(true);
     try {
-      const response = await getCurrentUser(
-        email.trim() || null,
-        subscriberNumber.trim() || null,
-      );
+      const response = await loginWithPassword(email.trim(), password);
       console.log('Login response:', response);
 
-      if (response && response.subscription) {
-        // Check if user is verified
-        if (response.subscription.status === 'verified') {
-          // Successfully logged in
-          if (onLoginSuccess) {
-            onLoginSuccess(response.subscription);
-          }
-        } else {
-          setErrorMessage(
-            'החשבון שלך עדיין לא אומת. אנא השלם את תהליך האימות.',
-          );
+      const status = response?.subscription?.status;
+      const canEnter = status === 'verified' || status === 'active';
+      if (canEnter && response?.subscription) {
+        if (onLoginSuccess) {
+          onLoginSuccess(response.subscription);
         }
+      } else if (response?.subscription) {
+        setErrorMessage(
+          'החשבון שלך עדיין לא אומת. אנא השלם את תהליך האימות.',
+        );
       } else {
-        setErrorMessage('משתמש לא נמצא. אנא בדוק את הפרטים שהזנת.');
+        setErrorMessage('מייל או סיסמה שגויים. אנא נסה שוב.');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setErrorMessage(error.message || 'נכשל בהתחברות. אנא נסה שוב.');
+      if (error.code === 'NO_PASSWORD_SET') {
+        setErrorMessage(
+          error.message ||
+            'לא הוגדרה סיסמה לחשבון. הירשמו מחדש והשלימו שליחת קוד אימות עם סיסמה.',
+        );
+      } else {
+        setErrorMessage(error.message || 'נכשל בהתחברות. אנא נסה שוב.');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -136,7 +143,7 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
         <View style={styles.formCard}>
           <Text style={[styles.headerTitle, {textAlign:'left'}]}>התחברות</Text>
           <Text style={[styles.instructionText, {textAlign:'left'}]}>
-            הזן את כתובת המייל או מספר המנוי שלך
+            הזן את כתובת המייל והסיסמה שלך
           </Text>
 
           {errorMessage && (
@@ -162,25 +169,34 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, {textAlign:'left'}]}>מספר מנוי</Text>
-            <TextInput
-              style={[styles.input]}
-              placeholder="הזן מספר מנוי"
-              placeholderTextColor={Colors.grey200}
-              value={subscriberNumber}
-              onChangeText={setSubscriberNumber}
-              keyboardType="numeric"
-              textAlign="right"
-            />
+            <Text style={[styles.label, {textAlign:'left'}]}>סיסמה</Text>
+            <View style={styles.passwordRow}>
+              <TouchableOpacity
+                onPress={() => setShowPassword(v => !v)}
+                style={styles.passwordToggle}
+                activeOpacity={0.8}>
+                <Text style={styles.passwordToggleText}>
+                  {showPassword ? 'הסתר' : 'הצג'}
+                </Text>
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="הזן סיסמה"
+                placeholderTextColor={Colors.grey200}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                textAlign="right"
+              />
+            </View>
           </View>
 
           <TouchableOpacity
-            disabled={
-              (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
-            }
+            disabled={!email.trim() || !password || isLoggingIn}
             style={[
               styles.loginButton,
-              (!email.trim() && !subscriberNumber.trim()) || isLoggingIn
+              !email.trim() || !password || isLoggingIn
                 ? styles.loginButtonDisabled
                 : null,
             ]}
@@ -354,6 +370,29 @@ const styles = StyleSheet.create({
     color: Colors.white100,
     textAlign: 'right',
     fontFamily: 'Rubik-Regular',
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1E2A',
+    borderColor: '#3B3A4C',
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  passwordInput: {
+    flex: 1,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 13,
+  },
+  passwordToggleText: {
+    color: Colors.yellowIcons,
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   dividerContainer: {
     flexDirection: 'row',
