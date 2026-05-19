@@ -1,20 +1,13 @@
 import {
-  ImageBackground,
   StyleSheet,
   Text,
   View,
   Image,
   Animated,
   Platform,
-  I18nManager,
+  InteractionManager,
 } from 'react-native';
-import React, {
-  useContext,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, {useCallback, useEffect, useRef, useState, memo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
@@ -25,6 +18,26 @@ import {getStoriesFeed} from '../utils/api';
 
 import {userCategories} from '../utils/constant';
 import {flexStart} from '../index';
+
+/**
+ * Hero: static PNG on Android (smooth decode). Web + iOS use optimized
+ * project_image.gif (~3MB, 640×441, 30 frames) — run scripts/compress-project-gif.sh to rebuild.
+ */
+const PROJECT_FEATURE_IMAGE = require('../assets/project_image.gif');
+
+const HomeBackground = memo(function HomeBackground({children}) {
+  return (
+    <View style={styles.background}>
+      <Image
+        source={require('../assets/background.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+        fadeDuration={0}
+      />
+      {children}
+    </View>
+  );
+});
 
 const Home = ({
   onOpenSettings,
@@ -42,6 +55,7 @@ const Home = ({
   const flippedRef = useRef(false);
   const [flipped, setFlipped] = useState(false);
   const flipAnimRef = useRef(null);
+  const [aiMounted, setAiMounted] = useState(false);
 
   const loadStories = useCallback(async () => {
     setStoriesLoading(true);
@@ -56,12 +70,18 @@ const Home = ({
   }, []);
 
   useEffect(() => {
-    loadStories();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadStories();
+    });
+    return () => task.cancel();
   }, [loadStories]);
 
   const toggleFlip = useCallback(() => {
     if (flipAnimRef.current) flipAnimRef.current.stop();
     const target = flippedRef.current ? 0 : 1;
+    if (target === 1) {
+      setAiMounted(true);
+    }
     flippedRef.current = !flippedRef.current;
     setFlipped(flippedRef.current);
     flipAnimRef.current = Animated.timing(flipProgress, {
@@ -105,7 +125,12 @@ const Home = ({
     loadStories();
   }, [loadStories]);
 
-  const categoriesList = userCategories;
+  const handleCategorySelect = useCallback(
+    category => {
+      onOpenTikTokFeed?.(category);
+    },
+    [onOpenTikTokFeed],
+  );
 
   const frontFace = (
     <>
@@ -122,12 +147,8 @@ const Home = ({
 
       <View style={styles.content}>
         <Carusel
-          categoriesList={categoriesList}
-          onCategorySelect={category => {
-            if (onOpenTikTokFeed) {
-              onOpenTikTokFeed(category);
-            }
-          }}
+          categoriesList={userCategories}
+          onCategorySelect={handleCategorySelect}
         />
         <View style={[styles.profileBarHeader, {marginTop: 20}]}>
           <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
@@ -140,9 +161,10 @@ const Home = ({
         <View style={styles.projectCardWrap}>
           <View style={styles.videoContainer}>
             <Image
-              source={require('../assets/project_image.gif')}
+              source={PROJECT_FEATURE_IMAGE}
               style={styles.projectImage}
               resizeMode="cover"
+              fadeDuration={0}
             />
             <Image
               source={require('../assets/videoLogo.png')}
@@ -178,17 +200,22 @@ const Home = ({
     </>
   );
 
-  const backFace = (
+  const handleAiOpenProfile = useCallback(
+    listing => {
+      toggleFlip();
+      onOpenUserProfile?.(listing);
+    },
+    [toggleFlip, onOpenUserProfile],
+  );
+
+  const backFace = aiMounted ? (
     <PiAiSearchModal
       embedded
       visible={flipped}
       onClose={toggleFlip}
-      onOpenUserProfile={listing => {
-        toggleFlip();
-        onOpenUserProfile?.(listing);
-      }}
+      onOpenUserProfile={handleAiOpenProfile}
     />
-  );
+  ) : null;
 
   // Horizontal carousel breaks inside 3D transforms on Android and web; opacity-only flip there.
   const use3dFlip = Platform.OS === 'ios';
@@ -200,9 +227,7 @@ const Home = ({
     : undefined;
 
   return (
-    <ImageBackground
-      source={require('../assets/background.png')}
-      style={styles.background}>
+    <HomeBackground>
       <View style={styles.backgroundClip}>
         <View
           style={[
@@ -212,6 +237,8 @@ const Home = ({
           <View style={styles.flipRoot}>
             <Animated.View
               pointerEvents={flipped ? 'none' : 'auto'}
+              collapsable={false}
+              renderToHardwareTextureAndroid={Platform.OS === 'android'}
               style={[
                 styles.flipFace,
                 {
@@ -221,17 +248,21 @@ const Home = ({
               ]}>
               {frontFace}
             </Animated.View>
-            <Animated.View
-              pointerEvents={flipped ? 'auto' : 'none'}
-              style={[
-                styles.flipFace,
-                {
-                  opacity: backOpacity,
-                  ...(backTransform ? {transform: backTransform} : {}),
-                },
-              ]}>
-              {backFace}
-            </Animated.View>
+            {aiMounted ? (
+              <Animated.View
+                pointerEvents={flipped ? 'auto' : 'none'}
+                collapsable={false}
+                renderToHardwareTextureAndroid={Platform.OS === 'android'}
+                style={[
+                  styles.flipFace,
+                  {
+                    opacity: backOpacity,
+                    ...(backTransform ? {transform: backTransform} : {}),
+                  },
+                ]}>
+                {backFace}
+              </Animated.View>
+            ) : null}
           </View>
 
           <StoryViewerModal
@@ -241,11 +272,11 @@ const Home = ({
           />
         </View>
       </View>
-    </ImageBackground>
+    </HomeBackground>
   );
 };
 
-export default Home;
+export default memo(Home);
 
 const styles = StyleSheet.create({
   background: {
@@ -253,6 +284,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     overflow: 'hidden',
+  },
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
   backgroundClip: {
     flex: 1,

@@ -1,4 +1,11 @@
-import React, {useRef, useState, useEffect, useCallback, memo} from 'react';
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  memo,
+  startTransition,
+} from 'react';
 import {
   View,
   ScrollView,
@@ -59,6 +66,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
       <Image
         source={source}
         resizeMode="contain"
+        fadeDuration={0}
         style={[
           styles.tikImageBase,
           isFaded && styles.fadedImage,
@@ -133,7 +141,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         if (now < androidScrollNextEmitRef.current) {
           return;
         }
-        androidScrollNextEmitRef.current = now + 80;
+        androidScrollNextEmitRef.current = now + 120;
       }
 
       const viewportCenter = scrollPosition + viewportWidth / 2;
@@ -151,16 +159,22 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         }
       });
 
-      setCenterIndex(prev => {
-        if (closestIndex === prev) return prev;
-        const boundaryRight = (prev + 1) * itemWidth;
-        const boundaryLeft = prev * itemWidth;
-        if (closestIndex > prev && viewportCenter >= boundaryRight)
-          return closestIndex;
-        if (closestIndex < prev && viewportCenter <= boundaryLeft)
-          return closestIndex;
-        return prev;
-      });
+      const applyCenterIndex = nextIndex => {
+        setCenterIndex(prev => {
+          if (nextIndex === prev) return prev;
+          const boundaryRight = (prev + 1) * itemWidth;
+          const boundaryLeft = prev * itemWidth;
+          if (nextIndex > prev && viewportCenter >= boundaryRight) return nextIndex;
+          if (nextIndex < prev && viewportCenter <= boundaryLeft) return nextIndex;
+          return prev;
+        });
+      };
+
+      if (Platform.OS === 'android') {
+        startTransition(() => applyCenterIndex(closestIndex));
+      } else {
+        applyCenterIndex(closestIndex);
+      }
     },
     [viewportWidth, itemWidth, list],
   );
@@ -278,9 +292,10 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         onScrollBeginDrag={handleScrollBeginDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
-        scrollEventThrottle={Platform.OS === 'android' ? 64 : 16}
+        scrollEventThrottle={Platform.OS === 'android' ? 128 : 16}
         nestedScrollEnabled
         removeClippedSubviews={false}
+        disableIntervalMomentum
         {...(Platform.OS === 'android' ? {overScrollMode: 'never'} : {})}>
         {list.map((item, index) => (
           <CarouselCategoryItem
@@ -323,4 +338,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Carusel;
+export default memo(Carusel);
