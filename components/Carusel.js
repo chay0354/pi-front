@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  Text,
 } from 'react-native';
 import {userCategories} from '../utils/constant';
 
@@ -68,11 +69,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
   );
 });
 
-const Carusel = ({
-  style,
-  categoriesList = userCategories,
-  onCategorySelect,
-}) => {
+const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
   const {width: screenWidth} = useWindowDimensions();
   const list =
     categoriesList && categoriesList.length > 0
@@ -198,29 +195,35 @@ const Carusel = ({
     [viewportWidth, itemWidth, list.length],
   );
 
+  const snapInterval = itemWidth;
+  const contentWidth = Math.max(viewportWidth, list.length * itemWidth);
+  const initialScrollX =
+    viewportWidth > 0
+      ? Math.max(0, (initialCenterIndex - 1) * itemWidth)
+      : 0;
+
+  const scrollToInitialCenter = useCallback(
+    (animated = false) => {
+      if (viewportWidth <= 0 || !scrollViewRef.current) {
+        return;
+      }
+      scrollViewRef.current.scrollTo({x: initialScrollX, animated});
+      lastScrollPositionRef.current = initialScrollX;
+      setCenterIndex(initialCenterIndex);
+      hasInitialScrollDone.current = true;
+    },
+    [viewportWidth, initialScrollX, initialCenterIndex],
+  );
+
   useEffect(() => {
     if (viewportWidth <= 0 || hasInitialScrollDone.current) {
       return;
     }
-
-    const initialScrollX = Math.max(0, (initialCenterIndex - 1) * itemWidth);
-
-    const runAfterLayout = () => {
-      if (scrollViewRef.current && !hasInitialScrollDone.current) {
-        scrollViewRef.current.scrollTo({
-          x: initialScrollX,
-          animated: false,
-        });
-        hasInitialScrollDone.current = true;
-      }
-    };
-
-    const t = setTimeout(runAfterLayout, 150);
-    return () => clearTimeout(t);
-  }, [viewportWidth, itemWidth, initialCenterIndex]);
-
-  const snapInterval = itemWidth;
-  const contentWidth = Math.max(viewportWidth, list.length * itemWidth);
+    const frame = requestAnimationFrame(() => {
+      scrollToInitialCenter(false);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewportWidth, scrollToInitialCenter]);
 
   const categoryIdsKey = list.map(c => c.id).join(',');
   const listRef = useRef(list);
@@ -243,13 +246,20 @@ const Carusel = ({
   }, [categoryIdsKey]);
 
   return (
-    <View style={[style]}>
+    <View>
       <ScrollView
         ref={scrollViewRef}
+        contentOffset={
+          initialScrollX > 0 ? {x: initialScrollX, y: 0} : undefined
+        }
         onLayout={event => {
           const width = event?.nativeEvent?.layout?.width ?? 0;
           if (width > 0 && Math.abs(width - carouselWidth) > 0.5) {
+            const isFirstMeasure = carouselWidth <= 0;
             setCarouselWidth(width);
+            if (isFirstMeasure) {
+              requestAnimationFrame(() => scrollToInitialCenter(false));
+            }
           }
         }}
         contentContainerStyle={[
@@ -291,7 +301,7 @@ const Carusel = ({
 
 const styles = StyleSheet.create({
   carouselContent: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     flexGrow: 0,
     flexShrink: 0,

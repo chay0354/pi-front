@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'flex-start',
     paddingVertical: 4,
+    flex: 1,
   },
   item: {
     width: OUTER,

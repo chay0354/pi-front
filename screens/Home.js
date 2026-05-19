@@ -204,7 +204,11 @@ const Home = ({
       source={require('../assets/background.png')}
       style={styles.background}>
       <View style={styles.backgroundClip}>
-        <View style={[styles.safeArea, {paddingTop: insets.top}]}>
+        <View
+          style={[
+            styles.safeArea,
+            {paddingTop: insets.top, paddingBottom: insets.bottom / 2},
+          ]}>
           <View style={styles.flipRoot}>
             <Animated.View
               pointerEvents={flipped ? 'none' : 'auto'}
