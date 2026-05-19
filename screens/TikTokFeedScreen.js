@@ -1718,9 +1718,7 @@ const TikTokFeedScreen = ({
                   ? parseLandBlockParcelFromListing(listing)
                   : {land_parcel: null, land_block: null};
               const landOfferParcels =
-                listingCategory === 7
-                  ? normalizeLandOfferParcels(listing)
-                  : [];
+                listingCategory === 7 ? normalizeLandOfferParcels(listing) : [];
 
               return {
                 id: listing.id,
@@ -1768,8 +1766,7 @@ const TikTokFeedScreen = ({
                 agricultural_land: listing.agricultural_land || null,
                 land_ownership: listing.land_ownership || null,
                 land_address: listing.land_address || null,
-                land_parcel:
-                  listing.land_parcel || landIds.land_parcel || null,
+                land_parcel: listing.land_parcel || landIds.land_parcel || null,
                 land_block: listing.land_block || landIds.land_block || null,
                 company_offers_land_sizes:
                   landOfferParcels.length > 0
@@ -4177,7 +4174,7 @@ const TikTokFeedScreen = ({
             }
             onClose?.();
           }}>
-          <MaterialCommunityIcons name="chevron-right" size={26} color="#fff" />
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
         </TouchableOpacity>
         {showUserSearchPanel ? (
           <View style={styles.userSearchInputWrap}>
@@ -4401,6 +4398,16 @@ const TikTokFeedScreen = ({
                                 },
                               );
                             }}>
+                            <ProfileAvatar
+                              uri={
+                                item.avatar &&
+                                !failedSearchAvatarKeys.has(item.key)
+                                  ? item.avatar
+                                  : null
+                              }
+                              name={item.name}
+                              size={66}
+                            />
                             <View style={styles.userSearchTextWrap}>
                               <Text
                                 style={styles.userSearchName}
@@ -4420,24 +4427,24 @@ const TikTokFeedScreen = ({
                                   const isFive = n >= 5;
                                   return (
                                     <>
-                                      <Text style={styles.userSearchMetaCount}>
-                                        {String(n)}
+                                      <Text
+                                        style={styles.userSearchMetaText}
+                                        numberOfLines={1}>
+                                        {item.subtitle}
                                       </Text>
                                       {isFive ? (
-                                        <View
-                                          style={styles.userSearchFiveStarWrap}
-                                          pointerEvents="none">
-                                          <Image
-                                            source={
-                                              TIKTOK_OVERLAY_ICONS.ratingFiveStars
-                                            }
-                                            style={
-                                              styles.userSearchFiveStarIcon
-                                            }
-                                            resizeMode="contain"
-                                          />
-                                        </View>
+                                        // <View
+                                        //   style={styles.userSearchFiveStarWrap}
+                                        //   pointerEvents="none">
+                                        <Image
+                                          source={
+                                            TIKTOK_OVERLAY_ICONS.ratingFiveStars
+                                          }
+                                          style={styles.userSearchFiveStarIcon}
+                                          resizeMode="contain"
+                                        />
                                       ) : (
+                                        // </View>
                                         <Image
                                           source={
                                             TIKTOK_OVERLAY_ICONS.ratingOneToFour
@@ -4446,26 +4453,14 @@ const TikTokFeedScreen = ({
                                           resizeMode="contain"
                                         />
                                       )}
+                                      <Text style={styles.userSearchMetaCount}>
+                                        {String(n)}
+                                      </Text>
                                     </>
                                   );
                                 })()}
-                                <Text
-                                  style={styles.userSearchMetaText}
-                                  numberOfLines={1}>
-                                  {item.subtitle}
-                                </Text>
                               </View>
                             </View>
-                            <ProfileAvatar
-                              uri={
-                                item.avatar &&
-                                !failedSearchAvatarKeys.has(item.key)
-                                  ? item.avatar
-                                  : null
-                              }
-                              name={item.name}
-                              size={66}
-                            />
                           </TouchableOpacity>
                         </View>
                       );
@@ -4640,6 +4635,11 @@ const TikTokFeedScreen = ({
                               {listing.price || '₪0'}
                             </Text>
                             <View style={styles.listCardLocationRow}>
+                              <Image
+                                source={require('../assets/liked-ads/location.png')}
+                                style={styles.listCardLocationIcon}
+                                resizeMode="contain"
+                              />
                               <Text
                                 style={styles.listCardLocationText}
                                 numberOfLines={2}>
@@ -4648,11 +4648,6 @@ const TikTokFeedScreen = ({
                                   listing.address ||
                                   'מיקום לא זמין'}
                               </Text>
-                              <Image
-                                source={require('../assets/liked-ads/location.png')}
-                                style={styles.listCardLocationIcon}
-                                resizeMode="contain"
-                              />
                             </View>
                           </>
                         ) : (
@@ -4711,6 +4706,11 @@ const TikTokFeedScreen = ({
                           </View>
                         ) : !isCompanyListing ? (
                           <View style={styles.listCardLocationRow}>
+                            <Image
+                              source={require('../assets/liked-ads/location.png')}
+                              style={styles.listCardLocationIcon}
+                              resizeMode="contain"
+                            />
                             <Text
                               style={styles.listCardLocationText}
                               numberOfLines={1}>
@@ -4718,11 +4718,6 @@ const TikTokFeedScreen = ({
                                 listing.address ||
                                 'תל אביב, רוטשילד 54'}
                             </Text>
-                            <Image
-                              source={require('../assets/liked-ads/location.png')}
-                              style={styles.listCardLocationIcon}
-                              resizeMode="contain"
-                            />
                           </View>
                         ) : null}
                       </View>
@@ -6237,26 +6232,26 @@ const styles = StyleSheet.create({
   },
   userSearchRowContent: {
     flex: 1,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: flexStart,
+    // justifyContent: flexEnd,
     gap: 10,
   },
   userSearchTextWrap: {
     flex: 1,
-    alignItems: flexStart,
+    alignItems: flexEnd,
     gap: 8,
   },
   userSearchName: {
     color: '#F7F3E6',
     fontSize: 18,
-    lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   userSearchMetaRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: flexEnd,
     gap: 4,
   },
   userSearchMetaText: {
@@ -6271,6 +6266,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
   },
   userSearchRatingIcon: {
     width: 14,
@@ -6411,7 +6407,7 @@ const styles = StyleSheet.create({
   listCardProfileBtn: {
     position: 'absolute',
     top: 10,
-    right: 10,
+    left: 10,
   },
   listCardProfile: {
     position: 'absolute',
@@ -6440,7 +6436,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   listCardPurposeRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 4,
@@ -6476,7 +6472,7 @@ const styles = StyleSheet.create({
     height: 18,
   },
   listCardStatsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     flexWrap: 'wrap',
@@ -6504,18 +6500,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   listCardLandPrice: {
     color: '#F7F3E6',
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
   },
   listCardLocationRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 4,

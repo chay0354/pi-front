@@ -99,6 +99,7 @@ export default function PartnersSmartInfoBlock({adAddress = ''}) {
         placeholder=""
         placeholderTextColor="rgba(255,255,255,0.4)"
         multiline
+        textAlign="right"
       />
     </View>
   );
@@ -163,10 +164,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: '#FFFFFF',
     fontSize: 20,
-    lineHeight: 28,
+    lineHeight: 24,
     textAlign: 'left',
     borderWidth: 1,
     borderColor: '#8C85B3',
     fontFamily: 'Rubik-Regular',
+    marginTop: 16,
+    writingDirection: 'rtl',
   },
 });

@@ -9,7 +9,7 @@ import {TouchableOpacity} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../../constants/styles';
 import {Divider} from './Divider';
-import {flexEnd} from '../../index';
+import {flexEnd, flexStart} from '../../index';
 
 export const GeneralDetails = ({
   area,
@@ -42,7 +42,7 @@ export const GeneralDetails = ({
     <FormContainer>
       {hasCounterFields ? (
         <>
-          <Text style={[styles.sectionHeading, {alignSelf: flexEnd}]}>
+          <Text style={[styles.sectionHeading, {alignSelf: flexStart}]}>
             פרטים כלליים
           </Text>
           {counterData.map((counter, index) => (
@@ -116,9 +116,6 @@ export const GeneralDetails = ({
                             styles.amenityQuantityButtonSelected,
                             {justifyContent: flexEnd},
                           ]}>
-                          <Text style={styles.amenityQuantityTextSelected}>
-                            {qty}
-                          </Text>
                           <View style={styles.amenityQuantityDotSelected}>
                             <LinearGradient
                               colors={['#FEE787', '#BD9947', '#9C6522']}
@@ -128,6 +125,9 @@ export const GeneralDetails = ({
                               style={styles.amenityQuantityDotInner}
                             />
                           </View>
+                          <Text style={styles.amenityQuantityTextSelected}>
+                            {qty}
+                          </Text>
                         </LinearGradient>
                       ) : (
                         <View
@@ -135,8 +135,8 @@ export const GeneralDetails = ({
                             styles.amenityQuantityButton,
                             {justifyContent: flexEnd},
                           ]}>
-                          <Text style={styles.amenityQuantityText}>{qty}</Text>
                           <View style={styles.amenityQuantityDot} />
+                          <Text style={styles.amenityQuantityText}>{qty}</Text>
                         </View>
                       )}
                     </TouchableOpacity>

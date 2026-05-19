@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
     marginVertical: 5,
+    direction: 'ltr',
   },
   purposeButtonContainer: {
     flex: 1,

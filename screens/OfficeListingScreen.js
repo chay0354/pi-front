@@ -14,6 +14,7 @@ import {
   Dimensions,
   I18nManager,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
@@ -306,6 +307,31 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
 
+  // Request camera and media library permissions on mount (native)
+  useEffect(() => {
+    const requestPermissions = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          const cameraStatus =
+            await ImagePicker.requestCameraPermissionsAsync();
+          const mediaLibraryStatus =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+          if (
+            cameraStatus.status !== 'granted' ||
+            mediaLibraryStatus.status !== 'granted'
+          ) {
+            alert('נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים');
+          }
+        } catch (error) {
+          console.error('Permission request error:', error);
+        }
+      }
+    };
+
+    requestPermissions();
+  }, []);
+
   const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
 
   const toggleAmenity = amenity => {
@@ -329,9 +355,29 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   };
 
   // File upload handlers
-  const handleMainImageUpload = () => {
+  const handleMainImageUpload = async () => {
     if (Platform.OS === 'web' && mainImageInputRef.current) {
       mainImageInputRef.current.click();
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setMainImage({
+          uri: asset.uri,
+          type: asset.type || asset.mimeType || 'image/jpeg',
+          name: asset.fileName || asset.filename || `photo-${Date.now()}.jpg`,
+          file: asset,
+        });
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת תמונה: ' + error.message);
     }
   };
 
@@ -349,9 +395,32 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  const handleAdditionalImageUpload = index => {
+  const handleAdditionalImageUpload = async index => {
     if (Platform.OS === 'web' && additionalImageInputRefs.current[index]) {
       additionalImageInputRefs.current[index].click();
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const fileObj = {
+          uri: asset.uri,
+          type: asset.type || asset.mimeType || 'image/jpeg',
+          name: asset.fileName || asset.filename || `photo-${Date.now()}.jpg`,
+          file: asset,
+        };
+        const newImages = [...additionalImages];
+        newImages[index] = fileObj;
+        setAdditionalImages(newImages);
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת תמונה: ' + error.message);
     }
   };
 
@@ -371,9 +440,30 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  const handleVideoUpload = () => {
+  const handleVideoUpload = async () => {
     if (Platform.OS === 'web' && videoInputRef.current) {
       videoInputRef.current.click();
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setVideoFile({
+          uri: asset.uri,
+          type: asset.type || asset.mimeType || 'video/mp4',
+          name: asset.fileName || asset.filename || `video-${Date.now()}.mp4`,
+          file: asset,
+        });
+        setHasVideo(true);
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת סרטון: ' + error.message);
     }
   };
 
@@ -387,7 +477,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         file: file,
       };
       setVideoFile(fileObj);
-      // Don't upload yet - will upload when publish button is pressed
+      setHasVideo(true);
     }
   };
 

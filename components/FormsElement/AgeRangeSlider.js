@@ -1,12 +1,5 @@
 import React, {useRef, useState, useMemo, useCallback, useEffect} from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  PanResponder,
-  Platform,
-  I18nManager,
-} from 'react-native';
+import {View, Text, StyleSheet, PanResponder, Platform} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 /** Match PreferencesFilterScreen (Figma drawer — גיל מועדף). */
 const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
@@ -29,6 +22,35 @@ function percentToAge(percent) {
   return Math.round(AGE_MIN + (p / 100) * (AGE_MAX - AGE_MIN));
 }
 
+function getSliderPercentFromEvent(
+  nativeEvent,
+  trackWidth,
+  windowX,
+  sliderViewRef,
+) {
+  const w = trackWidth > 0 ? trackWidth : 1;
+  const ne = nativeEvent;
+  if (typeof ne.pageX === 'number' && !Number.isNaN(ne.pageX)) {
+    const touchX = ne.pageX - windowX;
+    return Math.max(0, Math.min(100, (touchX / w) * 100));
+  }
+  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
+    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
+  }
+  const node = sliderViewRef && sliderViewRef.current;
+  const touch = ne.touches?.[0] || ne;
+  if (
+    node &&
+    typeof node.getBoundingClientRect === 'function' &&
+    (touch?.clientX != null || touch?.pageX != null)
+  ) {
+    const rect = node.getBoundingClientRect();
+    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
+    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
+  }
+  return 0;
+}
+
 /**
  * Partners — גיל מועדף (Figma 9:144344). Wires to preferredAgeMin/Max → DB.
  */
@@ -42,6 +64,8 @@ export const AgeRangeSlider = ({
 }) => {
   /** Native: seed width so first drag works before onLayout; web: measure via DOM. */
   const [sliderWidth, setSliderWidth] = useState(IS_WEB ? 0 : 320);
+  const sliderWidthRef = useRef(IS_WEB ? 1 : 320);
+  const sliderWindowXRef = useRef(0);
   const activeThumbRef = useRef(null);
   const webDraggingRef = useRef(false);
   const sliderContainerRef = useRef(null);
@@ -73,20 +97,20 @@ export const AgeRangeSlider = ({
     [onMinChange, onMaxChange],
   );
 
-  const getTrackWidth = useCallback(() => {
-    const el = sliderContainerRef.current;
-    if (el && typeof el.getBoundingClientRect === 'function' && IS_WEB) {
-      const w = el.getBoundingClientRect().width;
-      if (w > 0) return w;
-    }
-    return sliderWidth > 0 ? sliderWidth : 1;
-  }, [sliderWidth]);
+  const syncSliderMeasure = useCallback(() => {
+    const node = sliderContainerRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') return;
+    node.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        sliderWidthRef.current = width;
+        sliderWindowXRef.current = x;
+        setSliderWidth(width);
+      }
+    });
+  }, []);
 
-  const handlePressAtX = useCallback(
-    locationX => {
-      const w = getTrackWidth();
-      if (!w) return;
-      const percent = (locationX / w) * 100;
+  const handlePressAtPercent = useCallback(
+    percent => {
       const touchedAge = percentToAge(percent);
       const minDist = Math.abs(touchedAge - Number(minValueRef.current));
       const maxDist = Math.abs(touchedAge - Number(maxValueRef.current));
@@ -98,37 +122,75 @@ export const AgeRangeSlider = ({
         applyPair(minValueRef.current, touchedAge);
       }
     },
-    [getTrackWidth, applyPair],
+    [applyPair],
+  );
+
+  const percentFromNativeEvent = useCallback(
+    nativeEvent =>
+      getSliderPercentFromEvent(
+        nativeEvent,
+        sliderWidthRef.current,
+        sliderWindowXRef.current,
+        sliderContainerRef,
+      ),
+    [],
+  );
+
+  const applyDragPercent = useCallback(
+    percent => {
+      const thumb = activeThumbRef.current;
+      if (!thumb) return;
+      const age = percentToAge(percent);
+      if (thumb === 'min') {
+        applyPair(age, maxValueRef.current);
+      } else {
+        applyPair(minValueRef.current, age);
+      }
+    },
+    [applyPair],
+  );
+
+  const refreshMeasureThen = useCallback(
+    (nativeEvent, onReady) => {
+      const node = sliderContainerRef.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        onReady(percentFromNativeEvent(nativeEvent));
+        return;
+      }
+      node.measureInWindow((x, _y, width) => {
+        if (width > 0) {
+          sliderWidthRef.current = width;
+          sliderWindowXRef.current = x;
+        }
+        onReady(percentFromNativeEvent(nativeEvent));
+      });
+    },
+    [percentFromNativeEvent],
   );
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
         onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
         onPanResponderGrant: evt => {
-          const {locationX} = evt.nativeEvent;
-          handlePressAtX(locationX);
+          refreshMeasureThen(evt.nativeEvent, percent => {
+            handlePressAtPercent(percent);
+          });
         },
         onPanResponderMove: evt => {
-          const thumb = activeThumbRef.current;
-          if (!thumb) return;
-          const w = sliderWidth > 0 ? sliderWidth : getTrackWidth();
-          if (!w) return;
-          const {locationX} = evt.nativeEvent;
-          const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-          const age = percentToAge(percent);
-          if (thumb === 'min') {
-            applyPair(age, maxValueRef.current);
-          } else {
-            applyPair(minValueRef.current, age);
-          }
+          if (!activeThumbRef.current) return;
+          refreshMeasureThen(evt.nativeEvent, applyDragPercent);
         },
         onPanResponderRelease: () => {
           activeThumbRef.current = null;
         },
       }),
-    [sliderWidth, getTrackWidth, handlePressAtX, applyPair],
+    [refreshMeasureThen, handlePressAtPercent, applyDragPercent],
   );
 
   const applyDragAtClientX = useCallback(
@@ -136,9 +198,12 @@ export const AgeRangeSlider = ({
       const el = sliderContainerRef.current;
       if (!el || typeof el.getBoundingClientRect !== 'function') return;
       const rect = el.getBoundingClientRect();
-      const w = rect.width || sliderWidth || 1;
-      const locationX = clientX - rect.left;
-      const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
+      const percent = getSliderPercentFromEvent(
+        {pageX: clientX},
+        rect.width || sliderWidthRef.current,
+        rect.left,
+        sliderContainerRef,
+      );
       const age = percentToAge(percent);
       const thumb = activeThumbRef.current;
       if (!thumb) return;
@@ -148,7 +213,7 @@ export const AgeRangeSlider = ({
         applyPair(minValueRef.current, age);
       }
     },
-    [sliderWidth, applyPair],
+    [applyPair],
   );
 
   useEffect(() => {
@@ -178,11 +243,17 @@ export const AgeRangeSlider = ({
       const rect = el.getBoundingClientRect();
       const w = rect.width;
       if (!(w > 0)) return;
-      const locationX = e.clientX - rect.left;
       webDraggingRef.current = true;
-      handlePressAtX(locationX);
+      handlePressAtPercent(
+        getSliderPercentFromEvent(
+          {pageX: e.clientX},
+          rect.width,
+          rect.left,
+          sliderContainerRef,
+        ),
+      );
     },
-    [handlePressAtX],
+    [handlePressAtPercent],
   );
 
   const webTouchStart = useCallback(
@@ -191,10 +262,16 @@ export const AgeRangeSlider = ({
       if (!touch || !sliderContainerRef.current) return;
       const rect = sliderContainerRef.current.getBoundingClientRect?.();
       if (!rect) return;
-      const locationX = touch.clientX - rect.left;
-      handlePressAtX(locationX);
+      handlePressAtPercent(
+        getSliderPercentFromEvent(
+          {pageX: touch.clientX ?? touch.pageX},
+          rect.width,
+          rect.left,
+          sliderContainerRef,
+        ),
+      );
     },
-    [handlePressAtX],
+    [handlePressAtPercent],
   );
 
   const webTouchMove = useCallback(
@@ -205,17 +282,21 @@ export const AgeRangeSlider = ({
       if (!touch) return;
       const rect = sliderContainerRef.current.getBoundingClientRect?.();
       if (!rect) return;
-      const w = rect.width || sliderWidth || 1;
-      const locationX = touch.clientX - rect.left;
-      const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-      const age = percentToAge(percent);
+      const age = percentToAge(
+        getSliderPercentFromEvent(
+          {pageX: touch.clientX ?? touch.pageX},
+          rect.width,
+          rect.left,
+          sliderContainerRef,
+        ),
+      );
       if (thumb === 'min') {
         applyPair(age, maxValueRef.current);
       } else {
         applyPair(minValueRef.current, age);
       }
     },
-    [sliderWidth, applyPair],
+    [applyPair],
   );
 
   const webTouchEnd = useCallback(() => {
@@ -224,25 +305,30 @@ export const AgeRangeSlider = ({
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, {textAlign:'left'}]}>גיל מועדף</Text>
+      <Text style={[styles.sectionLabel, {textAlign: 'left'}]}>גיל מועדף</Text>
       <View style={styles.ageRangeRow}>
-        <Text style={styles.ageRangeValue}>{minValue}</Text>
-        <View style={styles.ageRangeSeparator} />
         <Text style={styles.ageRangeValue}>{maxValue}</Text>
+        <View style={styles.ageRangeSeparator} />
+        <Text style={styles.ageRangeValue}>{minValue}</Text>
       </View>
       <View
         ref={sliderContainerRef}
         style={[styles.sliderContainer, IS_WEB && styles.sliderContainerWeb]}
         onLayout={e => {
           const w = e.nativeEvent.layout.width;
-          if (w > 0) setSliderWidth(w);
+          if (w > 0) {
+            sliderWidthRef.current = w;
+            setSliderWidth(w);
+          }
+          syncSliderMeasure();
         }}
         {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
         onStartShouldSetResponder={() => true}
         onMouseDown={IS_WEB ? webMouseDown : undefined}
         onTouchStart={IS_WEB ? webTouchStart : undefined}
         onTouchMove={IS_WEB ? webTouchMove : undefined}
-        onTouchEnd={IS_WEB ? webTouchEnd : undefined}>
+        onTouchEnd={IS_WEB ? webTouchEnd : undefined}
+        collapsable={false}>
         <View style={styles.sliderTrack}>
           <LinearGradient
             colors={TRACK_GRADIENT}
@@ -324,6 +410,8 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     position: 'relative',
+    /** Min age left, max age right — match drag to thumb under forceRTL. */
+    direction: 'ltr',
   },
   sliderContainerWeb: {
     cursor: 'pointer',

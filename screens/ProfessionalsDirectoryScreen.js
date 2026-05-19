@@ -18,7 +18,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
-import {flexStart} from '../index';
+import {flexEnd, flexStart} from '../index';
 
 const imgBackArrow =
   'https://www.figma.com/api/mcp/asset/7f09ed22-4005-48ed-88bc-b516005535ca';
@@ -100,22 +100,11 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
 
       <View style={styles.cardContent}>
         <View style={styles.cardHeaderWrap}>
-          <View style={styles.ratingBlock}>
-            <Text style={styles.ratingNumber}>{ratingText}</Text>
-            <Image
-              source={imgStarBig}
-              style={styles.ratingBadgeImage}
-              resizeMode="contain"
-            />
-          </View>
           <View style={styles.cardTitleAddressCol}>
             <Text style={styles.cardTitle} numberOfLines={2}>
               {title}
             </Text>
             <View style={styles.addressRow}>
-              <Text style={styles.addressText} numberOfLines={1}>
-                {address}
-              </Text>
               <View style={styles.pinIconWrap}>
                 <Image
                   source={imgLocationPro}
@@ -123,7 +112,18 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
                   resizeMode="contain"
                 />
               </View>
+              <Text style={styles.addressText} numberOfLines={1}>
+                {address}
+              </Text>
             </View>
+          </View>
+          <View style={styles.ratingBlock}>
+            <Text style={styles.ratingNumber}>{ratingText}</Text>
+            <Image
+              source={imgStarBig}
+              style={styles.ratingBadgeImage}
+              resizeMode="contain"
+            />
           </View>
         </View>
 
@@ -187,9 +187,6 @@ const ProfessionalListCard = ({professional, onPress}) => {
           </View>
 
           <View style={styles.listAddressRow}>
-            <Text style={styles.listAddressText} numberOfLines={1}>
-              {address}
-            </Text>
             <View style={styles.listPinIconWrap}>
               <Image
                 source={imgLocationPro}
@@ -197,9 +194,11 @@ const ProfessionalListCard = ({professional, onPress}) => {
                 resizeMode="contain"
               />
             </View>
+            <Text style={styles.listAddressText} numberOfLines={1}>
+              {address}
+            </Text>
           </View>
         </View>
-
         <ProfileAvatar uri={mediaUrl} name={title} size={78} />
       </View>
 
@@ -427,6 +426,21 @@ const ProfessionalsDirectoryScreen = ({
         </View>
 
         <View style={styles.searchField}>
+          <View style={styles.searchInputGroup}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              style={styles.searchInput}
+              textAlign="right"
+              placeholder="סוג, שם העסק, התמחות, עיר"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+            />
+            <MaterialCommunityIcons
+              name="magnify"
+              size={22}
+              color="rgba(255,255,255,0.55)"
+            />
+          </View>
           <TouchableOpacity
             onPress={openSearchSettings}
             activeOpacity={0.85}
@@ -437,20 +451,6 @@ const ProfessionalsDirectoryScreen = ({
               color="#FFFFFF"
             />
           </TouchableOpacity>
-          <View style={styles.searchInputGroup}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              style={styles.searchInput}
-              placeholder="סוג, שם העסק, התמחות, עיר"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-            />
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color="rgba(255,255,255,0.55)"
-            />
-          </View>
         </View>
 
         <View style={styles.controlsRow}>
@@ -541,7 +541,7 @@ const ProfessionalsDirectoryScreen = ({
       )}
 
       {showSearchSettings ? (
-        <View style={styles.settingsOverlay}>
+        <View style={[styles.settingsOverlay, {paddingTop: insets.top}]}>
           <View style={styles.settingsMain}>
             <View style={styles.settingsTop}>
               <View style={styles.settingsTitleRow}>
@@ -580,7 +580,7 @@ const ProfessionalsDirectoryScreen = ({
                     placeholder=""
                     placeholderTextColor="#FFFFFF"
                     style={styles.settingsInput}
-                    textAlign="left"
+                    textAlign="right"
                   />
                 </View>
               </View>
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     height: 40,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
   },
   searchInputGroup: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
   },
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   },
   controlsRow: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
@@ -828,12 +828,13 @@ const styles = StyleSheet.create({
     justifyContent: flexStart,
     alignItems: 'flex-start',
     gap: 10,
+    direction: 'ltr',
   },
   listInfoCol: {
     flex: 1,
     minWidth: 0,
     gap: 16,
-    alignItems: flexStart,
+    // alignItems: flexStart,
   },
   listTitleRow: {
     width: '100%',
@@ -861,16 +862,17 @@ const styles = StyleSheet.create({
   listTitleText: {
     flex: 1,
     color: '#F7F3E6',
-    textAlign: 'left',
+    textAlign: 'right',
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
   },
   listAddressRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 4,
+    flex: 1,
   },
   listAddressText: {
     color: '#FFFFFF',
@@ -1125,7 +1127,7 @@ const styles = StyleSheet.create({
   },
   settingsTitleRow: {
     minHeight: 44,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -1176,6 +1178,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
+    writingDirection: 'rtl',
   },
   settingsChipWrap: {
     width: '100%',

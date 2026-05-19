@@ -18,10 +18,7 @@ const TermsOfUseScreen = ({onClose}) => {
     <View style={[styles.root, {writingDirection: 'rtl'}]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {paddingTop: insets.top + 8},
-        ]}
+        contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
@@ -57,11 +54,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
-    paddingVertical: 8,
     backgroundColor: '#ffffff',
   },
   backBtn: {

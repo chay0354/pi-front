@@ -523,6 +523,7 @@ const FollowHubScreen = ({
           value={search}
           onChangeText={setSearch}
           style={styles.searchInput}
+          textAlign="right"
         />
         <MaterialCommunityIcons
           name="magnify"
@@ -552,12 +553,32 @@ const FollowHubScreen = ({
                 styles.row,
                 isMutualGoldRow(row) ? styles.rowMutual : null,
               ]}>
-              {renderActionButton(row)}
               <TouchableOpacity
                 style={styles.rowBodyPress}
                 activeOpacity={0.85}
                 disabled={!onOpenUserProfile || row.is_self}
                 onPress={() => onOpenUserProfile && onOpenUserProfile(row)}>
+                <View
+                  style={[
+                    styles.avatarRing,
+                    isMutualGoldRow(row) ? styles.avatarRingMutual : null,
+                  ]}>
+                  {row.image_url ? (
+                    <Image
+                      source={{uri: row.image_url}}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                      <MaterialCommunityIcons
+                        name="account"
+                        size={18}
+                        color="rgba(255,255,255,0.6)"
+                      />
+                    </View>
+                  )}
+                </View>
                 <View style={styles.rowInfo}>
                   <Text
                     style={[
@@ -567,6 +588,7 @@ const FollowHubScreen = ({
                     {row.name}
                   </Text>
                   <View style={styles.rowMetaRow}>
+                    <Text style={styles.rowSub}>{row.subtitle}</Text>
                     {row?.viewer_rating_avg != null ? (
                       <View style={styles.rowRatingWrap}>
                         <Text style={styles.rowRatingValue}>
@@ -591,31 +613,10 @@ const FollowHubScreen = ({
                         )}
                       </View>
                     ) : null}
-                    <Text style={styles.rowSub}>{row.subtitle}</Text>
                   </View>
                 </View>
-                <View
-                  style={[
-                    styles.avatarRing,
-                    isMutualGoldRow(row) ? styles.avatarRingMutual : null,
-                  ]}>
-                  {row.image_url ? (
-                    <Image
-                      source={{uri: row.image_url}}
-                      style={styles.avatar}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <MaterialCommunityIcons
-                        name="account"
-                        size={18}
-                        color="rgba(255,255,255,0.6)"
-                      />
-                    </View>
-                  )}
-                </View>
               </TouchableOpacity>
+              {renderActionButton(row)}
             </View>
           ))
         )}
@@ -677,7 +678,7 @@ const styles = StyleSheet.create({
   },
   topRow: {
     height: 40,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   tabsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'center',
     gap: 24,
   },
@@ -885,7 +886,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   rowMetaRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 10,

@@ -169,12 +169,12 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
           showsVerticalScrollIndicator={false}>
           <View style={styles.summaryCard}>
             <View style={styles.summaryTopRow}>
+              <Text style={styles.summaryLabel}>מודעות פעילות</Text>
               <Text style={styles.summaryCountWrap}>
                 <Text style={styles.summaryCountCurrent}>{activeTotal}</Text>
                 <Text style={styles.summaryCountSlash}>/</Text>
                 <Text style={styles.summaryCountQuota}>{quota}</Text>
               </Text>
-              <Text style={styles.summaryLabel}>מודעות פעילות</Text>
             </View>
             <View style={styles.progressTrack}>
               <LinearGradient
@@ -191,8 +191,8 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
           </View>
 
           <View style={styles.tableHeader}>
-            <Text style={styles.tableHeaderLeft}>פרסומים</Text>
             <Text style={styles.tableHeaderRight}>קטגוריה</Text>
+            <Text style={styles.tableHeaderLeft}>פרסומים</Text>
           </View>
 
           {ANALYSIS_ROWS.map((row, idx) => {
@@ -201,19 +201,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
             return (
               <View key={row.id}>
                 <View style={styles.tableRow}>
-                  <View style={styles.rowLeft}>
-                    <Text style={styles.rowCount}>{count}</Text>
-                    <View style={styles.rowSubtextCol}>
-                      <Text style={styles.rowSubtextTitle}>
-                        מספר נכסים מפורסמים
-                      </Text>
-                      <Text style={styles.rowSubtextNote}>
-                        לא כולל בית פתוח ופוסטים
-                      </Text>
-                    </View>
-                  </View>
                   <View style={styles.rowRight}>
-                    <Text style={styles.rowCategoryName}>{row.label}</Text>
                     {meta?.image ? (
                       <CroppedCategoryImage
                         source={meta.image}
@@ -237,6 +225,18 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
                         />
                       </View>
                     )}
+                    <Text style={styles.rowCategoryName}>{row.label}</Text>
+                  </View>
+                  <View style={styles.rowLeft}>
+                    <View style={styles.rowSubtextCol}>
+                      <Text style={styles.rowSubtextTitle}>
+                        מספר נכסים מפורסמים
+                      </Text>
+                      <Text style={styles.rowSubtextNote}>
+                        לא כולל בית פתוח ופוסטים
+                      </Text>
+                    </View>
+                    <Text style={styles.rowCount}>{count}</Text>
                   </View>
                 </View>
                 {idx < ANALYSIS_ROWS.length - 1 ? (
@@ -254,7 +254,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: BG},
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: 14,
@@ -388,6 +388,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 10,
   },
   rowCount: {
@@ -397,7 +398,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     fontWeight: '600',
     minWidth: 28,
-    textAlign: inverseTextAlign,
+    textAlign: 'right',
   },
   rowSubtextCol: {
     flexShrink: 1,

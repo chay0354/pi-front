@@ -501,7 +501,7 @@ const AdsForm = ({
   const [category, setCategory] = useState(
     initialCategory ? parseInt(initialCategory) : 1,
   ); // Category 1-11 (default: 1, or use initialCategory if provided)
-
+  console.log('category', category);
   /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7), hide irrelevant blocks */
   const adsFormFields = useMemo(() => {
     return (
@@ -2153,16 +2153,15 @@ const AdsForm = ({
     }
   };
 
+  console.log('ads form screen', adsFormFields);
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         <TouchableOpacity
           onPress={onClose}
-          style={[
-            styles.backButton,
-            Platform.OS === 'web' && {cursor: 'pointer'},
-          ]}
+          style={[Platform.OS === 'web' && {cursor: 'pointer'}]}
           activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
@@ -2685,13 +2684,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 20,
-  },
-  backButton: {
-    marginEnd: 15,
   },
   backArrow: {
     color: '#fff',
@@ -2771,7 +2767,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     marginBottom: 5,
-    textAlign: "left",
+    textAlign: 'left',
     fontFamily: 'Rubik-Medium',
   },
   ageRangeSliderContainer: {

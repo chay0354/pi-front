@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,

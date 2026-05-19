@@ -43,7 +43,7 @@ export const RadioWithText = ({
         onLongPress={onLongPress}
         delayLongPress={450}
         activeOpacity={0.7}>
-        <Text style={[styles.radioOptionText, {textAlign:'left'}]}>
+        <Text style={[styles.radioOptionText, {textAlign:'right'}]}>
           {title}
           {isRequired && <Text style={styles.requiredStar}>*</Text>}
         </Text>
@@ -61,6 +61,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 20,
+    direction: 'ltr',
   },
   radioOptionText: {
     color: Colors.whiteGeneral,

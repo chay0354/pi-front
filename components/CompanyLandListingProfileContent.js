@@ -166,10 +166,7 @@ export default function CompanyLandListingProfileContent({
     [listing],
   );
 
-  const offersTitle = useMemo(
-    () => landOffersSectionTitle(listing),
-    [listing],
-  );
+  const offersTitle = useMemo(() => landOffersSectionTitle(listing), [listing]);
 
   const {parcel, block} = useMemo(() => {
     const parsed = parseLandBlockParcelFromListing(listing);
@@ -238,9 +235,7 @@ export default function CompanyLandListingProfileContent({
               <MaterialCommunityIcons name="account" size={14} color="#fff" />
             </View>
           )}
-          <Text style={styles.postedByName}>
-            {publisherName || 'משתמש'}
-          </Text>
+          <Text style={styles.postedByName}>{publisherName || 'משתמש'}</Text>
         </View>
       </View>
 
@@ -261,8 +256,8 @@ export default function CompanyLandListingProfileContent({
               return (
                 <View key={`land-offer-${idx}`} style={styles.offerCard}>
                   <View style={styles.offerCardHeader}>
-                    <Text style={styles.offerCardTitle}>קרקע {idx + 1}</Text>
                     <LandParcelIcon />
+                    <Text style={styles.offerCardTitle}>קרקע {idx + 1}</Text>
                   </View>
                   <Text style={styles.offerCardDetails}>
                     {`מחיר: ${priceStr}   |   גודל: ${sizeStr}`}
@@ -289,7 +284,7 @@ export default function CompanyLandListingProfileContent({
           <View style={[styles.line, {width: CONTENT_W}]} />
           <View style={[styles.twoColGrid, {width: CONTENT_W}]}>
             <View style={styles.col}>
-              {attrGridColumns.left.map(c => (
+              {attrGridColumns.right.map(c => (
                 <AttrChip
                   key={c.id}
                   label={c.label}
@@ -298,7 +293,7 @@ export default function CompanyLandListingProfileContent({
               ))}
             </View>
             <View style={styles.col}>
-              {attrGridColumns.right.map(c => (
+              {attrGridColumns.left.map(c => (
                 <AttrChip
                   key={c.id}
                   label={c.label}
@@ -322,14 +317,17 @@ export default function CompanyLandListingProfileContent({
 
       <View style={[styles.line, {width: CONTENT_W}]} />
       <PartnersSmartInfoBlock adAddress={smartAddr} />
-      <View style={[styles.line, {width: CONTENT_W}]} />
 
       {!hideReportButton ? (
         <TouchableOpacity
           style={[styles.reportBtn, {width: CONTENT_W}]}
           onPress={onReportPress}
           activeOpacity={0.85}>
-          <MaterialCommunityIcons name="alert-outline" size={24} color={CREAM} />
+          <MaterialCommunityIcons
+            name="alert-outline"
+            size={24}
+            color={CREAM}
+          />
           <Text style={styles.reportBtnText}>דווח</Text>
         </TouchableOpacity>
       ) : null}
@@ -366,7 +364,7 @@ const styles = StyleSheet.create({
     height: 85,
     position: 'absolute',
     marginLeft: -7,
-    top: -35,
+    top: -20,
   },
   piBadgeText: {
     color: GOLD_PI,
@@ -390,8 +388,7 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontFamily: 'Rubik-SemiBold',
-    fontSize: 40,
-    lineHeight: 47,
+    fontSize: 32,
     color: '#FFFFFF',
     textAlign: 'left',
     width: '100%',
@@ -399,7 +396,7 @@ const styles = StyleSheet.create({
   locRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: 5,
     width: '100%',
   },
@@ -432,7 +429,7 @@ const styles = StyleSheet.create({
   postedByRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: 8,
     width: '100%',
   },
@@ -497,7 +494,7 @@ const styles = StyleSheet.create({
   offerCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: 6,
     width: '100%',
   },
@@ -525,7 +522,7 @@ const styles = StyleSheet.create({
     height: 28,
   },
   twoColGrid: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
     alignSelf: flexStart,
   },
@@ -579,7 +576,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   attrChipInner: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 8,

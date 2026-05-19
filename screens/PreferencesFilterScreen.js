@@ -193,8 +193,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
       style={styles.checkRow}
       onPress={onToggle}
       activeOpacity={0.8}>
-      <Text style={styles.checkLabel}>{label}</Text>
       <FigmaCheckbox checked={checked} />
+      <Text style={styles.checkLabel}>{label}</Text>
     </TouchableOpacity>
   );
 
@@ -382,6 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 24,
+    direction: 'ltr',
   },
   genderPillWrap: {
     flex: 1,
@@ -448,9 +449,10 @@ const styles = StyleSheet.create({
   ageRangeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    // justifyContent: 'center',
     gap: 10,
     marginBottom: 19,
+    direction: 'ltr',
   },
   ageRangeValue: {
     color: '#FFFFFF',
@@ -472,6 +474,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 0,
+    direction: 'ltr',
   },
   sliderTrack: {
     position: 'absolute',

@@ -130,8 +130,8 @@ const ApartmentTypeFilterScreen = ({
                     );
                   }}
                   activeOpacity={0.8}>
-                  <Text style={styles.radioLabel}>{option.label}</Text>
                   <FigmaCheckbox checked={checked} variant="dot" />
+                  <Text style={styles.radioLabel}>{option.label}</Text>
                 </TouchableOpacity>
               );
             })}

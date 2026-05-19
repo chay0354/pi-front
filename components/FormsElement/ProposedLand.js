@@ -19,7 +19,7 @@ export const ProposedLand = () => {
       <Title text="קרקע מוצעת" required />
       <View style={styles.radioRow}>
         <Text style={styles.subLabel}>שטח הקרקע *</Text>
-        <View style={{flexDirection: 'row'}}>
+        <View style={{flexDirection: 'row', direction: 'ltr'}}>
           <RadioWithText
             key={1}
             isNotLastIndex={false}
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   radioRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,

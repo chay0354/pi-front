@@ -142,12 +142,12 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
       activeOpacity={0.8}
       accessibilityRole="checkbox"
       accessibilityState={{checked}}>
-      <Text style={styles.amenityText}>{label}</Text>
       <FigmaCheckbox
         checked={checked}
         size={24}
         style={checkRingStyle(checked)}
       />
+      <Text style={styles.amenityText}>{label}</Text>
     </TouchableOpacity>
   );
 
@@ -313,6 +313,7 @@ const styles = StyleSheet.create({
     borderColor: '#8C85B3',
     overflow: 'hidden',
     paddingHorizontal: 0,
+    direction: 'ltr',
   },
   counterButtonLeft: {
     width: 56,

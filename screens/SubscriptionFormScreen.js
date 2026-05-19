@@ -1,4 +1,4 @@
-import React, {useState, useRef} from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -119,198 +119,176 @@ const SubscriptionFormScreen = ({
     );
   };
 
-  // Request image picker permissions
-  const requestImagePermission = async () => {
-    if (Platform.OS === 'web') {
-      // On web, we can proceed without explicit permission
-      return true;
-    }
+  const buildPickedImageFile = (asset, namePrefix = 'photo') => ({
+    uri: asset.uri,
+    type: asset.type || asset.mimeType || 'image/jpeg',
+    name: asset.fileName || asset.filename || `${namePrefix}-${Date.now()}.jpg`,
+    file: asset,
+  });
 
-    try {
-      const {status} = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission needed',
-          'Sorry, we need camera roll permissions to upload images!',
-        );
-        return false;
+  const buildPickedVideoFile = asset => ({
+    uri: asset.uri,
+    type: asset.type || asset.mimeType || 'video/mp4',
+    name: asset.fileName || asset.filename || `video-${Date.now()}.mp4`,
+    file: asset,
+  });
+
+  const buildWebPickedFile = (file, namePrefix = 'photo') => ({
+    uri: URL.createObjectURL(file),
+    type: file.type,
+    name: file.name || `${namePrefix}-${Date.now()}.jpg`,
+    file,
+  });
+
+  // Request camera and media library permissions on mount (native)
+  useEffect(() => {
+    const requestPermissions = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          const cameraStatus =
+            await ImagePicker.requestCameraPermissionsAsync();
+          const mediaLibraryStatus =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+          if (
+            cameraStatus.status !== 'granted' ||
+            mediaLibraryStatus.status !== 'granted'
+          ) {
+            Alert.alert(
+              'נדרשת הרשאה',
+              'נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים',
+            );
+          }
+        } catch (error) {
+          console.error('Permission request error:', error);
+        }
       }
-      return true;
-    } catch (error) {
-      console.error('Error requesting permission:', error);
-      return false;
-    }
+    };
+
+    requestPermissions();
+  }, []);
+
+  const openWebImagePicker = onPicked => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = e => {
+      const file = e.target.files?.[0];
+      if (file) {
+        onPicked(buildWebPickedFile(file));
+      }
+    };
+    input.click();
   };
 
   // Pick profile picture
   const pickProfilePicture = async () => {
-    console.log('pickProfilePicture called');
-
-    // Web fallback using file input
     if (Platform.OS === 'web') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = e => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = event => {
-            setProfilePicture({
-              uri: event.target.result,
-              type: file.type,
-              name: file.name,
-            });
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-      return;
-    }
-
-    const hasPermission = await requestImagePermission();
-    if (!hasPermission) {
-      console.log('Permission denied');
+      openWebImagePicker(fileObj => setProfilePicture(fileObj));
       return;
     }
 
     try {
-      console.log('Launching image picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
-      console.log('Image picker result:', result);
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setProfilePicture(result.assets[0]);
+      if (!result.canceled && result.assets?.[0]) {
+        setProfilePicture(buildPickedImageFile(result.assets[0], 'profile'));
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', `Failed to pick image: ${error.message}`);
+      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`);
     }
   };
 
   // Pick additional image
   const pickAdditionalImage = async index => {
-    console.log('pickAdditionalImage called for index:', index);
-
-    // Web fallback using file input
     if (Platform.OS === 'web') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = e => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = event => {
-            const newImages = [...additionalImages];
-            newImages[index] = {
-              uri: event.target.result,
-              type: file.type,
-              name: file.name,
-            };
-            setAdditionalImages(newImages);
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
+      openWebImagePicker(fileObj => {
+        const newImages = [...additionalImages];
+        newImages[index] = fileObj;
+        setAdditionalImages(newImages);
+      });
       return;
     }
 
-    const hasPermission = await requestImagePermission();
-    if (!hasPermission) return;
-
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
+      if (!result.canceled && result.assets?.[0]) {
         const newImages = [...additionalImages];
-        newImages[index] = result.assets[0];
+        newImages[index] = buildPickedImageFile(result.assets[0]);
         setAdditionalImages(newImages);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', `Failed to pick image: ${error.message}`);
+      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`);
     }
   };
 
   // Pick company logo
   const pickCompanyLogo = async () => {
-    console.log('pickCompanyLogo called');
+    if (Platform.OS === 'web') {
+      openWebImagePicker(fileObj => setCompanyLogo(fileObj));
+      return;
+    }
 
-    // Web fallback using file input
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setCompanyLogo(buildPickedImageFile(result.assets[0], 'logo'));
+      }
+    } catch (error) {
+      Alert.alert('שגיאה', `לא ניתן לבחור לוגו: ${error.message}`);
+    }
+  };
+
+  // Pick video
+  const pickVideo = async () => {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = 'image/*';
+      input.accept = 'video/*';
       input.onchange = e => {
-        const file = e.target.files[0];
+        const file = e.target.files?.[0];
         if (file) {
-          const reader = new FileReader();
-          reader.onload = event => {
-            setCompanyLogo({
-              uri: event.target.result,
-              type: file.type,
-              name: file.name,
-            });
-          };
-          reader.readAsDataURL(file);
+          setVideo({
+            uri: URL.createObjectURL(file),
+            type: file.type,
+            name: file.name || `video-${Date.now()}.mp4`,
+            file,
+          });
         }
       };
       input.click();
       return;
     }
 
-    const hasPermission = await requestImagePermission();
-    if (!hasPermission) return;
-
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        quality: 1,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setCompanyLogo(result.assets[0]);
+      if (!result.canceled && result.assets?.[0]) {
+        setVideo(buildPickedVideoFile(result.assets[0]));
       }
     } catch (error) {
-      console.error('Error picking logo:', error);
-      Alert.alert('Error', `Failed to pick logo: ${error.message}`);
-    }
-  };
-
-  // Pick video
-  const pickVideo = async () => {
-    console.log('pickVideo called');
-    const hasPermission = await requestImagePermission();
-    if (!hasPermission) return;
-
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'videos',
-        allowsEditing: Platform.OS !== 'web',
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setVideo(result.assets[0]);
-      }
-    } catch (error) {
-      console.error('Error picking video:', error);
-      Alert.alert('Error', `Failed to pick video: ${error.message}`);
+      Alert.alert('שגיאה', `לא ניתן לבחור סרטון: ${error.message}`);
     }
   };
 
@@ -922,7 +900,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyName}
                   onChangeText={setCompanyName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -934,7 +912,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={contactPersonName}
                   onChangeText={setContactPersonName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -946,7 +924,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyId}
                   onChangeText={setCompanyId}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -959,7 +937,7 @@ const SubscriptionFormScreen = ({
                   value={officePhone}
                   onChangeText={setOfficePhone}
                   keyboardType="phone-pad"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -972,7 +950,7 @@ const SubscriptionFormScreen = ({
                   value={mobilePhone}
                   onChangeText={setMobilePhone}
                   keyboardType="phone-pad"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -986,7 +964,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setCompanyEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1000,12 +978,11 @@ const SubscriptionFormScreen = ({
                   onChangeText={setCompanyWebsite}
                   keyboardType="url"
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
               <View style={styles.companyDescriptionOption}>
-                <Text style={styles.companyDescriptionLabel}>הוסף תיאור</Text>
                 <TouchableOpacity
                   onPress={() => setAddDescription(!addDescription)}
                   style={[
@@ -1020,6 +997,7 @@ const SubscriptionFormScreen = ({
                     />
                   )}
                 </TouchableOpacity>
+                <Text style={styles.companyDescriptionLabel}>הוסף תיאור</Text>
               </View>
 
               {addDescription && (
@@ -1032,7 +1010,7 @@ const SubscriptionFormScreen = ({
                     onChangeText={setDescription}
                     multiline
                     numberOfLines={4}
-                    textAlign="left"
+                    textAlign="right"
                   />
                 </View>
               )}
@@ -1079,7 +1057,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerageLicenseNumber}
                   onChangeText={setBrokerageLicenseNumber}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1091,7 +1069,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={brokerOfficeName}
                   onChangeText={setBrokerOfficeName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1103,7 +1081,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={agentName}
                   onChangeText={setAgentName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1115,7 +1093,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1128,7 +1106,7 @@ const SubscriptionFormScreen = ({
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1142,7 +1120,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1156,7 +1134,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setDescription}
                   multiline
                   numberOfLines={4}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
             </>
@@ -1175,7 +1153,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessName}
                   onChangeText={setBusinessName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1187,7 +1165,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={businessAddress}
                   onChangeText={setBusinessAddress}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1199,7 +1177,7 @@ const SubscriptionFormScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1212,7 +1190,7 @@ const SubscriptionFormScreen = ({
                   value={phone1}
                   onChangeText={setPhone1}
                   keyboardType="phone-pad"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1225,7 +1203,7 @@ const SubscriptionFormScreen = ({
                   value={phone2}
                   onChangeText={setPhone2}
                   keyboardType="phone-pad"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1239,7 +1217,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -1253,7 +1231,7 @@ const SubscriptionFormScreen = ({
                   onChangeText={setDescription}
                   multiline
                   numberOfLines={4}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
             </>
@@ -1345,7 +1323,6 @@ const styles = StyleSheet.create({
   topNavSection: {
     width: '100%',
     paddingHorizontal: 24,
-    paddingTop: 50,
     paddingBottom: 20,
     backgroundColor: '#1e1d27',
     shadowColor: '#000',
@@ -1356,7 +1333,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   topNavHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -1420,7 +1397,7 @@ const styles = StyleSheet.create({
   companyWizard: {
     width: '100%',
     maxWidth: 366,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 4,
@@ -1580,9 +1557,8 @@ const styles = StyleSheet.create({
   },
   companyLogoWrap: {
     width: '100%',
-    maxWidth: 366,
-    alignSelf: 'center',
-    alignItems: 'center',
+    // maxWidth: 366,
+    alignItems: flexEnd,
     marginTop: 2,
     paddingHorizontal: 24,
   },
@@ -1625,7 +1601,7 @@ const styles = StyleSheet.create({
   companyLogoAddBadge: {
     position: 'absolute',
     bottom: 0,
-    right: 0,
+    left: 0,
     width: 35,
     height: 35,
     borderRadius: 17.5,
@@ -1700,7 +1676,7 @@ const styles = StyleSheet.create({
   },
   formSection: {
     width: '100%',
-    maxWidth: 366,
+    // maxWidth: 366,
     alignSelf: 'center',
     gap: 12,
     marginBottom: 20,
@@ -1755,6 +1731,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white100,
     textAlign: 'left',
+    writingDirection: 'rtl',
   },
   companyInput: {
     height: 52,
@@ -1780,6 +1757,7 @@ const styles = StyleSheet.create({
     color: Colors.white100,
     textAlign: 'left',
     textAlignVertical: 'top',
+    writingDirection: 'rtl',
   },
   nextButton: {
     width: '100%',
@@ -1879,6 +1857,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
     textAlignVertical: 'top',
+    writingDirection: 'rtl',
   },
   brokerTabContainer: {
     width: '100%',
@@ -2049,7 +2028,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   brokerChipsContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     justifyContent: flexStart,

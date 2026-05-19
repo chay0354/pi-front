@@ -19,12 +19,12 @@ export const InputBox = ({
         starStyle={{color: Colors.textSecondary}}
       />
       <TextInput
-        style={[styles.textInput, {textAlign:'left'}]}
+        style={[styles.textInput, {textAlign:'right'}]}
         placeholder={placeholder}
         placeholderTextColor="rgba(255, 255, 255, 0.5)"
         value={value}
         onChangeText={setValue}
-        textAlign="left"
+        textAlign="right"
       />
     </View>
   );
@@ -50,5 +50,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     height: 52,
     fontFamily: 'Rubik-Regular',
+    writingDirection: 'rtl',
   },
 });

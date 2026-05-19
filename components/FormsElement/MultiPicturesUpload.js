@@ -180,6 +180,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginTop: 15,
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
   },
 });

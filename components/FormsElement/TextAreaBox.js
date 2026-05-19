@@ -18,13 +18,13 @@ export const TextAreaBox = ({
         starStyle={{color: Colors.textSecondary}}
       />
       <TextInput
-        style={[styles.textArea, {textAlign:'left'}]}
+        style={[styles.textArea]}
         placeholder={placeholder}
         placeholderTextColor="rgba(255, 255, 255, 0.5)"
         value={value}
         onChangeText={setValue}
         multiline
-        textAlign="left"
+        textAlign="right"
       />
     </View>
   );
@@ -42,6 +42,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 10,
     height: 165,
+    writingDirection: 'rtl',
   },
   inputLabel: {
     fontSize: 14,

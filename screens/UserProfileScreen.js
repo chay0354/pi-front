@@ -1200,7 +1200,9 @@ const UserProfileScreen = ({
       company_offers_land_sizes:
         parcels.length > 0
           ? parcels
-          : lastAd.company_offers_land_sizes ?? lastAd.companyOffersLandSizes ?? null,
+          : (lastAd.company_offers_land_sizes ??
+            lastAd.companyOffersLandSizes ??
+            null),
     };
   }, [isLandListingAdProfile, lastAd]);
   const showLocationMap =
@@ -1925,405 +1927,419 @@ const UserProfileScreen = ({
 
             {!openedFromPost &&
               (isDedicatedListingAdProfile || !isProfessional) && (
-              <View style={styles.lastAdBody}>
-                {isBnbListingAdProfile ? (
-                  <BnbListingProfileContent
-                    listing={lastAd}
-                    mapAddress={firstNonEmpty(
-                      lastAd?.address,
-                      lastAd?.location,
-                      lastAd?.search_address,
-                      lastAd?.contact_details?.address,
-                      user?.address,
-                      brokerAddress,
-                    )}
-                    adAddress={adAddress}
-                    onReportPress={handleReportPress}
-                  />
-                ) : isPartnersListingAdProfile ? (
-                  <PartnersListingProfileContent
-                    listing={lastAd}
-                    displayName={displayName}
-                    mapAddress={firstNonEmpty(
-                      lastAd?.address,
-                      lastAd?.location,
-                      brokerAddress,
-                    )}
-                    adAddress={adAddress}
-                    onReportPress={handleReportPress}
-                  />
-                ) : isLandListingAdProfile ? (
-                  <CompanyLandListingProfileContent
-                    listing={landListingPayload}
-                    displayName={displayName}
-                    displayPiRating={displayPiRating}
-                    publisherAvatarUri={
-                      lastAd?.profileImageUrl || displayImage || null
-                    }
-                    mapAddress={firstNonEmpty(
-                      lastAd?.address,
-                      lastAd?.location,
-                      lastAd?.search_address,
-                      lastAd?.land_address,
-                      brokerAddress,
-                    )}
-                    adAddress={adAddress}
-                    onReportPress={handleReportPress}
-                    hideReportButton={showLandProfileContactAndReviews}
-                  />
-                ) : (
-                  <>
-                    <View style={styles.lastAdPiAndPurposeRow}>
-                      {renderPiRating() || <View />}
-                      {isCompany ? (
-                        <Image
-                          source={require('../assets/pre-sale.png')}
-                          style={styles.preSaleBadgeImage}
-                          resizeMode="contain"
-                        />
-                      ) : isProfessional ? (
-                        <Text
-                          style={styles.lastAdProfessionalName}
-                          numberOfLines={1}>
-                          {displayName}
-                        </Text>
-                      ) : (
-                        <View style={styles.lastAdPurposeTag}>
-                          <Text style={styles.lastAdPurposeText}>
-                            {lastAd.purpose || 'להשכרה'}
-                          </Text>
-                        </View>
+                <View style={styles.lastAdBody}>
+                  {isBnbListingAdProfile ? (
+                    <BnbListingProfileContent
+                      listing={lastAd}
+                      mapAddress={firstNonEmpty(
+                        lastAd?.address,
+                        lastAd?.location,
+                        lastAd?.search_address,
+                        lastAd?.contact_details?.address,
+                        user?.address,
+                        brokerAddress,
                       )}
-                    </View>
-                    {!isProfessional && (
-                      <Text style={styles.lastAdPrice}>
-                        {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
-                      </Text>
-                    )}
-                    {(() => {
-                      const addr = firstNonEmpty(
-                        user?._fromTikTokPost
-                          ? user?.creator_business_address
-                          : null,
-                        user?._fromTikTokPost ? user?.business_address : null,
-                        lastAd.address,
-                        lastAd.location,
-                      );
-                      if (!addr) return null;
-                      return (
-                        <View style={styles.lastAdLocationRow}>
-                          <SimpleLineIcons
-                            name="location-pin"
-                            size={18}
-                            color="rgba(255,255,255,0.9)"
-                          />
-                          <Text style={styles.lastAdLocationText}>{addr}</Text>
-                        </View>
-                      );
-                    })()}
-                    {isBroker && <View style={styles.lastAdDivider} />}
-                    {isCompany && (
-                      <View style={styles.companyStatsRow}>
-                        <View style={styles.companyStatItem}>
+                      adAddress={adAddress}
+                      onReportPress={handleReportPress}
+                    />
+                  ) : isPartnersListingAdProfile ? (
+                    <PartnersListingProfileContent
+                      listing={lastAd}
+                      displayName={displayName}
+                      mapAddress={firstNonEmpty(
+                        lastAd?.address,
+                        lastAd?.location,
+                        brokerAddress,
+                      )}
+                      adAddress={adAddress}
+                      onReportPress={handleReportPress}
+                    />
+                  ) : isLandListingAdProfile ? (
+                    <CompanyLandListingProfileContent
+                      listing={landListingPayload}
+                      displayName={displayName}
+                      displayPiRating={displayPiRating}
+                      publisherAvatarUri={
+                        lastAd?.profileImageUrl || displayImage || null
+                      }
+                      mapAddress={firstNonEmpty(
+                        lastAd?.address,
+                        lastAd?.location,
+                        lastAd?.search_address,
+                        lastAd?.land_address,
+                        brokerAddress,
+                      )}
+                      adAddress={adAddress}
+                      onReportPress={handleReportPress}
+                      hideReportButton={showLandProfileContactAndReviews}
+                    />
+                  ) : (
+                    <>
+                      <View style={styles.lastAdPiAndPurposeRow}>
+                        {renderPiRating() || <View />}
+                        {isCompany ? (
                           <Image
-                            source={require('../assets/building_icon.png')}
-                            style={styles.companyStatIconImage}
+                            source={require('../assets/pre-sale.png')}
+                            style={styles.preSaleBadgeImage}
                             resizeMode="contain"
                           />
-                          <Text style={styles.companyStatText}>
-                            {formatCompanyBuildingsLabel(companyBuildingCount)}
+                        ) : isProfessional ? (
+                          <Text
+                            style={styles.lastAdProfessionalName}
+                            numberOfLines={1}>
+                            {displayName}
                           </Text>
-                        </View>
-                        <View style={styles.companyStatItem}>
-                          <Image
-                            source={require('../assets/floor_icon.png')}
-                            style={styles.companyStatIconImage}
-                            resizeMode="contain"
-                          />
-                          <Text style={styles.companyStatText}>
-                            {formatCompanyFloorsLabel(companyFloorCount)}
-                          </Text>
-                        </View>
-                        <View style={styles.companyStatItem}>
-                          <Image
-                            source={require('../assets/apartment_icon.png')}
-                            style={styles.companyStatIconImage}
-                            resizeMode="contain"
-                          />
-                          <Text style={styles.companyStatText}>
-                            {formatCompanyApartmentsLabel(
-                              companyApartmentCount,
-                            )}
-                          </Text>
-                        </View>
+                        ) : (
+                          <View style={styles.lastAdPurposeTag}>
+                            <Text style={styles.lastAdPurposeText}>
+                              {lastAd.purpose || 'להשכרה'}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                    {isCompany && <View style={styles.lastAdDivider} />}
-                    {isRegularUserAdView ? (
-                      <>
-                        <View style={styles.lastAdDivider} />
-                        <Text
-                          style={styles.lastAdDescription}
-                          numberOfLines={6}>
-                          {String(lastAd.description || '').trim() ||
-                            'אין תיאור'}
+                      {!isProfessional && (
+                        <Text style={styles.lastAdPrice}>
+                          {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
                         </Text>
-                      </>
-                    ) : (
-                      <>
-                        <View style={styles.lastAdPostedBy}>
-                          <Text style={styles.lastAdPostedByLabel}>
-                            פורסם ע"י
-                          </Text>
-                          <View style={styles.brokerCardBottomLocation}>
-                            {lastAd.profileImageUrl || displayImage ? (
-                              <Image
-                                source={{
-                                  uri: lastAd.profileImageUrl || displayImage,
-                                }}
-                                style={styles.lastAdPostedByAvatar}
-                                resizeMode="cover"
-                              />
-                            ) : (
-                              <View
-                                style={[
-                                  styles.lastAdPostedByAvatar,
-                                  styles.lastAdPostedByAvatarPlaceholder,
-                                ]}>
-                                <MaterialCommunityIcons
-                                  name="account"
-                                  size={14}
-                                  color="#fff"
-                                />
-                              </View>
-                            )}
-                            <Text style={styles.lastAdPostedByName}>
-                              {displayName}
+                      )}
+                      {(() => {
+                        const addr = firstNonEmpty(
+                          user?._fromTikTokPost
+                            ? user?.creator_business_address
+                            : null,
+                          user?._fromTikTokPost ? user?.business_address : null,
+                          lastAd.address,
+                          lastAd.location,
+                        );
+                        if (!addr) return null;
+                        return (
+                          <View style={styles.lastAdLocationRow}>
+                            <SimpleLineIcons
+                              name="location-pin"
+                              size={18}
+                              color="rgba(255,255,255,0.9)"
+                            />
+                            <Text style={styles.lastAdLocationText}>
+                              {addr}
+                            </Text>
+                          </View>
+                        );
+                      })()}
+                      {isBroker && <View style={styles.lastAdDivider} />}
+                      {isCompany && (
+                        <View style={styles.companyStatsRow}>
+                          <View style={styles.companyStatItem}>
+                            <Image
+                              source={require('../assets/building_icon.png')}
+                              style={styles.companyStatIconImage}
+                              resizeMode="contain"
+                            />
+                            <Text style={styles.companyStatText}>
+                              {formatCompanyBuildingsLabel(
+                                companyBuildingCount,
+                              )}
+                            </Text>
+                          </View>
+                          <View style={styles.companyStatItem}>
+                            <Image
+                              source={require('../assets/floor_icon.png')}
+                              style={styles.companyStatIconImage}
+                              resizeMode="contain"
+                            />
+                            <Text style={styles.companyStatText}>
+                              {formatCompanyFloorsLabel(companyFloorCount)}
+                            </Text>
+                          </View>
+                          <View style={styles.companyStatItem}>
+                            <Image
+                              source={require('../assets/apartment_icon.png')}
+                              style={styles.companyStatIconImage}
+                              resizeMode="contain"
+                            />
+                            <Text style={styles.companyStatText}>
+                              {formatCompanyApartmentsLabel(
+                                companyApartmentCount,
+                              )}
                             </Text>
                           </View>
                         </View>
-                        <Text
-                          style={styles.lastAdDescription}
-                          numberOfLines={6}>
-                          {lastAd.description ||
-                            'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
-                        </Text>
-                      </>
-                    )}
-                    <View style={styles.lastAdDivider} />
-                    {isBroker ? (
-                      <>
-                        <View style={styles.lastAdFeaturesGrid}>
-                          {adFeatures.map((item, index) => (
-                            <View
-                              key={`feat-${item.iconKey}-${index}`}
-                              style={styles.lastAdFeatureChip}>
-                              <Image
-                                source={getFeatureIconSource(item.iconKey)}
-                                style={styles.smartInfoBtnIcon}
-                                resizeMode="contain"
-                              />
-                              <Text style={styles.smartInfoBtnLabel}>
-                                {item.label}
+                      )}
+                      {isCompany && <View style={styles.lastAdDivider} />}
+                      {isRegularUserAdView ? (
+                        <>
+                          <View style={styles.lastAdDivider} />
+                          <Text
+                            style={styles.lastAdDescription}
+                            numberOfLines={6}>
+                            {String(lastAd.description || '').trim() ||
+                              'אין תיאור'}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <View style={styles.lastAdPostedBy}>
+                            <Text style={styles.lastAdPostedByLabel}>
+                              פורסם ע"י
+                            </Text>
+                            <View style={styles.brokerCardBottomLocation}>
+                              {lastAd.profileImageUrl || displayImage ? (
+                                <Image
+                                  source={{
+                                    uri: lastAd.profileImageUrl || displayImage,
+                                  }}
+                                  style={styles.lastAdPostedByAvatar}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.lastAdPostedByAvatar,
+                                    styles.lastAdPostedByAvatarPlaceholder,
+                                  ]}>
+                                  <MaterialCommunityIcons
+                                    name="account"
+                                    size={14}
+                                    color="#fff"
+                                  />
+                                </View>
+                              )}
+                              <Text style={styles.lastAdPostedByName}>
+                                {displayName}
                               </Text>
                             </View>
-                          ))}
-                        </View>
-                        <View style={styles.lastAdDividerWhite} />
-                      </>
-                    ) : isCompany && projectOffersCards.length > 0 ? (
-                      <>
-                        <View style={styles.projectOffersSection}>
-                          <Text style={styles.projectOffersTitle}>
-                            הפרויקט מציע
+                          </View>
+                          <Text
+                            style={styles.lastAdDescription}
+                            numberOfLines={6}>
+                            {lastAd.description ||
+                              'דירה מרווחת ומוארת בלב תל אביב. קרובה למרכזי בילוי, תחבורה ציבורית ופארקים. משופצת מהיסוד עם חומרים איכותיים. הזדמנות שלא תחזור!'}
                           </Text>
-                          {projectOffersCards.map(card => {
-                            const areaStr =
-                              card.area != null
-                                ? `גודל: ${card.area} מ"ר`
-                                : 'גודל: —';
-                            const priceStr =
-                              card.price != null
-                                ? `החל מ-₪${Number(card.price).toLocaleString('he-IL')}`
-                                : null;
-                            const roomsStr =
-                              card.rooms != null
-                                ? `מס' חדרים: ${card.rooms}`
-                                : null;
-                            const isSimple = card.rooms == null;
-                            const detailsLine = isSimple
-                              ? `${areaStr} | ${priceStr || 'החל מ-—₪'}`
-                              : [areaStr, roomsStr].filter(Boolean).join(' | ');
-                            return (
+                        </>
+                      )}
+                      <View style={styles.lastAdDivider} />
+                      {isBroker ? (
+                        <>
+                          <View style={styles.lastAdFeaturesGrid}>
+                            {adFeatures.map((item, index) => (
                               <View
-                                key={card.key}
-                                style={styles.projectOfferCard}>
-                                <View style={styles.projectOfferCardHeader}>
-                                  <Image
-                                    source={getProjectOfferIconName(
-                                      card.iconKey,
-                                    )}
-                                    style={styles.companyStatIconImage}
-                                    resizeMode="contain"
-                                  />
-                                  <Text style={styles.projectOfferCardTitle}>
-                                    {card.title}
-                                  </Text>
-                                </View>
-                                <Text style={styles.projectOfferCardDetails}>
-                                  {detailsLine}
+                                key={`feat-${item.iconKey}-${index}`}
+                                style={styles.lastAdFeatureChip}>
+                                <Image
+                                  source={getFeatureIconSource(item.iconKey)}
+                                  style={styles.smartInfoBtnIcon}
+                                  resizeMode="contain"
+                                />
+                                <Text style={styles.smartInfoBtnLabel}>
+                                  {item.label}
                                 </Text>
-                                {!isSimple && (
-                                  <Text style={styles.projectOfferCardPrice}>
-                                    {priceStr || 'החל מ-—₪'}
-                                  </Text>
-                                )}
                               </View>
-                            );
-                          })}
-                        </View>
-                        <View style={styles.lastAdDividerWhite} />
-                        <View style={styles.constructionStatusBlock}>
-                          <Text style={styles.constructionStatusTitle}>
-                            מצב בנייה
-                          </Text>
-                          <View style={styles.constructionStatusRow}>
-                            {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
-                              const status = (lastAd?.construction_status ?? '')
-                                .toString()
-                                .toLowerCase();
-                              const isSelected =
-                                status === (step.name || '').toLowerCase();
-                              const isNotLast =
-                                index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                            ))}
+                          </View>
+                          <View style={styles.lastAdDividerWhite} />
+                        </>
+                      ) : isCompany && projectOffersCards.length > 0 ? (
+                        <>
+                          <View style={styles.projectOffersSection}>
+                            <Text style={styles.projectOffersTitle}>
+                              הפרויקט מציע
+                            </Text>
+                            {projectOffersCards.map(card => {
+                              const areaStr =
+                                card.area != null
+                                  ? `גודל: ${card.area} מ"ר`
+                                  : 'גודל: —';
+                              const priceStr =
+                                card.price != null
+                                  ? `החל מ-₪${Number(card.price).toLocaleString('he-IL')}`
+                                  : null;
+                              const roomsStr =
+                                card.rooms != null
+                                  ? `מס' חדרים: ${card.rooms}`
+                                  : null;
+                              const isSimple = card.rooms == null;
+                              const detailsLine = isSimple
+                                ? `${areaStr} | ${priceStr || 'החל מ-—₪'}`
+                                : [areaStr, roomsStr]
+                                    .filter(Boolean)
+                                    .join(' | ');
                               return (
-                                <React.Fragment key={step.name}>
-                                  <View style={styles.constructionStatusStep}>
-                                    {isSelected ? (
-                                      <Image
-                                        source={require('../assets/profile/check.png')}
-                                        style={
-                                          styles.constructionStatusCheckImage
-                                        }
-                                        resizeMode="contain"
-                                      />
-                                    ) : (
-                                      <View
-                                        style={styles.constructionStatusCircle}
-                                      />
-                                    )}
-                                    <Text
-                                      style={[
-                                        styles.constructionStatusLabel,
-                                        isSelected &&
-                                          styles.constructionStatusLabelActive,
-                                      ]}>
-                                      {step.title}
+                                <View
+                                  key={card.key}
+                                  style={styles.projectOfferCard}>
+                                  <View style={styles.projectOfferCardHeader}>
+                                    <Image
+                                      source={getProjectOfferIconName(
+                                        card.iconKey,
+                                      )}
+                                      style={styles.companyStatIconImage}
+                                      resizeMode="contain"
+                                    />
+                                    <Text style={styles.projectOfferCardTitle}>
+                                      {card.title}
                                     </Text>
                                   </View>
-                                  {isNotLast ? (
-                                    <View
-                                      style={
-                                        styles.constructionStatusDottedLine
-                                      }
-                                    />
-                                  ) : null}
-                                </React.Fragment>
+                                  <Text style={styles.projectOfferCardDetails}>
+                                    {detailsLine}
+                                  </Text>
+                                  {!isSimple && (
+                                    <Text style={styles.projectOfferCardPrice}>
+                                      {priceStr || 'החל מ-—₪'}
+                                    </Text>
+                                  )}
+                                </View>
                               );
                             })}
                           </View>
-                          <View style={styles.lastAdDivider} />
-                        </View>
-                      </>
-                    ) : (
-                      <>
-                        {isCompany ? (
-                          <>
-                            <View style={styles.constructionStatusBlock}>
-                              <Text style={styles.constructionStatusTitle}>
-                                מצב בנייה
-                              </Text>
-                              <View style={styles.constructionStatusRow}>
-                                {CONSTRUCTION_STATUS_STEPS.map(
-                                  (step, index) => {
-                                    const status = (
-                                      lastAd?.construction_status ?? ''
-                                    )
-                                      .toString()
-                                      .toLowerCase();
-                                    const isSelected =
-                                      status ===
-                                      (step.name || '').toLowerCase();
-                                    const isNotLast =
-                                      index <
-                                      CONSTRUCTION_STATUS_STEPS.length - 1;
-                                    return (
-                                      <React.Fragment key={step.name}>
+                          <View style={styles.lastAdDividerWhite} />
+                          <View style={styles.constructionStatusBlock}>
+                            <Text style={styles.constructionStatusTitle}>
+                              מצב בנייה
+                            </Text>
+                            <View style={styles.constructionStatusRow}>
+                              {CONSTRUCTION_STATUS_STEPS.map((step, index) => {
+                                const status = (
+                                  lastAd?.construction_status ?? ''
+                                )
+                                  .toString()
+                                  .toLowerCase();
+                                const isSelected =
+                                  status === (step.name || '').toLowerCase();
+                                const isNotLast =
+                                  index < CONSTRUCTION_STATUS_STEPS.length - 1;
+                                return (
+                                  <React.Fragment key={step.name}>
+                                    <View style={styles.constructionStatusStep}>
+                                      {isSelected ? (
+                                        <Image
+                                          source={require('../assets/profile/check.png')}
+                                          style={
+                                            styles.constructionStatusCheckImage
+                                          }
+                                          resizeMode="contain"
+                                        />
+                                      ) : (
                                         <View
-                                          style={styles.constructionStatusStep}>
-                                          {isSelected ? (
-                                            <Image
-                                              source={require('../assets/profile/check.png')}
-                                              style={
-                                                styles.constructionStatusCheckImage
-                                              }
-                                              resizeMode="contain"
-                                            />
-                                          ) : (
-                                            <View
-                                              style={
-                                                styles.constructionStatusCircle
-                                              }
-                                            />
-                                          )}
-                                          <Text
-                                            style={[
-                                              styles.constructionStatusLabel,
-                                              isSelected &&
-                                                styles.constructionStatusLabelActive,
-                                            ]}>
-                                            {step.title}
-                                          </Text>
-                                        </View>
-                                        {isNotLast ? (
+                                          style={
+                                            styles.constructionStatusCircle
+                                          }
+                                        />
+                                      )}
+                                      <Text
+                                        style={[
+                                          styles.constructionStatusLabel,
+                                          isSelected &&
+                                            styles.constructionStatusLabelActive,
+                                        ]}>
+                                        {step.title}
+                                      </Text>
+                                    </View>
+                                    {isNotLast ? (
+                                      <View
+                                        style={
+                                          styles.constructionStatusDottedLine
+                                        }
+                                      />
+                                    ) : null}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </View>
+                            <View style={styles.lastAdDivider} />
+                          </View>
+                        </>
+                      ) : (
+                        <>
+                          {isCompany ? (
+                            <>
+                              <View style={styles.constructionStatusBlock}>
+                                <Text style={styles.constructionStatusTitle}>
+                                  מצב בנייה
+                                </Text>
+                                <View style={styles.constructionStatusRow}>
+                                  {CONSTRUCTION_STATUS_STEPS.map(
+                                    (step, index) => {
+                                      const status = (
+                                        lastAd?.construction_status ?? ''
+                                      )
+                                        .toString()
+                                        .toLowerCase();
+                                      const isSelected =
+                                        status ===
+                                        (step.name || '').toLowerCase();
+                                      const isNotLast =
+                                        index <
+                                        CONSTRUCTION_STATUS_STEPS.length - 1;
+                                      return (
+                                        <React.Fragment key={step.name}>
                                           <View
                                             style={
-                                              styles.constructionStatusDottedLine
-                                            }
-                                          />
-                                        ) : null}
-                                      </React.Fragment>
-                                    );
-                                  },
-                                )}
-                              </View>
-                            </View>
-                            <View style={styles.lastAdDividerWhite} />
-                          </>
-                        ) : null}
-                        {isRegularUserAdView ? (
-                          <>
-                            <View style={styles.lastAdFeaturesGrid}>
-                              {adFeatures.map((item, index) => (
-                                <View
-                                  key={`feat-regular-${item.iconKey}-${index}`}
-                                  style={styles.lastAdFeatureChip}>
-                                  <Text style={styles.smartInfoBtnLabel}>
-                                    {item.label}
-                                  </Text>
-                                  <Image
-                                    source={getFeatureIconSource(item.iconKey)}
-                                    style={styles.smartInfoBtnIcon}
-                                    resizeMode="contain"
-                                  />
+                                              styles.constructionStatusStep
+                                            }>
+                                            {isSelected ? (
+                                              <Image
+                                                source={require('../assets/profile/check.png')}
+                                                style={
+                                                  styles.constructionStatusCheckImage
+                                                }
+                                                resizeMode="contain"
+                                              />
+                                            ) : (
+                                              <View
+                                                style={
+                                                  styles.constructionStatusCircle
+                                                }
+                                              />
+                                            )}
+                                            <Text
+                                              style={[
+                                                styles.constructionStatusLabel,
+                                                isSelected &&
+                                                  styles.constructionStatusLabelActive,
+                                              ]}>
+                                              {step.title}
+                                            </Text>
+                                          </View>
+                                          {isNotLast ? (
+                                            <View
+                                              style={
+                                                styles.constructionStatusDottedLine
+                                              }
+                                            />
+                                          ) : null}
+                                        </React.Fragment>
+                                      );
+                                    },
+                                  )}
                                 </View>
-                              ))}
-                            </View>
-                            <View style={styles.lastAdDividerWhite} />
-                          </>
-                        ) : null}
-                        {/* <View style={styles.lastAdDividerWhite} /> */}
-                        {/* <View style={styles.lastAdFeaturesGrid}>
+                              </View>
+                              <View style={styles.lastAdDividerWhite} />
+                            </>
+                          ) : null}
+                          {isRegularUserAdView ? (
+                            <>
+                              <View style={styles.lastAdFeaturesGrid}>
+                                {adFeatures.map((item, index) => (
+                                  <View
+                                    key={`feat-regular-${item.iconKey}-${index}`}
+                                    style={styles.lastAdFeatureChip}>
+                                    <Image
+                                      source={getFeatureIconSource(
+                                        item.iconKey,
+                                      )}
+                                      style={styles.smartInfoBtnIcon}
+                                      resizeMode="contain"
+                                    />
+                                    <Text style={styles.smartInfoBtnLabel}>
+                                      {item.label}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                              <View style={styles.lastAdDividerWhite} />
+                            </>
+                          ) : null}
+                          {/* <View style={styles.lastAdDividerWhite} /> */}
+                          {/* <View style={styles.lastAdFeaturesGrid}>
                     {adFeatures.map((item, index) => (
                       <View
                         key={`feat-${item.iconKey}-${index}`}
@@ -2339,23 +2355,23 @@ const UserProfileScreen = ({
                       </View>
                     ))}
                   </View> */}
-                      </>
-                    )}
-                    {!isBroker && !isCompany && !isRegularUserAdView ? (
-                      <View style={styles.lastAdDividerWhite} />
-                    ) : null}
-                    {showLocationMap ? (
-                      <LocationMap
-                        address={
-                          lastAd.address || lastAd.location || brokerAddress
-                        }
-                        containerStyle={styles.locationMapContainer}
-                      />
-                    ) : null}
-                  </>
-                )}
-              </View>
-            )}
+                        </>
+                      )}
+                      {!isBroker && !isCompany && !isRegularUserAdView ? (
+                        <View style={styles.lastAdDividerWhite} />
+                      ) : null}
+                      {showLocationMap ? (
+                        <LocationMap
+                          address={
+                            lastAd.address || lastAd.location || brokerAddress
+                          }
+                          containerStyle={styles.locationMapContainer}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </View>
+              )}
           </View>
         )}
 
@@ -2865,57 +2881,55 @@ const UserProfileScreen = ({
                   color="#F7F3E6"
                 />
               </TouchableOpacity>
-              {(isCompany ||
-                isBroker ||
-                isProfessional) &&
+              {(isCompany || isBroker || isProfessional) &&
                 !user?._fromTikTokPost && (
-                <>
-                  <View style={styles.profilePiChatWrap}>
+                  <>
+                    <View style={styles.profilePiChatWrap}>
+                      <TouchableOpacity
+                        style={styles.profileCtaChatImageOnlyBtn}
+                        onPress={handleChatPress}
+                        activeOpacity={0.85}>
+                        <Image
+                          source={require('../assets/menu/pichat.png')}
+                          style={styles.profileCtaChatImageOnlyAsset}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      {unreadChatCount > 0 ? (
+                        <View
+                          style={styles.profilePiChatBadge}
+                          pointerEvents="none"
+                          accessibilityRole="text"
+                          accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+                          <Text
+                            style={styles.profilePiChatBadgeText}
+                            numberOfLines={1}>
+                            {unreadChatCount > 99
+                              ? '99+'
+                              : String(unreadChatCount)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
                     <TouchableOpacity
-                      style={styles.profileCtaChatImageOnlyBtn}
-                      onPress={handleChatPress}
+                      style={styles.profileCtaPhoneBtn}
+                      onPress={handleCallPress}
                       activeOpacity={0.85}>
+                      <Text
+                        style={styles.profileCtaPhoneText}
+                        numberOfLines={1}
+                        ellipsizeMode="tail">
+                        פנייה בטלפון {primaryContactPhone}
+                      </Text>
                       <Image
-                        source={require('../assets/menu/pichat.png')}
-                        style={styles.profileCtaChatImageOnlyAsset}
+                        source={require('../assets/phone.png')}
+                        style={styles.profileCtaPhoneIcon}
                         resizeMode="contain"
                       />
                     </TouchableOpacity>
-                    {unreadChatCount > 0 ? (
-                      <View
-                        style={styles.profilePiChatBadge}
-                        pointerEvents="none"
-                        accessibilityRole="text"
-                        accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
-                        <Text
-                          style={styles.profilePiChatBadgeText}
-                          numberOfLines={1}>
-                          {unreadChatCount > 99
-                            ? '99+'
-                            : String(unreadChatCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.profileCtaPhoneBtn}
-                    onPress={handleCallPress}
-                    activeOpacity={0.85}>
-                    <Text
-                      style={styles.profileCtaPhoneText}
-                      numberOfLines={1}
-                      ellipsizeMode="tail">
-                      פנייה בטלפון {primaryContactPhone}
-                    </Text>
-                    <Image
-                      source={require('../assets/phone.png')}
-                      style={styles.profileCtaPhoneIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                </>
-              )}
+                  </>
+                )}
             </View>
           </View>
         ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
@@ -2983,7 +2997,7 @@ const UserProfileScreen = ({
               <TouchableOpacity
                 onPress={onClose}
                 activeOpacity={0.8}
-                style={[styles.heroCircleBtn, {top: top + 10}]}
+                style={[styles.heroCircleBtn, {top: 10}]}
                 hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
                 <MaterialCommunityIcons
                   name="chevron-left"

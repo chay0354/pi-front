@@ -48,11 +48,11 @@ export const DateSelection = ({
         activeOpacity={0.85}
         onPress={() => setVisible(true)}
         style={styles.pillContainer}>
-        <Text style={styles.dateText}>{selected}</Text>
         <Image
           source={require('../../assets/calendarIcon.png')}
           style={styles.icon}
         />
+        <Text style={styles.dateText}>{selected}</Text>
       </TouchableOpacity>
       {isDivider && <Divider style={styles.dividerGap} />}
       <CalendarModal
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 24,
     height: 24,
-    marginLeft: 10,
+    marginRight: 10,
   },
   dividerGap: {
     marginTop: Spacing.m3,

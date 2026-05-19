@@ -20,7 +20,7 @@ export const SaleAtPreSale = ({
         setName={toggle}
         index={0}
         isSelected={isSelected}
-        containerStyle={{marginLeft: 20}}
+        // containerStyle={{marginLeft: 20}}
         radioOptionStyle={{paddingTop: 0}}
       />
       <TouchableOpacity

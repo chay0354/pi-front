@@ -59,7 +59,6 @@ export const PriceCount = ({
           style={styles.counterValueContainer}
           onPress={() => inputRef.current?.focus?.()}>
           <View style={styles.priceValueRow}>
-            <Text style={styles.priceValue}>₪</Text>
             <TextInput
               ref={inputRef}
               style={[styles.priceValueInput, sideSpacing, {width: inputWidth}]}
@@ -72,6 +71,7 @@ export const PriceCount = ({
               textAlign="center"
               showSoftInputOnFocus
             />
+            <Text style={styles.priceValue}>₪</Text>
           </View>
         </Pressable>
         <View style={styles.counterDivider} />
@@ -90,11 +90,6 @@ export const PriceCount = ({
               alignItems: 'center',
               justifyContent: rowEndAlign,
             }}>
-            {hotDeal ? (
-              <View style={styles.hotDealContainer}>
-                <Text style={styles.hotDealText}>Hot deal</Text>
-              </View>
-            ) : null}
             <RadioWithText
               title={'הוסף ״מחיר במבצע״'}
               name={'sale_price'}
@@ -106,6 +101,11 @@ export const PriceCount = ({
                 paddingLeft: 10,
               }}
             />
+            {hotDeal ? (
+              <View style={styles.hotDealContainer}>
+                <Text style={styles.hotDealText}>Hot deal</Text>
+              </View>
+            ) : null}
           </View>
           <Text
             style={{

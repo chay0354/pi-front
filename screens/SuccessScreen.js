@@ -203,7 +203,6 @@ const styles = StyleSheet.create({
   topSection: {
     width: '100%',
     paddingHorizontal: 24,
-    paddingTop: 50,
     paddingBottom: 20,
     backgroundColor: BG,
     shadowColor: '#000',
@@ -213,7 +212,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -237,7 +236,7 @@ const styles = StyleSheet.create({
   },
   wizardRow: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -304,7 +303,7 @@ const styles = StyleSheet.create({
   checkmarkOverlay: {
     position: 'absolute',
     bottom: -2,
-    right: -2,
+    left: -2,
     width: 27,
     height: 27,
     borderRadius: 13.5,

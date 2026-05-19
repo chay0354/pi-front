@@ -19,6 +19,7 @@ export const PhoneInput = ({phone, setPhone}) => {
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
+          textAlign="left"
         />
       </View>
     </View>
@@ -51,5 +52,6 @@ const styles = StyleSheet.create({
     color: Colors.whiteGeneral,
     fontSize: 20,
     fontFamily: 'Rubik-Regular',
+    writingDirection: 'ltr',
   },
 });

@@ -155,7 +155,6 @@ const RoomsFilterScreen = ({
       style={styles.amenityOption}
       onPress={onToggle}
       activeOpacity={0.8}>
-      <Text style={styles.amenityText}>{label}</Text>
       <View style={styles.checkboxWrap}>
         {checked ? (
           <Image
@@ -168,6 +167,7 @@ const RoomsFilterScreen = ({
           <View style={styles.checkboxCircle} />
         )}
       </View>
+      <Text style={styles.amenityText}>{label}</Text>
     </TouchableOpacity>
   );
 
@@ -389,6 +389,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: INPUT_BORDER,
     overflow: 'hidden',
+    direction: 'ltr',
   },
   counterButtonLeft: {
     flex: 1,
@@ -446,7 +447,7 @@ const styles = StyleSheet.create({
   checkboxWrap: {
     width: 24,
     height: 24,
-    marginLeft: 10,
+    marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

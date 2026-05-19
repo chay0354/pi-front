@@ -32,12 +32,9 @@ export const VideoUpload = ({
       <TouchableOpacity
         style={[styles.videoOption, videoOptionStyle]}
         onPress={() => setHasVideo(!hasVideo)}>
-        <Title
-          text={'הוסף סרטון'}
-          textStyle={{marginBottom: 0, alignSelf: 'center'}}
-        />
-        <View style={styles.radioSpacer} />
         <RadioIcon isSelected={hasVideo} useFigmaStyle />
+        <View style={styles.radioSpacer} />
+        <Title text={'הוסף סרטון'} textStyle={{marginBottom: 0}} />
       </TouchableOpacity>
       {children}
       {/* Video Upload Section - shown when checkbox is selected */}
@@ -110,7 +107,7 @@ export const VideoUpload = ({
 const styles = StyleSheet.create({
   videoOption: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginTop: 5,
   },

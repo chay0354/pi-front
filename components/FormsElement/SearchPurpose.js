@@ -11,7 +11,7 @@ import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
 
 export const SearchPurpose = ({searchPurpose, setSearchPurpose}) => {
-  const sideSpacing = {marginLeft: 39};
+  const sideSpacing = {marginLeft: 32};
   return (
     <FormContainer>
       <Title text="מטרת החיפוש" required />

@@ -93,12 +93,16 @@ const VerificationScreen = ({
       return;
     }
     if (!displayEmail) {
-      console.warn('[VerificationScreen] send verification code: missing email');
+      console.warn(
+        '[VerificationScreen] send verification code: missing email',
+      );
       Alert.alert('שגיאה', 'חסר מייל מהשלב הקודם. חזרו לשלב 1.');
       return;
     }
     if (!passwordsFilled) {
-      console.warn('[VerificationScreen] send verification code: password too short');
+      console.warn(
+        '[VerificationScreen] send verification code: password too short',
+      );
       Alert.alert(
         'שגיאה',
         `הסיסמה חייבת להכיל לפחות ${MIN_PASSWORD_LENGTH} תווים`,
@@ -106,7 +110,9 @@ const VerificationScreen = ({
       return;
     }
     if (!passwordsMatch) {
-      console.warn('[VerificationScreen] send verification code: passwords mismatch');
+      console.warn(
+        '[VerificationScreen] send verification code: passwords mismatch',
+      );
       Alert.alert('שגיאה', 'הסיסמאות אינן תואמות');
       return;
     }
@@ -136,7 +142,9 @@ const VerificationScreen = ({
         throw new Error('חסר מזהה מנוי. חזרו לשלב 1 ונסו שוב.');
       }
 
-      console.log('[VerificationScreen] setSubscriptionPassword: start', {subId});
+      console.log('[VerificationScreen] setSubscriptionPassword: start', {
+        subId,
+      });
       await setSubscriptionPassword(subId, password);
       console.log('[VerificationScreen] setSubscriptionPassword: success');
 
@@ -149,12 +157,18 @@ const VerificationScreen = ({
         subId,
         password,
       );
-      console.log('[VerificationScreen] resendVerificationCode: success', sendResult);
+      console.log(
+        '[VerificationScreen] resendVerificationCode: success',
+        sendResult,
+      );
       setVerificationEmailSent(true);
       console.log('[VerificationScreen] send verification code: completed');
       Alert.alert('הצלחה', 'קוד האימות נשלח למייל שלך');
     } catch (error) {
-      console.error('[VerificationScreen] send verification code: failed', error);
+      console.error(
+        '[VerificationScreen] send verification code: failed',
+        error,
+      );
       Alert.alert(
         'שגיאה',
         error.message || 'נכשל בשמירת הסיסמה או בשליחת מייל האימות',
@@ -232,15 +246,16 @@ const VerificationScreen = ({
   };
 
   const handleResendCode = async () => {
-    if (!verificationEmailSent || isResending || !displayEmail || !subscriptionId)
+    if (
+      !verificationEmailSent ||
+      isResending ||
+      !displayEmail ||
+      !subscriptionId
+    )
       return;
     setIsResending(true);
     try {
-      await resendVerificationCode(
-        displayEmail,
-        subscriptionId,
-        password,
-      );
+      await resendVerificationCode(displayEmail, subscriptionId, password);
       Alert.alert('הצלחה', 'קוד האימות נשלח מחדש למייל שלך');
     } catch (error) {
       Alert.alert('שגיאה', error.message || 'נכשל בשליחת הקוד מחדש');
@@ -304,6 +319,16 @@ const VerificationScreen = ({
           </View>
 
           <View style={styles.inputRow}>
+            <TextInput
+              style={styles.inputField}
+              placeholder="סיסמה"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              textAlign="right"
+            />
             <TouchableOpacity
               onPress={() => setShowPassword(v => !v)}
               style={styles.eyeButton}
@@ -314,23 +339,10 @@ const VerificationScreen = ({
                 color={Colors.white100}
               />
             </TouchableOpacity>
-            <TextInput
-              style={styles.inputField}
-              placeholder="סיסמה"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              textAlign="left"
-            />
           </View>
 
           <View
-            style={[
-              styles.inputRow,
-              passwordMismatch && styles.inputRowError,
-            ]}>
+            style={[styles.inputRow, passwordMismatch && styles.inputRowError]}>
             <TextInput
               style={styles.inputField}
               placeholder="אימות סיסמה"
@@ -339,7 +351,7 @@ const VerificationScreen = ({
               onChangeText={setConfirmPassword}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
-              textAlign="left"
+              textAlign="right"
             />
           </View>
           {passwordMismatch ? (
@@ -379,7 +391,9 @@ const VerificationScreen = ({
                   </Text>
                 </LinearGradient>
               ) : (
-                <Text style={styles.sendCodeButtonTextMuted}>שלח קוד אימות</Text>
+                <Text style={styles.sendCodeButtonTextMuted}>
+                  שלח קוד אימות
+                </Text>
               )}
             </TouchableOpacity>
           )}
@@ -402,10 +416,7 @@ const VerificationScreen = ({
             </Text>
 
             <View
-              style={[
-                styles.inputRow,
-                codeFilled && styles.inputRowFilled,
-              ]}>
+              style={[styles.inputRow, codeFilled && styles.inputRowFilled]}>
               {codeFilled ? (
                 <TouchableOpacity
                   onPress={() => setVerificationCode('')}
@@ -419,13 +430,16 @@ const VerificationScreen = ({
                 </TouchableOpacity>
               ) : null}
               <TextInput
-                style={[styles.inputField, codeFilled && styles.inputFieldFilled]}
+                style={[
+                  styles.inputField,
+                  codeFilled && styles.inputFieldFilled,
+                ]}
                 placeholder="קוד אימות (6 ספרות)"
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 value={verificationCode}
                 onChangeText={setVerificationCode}
                 keyboardType="number-pad"
-                textAlign="left"
+                textAlign="right"
                 maxLength={6}
                 autoFocus
               />
@@ -438,7 +452,8 @@ const VerificationScreen = ({
               accessibilityRole="button"
               style={[
                 styles.sendCodeButton,
-                (!canVerifyCode || isVerifyingCode) && styles.sendCodeButtonDisabled,
+                (!canVerifyCode || isVerifyingCode) &&
+                  styles.sendCodeButtonDisabled,
               ]}>
               {isVerifyingCode ? (
                 <ActivityIndicator color={Colors.white100} />
@@ -449,7 +464,9 @@ const VerificationScreen = ({
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
                   style={styles.sendCodeButtonGradient}>
-                  <Text style={styles.sendCodeButtonTextActive}>אימות והמשך</Text>
+                  <Text style={styles.sendCodeButtonTextActive}>
+                    אימות והמשך
+                  </Text>
                 </LinearGradient>
               ) : (
                 <Text style={styles.sendCodeButtonTextMuted}>אימות והמשך</Text>
@@ -556,7 +573,7 @@ const styles = StyleSheet.create({
   topSection: {
     width: '100%',
     paddingHorizontal: 24,
-    paddingTop: 50,
+    // paddingTop: 50,
     paddingBottom: 20,
     backgroundColor: BG,
     shadowColor: '#000',
@@ -566,7 +583,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -590,7 +607,7 @@ const styles = StyleSheet.create({
   },
   wizardRow: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -631,7 +648,7 @@ const styles = StyleSheet.create({
   },
   instructionRow: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingRight: 8,
@@ -641,13 +658,13 @@ const styles = StyleSheet.create({
     flex: 1,
     color: Colors.white100,
     textAlign: 'left',
-    fontSize: 18,
+    fontSize: 16,
     lineHeight: 32,
     fontFamily: 'Rubik-Regular',
   },
   emailIcon: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
   readOnlyEmailRow: {
     width: '100%',
@@ -716,6 +733,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textAlign: 'left',
     backgroundColor: 'transparent',
+    writingDirection: 'rtl',
   },
   errorHint: {
     color: '#ff9b9b',

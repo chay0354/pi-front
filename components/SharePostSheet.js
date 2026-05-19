@@ -25,7 +25,7 @@ import {
   sendGroupChatMessage,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
-import {flexEnd} from '../index';
+import {flexStart} from '../index';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
 const SHEET_HEIGHT = Math.min(640, Math.round(SCREEN_HEIGHT * 0.82));
@@ -305,7 +305,7 @@ const SharePostSheet = ({
             </LinearGradient>
           )}
         </View>
-        <View style={[styles.rowText, {alignItems: flexEnd}]}>
+        <View style={[styles.rowText, {alignItems: flexStart}]}>
           <Text style={[styles.rowName, {textAlign: 'left'}]} numberOfLines={1}>
             {item.name}
           </Text>
@@ -372,7 +372,7 @@ const SharePostSheet = ({
                 />
               )}
             </View>
-            <View style={[styles.previewTextWrap, {alignItems: flexEnd}]}>
+            <View style={[styles.previewTextWrap, {alignItems: flexStart}]}>
               <Text style={[styles.previewLabel, {textAlign: 'left'}]}>
                 פוסט להעברה
               </Text>
@@ -396,7 +396,7 @@ const SharePostSheet = ({
               placeholder="חיפוש אנשי קשר"
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
-              textAlign={'left'}
+              textAlign={'right'}
               writingDirection="rtl"
             />
           </View>
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   previewCard: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     backgroundColor: '#2B2A39',
     borderRadius: 12,
     padding: 12,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   searchRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#2B2A39',
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   row: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     gap: 12,

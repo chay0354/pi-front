@@ -243,15 +243,6 @@ const SubscriptionScreen = ({
 
           <View style={styles.agreementBlock}>
             <View style={styles.agreementRow}>
-              <View style={styles.agreementTexts}>
-                <Text style={styles.agreementMain}>
-                  אני מאשר/ת שלא אפרסם מודעות פיקטיביות
-                </Text>
-                <Text style={styles.disclaimerText}>
-                  במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע
-                  חסימה אוטומטית של החשבון.
-                </Text>
-              </View>
               <TouchableOpacity
                 onPress={() => setIsAgreed(!isAgreed)}
                 style={styles.checkboxHit}
@@ -268,6 +259,15 @@ const SubscriptionScreen = ({
                   <View style={styles.checkboxEmpty} />
                 )}
               </TouchableOpacity>
+              <View style={styles.agreementTexts}>
+                <Text style={styles.agreementMain}>
+                  אני מאשר/ת שלא אפרסם מודעות פיקטיביות
+                </Text>
+                <Text style={styles.disclaimerText}>
+                  במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע
+                  חסימה אוטומטית של החשבון.
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',

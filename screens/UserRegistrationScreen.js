@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
-import {flexEnd} from '../index';
+import {flexStart} from '../index';
 
 /**
  * Regular user registration – shown when user without profile tries to publish an ad.
@@ -47,12 +47,18 @@ const UserRegistrationScreen = ({
 
   const requestMediaPermission = async () => {
     if (Platform.OS !== 'web') {
-      const {status} = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'נדרשת הרשאה',
-          'נדרשת הרשאה לספריית התמונות להעלאת תמונת פרופיל.',
-        );
+      try {
+        await ImagePicker.requestCameraPermissionsAsync();
+        const {status} =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'נדרשת הרשאה',
+            'נדרשת הרשאה לספריית התמונות להעלאת תמונת פרופיל.',
+          );
+        }
+      } catch (error) {
+        console.error('Permission request error:', error);
       }
     }
   };
@@ -62,6 +68,27 @@ const UserRegistrationScreen = ({
   }, []);
 
   const pickProfileImage = async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = e => {
+        const file = e.target.files?.[0];
+        if (file) {
+          setProfileImage({
+            uri: URL.createObjectURL(file),
+            type: file.type,
+            name: file.name,
+            mimeType: file.type,
+            fileName: file.name,
+            file,
+          });
+        }
+      };
+      input.click();
+      return;
+    }
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -70,7 +97,15 @@ const UserRegistrationScreen = ({
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        setProfileImage(result.assets[0]);
+        const asset = result.assets[0];
+        setProfileImage({
+          uri: asset.uri,
+          type: asset.type || asset.mimeType || 'image/jpeg',
+          name: asset.fileName || asset.filename || 'profile.jpg',
+          mimeType: asset.mimeType || asset.type || 'image/jpeg',
+          fileName: asset.fileName || asset.filename || 'profile.jpg',
+          file: asset,
+        });
       }
     } catch (err) {
       Alert.alert('שגיאה', 'לא ניתן לבחור תמונה. נסה שוב.');
@@ -96,9 +131,7 @@ const UserRegistrationScreen = ({
       return;
     }
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setErrorMessage(
-        `הסיסמה חייבת להכיל לפחות ${MIN_PASSWORD_LENGTH} תווים`,
-      );
+      setErrorMessage(`הסיסמה חייבת להכיל לפחות ${MIN_PASSWORD_LENGTH} תווים`);
       return;
     }
     if (password !== confirmPassword) {
@@ -223,7 +256,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={fullName}
                   onChangeText={setFullName}
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -240,7 +273,7 @@ const UserRegistrationScreen = ({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
@@ -250,6 +283,16 @@ const UserRegistrationScreen = ({
                   <Text style={styles.requiredMark}>*</Text>
                 </View>
                 <View style={styles.passwordRow}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="בחרו סיסמה"
+                    placeholderTextColor="rgba(255,255,255,0.35)"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    textAlign="right"
+                  />
                   <TouchableOpacity
                     onPress={() => setShowPassword(v => !v)}
                     style={styles.passwordToggle}
@@ -260,16 +303,6 @@ const UserRegistrationScreen = ({
                       color="#FFFFFF"
                     />
                   </TouchableOpacity>
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="בחרו סיסמה"
-                    placeholderTextColor="rgba(255,255,255,0.35)"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    textAlign="left"
-                  />
                 </View>
               </View>
 
@@ -286,19 +319,13 @@ const UserRegistrationScreen = ({
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  textAlign="left"
+                  textAlign="right"
                 />
               </View>
 
               <View style={styles.inputWrap}>
                 <Text style={styles.label}>טלפון</Text>
                 <View style={styles.phoneRow}>
-                  <TouchableOpacity
-                    style={styles.countrySelector}
-                    activeOpacity={0.8}>
-                    <Text style={styles.countryChevron}>⌄</Text>
-                    <Text style={styles.countryCode}>IL</Text>
-                  </TouchableOpacity>
                   <TextInput
                     style={styles.phoneInput}
                     placeholder="00 000 0000"
@@ -308,6 +335,12 @@ const UserRegistrationScreen = ({
                     keyboardType="phone-pad"
                     textAlign="left"
                   />
+                  <TouchableOpacity
+                    style={styles.countrySelector}
+                    activeOpacity={0.8}>
+                    <Text style={styles.countryChevron}>⌄</Text>
+                    <Text style={styles.countryCode}>IL</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -469,9 +502,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   labelRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: flexEnd,
+    justifyContent: flexStart,
     gap: 2,
     paddingHorizontal: 16,
   },

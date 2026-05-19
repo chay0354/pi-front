@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,9 @@ import {
   StyleSheet,
   TextInput,
   ScrollView,
-  I18nManager,
   Image,
-  Pressable,
   useWindowDimensions,
+  PanResponder,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -25,6 +24,34 @@ const TEXT_CLUE = 'rgba(255,255,255,0.35)';
 
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
+
+function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
+  const w = trackWidth > 0 ? trackWidth : 1;
+  const ne = nativeEvent;
+  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
+    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
+  }
+  const node = sliderViewRef && sliderViewRef.current;
+  const touch = ne.touches?.[0] || ne;
+  if (
+    node &&
+    typeof node.getBoundingClientRect === 'function' &&
+    (touch?.clientX != null || touch?.pageX != null)
+  ) {
+    const rect = node.getBoundingClientRect();
+    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
+    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
+  }
+  return 0;
+}
+
+function percentToDistanceKm(percent) {
+  const steps = DISTANCE_OPTIONS.length - 1;
+  const idx = Math.round(
+    (Math.max(0, Math.min(100, percent)) / 100) * steps,
+  );
+  return DISTANCE_OPTIONS[idx];
+}
 
 // Figma assets for node 12:74885
 const FIGMA_CITY_ICON = require('../assets/buttom-bar/city.png');
@@ -54,13 +81,49 @@ const CityFilterScreen = ({
     initialFilter?.immediateEntry ?? false,
   );
 
-  // Non-functional for now; slider only reflects the static default value.
-  // Drag / tap wiring will be added in a follow-up.
+  const sliderWidthRef = useRef(1);
+  const sliderRef = useRef(null);
+
   const thumbLeft = useMemo(() => {
     const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(distanceKm));
     const ratio = idx / (DISTANCE_OPTIONS.length - 1);
     return `${ratio * 100}%`;
   }, [distanceKm]);
+
+  const applyDistanceFromPercent = useCallback(percent => {
+    setDistanceKm(percentToDistanceKm(percent));
+  }, []);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: evt => {
+          const w = sliderWidthRef.current;
+          const percent = getSliderPercentFromEvent(
+            evt.nativeEvent,
+            w,
+            sliderRef,
+          );
+          applyDistanceFromPercent(percent);
+        },
+        onPanResponderMove: evt => {
+          const w = sliderWidthRef.current;
+          const percent = getSliderPercentFromEvent(
+            evt.nativeEvent,
+            w,
+            sliderRef,
+          );
+          applyDistanceFromPercent(percent);
+        },
+      }),
+    [applyDistanceFromPercent],
+  );
 
   const hidePurpose = isBnb || isPartners;
 
@@ -127,19 +190,19 @@ const CityFilterScreen = ({
                 style={styles.checkRow}
                 onPress={() => setPurpose('rent')}
                 activeOpacity={0.8}>
-                <Text style={styles.checkLabel}>להשכרה</Text>
                 <View style={styles.checkboxImageWrap}>
                   <CheckCircle checked={purpose === 'rent'} />
                 </View>
+                <Text style={styles.checkLabel}>להשכרה</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.checkRow}
                 onPress={() => setPurpose('sale')}
                 activeOpacity={0.8}>
-                <Text style={styles.checkLabel}>למכירה</Text>
                 <View style={styles.checkboxImageWrap}>
                   <CheckCircle checked={purpose === 'sale'} />
                 </View>
+                <Text style={styles.checkLabel}>למכירה</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.divider} />
@@ -154,7 +217,7 @@ const CityFilterScreen = ({
             placeholderTextColor="rgba(255,255,255,0.4)"
             value={city}
             onChangeText={setCity}
-            textAlign="left"
+            textAlign="right"
           />
         </View>
         <View style={styles.divider} />
@@ -167,14 +230,22 @@ const CityFilterScreen = ({
             placeholderTextColor="rgba(255,255,255,0.4)"
             value={street}
             onChangeText={setStreet}
-            textAlign="left"
+            textAlign="right"
           />
         </View>
         <View style={styles.divider} />
 
         <View style={styles.fieldWrap}>
           <Text style={styles.label}>מרחק ממני (ק"מ)</Text>
-          <View style={styles.sliderTrackWrap} pointerEvents="none">
+          <View
+            ref={sliderRef}
+            style={styles.sliderTrackWrap}
+            onLayout={e => {
+              const w = e.nativeEvent.layout.width;
+              if (w > 0) sliderWidthRef.current = w;
+            }}
+            {...panResponder.panHandlers}
+            collapsable={false}>
             <View style={styles.sliderMarkers}>
               {DISTANCE_OPTIONS.map(km => (
                 <View key={km} style={styles.sliderMarkerCell}>
@@ -348,17 +419,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
   sliderTrackWrap: {
     marginTop: 10,
+    paddingVertical: 10,
+    direction: 'ltr',
   },
   sliderMarkers: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    height: 11,
     marginBottom: 14,
   },
   sliderMarkerCell: {

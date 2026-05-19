@@ -33,7 +33,7 @@ const SubscriptionRatingIntroScreen = ({
         style={styles.scrollView}
         contentContainerStyle={[
           styles.contentContainer,
-          {paddingTop: insets.top + 46},
+          {paddingTop: insets.top},
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   },
   header: {
     width: '100%',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
   },

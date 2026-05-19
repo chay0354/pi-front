@@ -181,7 +181,7 @@ const FeedbackSuggestionScreen = ({onClose}) => {
             onChangeText={setMessage}
             multiline
             textAlignVertical="top"
-            textAlign="left"
+            textAlign="right"
           />
 
           <TouchableOpacity
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 24,
@@ -308,8 +308,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2b2a39',
     marginBottom: 18,
     letterSpacing: 0.2,
-  },
-  submitBtnOuter: {
+    writingDirection: 'rtl',
     width: '100%',
   },
   /** Fixed box so web does not collapse the CTA under TouchableOpacity. */

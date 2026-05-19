@@ -206,12 +206,12 @@ const TypeFilterScreen = ({
               style={styles.radioRow}
               onPress={() => toggleOption(option.id)}
               activeOpacity={0.8}>
-              <Text style={styles.radioLabel}>{option.label}</Text>
               <FigmaCheckbox
                 checked={selectedIds.includes(option.id)}
                 size={22}
                 variant="dot"
               />
+              <Text style={styles.radioLabel}>{option.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign:'left',
+    textAlign: 'left',
   },
   saveBtnWrap: {
     marginBottom: 12,

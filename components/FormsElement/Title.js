@@ -7,9 +7,14 @@ export const Title = ({
   textStyle = {},
   starStyle,
 }) => {
-  const titleAlignSelf = 'flex-end';
+  const titleAlignSelf = 'flex-start';
   return (
-    <Text style={[styles.title, {alignSelf: titleAlignSelf}, textStyle]}>
+    <Text
+      style={[
+        styles.title,
+        {alignSelf: titleAlignSelf, textAlign: 'left'},
+        textStyle,
+      ]}>
       {text}
       {required && <Text style={[styles.star, starStyle]}>*</Text>}
     </Text>

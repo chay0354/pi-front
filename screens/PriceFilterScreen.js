@@ -11,7 +11,6 @@ import {
   useWindowDimensions,
   PanResponder,
   Platform,
-  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
@@ -283,38 +282,6 @@ const PriceFilterScreen = ({
           <View style={styles.priceInputsRow}>
             <View style={styles.priceInputGroup}>
               <View style={styles.pricePill}>
-                <Text style={styles.pricePillPrefix}>
-                  {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
-                    ? '+ ₪'
-                    : '₪'}
-                </Text>
-                <TextInput
-                  value={
-                    maxFocused
-                      ? maxDraft
-                      : Math.max(0, Number(maxPrice) || 0).toLocaleString()
-                  }
-                  onFocus={() => {
-                    setMaxFocused(true);
-                    setMaxDraft(String(Math.max(0, Number(maxPrice) || 0)));
-                  }}
-                  onChangeText={text => setMaxDraft(digitsOnly(text))}
-                  onBlur={commitMaxDraft}
-                  onSubmitEditing={commitMaxDraft}
-                  keyboardType="numeric"
-                  inputMode="numeric"
-                  placeholder="0"
-                  placeholderTextColor="rgba(255,255,255,0.4)"
-                  style={styles.pricePillInput}
-                  textAlign={'left'}
-                  selectTextOnFocus
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-            <Text style={styles.priceDash}>-</Text>
-            <View style={styles.priceInputGroup}>
-              <View style={styles.pricePill}>
                 <Text style={styles.pricePillPrefix}>₪</Text>
                 <TextInput
                   value={
@@ -338,6 +305,39 @@ const PriceFilterScreen = ({
                   selectTextOnFocus
                   returnKeyType="done"
                 />
+              </View>
+            </View>
+            <Text style={styles.priceDash}>-</Text>
+            <View style={styles.priceInputGroup}>
+              <View style={styles.pricePill}>
+                <Text style={styles.pricePillPrefix}>₪</Text>
+                <TextInput
+                  value={
+                    maxFocused
+                      ? maxDraft
+                      : Math.max(0, Number(maxPrice) || 0).toLocaleString()
+                  }
+                  onFocus={() => {
+                    setMaxFocused(true);
+                    setMaxDraft(String(Math.max(0, Number(maxPrice) || 0)));
+                  }}
+                  onChangeText={text => setMaxDraft(digitsOnly(text))}
+                  onBlur={commitMaxDraft}
+                  onSubmitEditing={commitMaxDraft}
+                  keyboardType="numeric"
+                  inputMode="numeric"
+                  placeholder="0"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  style={styles.pricePillInput}
+                  textAlign={'left'}
+                  selectTextOnFocus
+                  returnKeyType="done"
+                />
+                <Text style={styles.pricePillPrefix}>
+                  {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
+                    ? '+'
+                    : ''}
+                </Text>
               </View>
             </View>
           </View>
@@ -568,6 +568,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 24,
+    direction: 'ltr',
   },
   sliderTrack: {
     width: '100%',

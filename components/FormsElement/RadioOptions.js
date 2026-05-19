@@ -40,6 +40,7 @@ export const RadioOptions = ({
 const styles = StyleSheet.create({
   optionsContainer: {
     flexDirection: 'row',
+    direction: 'ltr',
     justifyContent: 'space-between',
   },
 });
