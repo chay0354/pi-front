@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /**
  * Regular user registration – shown when user without profile tries to publish an ad.

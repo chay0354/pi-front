@@ -15,12 +15,13 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 import {
   verifyEmail,
   resendVerificationCode,
   verifyEmailSkipTest,
+  syncSubscriptionProfileStory,
 } from '../utils/api';
 import {
   getHeaderTitle,
@@ -70,7 +71,10 @@ const VerificationCodeScreen = ({
         ) {
           response.subscription.subscriber_number = response.subscriberNumber;
         }
-        if (onNext) onNext(response.subscription);
+        if (onNext) {
+          await syncSubscriptionProfileStory(response.subscription);
+          onNext(response.subscription);
+        }
       } else {
         Alert.alert(
           'שגיאה',
@@ -242,13 +246,13 @@ const VerificationCodeScreen = ({
                       subscriptionId,
                     );
                     if (response?.success && response.subscription) {
+                      await syncSubscriptionProfileStory(response.subscription);
                       onNext(response.subscription);
                     }
                   } catch (err) {
                     Alert.alert(
                       'שגיאה',
-                      err.message ||
-                        'דילוג אימות זמין רק כשהשרת מוגדר (ALLOW_SKIP_EMAIL_VERIFICATION=1)',
+                      err.message || 'נכשל בדילוג האימות',
                     );
                   } finally {
                     setIsSkipTesting(false);

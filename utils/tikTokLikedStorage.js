@@ -74,8 +74,8 @@ export async function loadTikTokLikedState(userId) {
     Number.isFinite(unseenNum) && unseenNum > 0 ? unseenNum : 0;
 
   return {
-    likedListingIds: new Set(ads),
-    likedPostIds: new Set(posts),
+    likedListingIds: new Set(ads.map(id => String(id))),
+    likedPostIds: new Set(posts.map(id => String(id))),
     unseenLikedCount,
   };
 }

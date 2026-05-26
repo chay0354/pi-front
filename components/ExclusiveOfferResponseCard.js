@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const CARD_BG = '#2b2a39';
 const CREAM = '#f7f3e6';

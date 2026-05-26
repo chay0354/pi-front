@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar} from './ProfileAvatar';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const BG = '#1e1d27';
 const GOLD = '#D4AF37';

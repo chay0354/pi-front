@@ -15,7 +15,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart} from '../utils/rtlLayout';
 
 const BLUE_100 = '#1e1d27';
 const WHITE_HEADLINE = '#f7f3e6';
@@ -26,10 +26,12 @@ const BUTTON_BG = '#4d4966';
 const BUTTON_TEXT_DARK = '#1e1d27';
 const CHECK_TEAL = '#60e7ff';
 const CONTENT_MAX = 366;
-const BROKER_FIGMA_PROFILE_IMAGE =
-  'https://www.figma.com/api/mcp/asset/b3dcda94-a154-4ec5-ab87-1f32d1c961d1';
-const PROFESSIONAL_FIGMA_PROFILE_IMAGE =
-  'https://www.figma.com/api/mcp/asset/e6fb61e0-7322-402e-856f-cbd2886b04ad';
+/** Subscription avatars — inner profile pic from Figma (yellow ring stays in styles). */
+const SUBSCRIPTION_PROFILE_IMAGE = {
+  [subscriptionTypes.broker]: require('../assets/subscription-broker-profile.png'),
+  [subscriptionTypes.professional]: require('../assets/subscription-professional-profile.png'),
+  [subscriptionTypes.company]: require('../assets/subscription-company-profile.png'),
+};
 
 const COMPANY_FEATURES = [
   '4 ערוצי פרסום לפרוייקט',
@@ -199,11 +201,8 @@ const SubscriptionScreen = ({
               <View style={styles.profileImageFrame}>
                 <Image
                   source={
-                    subscriptionType === subscriptionTypes.professional
-                      ? {uri: PROFESSIONAL_FIGMA_PROFILE_IMAGE}
-                      : subscriptionType === subscriptionTypes.broker
-                        ? {uri: BROKER_FIGMA_PROFILE_IMAGE}
-                        : require('../assets/subscription-company-profile.png')
+                    SUBSCRIPTION_PROFILE_IMAGE[subscriptionType] ||
+                    SUBSCRIPTION_PROFILE_IMAGE[subscriptionTypes.broker]
                   }
                   style={styles.profileImage}
                   resizeMode="cover"

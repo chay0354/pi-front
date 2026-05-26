@@ -10,7 +10,7 @@ import {
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CONTENT_W = Math.min(366, SCREEN_W - 48);
@@ -247,13 +247,6 @@ function InfoChip({label, iconSource, active = true}) {
   return (
     <View style={[styles.infoChip, !active && styles.infoChipInactive]}>
       <View style={styles.infoChipInner}>
-        <Text
-          style={[
-            styles.infoChipText,
-            !active && styles.infoChipTextInactive,
-          ]}>
-          {label}
-        </Text>
         {iconSource ? (
           <Image
             source={iconSource}
@@ -261,6 +254,13 @@ function InfoChip({label, iconSource, active = true}) {
             resizeMode="contain"
           />
         ) : null}
+        <Text
+          style={[
+            styles.infoChipText,
+            !active && styles.infoChipTextInactive,
+          ]}>
+          {label}
+        </Text>
       </View>
     </View>
   );
@@ -429,12 +429,12 @@ export default function BnbListingProfileContent({
 
         <View style={styles.priceBlock}>
           <View style={styles.priceRow}>
+            <Text style={styles.priceBig}>{priceStr}</Text>
+            <View style={styles.priceVertRule} />
             <View style={styles.pricePerNightLabels}>
               <Text style={styles.pricePerNightSmall}>מחיר </Text>
               <Text style={styles.pricePerNightSmall}>ללילה</Text>
             </View>
-            <View style={styles.priceVertRule} />
-            <Text style={styles.priceBig}>{priceStr}</Text>
           </View>
           {title ? (
             <Text style={styles.listingTitle}>{title}</Text>
@@ -459,12 +459,12 @@ export default function BnbListingProfileContent({
           <View style={[styles.highlightCard, {width: CONTENT_W}]}>
             {roomsLine ? (
               <View style={styles.highlightRow}>
-                <Text style={styles.highlightText}>{roomsLine}</Text>
                 <Image
                   source={require('../assets/new-profile-pages/bnb/top-part/rooms.png')}
                   style={styles.highlightIcon}
                   resizeMode="contain"
                 />
+                <Text style={styles.highlightText}>{roomsLine}</Text>
               </View>
             ) : null}
             {roomsLine && datesLine ? (
@@ -472,12 +472,12 @@ export default function BnbListingProfileContent({
             ) : null}
             {datesLine ? (
               <View style={styles.highlightRow}>
-                <Text style={styles.highlightText}>{datesLine}</Text>
                 <Image
                   source={require('../assets/new-profile-pages/bnb/top-part/date.png')}
                   style={styles.highlightIcon}
                   resizeMode="contain"
                 />
+                <Text style={styles.highlightText}>{datesLine}</Text>
               </View>
             ) : null}
             {(roomsLine || datesLine) && showFreeCancel ? (
@@ -485,12 +485,12 @@ export default function BnbListingProfileContent({
             ) : null}
             {showFreeCancel ? (
               <View style={styles.highlightRow}>
-                <Text style={styles.highlightText}>ביטול ללא קנס</Text>
                 <Image
                   source={require('../assets/new-profile-pages/bnb/top-part/cancel-aveialbe.png')}
                   style={styles.highlightIcon}
                   resizeMode="contain"
                 />
+                <Text style={styles.highlightText}>ביטול ללא קנס</Text>
               </View>
             ) : null}
           </View>
@@ -600,13 +600,13 @@ const styles = StyleSheet.create({
   },
   sectionTop: {
     gap: 20,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     width: '100%',
   },
   tagsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 12,
     flexWrap: 'wrap',
     width: '100%',
@@ -644,17 +644,17 @@ const styles = StyleSheet.create({
   priceBlock: {
     width: '100%',
     gap: 18,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
     width: '100%',
   },
   pricePerNightLabels: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
   },
   pricePerNightSmall: {
     fontFamily: 'Rubik-Medium',
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
   locRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 5,
     width: '100%',
   },
@@ -709,13 +709,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     gap: 18,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     alignSelf: flexStart,
   },
   highlightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 6,
     width: '100%',
   },
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   infoChipInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     gap: 10,
   },
   infoChipText: {

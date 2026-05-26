@@ -440,6 +440,31 @@ const AgeRangeSlider = ({minValue, maxValue, onMinChange, onMaxChange}) => {
   );
 };
 
+const isRemoteMediaUrl = uri =>
+  typeof uri === 'string' &&
+  (uri.startsWith('http://') || uri.startsWith('https://'));
+
+const hasLocalMediaFile = fileObj =>
+  Boolean(fileObj?.uri) && !isRemoteMediaUrl(fileObj.uri);
+
+/** Normalize expo-image-picker / web File into uploadFile shape. */
+const fileFromPickerAsset = (asset, kind = 'image') => {
+  if (!asset?.uri) return null;
+  const isVideo =
+    kind === 'video' ||
+    String(asset.type || '').toLowerCase() === 'video' ||
+    String(asset.mimeType || '').startsWith('video/');
+  const defaultMime = isVideo ? 'video/mp4' : 'image/jpeg';
+  const defaultName = isVideo
+    ? `video-${Date.now()}.mp4`
+    : `photo-${Date.now()}.jpg`;
+  const type =
+    asset.mimeType ||
+    (String(asset.type || '').includes('/') ? asset.type : defaultMime);
+  const name = asset.fileName || asset.filename || defaultName;
+  return {uri: asset.uri, type, name};
+};
+
 /**
  * AdsForm Component
  * Form for creating an office listing
@@ -1309,14 +1334,7 @@ const AdsForm = ({
         });
 
         if (!result.canceled && result.assets[0]) {
-          const asset = result.assets[0];
-          const fileObj = {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.filename || `photo-${Date.now()}.jpg`,
-            file: asset, // Store for upload
-          };
-          setMainImage(fileObj);
+          setMainImage(fileFromPickerAsset(result.assets[0], 'image'));
         }
       } catch (error) {
         console.log('errrorr', error);
@@ -1328,13 +1346,11 @@ const AdsForm = ({
   const handleMainImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const fileObj = {
+      setMainImage({
         uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file: file, // Store actual file for upload later
-      };
-      setMainImage(fileObj);
+        type: file.type || 'image/jpeg',
+        name: file.name || `photo-${Date.now()}.jpg`,
+      });
       // Don't upload yet - will upload when publish button is pressed
     }
   };
@@ -1427,15 +1443,8 @@ const AdsForm = ({
         });
 
         if (!result.canceled && result.assets[0]) {
-          const asset = result.assets[0];
-          const fileObj = {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.filename || `photo-${Date.now()}.jpg`,
-            file: asset,
-          };
           const newImages = [...additionalImages];
-          newImages[index] = fileObj;
+          newImages[index] = fileFromPickerAsset(result.assets[0], 'image');
           setAdditionalImages(newImages);
         }
       } catch (error) {
@@ -1447,16 +1456,13 @@ const AdsForm = ({
   const handleAdditionalImageChange = (index, event) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const fileObj = {
-        uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file: file,
-      };
       const newImages = [...additionalImages];
-      newImages[index] = fileObj;
+      newImages[index] = {
+        uri: URL.createObjectURL(file),
+        type: file.type || 'image/jpeg',
+        name: file.name || `photo-${Date.now()}.jpg`,
+      };
       setAdditionalImages(newImages);
-      // Don't upload yet - will upload when publish button is pressed
     }
   };
 
@@ -1473,15 +1479,8 @@ const AdsForm = ({
           // videoMaxDuration: 300, // 5 minutes max
         });
 
-        if (!result.canceled && result.assets[0]) {
-          const asset = result.assets[0];
-          const fileObj = {
-            uri: asset.uri,
-            type: asset.type || 'video/mp4',
-            name: asset.filename || `video-${Date.now()}.mp4`,
-            file: asset,
-          };
-          setVideoFile(fileObj);
+        if (!result.canceled && result.assets?.[0]) {
+          setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
           setHasVideo(true);
         }
       } catch (error) {
@@ -1494,14 +1493,12 @@ const AdsForm = ({
   const handleVideoChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const fileObj = {
+      setVideoFile({
         uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file: file,
-      };
-      setVideoFile(fileObj);
-      // Don't upload yet - will upload when publish button is pressed
+        type: file.type || 'video/mp4',
+        name: file.name || `video-${Date.now()}.mp4`,
+      });
+      setHasVideo(true);
     }
   };
 
@@ -1568,9 +1565,11 @@ const AdsForm = ({
       if (
         needsMainImage &&
         !mainImage &&
-        additionalImages.filter(img => img).length === 0
+        additionalImages.filter(img => img).length === 0 &&
+        !videoFile &&
+        !videoUrl
       ) {
-        publishErrors.push('העלו לפחות תמונה אחת');
+        publishErrors.push('העלו לפחות תמונה אחת או סרטון');
       }
       for (let fi = 0; fi < fields.length; fi++) {
         const f = fields[fi];
@@ -1605,11 +1604,27 @@ const AdsForm = ({
     projectName,
     mainImage,
     additionalImages,
+    videoFile,
+    videoUrl,
     projectOfferGroupsOn,
   ]);
 
   /** Mandatory fields satisfied — yellow asset + press enabled (still respects uploading). */
   const formReadyToPublish = publishBlockingErrors.length === 0;
+
+  const uploadAdsMedia = async (fileObj, folder, progressKey) => {
+    if (!hasLocalMediaFile(fileObj)) return null;
+    setUploadProgress(prev => ({...prev, [progressKey]: true}));
+    try {
+      const result = await uploadFile(fileObj, folder);
+      if (!result?.url) {
+        throw new Error(result?.error || 'Upload failed');
+      }
+      return result.url;
+    } finally {
+      setUploadProgress(prev => ({...prev, [progressKey]: false}));
+    }
+  };
 
   /** Gray vs yellow PNGs differ in size; one combined ratio caused letterboxing on the other */
   const publishAspectRatios = useMemo(() => {
@@ -1693,11 +1708,14 @@ const AdsForm = ({
       let uploadedMainImageUrl = null;
       const uploadedAdditionalImageUrls = [];
       let uploadedVideoUrl = null;
-      if (initialListing && mainImage?.uri && !mainImage?.file) {
+      if (initialListing && mainImage?.uri && !hasLocalMediaFile(mainImage)) {
         uploadedMainImageUrl = mainImage.uri || mainImageUrl;
       }
+      if (initialListing && videoFile?.uri && !hasLocalMediaFile(videoFile)) {
+        uploadedVideoUrl = videoFile.uri || videoUrl;
+      }
       for (let i = 0; i < (additionalImages?.length || 0); i++) {
-        if (additionalImages[i]?.uri && !additionalImages[i]?.file) {
+        if (additionalImages[i]?.uri && !hasLocalMediaFile(additionalImages[i])) {
           uploadedAdditionalImageUrls[i] = additionalImages[i].uri;
         }
       }
@@ -1706,31 +1724,18 @@ const AdsForm = ({
       if (category === 3) {
         if (uploadedMainImageUrl) {
           // Already have URL from initialListing (edit mode)
-        } else if (mainImage && mainImage.file) {
+        } else if (hasLocalMediaFile(mainImage)) {
           // User uploaded their own image - upload it
           try {
-            setUploadProgress(prev => ({...prev, mainImage: true}));
-            const formData = new FormData();
-            formData.append('file', mainImage.file);
-            formData.append('folder', 'listings/images');
-
-            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-
-            const data = await response.json();
-            if (data.success && data.url) {
-              uploadedMainImageUrl = data.url;
-            } else {
-              throw new Error(data.error || 'Failed to upload image');
-            }
+            uploadedMainImageUrl = await uploadAdsMedia(
+              mainImage,
+              'listings/images',
+              'mainImage',
+            );
           } catch (error) {
             alert('שגיאה בהעלאת התמונה. נסה שוב.');
             setUploading(false);
             return;
-          } finally {
-            setUploadProgress(prev => ({...prev, mainImage: false}));
           }
         } else {
           // No user image - upload the fixed image from assets
@@ -1785,145 +1790,83 @@ const AdsForm = ({
       }
 
       // Upload main image (skip for category 3; skip if already have URL from edit)
-      if (
-        category !== 3 &&
-        !uploadedMainImageUrl &&
-        mainImage &&
-        mainImage.file
-      ) {
+      if (category !== 3 && !uploadedMainImageUrl && hasLocalMediaFile(mainImage)) {
         try {
-          setUploadProgress(prev => ({...prev, mainImage: true}));
-          const formData = new FormData();
-          formData.append('file', mainImage.file);
-          formData.append('folder', 'listings/images');
-
-          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await response.json();
-          if (data.success && data.url) {
-            uploadedMainImageUrl = data.url;
-          } else {
-            throw new Error(data.error || 'Failed to upload main image');
-          }
+          uploadedMainImageUrl = await uploadAdsMedia(
+            mainImage,
+            'listings/images',
+            'mainImage',
+          );
         } catch (error) {
+          console.log('main image upload error:', error);
           alert('שגיאה בהעלאת התמונה הראשית. נסה שוב.');
           setUploading(false);
           return;
-        } finally {
-          setUploadProgress(prev => ({...prev, mainImage: false}));
         }
       }
 
       // Upload additional images
       for (let i = 0; i < additionalImages.length; i++) {
-        if (additionalImages[i] && additionalImages[i].file) {
+        if (hasLocalMediaFile(additionalImages[i])) {
           try {
-            setUploadProgress(prev => ({
-              ...prev,
-              [`additional-${i}`]: true,
-            }));
-            const formData = new FormData();
-            formData.append('file', additionalImages[i].file);
-            formData.append('folder', 'listings/images');
-
-            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-
-            const data = await response.json();
-            if (data.success && data.url) {
-              uploadedAdditionalImageUrls[i] = data.url;
-            } else {
-            }
+            uploadedAdditionalImageUrls[i] = await uploadAdsMedia(
+              additionalImages[i],
+              'listings/images',
+              `additional-${i}`,
+            );
           } catch (error) {
-          } finally {
-            setUploadProgress(prev => ({
-              ...prev,
-              [`additional-${i}`]: false,
-            }));
+            console.log(`additional image ${i} upload error:`, error);
           }
         }
       }
 
       // Upload video if exists
-      if (videoFile && videoFile.file) {
+      if (!uploadedVideoUrl && hasLocalMediaFile(videoFile)) {
         try {
-          setUploadProgress(prev => ({...prev, video: true}));
-          const formData = new FormData();
-          formData.append('file', videoFile.file);
-          formData.append('folder', 'listings/videos');
-
-          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await response.json();
-          if (data.success && data.url) {
-            uploadedVideoUrl = data.url;
-          } else {
-          }
+          uploadedVideoUrl = await uploadAdsMedia(
+            videoFile,
+            'listings/videos',
+            'video',
+          );
         } catch (error) {
-        } finally {
-          setUploadProgress(prev => ({...prev, video: false}));
+          console.log('video upload error:', error);
+          alert('שגיאה בהעלאת הסרטון. נסה שוב.');
+          setUploading(false);
+          return;
         }
       }
 
       let uploadedSalesImageUrl = null;
-      if (salesImage?.uri && !salesImage?.file) {
+      if (salesImage?.uri && !hasLocalMediaFile(salesImage)) {
         uploadedSalesImageUrl = salesImage.uri || salesImageUrl;
-      } else if (salesImage?.file) {
+      } else if (hasLocalMediaFile(salesImage)) {
         try {
-          setUploadProgress(prev => ({...prev, salesImage: true}));
-          const formData = new FormData();
-          formData.append('file', salesImage.file);
-          formData.append('folder', 'listings/images');
-          const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-          const data = await response.json();
-          if (data.success && data.url) {
-            uploadedSalesImageUrl = data.url;
-          }
+          uploadedSalesImageUrl = await uploadAdsMedia(
+            salesImage,
+            'listings/images',
+            'salesImage',
+          );
         } catch (err) {
           console.warn('[AdsForm] sales image upload failed:', err.message);
-        } finally {
-          setUploadProgress(prev => ({...prev, salesImage: false}));
         }
       }
 
       let uploadedBnbBusinessLogoUrl = null;
       if (category === 5 && bnbHostType === 'business') {
-        if (initialListing && bnbBusinessLogo?.uri && !bnbBusinessLogo?.file) {
+        if (initialListing && bnbBusinessLogo?.uri && !hasLocalMediaFile(bnbBusinessLogo)) {
           uploadedBnbBusinessLogoUrl =
             bnbBusinessLogo.uri || bnbBusinessLogoUrl;
-        } else if (bnbBusinessLogo?.file) {
+        } else if (hasLocalMediaFile(bnbBusinessLogo)) {
           try {
-            setUploadProgress(prev => ({...prev, bnbBusinessLogo: true}));
-            const formData = new FormData();
-            formData.append('file', bnbBusinessLogo.file);
-            formData.append('folder', 'listings/images');
-            const response = await fetch(`${getResolvedApiUrl()}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-            const data = await response.json();
-            if (data.success && data.url) {
-              uploadedBnbBusinessLogoUrl = data.url;
-            } else {
-              throw new Error(data.error || 'Failed to upload logo');
-            }
+            uploadedBnbBusinessLogoUrl = await uploadAdsMedia(
+              bnbBusinessLogo,
+              'listings/images',
+              'bnbBusinessLogo',
+            );
           } catch (error) {
             alert('שגיאה בהעלאת הלוגו. נסה שוב.');
             setUploading(false);
             return;
-          } finally {
-            setUploadProgress(prev => ({...prev, bnbBusinessLogo: false}));
           }
         }
       }
@@ -2095,7 +2038,7 @@ const AdsForm = ({
         : await createListing(listingData);
 
       // Mirror תמונה מכירתית as a feed post (same image, same listing category) — only when user chose a new file this publish (avoid duplicate posts on re-save).
-      const salesImageIsNewUpload = Boolean(salesImage?.file);
+      const salesImageIsNewUpload = hasLocalMediaFile(salesImage);
       if (
         uploadedSalesImageUrl &&
         fieldKeys.includes('salesimage') &&

@@ -1,48 +1,44 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform,
   Image,
-  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {recoverSubscriberCodeByEmail} from '../utils/api';
-import {flexEnd} from '../index';
+import {recoverPasswordByEmail} from '../utils/api';
+import {flexEnd} from '../utils/rtlLayout';
 
 const KEY_ICON = require('../assets/menu/key.png');
 
 /**
- * שחזור קוד סודי – enter email, send מספר מנוי by mail
+ * שכחתי סיסמה – sends to the logged-in account email only (no typing).
  */
-const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
+const SecretCodeRecoveryScreen = ({onClose, onSent, userEmail = ''}) => {
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const accountEmail = String(userEmail || '').trim();
+
+  useEffect(() => {
+    if (!accountEmail) {
+      Alert.alert('שגיאה', 'לא נמצא מייל בחשבון המחובר.', [
+        {text: 'אישור', onPress: () => onClose && onClose()},
+      ]);
+    }
+  }, [accountEmail, onClose]);
 
   const handleSend = async () => {
-    const trimmed = email.trim();
-    if (!trimmed) {
-      Alert.alert('שגיאה', 'אנא הזן כתובת מייל');
-      return;
-    }
-    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed.toLowerCase());
-    if (!ok) {
-      Alert.alert('שגיאה', 'אנא הזן כתובת מייל תקינה');
-      return;
-    }
+    if (!accountEmail) return;
     setLoading(true);
     try {
-      await recoverSubscriberCodeByEmail(trimmed);
-      if (onSent) onSent(trimmed);
+      await recoverPasswordByEmail(accountEmail);
+      if (onSent) onSent(accountEmail);
     } catch (e) {
       Alert.alert('שגיאה', e.message || 'נכשל בשליחה. נסה שוב.');
     } finally {
@@ -50,14 +46,13 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
     }
   };
 
-  const canSend = email.trim().length > 0 && !loading;
+  const canSend = Boolean(accountEmail) && !loading;
 
   return (
     <View style={styles.root}>
       <ScrollView
         contentContainerStyle={[styles.scroll, {paddingTop: insets.top + 10}]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
+        showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={onClose}
@@ -65,7 +60,7 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
             hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>שחזור קוד סודי</Text>
+          <Text style={styles.headerTitle}>שכחתי סיסמה</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -77,38 +72,17 @@ const SecretCodeRecoveryScreen = ({onClose, onSent}) => {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.cardTitle}>שכחת את הקוד?</Text>
+          <Text style={styles.cardTitle}>שכחתי סיסמה</Text>
           <Text style={styles.cardBody}>
-            לא נורא, הזן את כתובת המייל המשויכת לחשבונך, ואנו נשלח לך את קוד
-            המנוי שלך.
+            לחץ שלח וישלח אלייך מייל עם הסיסמה העדכנית שלך לכתובת המייל של
+            החשבון המחובר:
           </Text>
 
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={styles.input}
-              placeholder="כתובת מייל"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textAlign="center"
-            />
-            {email.trim().length > 0 ? (
-              <TouchableOpacity
-                onPress={() => setEmail('')}
-                style={styles.clearBtn}
-                hitSlop={10}
-                activeOpacity={0.7}>
-                <Text style={styles.clearBtnText}>×</Text>
-              </TouchableOpacity>
-            ) : null}
+          <View style={styles.emailReadOnlyWrap}>
+            <Text style={styles.emailReadOnly} numberOfLines={2}>
+              {accountEmail || '—'}
+            </Text>
           </View>
-
-          {email.trim().length === 0 ? (
-            <Text style={styles.promo}>הזן מייל לקבלת קוד חינם לחצי שנה</Text>
-          ) : null}
 
           <TouchableOpacity
             activeOpacity={0.85}
@@ -212,46 +186,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  inputWrap: {
-    position: 'relative',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#8c85b3',
+  emailReadOnlyWrap: {
+    width: '100%',
+    minHeight: 52,
     borderRadius: 1000,
-    height: 52,
-    paddingHorizontal: 16,
-    color: Colors.white100,
-    fontSize: 20,
-    letterSpacing: 0.2,
-    backgroundColor: '#2b2a39',
-    textAlign: 'left',
-    writingDirection: 'rtl',
-  },
-  clearBtn: {
-    position: 'absolute',
-    left: 16,
-    top: 0,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 20,
-  },
-  clearBtnText: {
-    color: '#FFFFFF',
-    fontSize: 34,
-    lineHeight: 34,
-    fontWeight: '300',
-  },
-  promo: {
-    color: '#E39513',
-    fontSize: 14,
-    letterSpacing: 0.14,
-    textAlign: 'left',
+    borderWidth: 1,
+    borderColor: '#ffc40a',
+    backgroundColor: 'rgba(255,196,10,0.08)',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     marginBottom: 20,
+    justifyContent: 'center',
+  },
+  emailReadOnly: {
+    color: Colors.white100,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
   },
   btnWrap: {
     borderRadius: 1000,

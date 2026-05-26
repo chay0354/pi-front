@@ -10,7 +10,7 @@ import {
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {
   buildCompanyLandAttrChips,
@@ -415,23 +415,27 @@ const styles = StyleSheet.create({
     alignSelf: flexStart,
   },
   postedBy: {
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     marginBottom: 12,
+    width: '100%',
   },
   postedByLabel: {
     color: TEXT_SECONDARY,
     fontSize: 11,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
     marginBottom: 7,
     width: '100%',
   },
   postedByRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexStart,
     gap: 8,
     width: '100%',
+    alignSelf: flexStart,
   },
   postedByAvatar: {
     width: 24,
@@ -447,7 +451,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   bodyText: {
     fontFamily: 'Rubik-Regular',

@@ -32,7 +32,14 @@ import {
   shouldShowCommercialLogoBadge,
   getCompanyLogoUrlFromListing,
 } from '../utils/listingGridCardFigma';
-import {flexEnd, flexStart} from '../index';
+import {flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
+
+/** Pi badge is always LTR (number then star) — isolated from RTL grid rows. */
+const piBadgeLtrDirection =
+  Platform.OS === 'web' ? {direction: 'ltr'} : null;
+/** Web StyleSheet omits direction; native uses I18nManager + forceRtlStyle on rows. */
+const gridRtlDirection =
+  Platform.OS === 'web' ? {direction: 'rtl'} : null;
 
 const CARD_BG = '#2B2A39';
 const IMG_PLACEHOLDER_BG = '#1e1d2b';
@@ -121,7 +128,6 @@ const ListingGridCardFigma = ({
           style={[
             styles.gridCardStatTextFigma,
             styles.gridCardStatTextCell,
-            {textAlign: 'left'},
           ]}>
           {s.label}
         </Text>
@@ -134,10 +140,14 @@ const ListingGridCardFigma = ({
     const roomsD = formatApartmentRoomsOrFloorForDisplay(listing?.rooms);
     const areaD = formatApartmentAreaForDisplay(listing?.area);
     const floorD = formatApartmentRoomsOrFloorForDisplay(listing?.floor);
-    const textRow = [
-      styles.gridCardStatTextInline,
-      styles.gridCardApartmentStatTextWrap,
-    ];
+    const statText =
+      key === 'rooms' && roomsD != null
+        ? `${roomsD} חדרים`
+        : key === 'area' && areaD != null
+          ? `${areaD} ${HEB_M2}`
+          : key === 'floor' && floorD != null
+            ? `קומה ${floorD}`
+            : s.label;
     const floorIconStyle =
       key === 'floor'
         ? [styles.gridCardStatIconFigma, styles.gridCardStatIconFlipped]
@@ -147,42 +157,14 @@ const ListingGridCardFigma = ({
         <View style={styles.gridCardStatIconBox}>
           <Image source={s.icon} style={floorIconStyle} resizeMode="contain" />
         </View>
-        {key === 'rooms' && roomsD != null ? (
-          <Text
-            style={[...textRow, styles.gridCardStatTextCell]}
-            textAlign={'left'}
-            writingDirection="rtl">
-            <Text style={styles.gridCardStatValueFigma}>{roomsD}</Text>
-            <Text style={styles.gridCardStatLabelFigma}> חדרים</Text>
-          </Text>
-        ) : key === 'area' && areaD != null ? (
-          <Text
-            style={[...textRow, styles.gridCardStatTextCell]}
-            textAlign={'left'}
-            writingDirection="rtl">
-            <Text style={styles.gridCardStatValueFigma}>{areaD}</Text>
-            <Text style={styles.gridCardStatLabelFigma}> {HEB_M2}</Text>
-          </Text>
-        ) : key === 'floor' && floorD != null ? (
-          <Text
-            style={[...textRow, styles.gridCardStatTextCell]}
-            textAlign={'left'}
-            writingDirection="rtl">
-            <Text style={styles.gridCardStatLabelFigma}>קומה </Text>
-            <Text style={styles.gridCardStatValueFigma}>{floorD}</Text>
-          </Text>
-        ) : (
-          <Text
-            style={[
-              styles.gridCardStatTextFigma,
-              styles.gridCardApartmentStatTextWrap,
-              styles.gridCardStatTextCell,
-            ]}
-            textAlign={'left'}
-            writingDirection="rtl">
-            {s.label}
-          </Text>
-        )}
+        <Text
+          style={[
+            styles.gridCardStatTextFigma,
+            styles.gridCardApartmentStatTextWrap,
+            styles.gridCardStatTextCell,
+          ]}>
+          {statText}
+        </Text>
       </View>
     );
   };
@@ -212,10 +194,10 @@ const ListingGridCardFigma = ({
           style={styles.gridCardImageGradient}
         />
         <View
-          style={[styles.gridCardPriceOverlay, {alignItems: flexEnd}]}
+          style={[styles.gridCardPriceOverlay, {alignItems: flexStart}]}
           pointerEvents="box-none">
           <Text
-            style={[styles.gridCardPriceOnImage, {textAlign: 'left'}]}
+            style={styles.gridCardPriceOnImage}
             numberOfLines={2}
             maxFontSizeMultiplier={1.4}>
             {cardPriceLabel}
@@ -253,15 +235,16 @@ const ListingGridCardFigma = ({
         ) : null}
       </View>
 
-      <View style={[styles.gridCardBodyFigma, {alignItems: flexEnd}]}>
+      <View style={[styles.gridCardBodyFigma, gridRtlDirection]}>
         <View
           style={[
             styles.gridCardTopRowFigma,
+            gridRtlDirection,
             !showPiRating &&
               !showCommercialLogo &&
               styles.gridCardTopRowFigmaNoPi,
             !showPiRating &&
-              !showCommercialLogo && {justifyContent: flexEnd},
+              !showCommercialLogo && {justifyContent: flexStart},
           ]}>
           {showCommercialLogo ? (
             <View
@@ -275,7 +258,9 @@ const ListingGridCardFigma = ({
               />
             </View>
           ) : showPiRating ? (
-            <View style={styles.gridCardPiBadge} pointerEvents="box-none">
+            <View
+              style={[styles.gridCardPiBadge, piBadgeLtrDirection]}
+              pointerEvents="box-none">
               <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
               <Image
                 source={piBadgeImage}
@@ -285,7 +270,7 @@ const ListingGridCardFigma = ({
               />
             </View>
           ) : null}
-          <View style={styles.gridCardTopRowEnd}>
+          <View style={[styles.gridCardTopRowEnd, gridRtlDirection]}>
             <TouchableOpacity
               onPress={e => {
                 e?.stopPropagation?.();
@@ -327,27 +312,25 @@ const ListingGridCardFigma = ({
           </View>
         </View>
 
-        <View
-          style={[styles.gridCardAddressRowFigma, {justifyContent: flexStart}]}>
-          <Text
-            style={[styles.gridCardAddressTextFigma, {textAlign: 'left'}]}
-            numberOfLines={1}>
-            {addr}
-          </Text>
+        <View style={[styles.gridCardAddressRowFigma, gridRtlDirection]}>
           <Image
             source={require('../assets/liked-ads/location.png')}
             style={styles.gridCardAddressIconFigma}
             resizeMode="contain"
             accessibilityLabel="מיקום"
           />
+          <Text
+            style={styles.gridCardAddressTextFigma}
+            numberOfLines={1}>
+            {addr}
+          </Text>
         </View>
 
-        <View
-          style={[styles.gridCardStatsRowFigma, {justifyContent: flexStart}]}>
+        <View style={[styles.gridCardStatsRowFigma, gridRtlDirection]}>
           {isCompany ? (
             <>
               {renderGridStat(apartmentsStat)}
-              <View style={styles.gridCardStatsPairGroup}>
+              <View style={[styles.gridCardStatsPairGroup, gridRtlDirection]}>
                 {renderGridStat(buildingsStat)}
                 {renderGridStat(floorsStat)}
               </View>
@@ -355,7 +338,7 @@ const ListingGridCardFigma = ({
           ) : (
             <>
               {renderApartmentGridStat('rooms')}
-              <View style={styles.gridCardStatsPairGroup}>
+              <View style={[styles.gridCardStatsPairGroup, gridRtlDirection]}>
                 {renderApartmentGridStat('area')}
                 {renderApartmentGridStat('floor')}
               </View>
@@ -441,6 +424,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
+    textAlign: 'left',
     writingDirection: 'rtl',
     textShadowColor: 'rgba(0,0,0,0.85)',
     textShadowOffset: {width: 0, height: 1},
@@ -482,6 +466,8 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     borderBottomLeftRadius: 14,
     borderBottomRightRadius: 14,
+    alignItems: flexStart,
+    ...forceRtlStyle,
   },
   gridCardTopRowFigma: {
     flexDirection: 'row',
@@ -492,7 +478,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     overflow: 'visible',
     zIndex: 2,
-    writingDirection: 'rtl',
+    ...forceRtlStyle,
   },
   gridCardTopRowFigmaNoPi: {},
   gridCardTopRowEnd: {
@@ -500,6 +486,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   gridCardCommercialLogoWrap: {
     width: 87,
@@ -516,10 +503,12 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   gridCardPiBadge: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 2,
     position: 'relative',
+    flexShrink: 0,
+    ...forceLtrStyle,
   },
   gridCardPiText: {
     color: '#FFD275',
@@ -527,12 +516,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
+    zIndex: 1,
+    ...forceLtrStyle,
   },
   gridCardPiBadgeImage: {
     width: 60,
     height: 60,
     position: 'absolute',
-    left: -6,
+    marginLeft: -6,
     top: -22,
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
@@ -564,8 +555,10 @@ const styles = StyleSheet.create({
   gridCardAddressRowFigma: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: flexStart,
     gap: 6,
     width: '100%',
+    ...forceRtlStyle,
   },
   gridCardAddressTextFigma: {
     flex: 1,
@@ -575,6 +568,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.54,
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   gridCardAddressIconFigma: {
@@ -583,14 +577,16 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   gridCardStatsRowFigma: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'center',
+    justifyContent: flexStart,
     gap: 6,
     width: '100%',
     marginTop: 4,
     overflow: 'visible',
     zIndex: 2,
+    ...forceRtlStyle,
     ...Platform.select({
       android: {elevation: 2},
       default: {},
@@ -633,12 +629,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   gridCardStatGroup: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   gridCardStatTextFigma: {
     color: Colors.white100,
@@ -646,6 +644,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.45,
+    textAlign: 'left',
     writingDirection: 'rtl',
     flexShrink: 0,
     ...Platform.select({

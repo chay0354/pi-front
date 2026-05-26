@@ -6,9 +6,12 @@ if (-not (Test-Path $sdk)) {
   Write-Error "Android SDK not found at $sdk — install Android Studio and SDK first."
 }
 $env:ANDROID_HOME = $sdk
-$env:PATH = "$sdk\platform-tools;$sdk\emulator;$env:PATH"
+$env:PATH = "$(Join-Path $sdk 'platform-tools');$(Join-Path $sdk 'emulator');$env:PATH"
 
 $deviceLines = @((& adb devices 2>$null) | Where-Object { $_ -match '\tdevice$' })
+if ($deviceLines.Count -ge 1) {
+  & "$PSScriptRoot\android-emulator-api.ps1" 2>$null
+}
 if ($deviceLines.Count -lt 1) {
   Write-Host ''
   Write-Host 'No Android device/emulator detected. Start an AVD (Device Manager) or plug in a phone, then run:'

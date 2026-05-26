@@ -12,9 +12,12 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {brokerCategories} from '../utils/constant';
+import {
+  brokerCategories,
+  DEFAULT_MONTHLY_LISTING_QUOTA,
+} from '../utils/constant';
 import {getListings} from '../utils/api';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 const inverseTextAlign = 'right';
 
 // Figma palette (node 35:547303 — ניתוח מודעות)
@@ -44,7 +47,7 @@ const ANALYSIS_ROWS = [
   {id: 6, label: 'מגזר דתי'},
 ];
 
-const DEFAULT_LISTING_QUOTA = 65;
+const DEFAULT_LISTING_QUOTA = DEFAULT_MONTHLY_LISTING_QUOTA;
 
 const categoryMeta = id => brokerCategories.find(c => c.id === id) || null;
 

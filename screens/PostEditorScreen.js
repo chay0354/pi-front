@@ -1,4 +1,11 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,17 +15,20 @@ import {
   ScrollView,
   TextInput,
   Keyboard,
-  Dimensions,
+  KeyboardAvoidingView,
   Platform,
+  InteractionManager,
   Animated,
   PanResponder,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import {Video, ResizeMode} from 'expo-av';
+import {Video, ResizeMode, Audio} from 'expo-av';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {captureRef} from 'react-native-view-shot';
 import {
@@ -31,6 +41,7 @@ import {
   createStory,
   toSubscriptionId,
 } from '../utils/api';
+import {forceLtrStyle} from '../utils/rtlLayout';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -157,12 +168,87 @@ const getTextVisualStyle = (baseColor, bgMode = 0) => {
   return {textColor: color, backgroundColor: 'transparent'};
 };
 
+/**
+ * Self-contained editing text input.
+ * - Fully UNCONTROLLED (uses defaultValue) — on Android, controlled
+ *   multiline TextInputs can drop typed characters when the parent
+ *   re-renders. Uncontrolled avoids this entirely.
+ * - Tracks the latest text in a ref (updated from BOTH onChangeText and
+ *   onChange) so finishEditing can read it via getText().
+ * - Reads the underlying native input value as a last-resort fallback so
+ *   we never lose what the user actually typed.
+ */
+const EditingTextBox = forwardRef(
+  ({initialText, onTextChange, ...inputProps}, ref) => {
+    const initial = String(initialText ?? '');
+    const textRef = useRef(initial);
+    const inputRef = useRef(null);
+
+    const readNativeValue = () => {
+      const input = inputRef.current;
+      if (!input) return '';
+      // Web: react-native-web exposes _node for the DOM input
+      if (Platform.OS === 'web') {
+        const dom =
+          input?._node ??
+          input?._inputRef ??
+          (typeof document !== 'undefined'
+            ? document.getElementById('post-editor-text-input')
+            : null);
+        if (dom && typeof dom.value === 'string') return dom.value;
+      }
+      // Internal RN TextInput last seen native text (best-effort)
+      if (typeof input._lastNativeText === 'string') {
+        return input._lastNativeText;
+      }
+      return '';
+    };
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        getText: () => {
+          const fromRef = textRef.current;
+          if (fromRef && String(fromRef).length > 0) return String(fromRef);
+          // Fallback to whatever the native input currently shows
+          const native = readNativeValue();
+          if (native && String(native).length > 0) return String(native);
+          return String(fromRef ?? '');
+        },
+        focus: () => inputRef.current?.focus?.(),
+        blur: () => inputRef.current?.blur?.(),
+      }),
+      [],
+    );
+
+    const handleText = next => {
+      const v = String(next ?? '');
+      textRef.current = v;
+      onTextChange?.(v);
+    };
+
+    return (
+      <TextInput
+        {...inputProps}
+        ref={inputRef}
+        defaultValue={initial}
+        onChangeText={handleText}
+        onChange={e => {
+          const t = e?.nativeEvent?.text;
+          if (typeof t === 'string') handleText(t);
+        }}
+      />
+    );
+  },
+);
+
 const DraggableTextBlock = React.memo(
   ({
     block,
     stageWidth,
     selectedColor,
     zIndex,
+    isBeingEdited,
     onPress,
     onUpdatePosition,
     onBringToFront,
@@ -188,6 +274,17 @@ const DraggableTextBlock = React.memo(
     const position = useRef(
       new Animated.ValueXY({x: initialX, y: block.y ?? 0}),
     ).current;
+
+    useEffect(() => {
+      hasAligned.current = false;
+      const sw = stageWidth > 0 ? stageWidth : 300;
+      const nextX =
+        block.x === null || block.x === undefined
+          ? Math.max(0, sw / 2 - 75)
+          : block.x;
+      const nextY = block.y ?? 0;
+      position.setValue({x: nextX, y: nextY});
+    }, [block.id, block.x, block.y, stageWidth]);
 
     const panResponder = useRef(
       PanResponder.create({
@@ -229,9 +326,17 @@ const DraggableTextBlock = React.memo(
 
     const handleLayout = e => {
       if (hasAligned.current) return;
+      // Skip alignment while the block is being edited. During edit the
+      // visible Text is empty (opacity 0, text="") so wrapper width is just
+      // padding — aligning here would commit a wrong x/y and pin the block
+      // to (0,0) once Done is pressed. Defer until the block is actually
+      // shown with its real text content.
+      if (isBeingEdited) return;
+      if (block.x !== null && block.x !== undefined) {
+        hasAligned.current = true;
+        return;
+      }
       hasAligned.current = true;
-      // Only recompute if this is a freshly placed block (x was null)
-      if (block.x !== null && block.x !== undefined) return;
       const blockW = e.nativeEvent.layout.width;
       const sw = stageWidth > 0 ? stageWidth : 300;
       let newX;
@@ -258,8 +363,11 @@ const DraggableTextBlock = React.memo(
           styles.centerTextWrapper,
           {
             zIndex,
-            left: position.x,
-            top: position.y,
+            left: 0,
+            top: 0,
+            opacity: isBeingEdited ? 0 : 1,
+            // translateX/Y — not swapped by I18nManager.swapLeftAndRightInRTL (unlike `left`/`top`)
+            transform: position.getTranslateTransform(),
           },
           visual.backgroundColor !== 'transparent' && {
             backgroundColor: visual.backgroundColor,
@@ -398,9 +506,11 @@ const DraggableImage = React.memo(
         style={{
           position: 'absolute',
           zIndex,
-          left: animX,
-          top: animY,
-          transform: [{scale: animScale}],
+          transform: [
+            {translateX: animX},
+            {translateY: animY},
+            {scale: animScale},
+          ],
           padding: TOUCH_PAD,
         }}>
         <Image
@@ -444,10 +554,18 @@ const PostEditorScreen = ({
   const [textBlocks, setTextBlocks] = useState([]);
   const [editingTextBlockId, setEditingTextBlockId] = useState(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
+  const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
   const editingInputRef = useRef(null);
+  const editingTextDraftRef = useRef('');
+  const isFinishingEditRef = useRef(false);
+  const stageLayoutRef = useRef({width: 0, height: 0});
+  // Track the largest stage height ever observed (i.e. with the keyboard
+  // closed). New text blocks are positioned relative to this so they don't
+  // end up at the top of the screen once the keyboard dismisses.
+  const maxStageHeightRef = useRef(0);
   const activeTabRef = useRef(activeTab);
   const nextStackOrderRef = useRef(1);
   const fontSizeTravel = POLYGON_TRACK_HEIGHT - POLYGON_KNOB_SIZE;
@@ -497,7 +615,7 @@ const PostEditorScreen = ({
     if (!canPublish) {
       Alert.alert(
         'לא ניתן לפרסם',
-        'הוסף תמונה מהמצלמה או מהגלריה, או טקסט (Aa), ואז לחץ שוב כדי להעלות ולפרסם.',
+        'הוסף תמונה או סרטון מהמצלמה או מהגלריה, או טקסט (Aa), ואז לחץ שוב כדי להעלות ולפרסם.',
       );
       return;
     }
@@ -623,23 +741,32 @@ const PostEditorScreen = ({
     return 88;
   }, [selectedFormat, editingTextBlockId, isCapturing]);
 
+  /** Space above the format toolbar so the inline editor is not covered. */
+  const editingInputMarginBottom = useMemo(() => {
+    if (Platform.OS === 'web') {
+      return webToolbarInputMarginBottom;
+    }
+    if (!editingTextBlockId || isCapturing) {
+      return 0;
+    }
+    if (!isKeyboardVisible) {
+      return Math.max(formatToolbarHeight, 72) + 8;
+    }
+    return Math.max(formatToolbarHeight, 72) + 12;
+  }, [
+    webToolbarInputMarginBottom,
+    editingTextBlockId,
+    isCapturing,
+    isKeyboardVisible,
+    formatToolbarHeight,
+  ]);
+
   useEffect(() => {
-    const onShow = e => {
+    const onShow = () => {
       setIsKeyboardVisible(true);
-      const winH = Dimensions.get('window')?.height ?? 0;
-      const screenY = e?.endCoordinates?.screenY;
-      const height = e?.endCoordinates?.height;
-      const insetFromScreenY =
-        Number.isFinite(winH) && Number.isFinite(screenY)
-          ? Math.max(0, winH - screenY)
-          : 0;
-      const insetFromHeight = Number.isFinite(height) ? height : 0;
-      const inset = Math.max(insetFromScreenY, insetFromHeight, 0);
-      setKeyboardInset(inset);
     };
     const onHide = () => {
       setIsKeyboardVisible(false);
-      setKeyboardInset(0);
       setSelectedFormat(null);
     };
 
@@ -668,36 +795,86 @@ const PostEditorScreen = ({
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
-  useEffect(() => {
-    if (!editingTextBlockId) return;
-    const input = editingInputRef.current;
-    if (!input || typeof input.setNativeProps !== 'function') return;
-    const baseColor = editingBlock?.color ?? selectedColor;
-    const mode = editingBlock?.bgMode ?? 0;
-    const currentFontSize = editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
-    const {textColor} = getTextVisualStyle(baseColor, mode);
-    input.setNativeProps({
-      style: {
-        color: textColor,
-        textAlign: textAlignMode,
-        fontSize: currentFontSize,
-        lineHeight: Math.round(currentFontSize * 1.15),
-        ...(TEXT_STYLES[selectedTextStyleIndex]?.textStyle ?? {}),
-      },
-    });
-  }, [
-    editingTextBlockId,
-    editingBlock,
-    selectedColor,
-    textAlignMode,
-    selectedTextStyleIndex,
-  ]);
-
   const syncEditingToBlock = partial => {
     if (!editingTextBlockId) return;
     setTextBlocks(prev =>
       prev.map(b => (b.id === editingTextBlockId ? {...b, ...partial} : b)),
     );
+  };
+
+  // Mirror the EditingTextBox local state into a parent ref so finishEditing
+  // can read it even if the box has unmounted/blurred. EditingTextBox calls
+  // this on every keystroke.
+  const syncEditingDraft = text => {
+    const next = String(text ?? '');
+    editingTextDraftRef.current = next;
+  };
+
+  const readLatestEditingText = () => {
+    const fromBox = editingInputRef.current?.getText?.();
+    if (fromBox != null && String(fromBox).length > 0) {
+      return String(fromBox);
+    }
+    return String(editingTextDraftRef.current ?? '');
+  };
+
+  const finishEditing = () => {
+    if (!editingTextBlockId) return;
+    const blockId = editingTextBlockId;
+
+    // CRITICAL: Capture text into a local variable BEFORE any setState calls.
+    // React 18 batches state updates so updater functions run AFTER this
+    // event handler returns. By then refs may have been cleared. Closing
+    // over a local variable guarantees the captured value is preserved.
+    const capturedText = readLatestEditingText().trim();
+
+    isFinishingEditRef.current = true;
+
+    // Prefer the largest stage height we've ever measured (i.e. before the
+    // keyboard opened). At Done time the keyboard is still up, so
+    // stageLayoutRef.current.height is the smaller, keyboard-shrunken value.
+    // Using that would place the text near the top of the full-size stage.
+    const stageH =
+      maxStageHeightRef.current > 0
+        ? maxStageHeightRef.current
+        : stageLayoutRef.current.height > 0
+          ? stageLayoutRef.current.height
+          : stageLayout.height > 0
+            ? stageLayout.height
+            : 300;
+
+    setTextBlocks(prev => {
+      const cur = prev.find(b => b.id === blockId);
+      const text = capturedText || String(cur?.text ?? '').trim();
+      if (!text) {
+        return prev.filter(b => b.id !== blockId);
+      }
+      const isNew = cur?.x === null || cur?.x === undefined;
+      const hadY = cur?.y != null && cur?.y !== undefined;
+      return prev.map(b =>
+        b.id === blockId
+          ? {
+              ...b,
+              text,
+              color: selectedColor,
+              textStyleIndex: selectedTextStyleIndex,
+              align: textAlignMode,
+              x: isNew ? (textAlignMode === 'left' ? 10 : null) : b.x,
+              y: hadY
+                ? b.y
+                : isNew
+                  ? Math.max(24, Math.min(stageH * 0.42, stageH - 72))
+                  : b.y,
+            }
+          : b,
+      );
+    });
+
+    editingTextDraftRef.current = '';
+    setEditingTextBlockId(null);
+    isFinishingEditRef.current = false;
+    editingInputRef.current?.blur?.();
+    Keyboard.dismiss();
   };
 
   const getSliderOffsetFromSize = size => {
@@ -726,6 +903,8 @@ const PostEditorScreen = ({
   const beginEditTextBlock = id => {
     const block = textBlocks.find(b => b.id === id);
     if (!block) return;
+    const initialText = block.text ?? '';
+    editingTextDraftRef.current = initialText;
     setEditingTextBlockId(id);
     setSelectedTextStyleIndex(block.textStyleIndex ?? 0);
     setSelectedColor(block.color ?? COLOR_PAGES[0][0]);
@@ -775,38 +954,12 @@ const PostEditorScreen = ({
       stackOrder: nextStackOrderRef.current++,
     };
     setTextBlocks(prev => [...prev, newBlock]);
+    editingTextDraftRef.current = '';
     setEditingTextBlockId(id);
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
       if (editingInputRef.current?.focus) editingInputRef.current.focus();
     });
-  };
-
-  const finishEditing = () => {
-    if (!editingTextBlockId) return;
-    const stageH = stageLayout.height > 0 ? stageLayout.height : 300;
-    setTextBlocks(prev => {
-      const cur = prev.find(b => b.id === editingTextBlockId);
-      const text = (cur?.text ?? '').trim();
-      if (!text) return prev.filter(b => b.id !== editingTextBlockId);
-      const isNew = cur?.x === null || cur?.x === undefined;
-      return prev.map(b =>
-        b.id === editingTextBlockId
-          ? {
-              ...b,
-              text,
-              color: selectedColor,
-              textStyleIndex: selectedTextStyleIndex,
-              align: textAlignMode,
-              // New block: left is exact, center/right measured by DraggableTextBlock onLayout
-              x: isNew ? (textAlignMode === 'left' ? 10 : null) : b.x,
-              y: isNew ? stageH / 2 - 15 : b.y,
-            }
-          : b,
-      );
-    });
-    setEditingTextBlockId(null);
-    Keyboard.dismiss();
   };
 
   const applyBackgroundImage = uri => {
@@ -826,12 +979,183 @@ const PostEditorScreen = ({
     });
   };
 
+  const switchToCameraTab = () => {
+    if (activeTabRef.current !== TAB_CAMERA) {
+      clearAllEditorState();
+    }
+    activeTabRef.current = TAB_CAMERA;
+    setActiveTab(TAB_CAMERA);
+  };
+
+  const applyCameraCaptureAsset = asset => {
+    if (!asset?.uri) return;
+    if (isVideoAsset(asset)) {
+      applyBackgroundVideo(asset);
+      return;
+    }
+    applyBackgroundImage(asset.uri);
+  };
+
+  const requestCameraPermissions = async () => {
+    if (Platform.OS === 'web') return true;
+    const existing = await ImagePicker.getCameraPermissionsAsync();
+    let status = existing?.status;
+    if (status !== 'granted') {
+      const requested = await ImagePicker.requestCameraPermissionsAsync();
+      status = requested?.status;
+    }
+    if (status !== 'granted') {
+      Alert.alert('', 'נדרשת גישה למצלמה כדי לצלם תמונה או סרטון');
+      return false;
+    }
+    return true;
+  };
+
+  const requestMediaLibraryPermissions = async () => {
+    if (Platform.OS === 'web') return true;
+    const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
+    let status = existing?.status;
+    if (status !== 'granted') {
+      const requested =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      status = requested?.status;
+    }
+    if (status !== 'granted') {
+      Alert.alert('', 'נדרשת גישה לגלריה כדי לבחור תמונה או סרטון');
+      return false;
+    }
+    return true;
+  };
+
+  const takePhotoWithCamera = async () => {
+    if (Platform.OS !== 'web') {
+      const permitted = await requestCameraPermissions();
+      if (!permitted) return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 1,
+    });
+    if (result?.canceled) return;
+    applyCameraCaptureAsset(result?.assets?.[0]);
+  };
+
+  const takeVideoWithCamera = async () => {
+    if (Platform.OS !== 'web') {
+      const permitted = await requestCameraPermissions();
+      if (!permitted) return;
+      const mic = await Audio.requestPermissionsAsync();
+      if (mic.status !== 'granted') {
+        Alert.alert('', 'נדרשת גישה למיקרופון כדי לצלם סרטון');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: false,
+      quality: 1,
+      videoMaxDuration: 60,
+    });
+    if (result?.canceled) return;
+    applyCameraCaptureAsset(result?.assets?.[0]);
+  };
+
+  const pickExistingMediaForCameraTab = async () => {
+    if (Platform.OS !== 'web') {
+      const permitted = await requestMediaLibraryPermissions();
+      if (!permitted) return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: false,
+      quality: 1,
+    });
+    if (result?.canceled) return;
+    applyCameraCaptureAsset(result?.assets?.[0]);
+  };
+
+  /**
+   * Must launch camera/gallery in the same user-gesture turn as the button
+   * press. Any await/setTimeout before launchCameraAsync on web causes the
+   * browser to silently block the file picker.
+   */
+  const runCameraTabMediaAction = action => {
+    if (Platform.OS === 'web') {
+      const pickerPromise =
+        action === 'photo'
+          ? ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: false,
+              quality: 1,
+            })
+          : action === 'video'
+            ? ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+                allowsEditing: false,
+                quality: 1,
+                videoMaxDuration: 60,
+              })
+            : ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsEditing: false,
+                quality: 1,
+              });
+      setShowMediaSourceSheet(false);
+
+      pickerPromise
+        .then(result => {
+          if (result?.canceled) return;
+          applyCameraCaptureAsset(result?.assets?.[0]);
+        })
+        .catch(e => {
+          console.log('runCameraTabMediaAction web error:', e);
+          Alert.alert('שגיאה', 'לא ניתן לפתוח את המצלמה או הגלריה. נסה שוב.');
+        });
+      return;
+    }
+
+    runNativeCameraTabMediaAction(action);
+  };
+
+  const runNativeCameraTabMediaAction = action => {
+    setShowMediaSourceSheet(false);
+    const launch = () => {
+      void (async () => {
+        try {
+          if (action === 'photo') {
+            await takePhotoWithCamera();
+          } else if (action === 'video') {
+            await takeVideoWithCamera();
+          } else if (action === 'library') {
+            await pickExistingMediaForCameraTab();
+          }
+        } catch (e) {
+          console.log('runCameraTabMediaAction error:', e);
+          Alert.alert('שגיאה', 'לא ניתן לפתוח את המצלמה או הגלריה. נסה שוב.');
+        }
+      })();
+    };
+    if (Platform.OS === 'android') {
+      InteractionManager.runAfterInteractions(launch);
+    } else {
+      launch();
+    }
+  };
+
+  const openCameraTabMediaPicker = () => {
+    switchToCameraTab();
+    setShowMediaSourceSheet(true);
+  };
+
   const clearAllEditorState = () => {
     setBackgroundImageUri(null);
     setBackgroundVideoAsset(null);
     setMediaImages([]);
     setTextBlocks([]);
     setEditingTextBlockId(null);
+    editingTextDraftRef.current = '';
+    isFinishingEditRef.current = false;
     setSelectedFormat(null);
     setTextModeOverlayText('');
     setTextContent('');
@@ -879,38 +1203,6 @@ const PostEditorScreen = ({
     }
   };
 
-  const openCameraAndSetBackground = async () => {
-    try {
-      if (activeTab !== TAB_CAMERA) {
-        clearAllEditorState();
-      }
-      setActiveTab(TAB_CAMERA);
-      if (Platform.OS !== 'web') {
-        const existing = await ImagePicker.getCameraPermissionsAsync();
-        let status = existing?.status;
-        if (status !== 'granted') {
-          const requested = await ImagePicker.requestCameraPermissionsAsync();
-          status = requested?.status;
-        }
-        if (status !== 'granted') return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'Images',
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (result?.canceled) return;
-      if (activeTabRef.current !== TAB_CAMERA) return;
-      const asset = result?.assets?.[0];
-      if (!asset?.uri) return;
-      applyBackgroundImage(asset.uri);
-    } catch (e) {
-      console.log('openCameraAndSetBackground error:', e);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={[styles.topNav, {paddingTop: top}]}>
@@ -921,7 +1213,7 @@ const PostEditorScreen = ({
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
         <View style={styles.tabs}>
-          <TouchableOpacity onPress={openCameraAndSetBackground}>
+          <TouchableOpacity onPress={openCameraTabMediaPicker}>
             <Text
               style={[
                 styles.tabText,
@@ -990,7 +1282,11 @@ const PostEditorScreen = ({
             style={styles.backgroundGradient}
           />
         )}
-        <View style={styles.editorRoot}>
+        <KeyboardAvoidingView
+          style={styles.editorKeyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}>
+          <View style={styles.editorRoot}>
           {!isCapturing && (
             <View style={styles.headerContainer}>
               <TouchableOpacity
@@ -1047,9 +1343,17 @@ const PostEditorScreen = ({
               </View>
             </View>
           )}
+          <View style={styles.stageColumn}>
           <View
             style={styles.stage}
-            onLayout={e => setStageLayout(e.nativeEvent.layout)}>
+            onLayout={e => {
+              const layout = e.nativeEvent.layout;
+              stageLayoutRef.current = layout;
+              if (layout.height > maxStageHeightRef.current) {
+                maxStageHeightRef.current = layout.height;
+              }
+              setStageLayout(layout);
+            }}>
             <View style={styles.stageLtr} pointerEvents="box-none">
             {stageLayout.width > 0 &&
               stageLayout.height > 0 &&
@@ -1064,15 +1368,14 @@ const PostEditorScreen = ({
                   onBringToFront={bringMediaImageToFront}
                 />
               ))}
-            {textBlocks
-              .filter(b => b.id !== editingTextBlockId)
-              .map((block, idx) => (
+            {textBlocks.map((block, idx) => (
                 <DraggableTextBlock
                   key={block.id}
                   block={block}
                   stageWidth={stageLayout.width}
                   selectedColor={selectedColor}
                   zIndex={block.stackOrder ?? idx + 1}
+                  isBeingEdited={block.id === editingTextBlockId}
                   onPress={() => beginEditTextBlock(block.id)}
                   onUpdatePosition={updateBlockPosition}
                   onBringToFront={bringTextBlockToFront}
@@ -1130,18 +1433,15 @@ const PostEditorScreen = ({
                                 : textAlignMode === 'right'
                                   ? 'flex-end'
                                   : 'center',
-                            marginBottom: isKeyboardVisible
-                              ? 400
-                              : webToolbarInputMarginBottom,
+                            marginBottom: editingInputMarginBottom,
                           },
                         ]}>
-                        <TextInput
+                        <EditingTextBox
+                          key={editingTextBlockId}
                           ref={editingInputRef}
-                          value={
-                            textBlocks.find(b => b.id === editingTextBlockId)
-                              ?.text ?? ''
-                          }
-                          onChangeText={t => syncEditingToBlock({text: t})}
+                          nativeID="post-editor-text-input"
+                          initialText={editingBlock?.text ?? ''}
+                          onTextChange={syncEditingDraft}
                           placeholder="הקלד משהו..."
                           placeholderTextColor="rgba(255,255,255,0.55)"
                           selectionColor={visual.textColor}
@@ -1172,19 +1472,23 @@ const PostEditorScreen = ({
             )}
             </View>
           </View>
+          </View>
 
           {showTextFormatToolbar && (
             <View
+              onLayout={e => {
+                const h = e.nativeEvent.layout.height;
+                if (h > 0 && Math.abs(h - formatToolbarHeight) > 1) {
+                  setFormatToolbarHeight(h);
+                }
+              }}
               style={[
                 styles.keyboardControls,
                 {
-                  bottom: Platform.OS === 'web' ? 0 : keyboardInset,
                   paddingBottom:
-                    Platform.OS === 'web' ? Math.max(bottom, 10) : 5,
-                  zIndex: 100,
-                  ...(Platform.OS === 'web'
-                    ? {backgroundColor: '#1a1926'}
-                    : {}),
+                    Platform.OS === 'web'
+                      ? Math.max(bottom, 10)
+                      : Math.max(bottom, 8),
                 },
               ]}>
               {selectedFormat === 'aa' && (
@@ -1427,8 +1731,55 @@ const PostEditorScreen = ({
               </View>
             </View>
           )}
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
+
+      <Modal
+        visible={showMediaSourceSheet}
+        transparent
+        animationType="slide"
+        statusBarTranslucent={Platform.OS === 'android'}
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setShowMediaSourceSheet(false)}>
+        <Pressable
+          style={styles.mediaSheetBackdrop}
+          onPress={() => setShowMediaSourceSheet(false)}>
+          <View
+            style={[styles.mediaSheetCard, {paddingBottom: Math.max(bottom, 28)}]}
+            onStartShouldSetResponder={() => true}>
+            <View style={styles.mediaSheetHandle} />
+            <Text style={styles.mediaSheetTitle}>מצלמה</Text>
+            <Text style={styles.mediaSheetSubtitle}>
+              בחר איך להוסיף תמונה או סרטון
+            </Text>
+            <TouchableOpacity
+              style={styles.mediaSheetOption}
+              activeOpacity={0.7}
+              onPress={() => runCameraTabMediaAction('photo')}>
+              <Text style={styles.mediaSheetOptionText}>צלם תמונה</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mediaSheetOption}
+              activeOpacity={0.7}
+              onPress={() => runCameraTabMediaAction('video')}>
+              <Text style={styles.mediaSheetOptionText}>צלם סרטון</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mediaSheetOption}
+              activeOpacity={0.7}
+              onPress={() => runCameraTabMediaAction('library')}>
+              <Text style={styles.mediaSheetOptionText}>בחר מהגלריה</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mediaSheetCancel}
+              activeOpacity={0.7}
+              onPress={() => setShowMediaSourceSheet(false)}>
+              <Text style={styles.mediaSheetCancelText}>ביטול</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -1451,19 +1802,26 @@ const styles = StyleSheet.create({
   },
   stageLtr: {
     ...StyleSheet.absoluteFillObject,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   stageLtrDirection: {
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   backgroundContainer: {
     flex: 1,
     position: 'relative',
   },
+  editorKeyboardAvoid: {
+    flex: 1,
+  },
   editorRoot: {
     flex: 1,
     position: 'relative',
     writingDirection: 'rtl',
+  },
+  stageColumn: {
+    flex: 1,
+    minHeight: 0,
   },
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
@@ -1659,9 +2017,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   keyboardControls: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+    width: '100%',
+    zIndex: 100,
+    elevation: 24,
+    backgroundColor:
+      Platform.OS === 'web' ? '#1a1926' : 'rgba(30, 29, 39, 0.98)',
   },
   editorCanvas: {
     flex: 1,
@@ -1873,5 +2233,61 @@ const styles = StyleSheet.create({
     width: 29,
     height: 29,
     borderRadius: 14.5,
+  },
+  mediaSheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  mediaSheetCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 10,
+    paddingHorizontal: 20,
+    writingDirection: 'rtl',
+  },
+  mediaSheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D8D8D8',
+    marginBottom: 14,
+  },
+  mediaSheetTitle: {
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+    color: '#1E1D27',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  mediaSheetSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    color: '#666666',
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  mediaSheetOption: {
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E8E8E8',
+  },
+  mediaSheetOptionText: {
+    fontSize: 17,
+    fontFamily: 'Rubik-Regular',
+    color: '#1E1D27',
+    textAlign: 'right',
+  },
+  mediaSheetCancel: {
+    marginTop: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  mediaSheetCancelText: {
+    fontSize: 17,
+    fontFamily: 'Rubik-Medium',
+    color: '#CC001E',
   },
 });

@@ -26,7 +26,7 @@ import {
 } from '../utils/constant';
 import {getListings, getBoostQuota, boostListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 

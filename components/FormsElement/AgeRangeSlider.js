@@ -1,5 +1,7 @@
 import React, {useRef, useState, useMemo, useCallback, useEffect} from 'react';
 import {View, Text, StyleSheet, PanResponder, Platform} from 'react-native';
+import {forceLtrStyle, getRangeSliderPercentFromEvent, rangeSliderFillStyle, rangeSliderThumbStyle} from '../../utils/rtlLayout';
+
 import {LinearGradient} from 'expo-linear-gradient';
 /** Match PreferencesFilterScreen (Figma drawer — גיל מועדף). */
 const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
@@ -10,7 +12,6 @@ const TRACK_GRADIENT_LOCATIONS = [0.1113, 0.8662];
 const AGE_MIN = 18;
 const AGE_MAX = 100;
 const THUMB = 22;
-const THUMB_R = -THUMB / 2;
 
 function ageToPercent(age) {
   const a = Math.max(AGE_MIN, Math.min(AGE_MAX, Number(age) || AGE_MIN));
@@ -20,35 +21,6 @@ function ageToPercent(age) {
 function percentToAge(percent) {
   const p = Math.max(0, Math.min(100, percent));
   return Math.round(AGE_MIN + (p / 100) * (AGE_MAX - AGE_MIN));
-}
-
-function getSliderPercentFromEvent(
-  nativeEvent,
-  trackWidth,
-  windowX,
-  sliderViewRef,
-) {
-  const w = trackWidth > 0 ? trackWidth : 1;
-  const ne = nativeEvent;
-  if (typeof ne.pageX === 'number' && !Number.isNaN(ne.pageX)) {
-    const touchX = ne.pageX - windowX;
-    return Math.max(0, Math.min(100, (touchX / w) * 100));
-  }
-  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
-    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
-  }
-  const node = sliderViewRef && sliderViewRef.current;
-  const touch = ne.touches?.[0] || ne;
-  if (
-    node &&
-    typeof node.getBoundingClientRect === 'function' &&
-    (touch?.clientX != null || touch?.pageX != null)
-  ) {
-    const rect = node.getBoundingClientRect();
-    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
-    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
-  }
-  return 0;
 }
 
 /**
@@ -127,7 +99,7 @@ export const AgeRangeSlider = ({
 
   const percentFromNativeEvent = useCallback(
     nativeEvent =>
-      getSliderPercentFromEvent(
+      getRangeSliderPercentFromEvent(
         nativeEvent,
         sliderWidthRef.current,
         sliderWindowXRef.current,
@@ -198,7 +170,7 @@ export const AgeRangeSlider = ({
       const el = sliderContainerRef.current;
       if (!el || typeof el.getBoundingClientRect !== 'function') return;
       const rect = el.getBoundingClientRect();
-      const percent = getSliderPercentFromEvent(
+      const percent = getRangeSliderPercentFromEvent(
         {pageX: clientX},
         rect.width || sliderWidthRef.current,
         rect.left,
@@ -245,7 +217,7 @@ export const AgeRangeSlider = ({
       if (!(w > 0)) return;
       webDraggingRef.current = true;
       handlePressAtPercent(
-        getSliderPercentFromEvent(
+        getRangeSliderPercentFromEvent(
           {pageX: e.clientX},
           rect.width,
           rect.left,
@@ -263,7 +235,7 @@ export const AgeRangeSlider = ({
       const rect = sliderContainerRef.current.getBoundingClientRect?.();
       if (!rect) return;
       handlePressAtPercent(
-        getSliderPercentFromEvent(
+        getRangeSliderPercentFromEvent(
           {pageX: touch.clientX ?? touch.pageX},
           rect.width,
           rect.left,
@@ -283,7 +255,7 @@ export const AgeRangeSlider = ({
       const rect = sliderContainerRef.current.getBoundingClientRect?.();
       if (!rect) return;
       const age = percentToAge(
-        getSliderPercentFromEvent(
+        getRangeSliderPercentFromEvent(
           {pageX: touch.clientX ?? touch.pageX},
           rect.width,
           rect.left,
@@ -337,10 +309,7 @@ export const AgeRangeSlider = ({
             end={{x: 1, y: 0}}
             style={[
               styles.sliderTrackFill,
-              {
-                left: `${minPct}%`,
-                width: `${Math.max(0, maxPct - minPct)}%`,
-              },
+              rangeSliderFillStyle(sliderWidth, minPct, maxPct),
             ]}
           />
         </View>
@@ -351,7 +320,8 @@ export const AgeRangeSlider = ({
           end={{x: 0.5, y: 1}}
           style={[
             styles.sliderThumb,
-            {left: `${minPct}%`, pointerEvents: 'none'},
+            rangeSliderThumbStyle(sliderWidth, minPct),
+            {pointerEvents: 'none'},
           ]}
         />
         <LinearGradient
@@ -361,7 +331,8 @@ export const AgeRangeSlider = ({
           end={{x: 0.5, y: 1}}
           style={[
             styles.sliderThumb,
-            {left: `${maxPct}%`, pointerEvents: 'none'},
+            rangeSliderThumbStyle(sliderWidth, maxPct),
+            {pointerEvents: 'none'},
           ]}
         />
       </View>
@@ -411,7 +382,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     /** Min age left, max age right — match drag to thumb under forceRTL. */
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   sliderContainerWeb: {
     cursor: 'pointer',
@@ -439,7 +410,6 @@ const styles = StyleSheet.create({
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    marginLeft: THUMB_R,
     top: '50%',
     marginTop: -THUMB / 2,
     zIndex: 2,

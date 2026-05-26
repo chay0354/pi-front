@@ -26,6 +26,7 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
   const timerRef = useRef(null);
   const startRef = useRef(0);
   const rafRef = useRef(null);
@@ -40,11 +41,17 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
     if (!visible || !total) {
       setSlideIndex(0);
       setProgress(0);
+      setMediaReady(false);
       return;
     }
     setSlideIndex(0);
     setProgress(0);
+    setMediaReady(false);
   }, [visible, ring?.subscription_id, total]);
+
+  useEffect(() => {
+    setMediaReady(false);
+  }, [slideIndex, currentSlide?.media_url]);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -115,20 +122,29 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
             <Video
               ref={videoRef}
               source={{uri}}
-              style={styles.mediaFullScreen}
+              style={[
+                styles.mediaFullScreen,
+                !mediaReady && styles.mediaUntilReady,
+              ]}
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay
               isMuted={isMuted}
-              useNativeControls
+              useNativeControls={false}
               isLooping
+              onLoad={() => setMediaReady(true)}
+              onReadyForDisplay={() => setMediaReady(true)}
             />
           ) : (
             <Pressable style={StyleSheet.absoluteFillObject} onPress={onTapContent}>
               {uri ? (
                 <Image
                   source={{uri}}
-                  style={styles.mediaFullScreen}
+                  style={[
+                    styles.mediaFullScreen,
+                    !mediaReady && styles.mediaUntilReady,
+                  ]}
                   resizeMode="cover"
+                  onLoadEnd={() => setMediaReady(true)}
                 />
               ) : (
                 <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
@@ -230,6 +246,9 @@ const styles = StyleSheet.create({
   mediaFullScreen: {
     width: '100%',
     height: '100%',
+  },
+  mediaUntilReady: {
+    opacity: 0,
   },
   overlayTop: {
     position: 'absolute',

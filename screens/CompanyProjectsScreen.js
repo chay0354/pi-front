@@ -15,7 +15,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {getListings} from '../utils/api';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const H_PAD = 16;

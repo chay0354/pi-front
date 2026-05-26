@@ -16,10 +16,14 @@ import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {subscriptionTypes} from '../utils/constant';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {
+  getUserCompanyLogoUrl,
+  getUserProfileImageUrl,
+  getUserProfilePhotoUrl,
+} from '../utils/userProfileImage';
 import {getCurrentUser, getFollowHubRows, toSubscriptionId} from '../utils/api';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /** Set URLs when pages are ready; empty string shows a short “בקרוב” alert */
 const LEGAL_DEFAULTS = {
@@ -31,6 +35,8 @@ const LEGAL_DEFAULTS = {
 
 // Figma node 74:6022 assets (messages pill / PiChat badge)
 const PI_CHAT_BAR = require('../assets/menu/pichat.png');
+/** Native asset 1076×144 — full-width bar; explicit height so web/native match Figma scale */
+const PI_CHAT_BAR_HEIGHT = 60;
 
 const MENU_ICONS = {
   edit: require('../assets/pencil-icon.png'),
@@ -217,8 +223,11 @@ const SettingsScreen = ({
       currentUser.business_name ||
       'משתמש'
     : '';
-  const settingsProfilePicUrl = currentUser
-    ? getUserProfileImageUrl(currentUser)
+  const settingsProfilePhotoUrl = currentUser
+    ? getUserProfilePhotoUrl(currentUser)
+    : null;
+  const settingsCompanyLogoUrl = currentUser
+    ? getUserCompanyLogoUrl(currentUser)
     : null;
   const renderChevron = () => (
     <MaterialCommunityIcons name="chevron-left" size={20} color={'#A5A5A5'} />
@@ -293,9 +302,11 @@ const SettingsScreen = ({
                 onPress={() => onOpenOwnProfile && onOpenOwnProfile()}
                 activeOpacity={0.8}>
                 <ProfileAvatar
-                  uri={settingsProfilePicUrl}
+                  uri={settingsProfilePhotoUrl}
+                  fallbackUri={settingsCompanyLogoUrl}
                   name={settingsProfileDisplayName}
                   size={82}
+                  fallbackResizeMode="contain"
                 />
               </TouchableOpacity>
             </View>
@@ -354,6 +365,7 @@ const SettingsScreen = ({
               ) : (
                 followingPreviewRows.map((row, idx) => {
                   const raw =
+                    row?.image_url ||
                     getUserProfileImageUrl(row) ||
                     row?.profile_image_url ||
                     row?.profile_picture_url ||
@@ -366,14 +378,13 @@ const SettingsScreen = ({
                         `following-preview-${idx}`
                       }
                       style={styles.followingPreviewAvatarWrap}>
-                      <Image
-                        source={
-                          raw
-                            ? {uri: String(raw)}
-                            : require('../assets/image-copy-10.png')
-                        }
-                        style={styles.followingPreviewAvatar}
-                        resizeMode="cover"
+                      <ProfileAvatar
+                        uri={raw}
+                        name={row?.name}
+                        size={31}
+                        showRing={false}
+                        placeholderImage={require('../assets/image-copy-10.png')}
+                        imageStyle={styles.followingPreviewAvatar}
                       />
                     </View>
                   );
@@ -462,17 +473,21 @@ const SettingsScreen = ({
       <View style={styles.section}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>כללי</Text>
-          <TouchableOpacity
-            style={[styles.cardItem, styles.cardItemDivider]}
-            onPress={() =>
-              onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()
-            }>
-            {renderChevron()}
-            <View style={styles.cardItemTextWrap}>
-              <Text style={styles.cardItemText}>שחזור קוד סודי</Text>
-              {renderMenuIcon('secret')}
-            </View>
-          </TouchableOpacity>
+          {currentUser &&
+          currentUser.email &&
+          (isLoggedBroker || isLoggedProfessional || isLoggedCompany) ? (
+            <TouchableOpacity
+              style={[styles.cardItem, styles.cardItemDivider]}
+              onPress={() =>
+                onOpenSecretCodeRecovery && onOpenSecretCodeRecovery()
+              }>
+              {renderChevron()}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>שכחתי סיסמה</Text>
+                {renderMenuIcon('secret')}
+              </View>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={[styles.cardItem, styles.cardItemDivider]}
             onPress={() => onOpenFeedback && onOpenFeedback()}>
@@ -624,23 +639,18 @@ const styles = StyleSheet.create({
   },
   buttonsImageWrap: {
     width: '100%',
-    height: 44,
+    minHeight: PI_CHAT_BAR_HEIGHT,
     position: 'relative',
-    maxWidth: 313,
-    alignSelf: 'center',
     overflow: 'visible',
   },
   buttonsImage: {
     width: '100%',
-    height: 44,
-    maxWidth: 313,
-    alignSelf: 'center',
+    height: PI_CHAT_BAR_HEIGHT,
+    minHeight: PI_CHAT_BAR_HEIGHT,
     overflow: 'visible',
   },
   followingPreviewWrap: {
     width: '100%',
-    maxWidth: 313,
-    alignSelf: 'center',
     marginTop: 2,
     marginBottom: 2,
     alignItems: flexStart,

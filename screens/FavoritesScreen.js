@@ -20,7 +20,7 @@ import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
 import FeedBottomBar from '../components/FeedBottomBar';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /** Figma palette for מסך מועדפים (Favorites screen). */
 const BG = '#1E1D27';

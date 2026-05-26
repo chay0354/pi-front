@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Colors} from '../../constants/styles';
-import {flexEnd} from '../../index';
+import {flexEnd} from '../../utils/rtlLayout';
 /**
  * Circular logo placeholder for BnB "business" flow only — gold ring, לוגו label, + control.
  */

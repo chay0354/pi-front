@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Platform,
-  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -18,7 +17,15 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
+
+/** Pi badge layout is always LTR (number then star) — isolate from RTL card rows. */
+const piBadgeLtrDirection =
+  Platform.OS === 'web' ? {direction: 'ltr'} : null;
+
+/** Web StyleSheet omits `direction`; apply on list rows so flex order matches native RTL. */
+const listRtlDirection =
+  Platform.OS === 'web' ? {direction: 'rtl'} : null;
 
 const imgBackArrow =
   'https://www.figma.com/api/mcp/asset/7f09ed22-4005-48ed-88bc-b516005535ca';
@@ -34,7 +41,8 @@ const imgSortTwoArrows = require('../assets/profile/2-arows.png');
 /** גבוה→נמוך (desc) / נמוך→גבוה (asc) */
 const imgSortArrowUp = require('../assets/profile/arow-up.png');
 const imgSortArrowDown = require('../assets/profile/arow-down.png');
-const imgStarBig = require('../assets/pros/star-big.png');
+const piBadgeSource = require('../assets/pi-badge.png');
+const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
 const imgLocationPro = require('../assets/pros/location-pro.png');
 const imgProfileRing =
   'https://www.figma.com/api/mcp/asset/9daf687f-169f-43ec-baf8-8539b1ebca51';
@@ -67,9 +75,34 @@ const getRatingValue = value => {
   return num;
 };
 
+const ProfessionalPiRatingBadge = ({rating, variant = 'list'}) => {
+  const ratingValue = getRatingValue(rating);
+  const ratingText = formatRating(rating);
+  const badgeSource = ratingValue > 4 ? piBadgeSourceRing : piBadgeSource;
+  const isList = variant === 'list';
+
+  return (
+    <View
+      style={[
+        isList ? styles.listPiBadgeWrap : styles.cardPiBadgeWrap,
+        piBadgeLtrDirection,
+      ]}
+      pointerEvents="box-none">
+      <Text style={isList ? styles.listPiBadgeText : styles.cardPiBadgeText}>
+        {ratingText}
+      </Text>
+      <Image
+        source={badgeSource}
+        style={isList ? styles.listPiBadgeImage : styles.cardPiBadgeImage}
+        resizeMode="cover"
+        accessibilityLabel="דירוג Pi"
+      />
+    </View>
+  );
+};
+
 const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
   const tags = collectTags(professional);
-  const ratingText = formatRating(professional?.average_rating);
   const mediaUrl = professional?.profile_image_url || null;
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
@@ -117,14 +150,10 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
               </Text>
             </View>
           </View>
-          <View style={styles.ratingBlock}>
-            <Text style={styles.ratingNumber}>{ratingText}</Text>
-            <Image
-              source={imgStarBig}
-              style={styles.ratingBadgeImage}
-              resizeMode="contain"
-            />
-          </View>
+          <ProfessionalPiRatingBadge
+            rating={professional?.average_rating}
+            variant="card"
+          />
         </View>
 
         <View style={styles.tagsRow}>
@@ -160,33 +189,29 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
 
 const ProfessionalListCard = ({professional, onPress}) => {
   const tags = collectTags(professional);
-  const ratingText = formatRating(professional?.average_rating);
   const mediaUrl = professional?.profile_image_url || null;
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
 
   return (
     <TouchableOpacity
-      style={styles.listCardShell}
+      style={[styles.listCardShell, listRtlDirection]}
       onPress={onPress}
       activeOpacity={0.9}>
-      <View style={styles.listCardTopRow}>
-        <View style={styles.listInfoCol}>
-          <View style={styles.listTitleRow}>
-            <View style={styles.listRatingWrap}>
-              <Text style={styles.listRatingNumber}>{ratingText}</Text>
-              <Image
-                source={imgStarBig}
-                style={styles.listRatingBadgeImage}
-                resizeMode="contain"
-              />
-            </View>
+      <View style={[styles.listCardTopRow, listRtlDirection]}>
+        <ProfileAvatar uri={mediaUrl} name={title} size={78} />
+        <View style={[styles.listInfoCol, listRtlDirection]}>
+          <View style={[styles.listTitleRow, listRtlDirection]}>
             <Text style={styles.listTitleText} numberOfLines={1}>
               {title}
             </Text>
+            <ProfessionalPiRatingBadge
+              rating={professional?.average_rating}
+              variant="list"
+            />
           </View>
 
-          <View style={styles.listAddressRow}>
+          <View style={[styles.listAddressRow, listRtlDirection]}>
             <View style={styles.listPinIconWrap}>
               <Image
                 source={imgLocationPro}
@@ -199,10 +224,9 @@ const ProfessionalListCard = ({professional, onPress}) => {
             </Text>
           </View>
         </View>
-        <ProfileAvatar uri={mediaUrl} name={title} size={78} />
       </View>
 
-      <View style={styles.listTagsRow}>
+      <View style={[styles.listTagsRow, listRtlDirection]}>
         {tags.map(tag => (
           <View key={tag} style={styles.listTagChip}>
             <Text style={styles.listTagText} numberOfLines={1}>
@@ -822,57 +846,68 @@ const styles = StyleSheet.create({
     backgroundColor: '#2B2A39',
     padding: 20,
     gap: 20,
+    ...forceRtlStyle,
   },
   listCardTopRow: {
     flexDirection: 'row',
-    justifyContent: flexStart,
     alignItems: 'flex-start',
     gap: 10,
-    direction: 'ltr',
+    ...forceRtlStyle,
   },
   listInfoCol: {
     flex: 1,
     minWidth: 0,
     gap: 16,
-    // alignItems: flexStart,
+    ...forceRtlStyle,
   },
   listTitleRow: {
     width: '100%',
     flexDirection: 'row',
-    justifyContent: flexStart,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 20,
+    gap: 12,
+    ...forceRtlStyle,
   },
-  listRatingWrap: {
-    flexDirection: 'row',
+  listPiBadgeWrap: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
+    flexShrink: 0,
+    position: 'relative',
+    ...forceLtrStyle,
   },
-  listRatingNumber: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  listPiBadgeText: {
+    color: '#FFD275',
+    fontSize: 20,
+    lineHeight: 26,
     letterSpacing: 0.16,
     fontFamily: 'Rubik-Medium',
+    zIndex: 1,
   },
-  listRatingBadgeImage: {
-    width: 36,
-    height: 36,
-    marginLeft: 4,
+  listPiBadgeImage: {
+    width: 72,
+    height: 72,
+    position: 'absolute',
+    marginLeft: -6,
+    top: -26,
+    ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   listTitleText: {
     flex: 1,
     color: '#F7F3E6',
-    textAlign: 'right',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
+    alignSelf: 'stretch',
   },
   listAddressRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
+    alignSelf: 'stretch',
     gap: 4,
-    flex: 1,
+    ...forceRtlStyle,
   },
   listAddressText: {
     color: '#FFFFFF',
@@ -880,7 +915,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    flexShrink: 1,
   },
   listPinIconWrap: {
     width: 20,
@@ -914,9 +950,10 @@ const styles = StyleSheet.create({
   },
   listTagsRow: {
     flexDirection: 'row',
-    justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 6,
+    justifyContent: flexStart,
+    ...forceRtlStyle,
   },
   listTagChip: {
     height: 28.143,
@@ -932,7 +969,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   cardMedia: {
     height: 212,
@@ -991,21 +1029,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
   },
-  ratingBlock: {
-    flexDirection: 'row',
+  cardPiBadgeWrap: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
+    flexShrink: 0,
+    position: 'relative',
+    ...forceLtrStyle,
   },
-  ratingNumber: {
-    color: '#FFFFFF',
-    fontSize: 20,
+  cardPiBadgeText: {
+    color: '#FFD275',
+    fontSize: 24,
+    lineHeight: 30,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Medium',
+    zIndex: 1,
   },
-  ratingBadgeImage: {
-    width: 34,
-    height: 34,
-    marginLeft: 4,
+  cardPiBadgeImage: {
+    width: 85,
+    height: 85,
+    position: 'absolute',
+    marginLeft: -7,
+    top: -35,
+    ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   cardTitle: {
     color: '#F7F3E6',

@@ -17,7 +17,7 @@ import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getStoriesFeed} from '../utils/api';
 
 import {userCategories} from '../utils/constant';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /**
  * Hero: static PNG on Android (smooth decode). Web + iOS use optimized

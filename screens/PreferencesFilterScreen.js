@@ -1,4 +1,4 @@
-import React, {useState, useRef} from 'react';
+import React, {useState, useRef, useCallback, useMemo} from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,18 @@ import {
   Image,
   Dimensions,
   PanResponder,
-  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
-import {flexStart} from '../index';
+import {
+  flexStart,
+  forceLtrStyle,
+  getRangeSliderPercentFromEvent,
+  rangeSliderFillStyle,
+  rangeSliderThumbStyle,
+} from '../utils/rtlLayout';
 
 // Figma: node 25:200959 (מגירה - העדפות)
 const BG = '#2B2A39';
@@ -49,6 +54,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   const [sliderWidth, setSliderWidth] = useState(
     Dimensions.get('window').width - 48,
   );
+  const sliderWidthRef = useRef(sliderWidth);
+  const sliderWindowXRef = useRef(0);
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
   const ageMinRef = useRef(ageMin);
@@ -59,54 +66,89 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   const minPercent = ((ageMin - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
   const maxPercent = ((ageMax - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
 
-  const updateFromPercent = (percent, isMin) => {
+  const updateFromPercent = useCallback((percent, isMin) => {
     const value = MIN_AGE + (percent / 100) * (MAX_AGE - MIN_AGE);
     const rounded = Math.round(value);
     const maxA = ageMaxRef.current;
     const minA = ageMinRef.current;
     if (isMin) setAgeMin(Math.max(MIN_AGE, Math.min(rounded, maxA - 1)));
     else setAgeMax(Math.min(MAX_AGE, Math.max(rounded, minA + 1)));
-  };
+  }, []);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: evt => {
-        const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
-        const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX =
-          rect && touch.pageX != null
-            ? touch.pageX - rect.left
-            : (touch.locationX ?? 0);
-        const w = sliderWidth || 1;
-        const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        const minP =
-          ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
-        const maxP =
-          ((ageMaxRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
-        const minDist = Math.abs(percent - minP);
-        const maxDist = Math.abs(percent - maxP);
-        activeThumbRef.current = minDist < maxDist ? 'min' : 'max';
-      },
-      onPanResponderMove: evt => {
-        const thumb = activeThumbRef.current;
-        if (!thumb) return;
-        const touch = evt.nativeEvent.touches?.[0] || evt.nativeEvent;
-        const rect = sliderRef.current?.getBoundingClientRect?.();
-        const locationX =
-          rect && touch.pageX != null
-            ? touch.pageX - rect.left
-            : (touch.locationX ?? 0);
-        const w = sliderWidth || 1;
-        const percent = Math.max(0, Math.min(100, (locationX / w) * 100));
-        updateFromPercent(percent, thumb === 'min');
-      },
-      onPanResponderRelease: () => {
-        activeThumbRef.current = null;
-      },
-    }),
-  ).current;
+  const syncSliderMeasure = useCallback(() => {
+    const node = sliderRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') return;
+    node.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        sliderWindowXRef.current = x;
+        sliderWidthRef.current = width;
+        setSliderWidth(width);
+      }
+    });
+  }, []);
+
+  const percentFromNativeEvent = useCallback(nativeEvent => {
+    return getRangeSliderPercentFromEvent(
+      nativeEvent,
+      sliderWidthRef.current,
+      sliderWindowXRef.current,
+      sliderRef,
+    );
+  }, []);
+
+  const refreshMeasureThen = useCallback(
+    (nativeEvent, onReady) => {
+      const node = sliderRef.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        onReady(percentFromNativeEvent(nativeEvent));
+        return;
+      }
+      node.measureInWindow((x, _y, width) => {
+        if (width > 0) {
+          sliderWindowXRef.current = x;
+          sliderWidthRef.current = width;
+        }
+        onReady(percentFromNativeEvent(nativeEvent));
+      });
+    },
+    [percentFromNativeEvent],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: evt => {
+          refreshMeasureThen(evt.nativeEvent, percent => {
+            const minP =
+              ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
+            const maxP =
+              ((ageMaxRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
+            activeThumbRef.current =
+              Math.abs(percent - minP) < Math.abs(percent - maxP)
+                ? 'min'
+                : 'max';
+            updateFromPercent(percent, activeThumbRef.current === 'min');
+          });
+        },
+        onPanResponderMove: evt => {
+          const thumb = activeThumbRef.current;
+          if (!thumb) return;
+          refreshMeasureThen(evt.nativeEvent, percent => {
+            updateFromPercent(percent, thumb === 'min');
+          });
+        },
+        onPanResponderRelease: () => {
+          activeThumbRef.current = null;
+        },
+      }),
+    [refreshMeasureThen, updateFromPercent],
+  );
 
   const handleSave = () => {
     if (onSave) {
@@ -238,11 +280,9 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         <View
           ref={sliderRef}
           style={styles.sliderContainer}
-          onLayout={e => {
-            const w = e.nativeEvent.layout.width;
-            if (w > 0) setSliderWidth(w);
-          }}
-          {...panResponder.panHandlers}>
+          onLayout={syncSliderMeasure}
+          {...panResponder.panHandlers}
+          collapsable={false}>
           <View style={styles.sliderTrack}>
             <LinearGradient
               colors={TRACK_GRADIENT}
@@ -251,10 +291,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
               end={{x: 1, y: 0}}
               style={[
                 styles.sliderTrackFill,
-                {
-                  left: `${minPercent}%`,
-                  width: `${maxPercent - minPercent}%`,
-                },
+                rangeSliderFillStyle(sliderWidth, minPercent, maxPercent),
               ]}
             />
           </View>
@@ -265,7 +302,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              {left: `${minPercent}%`, pointerEvents: 'none'},
+              rangeSliderThumbStyle(sliderWidth, minPercent),
+              {pointerEvents: 'none'},
             ]}
           />
           <LinearGradient
@@ -275,7 +313,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              {left: `${maxPercent}%`, pointerEvents: 'none'},
+              rangeSliderThumbStyle(sliderWidth, maxPercent),
+              {pointerEvents: 'none'},
             ]}
           />
         </View>
@@ -382,7 +421,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 24,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   genderPillWrap: {
     flex: 1,
@@ -452,7 +491,7 @@ const styles = StyleSheet.create({
     // justifyContent: 'center',
     gap: 10,
     marginBottom: 19,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   ageRangeValue: {
     color: '#FFFFFF',
@@ -474,7 +513,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 0,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   sliderTrack: {
     position: 'absolute',
@@ -496,7 +535,6 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    marginLeft: -11,
     top: 0,
   },
   checksWrap: {

@@ -45,7 +45,8 @@ module.exports = {
       infoPlist: {
         CFBundleDevelopmentRegion: 'he',
         UIViewSemanticContentAttribute: 'ForceRightToLeft',
-        NSCameraUsageDescription: 'אנחנו צריכים גישה למצלמה כדי להעלות תמונות',
+        NSCameraUsageDescription:
+          'אנחנו צריכים גישה למצלמה כדי לצלם תמונות וסרטונים לפוסט',
         NSPhotoLibraryUsageDescription:
           'אנחנו צריכים גישה לספריית התמונות כדי להעלות תמונות וסרטונים',
         NSPhotoLibraryAddOnlyUsageDescription:
@@ -58,6 +59,7 @@ module.exports = {
       package: 'com.pi.frontend',
       versionCode: 7,
       supportsRTL: true,
+      softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
@@ -90,6 +92,7 @@ module.exports = {
         'expo-build-properties',
         {
           android: {
+            usesCleartextTraffic: true,
             compileSdkVersion: 34,
             targetSdkVersion: 34,
             minSdkVersion: 23,

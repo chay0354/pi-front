@@ -1,4 +1,6 @@
 export {default as ProfileAvatar} from './ProfileAvatar';
+export {TikTokHeartIcon} from './TikTokHeartIcon';
+export {PostFeedLikeIcon} from './PostFeedLikeIcon';
 export {default as SharePostSheet} from './SharePostSheet';
 export {Title} from './FormsElement/Title';
 export {MultiPicturesUpload} from './FormsElement/MultiPicturesUpload';

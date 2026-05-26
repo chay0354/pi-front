@@ -61,7 +61,7 @@ import PartnersListingProfileContent from '../components/PartnersListingProfileC
 import CompanyLandListingProfileContent from '../components/CompanyLandListingProfileContent';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart, forceRtlStyle} from '../utils/rtlLayout';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -720,13 +720,61 @@ const UserProfileScreen = ({
     profile?.company_logo_url;
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
-  const contactPhones =
-    resolvedCreator?.phones && resolvedCreator.phones.length > 0
-      ? resolvedCreator.phones
-      : [];
+  const contactPhones = (() => {
+    if (resolvedCreator?.phones?.length > 0) {
+      return resolvedCreator.phones;
+    }
+    const fromListing = [
+      user?.phone,
+      user?.contact_details?.phone,
+      ...(Array.isArray(user?.contact_details?.phones)
+        ? user.contact_details.phones
+        : []),
+    ]
+      .map(p => (p != null ? String(p).trim() : ''))
+      .filter(Boolean);
+    return fromListing;
+  })();
   const contactEmail = displayEmail;
   const primaryContactPhone =
-    contactPhones.length > 0 ? String(contactPhones[0]).trim() : '070-234-234';
+    contactPhones.length > 0 ? String(contactPhones[0]).trim() : '';
+
+  const viewedSubscriptionId = toSubscriptionId(
+    resolvedCreator?.id ||
+      user?.subscription_id ||
+      user?.owner_id ||
+      (!isListingFromFeed && !isAdsListingRecord(user) ? profile?.id : null),
+  );
+  const currentSubscriptionId = toSubscriptionId(
+    currentUser?.id ||
+      currentUser?.subscription_id ||
+      currentUser?.owner_id,
+  );
+  const viewedProfileEmail = String(
+    resolvedCreator?.email ||
+      user?.creator_email ||
+      user?.email ||
+      profile?.email ||
+      '',
+  )
+    .trim()
+    .toLowerCase();
+  const currentProfileEmail = String(currentUser?.email || '')
+    .trim()
+    .toLowerCase();
+  const subscriptionIdsMatch =
+    !!viewedSubscriptionId &&
+    !!currentSubscriptionId &&
+    viewedSubscriptionId === currentSubscriptionId;
+  const profileEmailsMatch =
+    !!viewedProfileEmail &&
+    !!currentProfileEmail &&
+    viewedProfileEmail === currentProfileEmail;
+  const isOwnProfile =
+    subscriptionIdsMatch &&
+    (!viewedProfileEmail ||
+      !currentProfileEmail ||
+      profileEmailsMatch);
 
   const copyContactDetails = () => {
     const lines = [...contactPhones, contactEmail].filter(Boolean);
@@ -744,6 +792,7 @@ const UserProfileScreen = ({
     }
   };
   const handleChatPress = () => {
+    if (isOwnProfile) return;
     if (!currentUser && typeof onOpenUserRegistration === 'function') {
       onOpenUserRegistration();
       return;
@@ -751,7 +800,8 @@ const UserProfileScreen = ({
     if (typeof onMessage === 'function') onMessage();
   };
   const handleCallPress = () => {
-    if (typeof onCall === 'function') onCall();
+    if (isOwnProfile) return;
+    if (typeof onCall === 'function') onCall(primaryContactPhone);
   };
   const handleReportPress = () => {
     const st = String(
@@ -977,17 +1027,6 @@ const UserProfileScreen = ({
   const [fullScreenImageIndex, setFullScreenImageIndex] = useState(0);
   const fullScreenCarouselRef = useRef(null);
 
-  const viewedSubscriptionId = toSubscriptionId(
-    resolvedCreator?.id ||
-      user?.subscription_id ||
-      user?.owner_id ||
-      profile?.id,
-  );
-  const currentSubscriptionId = toSubscriptionId(currentUser?.id);
-  const isOwnProfile =
-    !!viewedSubscriptionId &&
-    !!currentSubscriptionId &&
-    viewedSubscriptionId === currentSubscriptionId;
   const [followStatus, setFollowStatus] = useState({
     isFollowing: false,
     hasPendingRequest: false,
@@ -1747,10 +1786,7 @@ const UserProfileScreen = ({
           !fromCompanyProjects && (
             <View style={styles.actionRow}>
               <TouchableOpacity
-                onPress={() => {
-                  if (isOwnProfile) return;
-                  typeof onCall === 'function' && onCall();
-                }}
+                onPress={handleCallPress}
                 activeOpacity={0.8}
                 disabled={isOwnProfile}
                 style={[
@@ -1764,17 +1800,7 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => {
-                  if (isOwnProfile) return;
-                  if (
-                    !currentUser &&
-                    typeof onOpenUserRegistration === 'function'
-                  ) {
-                    onOpenUserRegistration();
-                  } else if (typeof onMessage === 'function') {
-                    onMessage();
-                  }
-                }}
+                onPress={handleChatPress}
                 activeOpacity={0.8}
                 disabled={isOwnProfile}
                 style={[
@@ -1977,25 +2003,25 @@ const UserProfileScreen = ({
                     <>
                       <View style={styles.lastAdPiAndPurposeRow}>
                         {renderPiRating() || <View />}
-                        {isCompany ? (
-                          <Image
-                            source={require('../assets/pre-sale.png')}
-                            style={styles.preSaleBadgeImage}
-                            resizeMode="contain"
-                          />
-                        ) : isProfessional ? (
+                        {isProfessional ? (
                           <Text
                             style={styles.lastAdProfessionalName}
                             numberOfLines={1}>
                             {displayName}
                           </Text>
-                        ) : (
-                          <View style={styles.lastAdPurposeTag}>
-                            <Text style={styles.lastAdPurposeText}>
-                              {lastAd.purpose || 'להשכרה'}
-                            </Text>
-                          </View>
-                        )}
+                        ) : isCompany ? (
+                              <Image
+                                source={require('../assets/pre-sale.png')}
+                                style={styles.preSaleBadgeImage}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <View style={styles.lastAdPurposeTag}>
+                                <Text style={styles.lastAdPurposeText}>
+                                  {lastAd.purpose || 'להשכרה'}
+                                </Text>
+                              </View>
+                            )}
                       </View>
                       {!isProfessional && (
                         <Text style={styles.lastAdPrice}>
@@ -2447,12 +2473,17 @@ const UserProfileScreen = ({
             {!isCompany || showCompanyPostSpecialties ? (
               <>
                 <View style={styles.brokerCardBottomHeader}>
-                  {renderPiRating()}
                   <View style={styles.brokerCardBottomNameBlock}>
-                    <Text style={styles.brokerCardBottomName}>
+                    <Text
+                      style={
+                        isProfessional
+                          ? styles.proBrokerCardBottomName
+                          : styles.brokerCardBottomName
+                      }>
                       {displayName}
                     </Text>
                   </View>
+                  {renderPiRating()}
                 </View>
                 {brokerAddress ? (
                   <View style={styles.brokerCardBottomLocationRow}>
@@ -3395,12 +3426,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   brokerCardBottomHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
-    justifyContent: flexEnd,
-    gap: 24,
     width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 24,
     marginBottom: 4,
+    ...forceRtlStyle,
+  },
+  proBrokerCardBottomName: {
+    color: '#F7F3E6',
+    fontSize: 28,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    alignSelf: 'stretch',
   },
   brokerCardBottomSectionDivider: {
     height: 1,
@@ -3410,14 +3450,16 @@ const styles = StyleSheet.create({
   },
   brokerCardBottomNameBlock: {
     flex: 1,
-    alignItems: flexEnd,
+    minWidth: 0,
+    ...forceRtlStyle,
   },
   brokerCardBottomName: {
     color: '#F7F3E6',
     fontSize: 28,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'left',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    alignSelf: 'stretch',
   },
   brokerCardBottomLocationRow: {
     flexDirection: 'row',
@@ -3432,6 +3474,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 6,
+    alignSelf: 'stretch',
+    ...forceRtlStyle,
   },
   brokerCardBottomAddress: {
     color: '#FFFFFF',
@@ -3663,9 +3707,9 @@ const styles = StyleSheet.create({
   },
   profileCtaChatImageOnlyBtn: {
     width: '100%',
-    height: 52,
-    minHeight: 52,
-    maxHeight: 52,
+    height: 60,
+    minHeight: 60,
+    maxHeight: 60,
     alignSelf: 'stretch',
     borderRadius: 28,
     overflow: 'hidden',
@@ -3674,8 +3718,8 @@ const styles = StyleSheet.create({
   },
   profileCtaChatImageOnlyAsset: {
     width: '100%',
-    height: 52,
-    maxHeight: 52,
+    height: 60,
+    maxHeight: 60,
   },
   profileCtaPhoneBtn: {
     width: '100%',
@@ -4018,10 +4062,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginLeft: 12,
   },
-  // direction: 'ltr',
-  // alignSelf: 'flex-start',
-  // alignItems: 'flex-start',
-  // maxWidth: '100%',
   lastAdPrice: {
     color: '#F7F3E6',
     fontSize: 28,
@@ -4099,11 +4139,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
     marginBottom: 18,
   },
-  lastAdPostedBy: {marginBottom: 8},
+  lastAdPostedBy: {
+    marginBottom: 8,
+    width: '100%',
+    ...forceRtlStyle,
+  },
   lastAdPostedByLabel: {
     color: '#D2D0DC',
     fontSize: 11,
-    textAlign: 'left',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    alignSelf: 'stretch',
     marginBottom: 7,
     fontFamily: 'Rubik-Regular',
   },
@@ -4111,7 +4156,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    flex: 1,
   },
   lastAdPostedByAvatar: {width: 24, height: 24, borderRadius: 12},
   lastAdPostedByAvatarPlaceholder: {

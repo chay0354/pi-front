@@ -15,16 +15,20 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 import {
+  applySubscriptionPromoCode,
+  prepareSubscriptionSubmitPayload,
   resendVerificationCode,
   setSubscriptionPassword,
   submitSubscription,
+  syncSubscriptionProfileStory,
   verifyEmail,
   verifyEmailSkipTest,
 } from '../utils/api';
 import {
+  DEFAULT_MONTHLY_LISTING_QUOTA,
   getHeaderTitle,
   subscriptionTypes,
   showSkipEmailVerificationTest,
@@ -64,6 +68,19 @@ const VerificationScreen = ({
   const [subscriptionId, setSubscriptionId] = useState(() =>
     pendingSubmit?.formData ? null : propSubscriptionId || null,
   );
+  const [promoCode, setPromoCode] = useState('');
+  const [monthlyQuota, setMonthlyQuota] = useState(
+    DEFAULT_MONTHLY_LISTING_QUOTA,
+  );
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  const activeSubscriptionId = subscriptionId || propSubscriptionId || null;
+  const canApplyPromo =
+    !!activeSubscriptionId &&
+    !promoApplied &&
+    promoCode.trim().length >= 3 &&
+    !isApplyingPromo;
 
   const passwordsFilled =
     password.length >= MIN_PASSWORD_LENGTH &&
@@ -123,9 +140,13 @@ const VerificationScreen = ({
       let subId = subscriptionId;
       if (!subId && pendingSubmit?.formData) {
         console.log('[VerificationScreen] submitSubscription: start');
-        const created = await submitSubscription(
+        const prepared = await prepareSubscriptionSubmitPayload(
           pendingSubmit.formData,
           pendingSubmit.files || {},
+        );
+        const created = await submitSubscription(
+          prepared.formData,
+          prepared.files,
         );
         console.log('[VerificationScreen] submitSubscription: done', {
           success: created?.success,
@@ -207,13 +228,47 @@ const VerificationScreen = ({
   const canVerifyCode =
     verificationEmailSent && verificationCode.trim().length >= 6;
 
-  const finishVerified = (subscription, subscriberNumber) => {
-    if (!subscription || !onVerified) return;
+  const finishVerified = async (
+    subscription,
+    subscriberNumber,
+    complete = onVerified,
+  ) => {
+    if (!subscription || !complete) return;
     const sub = {...subscription};
     if (!sub.subscriber_number && subscriberNumber) {
       sub.subscriber_number = subscriberNumber;
     }
-    onVerified(sub);
+    if (!sub.max_published_listings && monthlyQuota > DEFAULT_MONTHLY_LISTING_QUOTA) {
+      sub.max_published_listings = monthlyQuota;
+    }
+    await syncSubscriptionProfileStory(sub);
+    complete(sub);
+  };
+
+  const handleApplyPromoCode = async () => {
+    if (!canApplyPromo) return;
+    setIsApplyingPromo(true);
+    try {
+      const result = await applySubscriptionPromoCode(
+        activeSubscriptionId,
+        promoCode.trim(),
+      );
+      const quota =
+        Number(
+          result?.maxPublishedListings ??
+            result?.subscription?.max_published_listings,
+        ) || DEFAULT_MONTHLY_LISTING_QUOTA;
+      setMonthlyQuota(quota);
+      setPromoApplied(true);
+      Alert.alert(
+        'קופון הופעל',
+        `מכסת המודעות החודשית שלך: ${quota} (במקום ${DEFAULT_MONTHLY_LISTING_QUOTA})`,
+      );
+    } catch (error) {
+      Alert.alert('שגיאה', error.message || 'קוד הקופון אינו תקף');
+    } finally {
+      setIsApplyingPromo(false);
+    }
   };
 
   const handleVerifyCode = async () => {
@@ -231,7 +286,7 @@ const VerificationScreen = ({
         password,
       );
       if (response?.success && response.subscription) {
-        finishVerified(response.subscription, response.subscriberNumber);
+        await finishVerified(response.subscription, response.subscriberNumber);
       } else {
         Alert.alert(
           'שגיאה',
@@ -261,6 +316,61 @@ const VerificationScreen = ({
       Alert.alert('שגיאה', error.message || 'נכשל בשליחת הקוד מחדש');
     } finally {
       setIsResending(false);
+    }
+  };
+
+  const canShowSkipTest =
+    showSkipEmailVerificationTest &&
+    onSkipVerifiedTest &&
+    (subscriptionId || pendingSubmit?.formData);
+
+  const handleSkipVerificationTest = async () => {
+    if (!canShowSkipTest || isSkipTesting) return;
+    if (!passwordsReady) {
+      Alert.alert(
+        'שגיאה',
+        `הגדירו סיסמה תואמת (לפחות ${MIN_PASSWORD_LENGTH} תווים) לפני דילוג האימות`,
+      );
+      return;
+    }
+    setIsSkipTesting(true);
+    try {
+      let subId = subscriptionId;
+      if (!subId && pendingSubmit?.formData) {
+        const prepared = await prepareSubscriptionSubmitPayload(
+          pendingSubmit.formData,
+          pendingSubmit.files || {},
+        );
+        const created = await submitSubscription(
+          prepared.formData,
+          prepared.files,
+        );
+        if (!created?.success || !created.subscriptionId) {
+          throw new Error(created?.error || 'נכשל בשמירת הטופס');
+        }
+        subId = created.subscriptionId;
+        setSubscriptionId(subId);
+      }
+      if (!subId) {
+        throw new Error('חסר מזהה מנוי');
+      }
+      await setSubscriptionPassword(subId, password);
+      const response = await verifyEmailSkipTest(
+        displayEmail || undefined,
+        subId,
+        password,
+      );
+      if (response?.success && response.subscription) {
+        await finishVerified(
+          response.subscription,
+          response.subscriberNumber,
+          onSkipVerifiedTest,
+        );
+      }
+    } catch (err) {
+      Alert.alert('שגיאה', err.message || 'נכשל בדילוג האימות');
+    } finally {
+      setIsSkipTesting(false);
     }
   };
 
@@ -397,6 +507,17 @@ const VerificationScreen = ({
               )}
             </TouchableOpacity>
           )}
+          {!verificationEmailSent && canShowSkipTest ? (
+            <TouchableOpacity
+              style={styles.skipBelowSend}
+              disabled={isSkipTesting}
+              onPress={handleSkipVerificationTest}
+              hitSlop={{top: 8, bottom: 8, left: 12, right: 12}}>
+              <Text style={styles.skipBelowSendText}>
+                {isSkipTesting ? 'מדלג...' : 'דלג (בדיקה)'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           {!verificationEmailSent && !isSendReady ? (
             <Text style={styles.sendHint}>
               {passwordMismatch
@@ -406,6 +527,87 @@ const VerificationScreen = ({
                   : `מלאו סיסמה ואימות סיסמה (לפחות ${MIN_PASSWORD_LENGTH} תווים)`}
             </Text>
           ) : null}
+        </View>
+
+        <View style={styles.promoSection}>
+          <View style={styles.promoCard}>
+            <View style={styles.promoHeaderRow}>
+              <MaterialCommunityIcons
+                name="ticket-percent-outline"
+                size={22}
+                color="#F4AD39"
+              />
+              <Text style={styles.promoTitle}>קוד קופון (אופציונלי)</Text>
+            </View>
+            <Text style={styles.promoSubtitle}>
+              מגדיל את מכסת המודעות החודשית · ברירת מחדל{' '}
+              {DEFAULT_MONTHLY_LISTING_QUOTA}
+            </Text>
+
+            <View style={styles.quotaPill}>
+              <Text style={styles.quotaPillLabel}>מכסה חודשית</Text>
+              <Text style={styles.quotaPillValue}>{monthlyQuota}</Text>
+              {promoApplied ? (
+                <View style={styles.promoAppliedBadge}>
+                  <MaterialCommunityIcons
+                    name="check"
+                    size={14}
+                    color="#15e3ff"
+                  />
+                  <Text style={styles.promoAppliedBadgeText}>קופון פעיל</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {!activeSubscriptionId ? (
+              <Text style={styles.promoWaitHint}>
+                שלחו קוד אימות כדי להפעיל קופון (נשמר לאחר שמירת הטופס)
+              </Text>
+            ) : null}
+
+            <View
+              style={[
+                styles.inputRow,
+                promoApplied && styles.inputRowFilled,
+                !activeSubscriptionId && styles.inputRowDisabled,
+              ]}>
+              <TextInput
+                style={[
+                  styles.inputField,
+                  promoApplied && styles.inputFieldFilled,
+                ]}
+                placeholder="הזינו קוד קופון"
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                value={promoCode}
+                onChangeText={setPromoCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!promoApplied && !!activeSubscriptionId}
+                textAlign="right"
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={handleApplyPromoCode}
+              disabled={!canApplyPromo}
+              activeOpacity={0.85}
+              style={[
+                styles.promoApplyButton,
+                !canApplyPromo && styles.promoApplyButtonDisabled,
+              ]}>
+              {isApplyingPromo ? (
+                <ActivityIndicator color="#F4AD39" size="small" />
+              ) : (
+                <Text
+                  style={[
+                    styles.promoApplyButtonText,
+                    canApplyPromo && styles.promoApplyButtonTextActive,
+                  ]}>
+                  {promoApplied ? 'הקופון הופעל' : 'החל קופון'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {verificationEmailSent ? (
@@ -481,64 +683,20 @@ const VerificationScreen = ({
                 {isResending ? 'שולח...' : 'לא קיבלתי את הקוד'}
               </Text>
             </TouchableOpacity>
+
+            {canShowSkipTest ? (
+              <TouchableOpacity
+                style={styles.skipBelowSend}
+                disabled={isSkipTesting}
+                onPress={handleSkipVerificationTest}
+                hitSlop={{top: 8, bottom: 8, left: 12, right: 12}}>
+                <Text style={styles.skipBelowSendText}>
+                  {isSkipTesting ? 'מדלג...' : 'דלג (בדיקה)'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
-
-        {showSkipEmailVerificationTest &&
-          subscriptionId &&
-          onSkipVerifiedTest && (
-            <TouchableOpacity
-              style={styles.skipTestLink}
-              disabled={isSkipTesting}
-              onPress={async () => {
-                if (!passwordsReady) {
-                  Alert.alert(
-                    'שגיאה',
-                    `הגדירו סיסמה תואמת (לפחות ${MIN_PASSWORD_LENGTH} תווים) לפני דילוג האימות`,
-                  );
-                  return;
-                }
-                setIsSkipTesting(true);
-                try {
-                  let subId = subscriptionId;
-                  if (!subId && pendingSubmit?.formData) {
-                    const created = await submitSubscription(
-                      pendingSubmit.formData,
-                      pendingSubmit.files || {},
-                    );
-                    if (!created?.success || !created.subscriptionId) {
-                      throw new Error(created?.error || 'נכשל בשמירת הטופס');
-                    }
-                    subId = created.subscriptionId;
-                    setSubscriptionId(subId);
-                  }
-                  if (!subId) {
-                    throw new Error('חסר מזהה מנוי');
-                  }
-                  await setSubscriptionPassword(subId, password);
-                  const response = await verifyEmailSkipTest(
-                    displayEmail || undefined,
-                    subId,
-                    password,
-                  );
-                  if (response?.success && response.subscription) {
-                    onSkipVerifiedTest(response.subscription);
-                  }
-                } catch (err) {
-                  Alert.alert(
-                    'שגיאה',
-                    err.message ||
-                      'דילוג אימות זמין רק כשהשרת מוגדר (ALLOW_SKIP_EMAIL_VERIFICATION=1)',
-                  );
-                } finally {
-                  setIsSkipTesting(false);
-                }
-              }}>
-              <Text style={styles.skipTestLinkText}>
-                {isSkipTesting ? 'מדלג...' : 'דלג על אימות מייל (בדיקה)'}
-              </Text>
-            </TouchableOpacity>
-          )}
       </ScrollView>
     </ImageBackground>
   );
@@ -645,6 +803,98 @@ const styles = StyleSheet.create({
   sectionOne: {
     paddingHorizontal: 24,
     gap: 16,
+  },
+  promoSection: {
+    paddingHorizontal: 24,
+  },
+  promoCard: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(140,133,179,0.55)',
+    backgroundColor: 'rgba(77,73,102,0.35)',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    gap: 12,
+  },
+  promoHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  promoTitle: {
+    color: Colors.white100,
+    fontSize: 17,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'left',
+  },
+  promoSubtitle: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
+  },
+  quotaPill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 1000,
+    borderWidth: 1,
+    borderColor: 'rgba(255,196,10,0.45)',
+    backgroundColor: 'rgba(255,196,10,0.08)',
+  },
+  quotaPillLabel: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+  },
+  quotaPillValue: {
+    color: '#ffc40a',
+    fontSize: 20,
+    fontFamily: 'Rubik-Medium',
+  },
+  promoAppliedBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    marginRight: 4,
+  },
+  promoAppliedBadgeText: {
+    color: '#15e3ff',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+  },
+  promoWaitHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'left',
+    fontFamily: 'Rubik-Regular',
+  },
+  promoApplyButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 1000,
+    borderWidth: 1,
+    borderColor: 'rgba(244,173,57,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(77,73,102,0.5)',
+  },
+  promoApplyButtonDisabled: {
+    opacity: 0.5,
+  },
+  promoApplyButtonText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 17,
+    fontFamily: 'Rubik-Medium',
+  },
+  promoApplyButtonTextActive: {
+    color: '#F4AD39',
   },
   instructionRow: {
     width: '100%',
@@ -828,17 +1078,17 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     fontFamily: 'Rubik-Regular',
   },
-  skipTestLink: {
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    marginTop: 2,
+  skipBelowSend: {
+    alignSelf: 'center',
+    marginTop: 10,
+    paddingVertical: 4,
   },
-  skipTestLinkText: {
-    fontSize: 13,
-    color: '#f5a623',
+  skipBelowSendText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
     textAlign: 'center',
     textDecorationLine: 'underline',
-    fontFamily: 'Rubik-Medium',
+    fontFamily: 'Rubik-Regular',
   },
 });
 

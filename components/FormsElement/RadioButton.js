@@ -1,5 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, View, TouchableOpacity, Image} from 'react-native';
+import {forceLtrStyle} from '../../utils/rtlLayout';
+
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors} from '../../constants/styles';
 
@@ -56,7 +58,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
     marginVertical: 5,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   purposeButtonContainer: {
     flex: 1,

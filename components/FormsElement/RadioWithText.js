@@ -10,6 +10,7 @@ import {
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';
 import {RadioIcon} from './RadioIcon';
+import {forceLtrStyle} from '../../utils/rtlLayout';
 
 export const RadioWithText = ({
   isNotLastIndex,
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 20,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   radioOptionText: {
     color: Colors.whiteGeneral,

@@ -40,6 +40,68 @@ export function normalizeUserProfileAliases(user) {
   };
 }
 
+function isProfileImagePlaceholder(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return true;
+  return (
+    v.includes('/assets/assets/image-copy-10.png') ||
+    v.endsWith('/image-copy-10.png') ||
+    v === 'image-copy-10.png'
+  );
+}
+
+function pickFirstValidImageUrl(candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    if (c != null && String(c).trim() && !isProfileImagePlaceholder(c)) {
+      return String(c).trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Personal profile photo only (no company logo).
+ * @param {object|null|undefined} entity
+ * @returns {string|null}
+ */
+export function getUserProfilePhotoUrl(entity) {
+  if (!entity || typeof entity !== 'object') return null;
+  return pickFirstValidImageUrl([
+    entity.profile_picture_url,
+    entity.profilePictureUrl,
+    entity.profile_photo_url,
+    entity.profilePhotoUrl,
+    entity.profile_image_url,
+    entity.profileImageUrl,
+    entity.subscription?.profile_picture_url,
+    entity.subscription?.profilePictureUrl,
+    entity.subscription?.profile_image_url,
+    entity.subscription?.profileImageUrl,
+  ]);
+}
+
+/**
+ * Company / business logo only (no profile photo).
+ * @param {object|null|undefined} entity
+ * @returns {string|null}
+ */
+export function getUserCompanyLogoUrl(entity) {
+  if (!entity || typeof entity !== 'object') return null;
+  return pickFirstValidImageUrl([
+    entity.company_logo_url,
+    entity.companyLogoUrl,
+    entity.bnb_business_logo_url,
+    entity.bnbBusinessLogoUrl,
+    entity.logo_url,
+    entity.logoUrl,
+    entity.business_logo_url,
+    entity.businessLogoUrl,
+    entity.subscription?.company_logo_url,
+    entity.subscription?.companyLogoUrl,
+  ]);
+}
+
 /**
  * Resolve the best avatar/profile image URL from user-like objects
  * (subscription, currentUser, listing, chat participant, review user).
@@ -50,44 +112,20 @@ export function normalizeUserProfileAliases(user) {
  */
 export function getUserProfileImageUrl(entity) {
   if (!entity || typeof entity !== 'object') return null;
-  const isPlaceholder = value => {
-    const v = String(value || '').trim().toLowerCase();
-    if (!v) return true;
-    return (
-      v.includes('/assets/assets/image-copy-10.png') ||
-      v.endsWith('/image-copy-10.png') ||
-      v === 'image-copy-10.png'
-    );
-  };
-  const candidates = [
-    entity.profile_picture_url,
-    entity.profilePictureUrl,
-    entity.profile_photo_url,
-    entity.profilePhotoUrl,
-    entity.group_image_url,
-    entity.groupImageUrl,
-    entity.group_avatar_url,
-    entity.groupAvatarUrl,
-    entity.creator_profile_image_url,
-    entity.creatorProfileImageUrl,
-    entity.profile_image_url,
-    entity.profileImageUrl,
-    entity.company_logo_url,
-    entity.companyLogoUrl,
-    entity.bnb_business_logo_url,
-    entity.bnbBusinessLogoUrl,
-    entity.logo_url,
-    entity.logoUrl,
-    entity.business_logo_url,
-    entity.businessLogoUrl,
-    entity.subscription?.profile_picture_url,
-    entity.subscription?.profilePictureUrl,
-    entity.subscription?.profile_image_url,
-    entity.subscription?.profileImageUrl,
-  ];
-  for (let i = 0; i < candidates.length; i++) {
-    const c = candidates[i];
-    if (c != null && String(c).trim() && !isPlaceholder(c)) return String(c).trim();
-  }
-  return null;
+  return (
+    getUserProfilePhotoUrl(entity) ||
+    pickFirstValidImageUrl([
+      entity.image_url,
+      entity.imageUrl,
+      entity.group_image_url,
+      entity.groupImageUrl,
+      entity.group_avatar_url,
+      entity.groupAvatarUrl,
+      entity.creator_profile_image_url,
+      entity.creatorProfileImageUrl,
+      entity.profile_image_url,
+      entity.profileImageUrl,
+    ]) ||
+    getUserCompanyLogoUrl(entity)
+  );
 }

@@ -17,7 +17,7 @@ import {ContextHook} from '../hooks/ContextHook';
 import {submitImprovementFeedback, toSubscriptionId} from '../utils/api';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {resolveBundledAssetSource} from '../utils/bundledAsset';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const thanksEndImage = require('../assets/improve/end.png');
 const sendButtonImage = require('../assets/improve/send-button.png');

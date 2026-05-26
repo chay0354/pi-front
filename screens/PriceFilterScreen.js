@@ -16,7 +16,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {CalendarModal} from '../components/FormsElement/CalendarModal';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
-import {flexEnd} from '../index';
+import {flexEnd, forceLtrStyle, getRangeSliderPercentFromEvent, rangeSliderFillStyle, rangeSliderThumbStyle} from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -45,26 +45,6 @@ const formatDateForDisplay = isoDate => {
   const [year, month, day] = safe.split('-');
   return `${day}.${month}.${year.slice(2)}`;
 };
-
-function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
-  const w = trackWidth > 0 ? trackWidth : 1;
-  const ne = nativeEvent;
-  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
-    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
-  }
-  const node = sliderViewRef && sliderViewRef.current;
-  const touch = ne.touches?.[0] || ne;
-  if (
-    node &&
-    typeof node.getBoundingClientRect === 'function' &&
-    (touch?.clientX != null || touch?.pageX != null)
-  ) {
-    const rect = node.getBoundingClientRect();
-    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
-    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
-  }
-  return 0;
-}
 
 const PriceFilterScreen = ({
   initialFilter,
@@ -108,6 +88,7 @@ const PriceFilterScreen = ({
   const [maxDraft, setMaxDraft] = useState('');
   const [sliderWidth, setSliderWidth] = useState(1);
   const sliderWidthRef = useRef(1);
+  const sliderWindowXRef = useRef(0);
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
   const minPriceRef = useRef(minPrice);
@@ -148,6 +129,67 @@ const PriceFilterScreen = ({
     [isBnb, maxPriceCap],
   );
 
+  const syncSliderMeasure = useCallback(() => {
+    const node = sliderRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') return;
+    node.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        sliderWindowXRef.current = x;
+        sliderWidthRef.current = width;
+        setSliderWidth(width);
+      }
+    });
+  }, []);
+
+  const percentFromNativeEvent = useCallback(nativeEvent => {
+    return getRangeSliderPercentFromEvent(
+      nativeEvent,
+      sliderWidthRef.current,
+      sliderWindowXRef.current,
+      sliderRef,
+    );
+  }, []);
+
+  const handleSliderPressAtPercent = useCallback(
+    percent => {
+      const cap = maxPriceCap;
+      const minP = (minPriceRef.current / cap) * 100;
+      const maxP = (maxPriceRef.current / cap) * 100;
+      const nearestMin =
+        Math.abs(percent - minP) < Math.abs(percent - maxP);
+      activeThumbRef.current = nearestMin ? 'min' : 'max';
+      applyPriceFromPercent(percent, activeThumbRef.current === 'min');
+    },
+    [applyPriceFromPercent, maxPriceCap],
+  );
+
+  const applyDragPercent = useCallback(
+    percent => {
+      const thumb = activeThumbRef.current;
+      if (!thumb) return;
+      applyPriceFromPercent(percent, thumb === 'min');
+    },
+    [applyPriceFromPercent],
+  );
+
+  const refreshMeasureThen = useCallback(
+    (nativeEvent, onReady) => {
+      const node = sliderRef.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        onReady(percentFromNativeEvent(nativeEvent));
+        return;
+      }
+      node.measureInWindow((x, _y, width) => {
+        if (width > 0) {
+          sliderWindowXRef.current = x;
+          sliderWidthRef.current = width;
+        }
+        onReady(percentFromNativeEvent(nativeEvent));
+      });
+    },
+    [percentFromNativeEvent],
+  );
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -158,36 +200,17 @@ const PriceFilterScreen = ({
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => true,
         onPanResponderGrant: evt => {
-          const w = sliderWidthRef.current;
-          const percent = getSliderPercentFromEvent(
-            evt.nativeEvent,
-            w,
-            sliderRef,
-          );
-          const cap = maxPriceCap;
-          const minP = (minPriceRef.current / cap) * 100;
-          const maxP = (maxPriceRef.current / cap) * 100;
-          const nearestMin =
-            Math.abs(percent - minP) < Math.abs(percent - maxP);
-          activeThumbRef.current = nearestMin ? 'min' : 'max';
-          applyPriceFromPercent(percent, activeThumbRef.current === 'min');
+          refreshMeasureThen(evt.nativeEvent, handleSliderPressAtPercent);
         },
         onPanResponderMove: evt => {
-          const thumb = activeThumbRef.current;
-          if (!thumb) return;
-          const w = sliderWidthRef.current;
-          const percent = getSliderPercentFromEvent(
-            evt.nativeEvent,
-            w,
-            sliderRef,
-          );
-          applyPriceFromPercent(percent, thumb === 'min');
+          if (!activeThumbRef.current) return;
+          refreshMeasureThen(evt.nativeEvent, applyDragPercent);
         },
         onPanResponderRelease: () => {
           activeThumbRef.current = null;
         },
       }),
-    [applyPriceFromPercent, maxPriceCap],
+    [refreshMeasureThen, handleSliderPressAtPercent, applyDragPercent],
   );
 
   const handleSave = () => {
@@ -346,12 +369,8 @@ const PriceFilterScreen = ({
         <View
           ref={sliderRef}
           style={styles.sliderContainer}
-          onLayout={e => {
-            const w = e.nativeEvent.layout.width;
-            if (w > 0) {
-              sliderWidthRef.current = w;
-              setSliderWidth(w);
-            }
+          onLayout={() => {
+            syncSliderMeasure();
           }}
           {...panResponder.panHandlers}
           collapsable={false}>
@@ -359,20 +378,23 @@ const PriceFilterScreen = ({
             <View
               style={[
                 styles.sliderTrackFill,
-                {
-                  left: `${minPercent}%`,
-                  width: `${Math.max(0, maxPercent - minPercent)}%`,
-                },
+                rangeSliderFillStyle(sliderWidth, minPercent, maxPercent),
               ]}
             />
           </View>
           <View
-            style={[styles.sliderThumb, {left: `${minPercent}%`}]}
+            style={[
+              styles.sliderThumb,
+              rangeSliderThumbStyle(sliderWidth, minPercent),
+            ]}
             pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
           <View
-            style={[styles.sliderThumb, {left: `${maxPercent}%`}]}
+            style={[
+              styles.sliderThumb,
+              rangeSliderThumbStyle(sliderWidth, maxPercent),
+            ]}
             pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
@@ -510,11 +532,12 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   priceInputsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 24,
     gap: 8,
+    ...forceLtrStyle,
   },
   priceInputGroup: {
     flex: 1,
@@ -526,10 +549,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: INPUT_BORDER,
     alignItems: 'center',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 6,
     overflow: 'hidden',
+    ...forceLtrStyle,
   },
   pricePillText: {
     color: '#fff',
@@ -568,7 +592,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 24,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   sliderTrack: {
     width: '100%',
@@ -588,7 +612,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 22,
     height: 22,
-    marginLeft: -11,
     top: 10,
   },
   sliderThumbCore: {

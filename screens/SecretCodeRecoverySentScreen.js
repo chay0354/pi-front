@@ -12,12 +12,12 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const KEY_ICON = require('../assets/menu/key.png');
 
 /**
- * Confirmation after requesting מספר מנוי by email
+ * Confirmation after forgot-password email was requested.
  */
 const SecretCodeRecoverySentScreen = ({email, onBack}) => {
   const insets = useSafeAreaInsets();
@@ -33,7 +33,7 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
             hitSlop={12}>
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>שחזור קוד סודי</Text>
+          <Text style={styles.headerTitle}>שכחתי סיסמה</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -45,8 +45,8 @@ const SecretCodeRecoverySentScreen = ({email, onBack}) => {
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.cardTitle}>הקוד בדרך אליך!</Text>
-          <Text style={styles.subLine}>שלחנו את קוד המנוי שלך לכתובת</Text>
+          <Text style={styles.cardTitle}>הסיסמה בדרך אליך!</Text>
+          <Text style={styles.subLine}>שלחנו אליך מייל עם הסיסמה לכתובת</Text>
           <Text style={styles.emailBold}>{email || ''}</Text>
           <Text style={styles.hint}>
             אנא בדוק את תיבת הדואר הנכנס שלך{'\n'}(וגם את תיקיית הספאם).

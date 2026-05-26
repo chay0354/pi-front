@@ -5,6 +5,7 @@ import {Title} from './Title';
 import {Colors, Spacing, FontSizes} from '../../constants/styles';
 import {RadioWithText} from './RadioWithText';
 import {CountUpdate} from './CountUpdate';
+import {forceLtrStyle} from '../../utils/rtlLayout';
 
 export const ProposedLand = () => {
   const [unit, setUnit] = useState('dunam'); // 'dunam' or 'sqm'
@@ -19,7 +20,7 @@ export const ProposedLand = () => {
       <Title text="קרקע מוצעת" required />
       <View style={styles.radioRow}>
         <Text style={styles.subLabel}>שטח הקרקע *</Text>
-        <View style={{flexDirection: 'row', direction: 'ltr'}}>
+        <View style={[{flexDirection: 'row'}, forceLtrStyle]}>
           <RadioWithText
             key={1}
             isNotLastIndex={false}

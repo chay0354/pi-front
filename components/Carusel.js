@@ -24,6 +24,43 @@ const CATEGORY_SLOT_H = 212;
 const CATEGORY_SIDE_SCALE_X = 104 / CATEGORY_SLOT_W;
 const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
 
+/** Web: `flexDirection: row-reverse` inverts item X positions vs scroll offset math. */
+function webCarouselItemCenterX(index, itemWidth, contentWidth) {
+  return contentWidth - (index + 0.5) * itemWidth;
+}
+
+function webCarouselSnapScrollX(
+  centerIndex,
+  itemWidth,
+  contentWidth,
+  viewportWidth,
+) {
+  const itemCenter = webCarouselItemCenterX(centerIndex, itemWidth, contentWidth);
+  const maxScroll = Math.max(0, contentWidth - viewportWidth);
+  return Math.max(0, Math.min(itemCenter - viewportWidth / 2, maxScroll));
+}
+
+function webCarouselClosestIndex(
+  scrollPosition,
+  itemWidth,
+  contentWidth,
+  viewportWidth,
+  listLength,
+) {
+  const viewportCenter = scrollPosition + viewportWidth / 2;
+  let closestIndex = 0;
+  let minDistance = Infinity;
+  for (let index = 0; index < listLength; index++) {
+    const itemCenter = webCarouselItemCenterX(index, itemWidth, contentWidth);
+    const distance = Math.abs(viewportCenter - itemCenter);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestIndex = index;
+    }
+  }
+  return closestIndex;
+}
+
 const CarouselCategoryItem = memo(function CarouselCategoryItem({
   item,
   itemWidth,
@@ -100,22 +137,45 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
   const viewportWidth = carouselWidth > 0 ? carouselWidth : screenWidth;
   const itemWidth = viewportWidth > 0 ? viewportWidth / 3 : 120;
 
+  const contentWidth = Math.max(viewportWidth, list.length * itemWidth);
+
   const runSnapToCenter = useCallback(
     scrollPosition => {
       if (viewportWidth <= 0) return;
-      const viewportCenter = scrollPosition + viewportWidth / 2;
-      let closestIndex = 0;
-      let minDistance = Infinity;
-      list.forEach((_, index) => {
-        const itemCenter = (index + 0.5) * itemWidth;
-        const distance = Math.abs(viewportCenter - itemCenter);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestIndex = index;
-        }
-      });
+
+      let closestIndex;
+      let snapScrollX;
+
+      if (Platform.OS === 'web') {
+        closestIndex = webCarouselClosestIndex(
+          scrollPosition,
+          itemWidth,
+          contentWidth,
+          viewportWidth,
+          list.length,
+        );
+        snapScrollX = webCarouselSnapScrollX(
+          closestIndex,
+          itemWidth,
+          contentWidth,
+          viewportWidth,
+        );
+      } else {
+        const viewportCenter = scrollPosition + viewportWidth / 2;
+        closestIndex = 0;
+        let minDistance = Infinity;
+        list.forEach((_, index) => {
+          const itemCenter = (index + 0.5) * itemWidth;
+          const distance = Math.abs(viewportCenter - itemCenter);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = index;
+          }
+        });
+        snapScrollX = Math.max(0, (closestIndex - 1) * itemWidth);
+      }
+
       setCenterIndex(closestIndex);
-      const snapScrollX = Math.max(0, (closestIndex - 1) * itemWidth);
       if (scrollViewRef.current && Math.abs(scrollPosition - snapScrollX) > 1) {
         scrollViewRef.current.scrollTo({
           x: snapScrollX,
@@ -124,7 +184,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         lastScrollPositionRef.current = snapScrollX;
       }
     },
-    [viewportWidth, itemWidth, list],
+    [viewportWidth, itemWidth, list, contentWidth],
   );
 
   const handleScroll = useCallback(
@@ -142,6 +202,18 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
           return;
         }
         androidScrollNextEmitRef.current = now + 120;
+      }
+
+      if (Platform.OS === 'web') {
+        const closestIndex = webCarouselClosestIndex(
+          scrollPosition,
+          itemWidth,
+          contentWidth,
+          viewportWidth,
+          list.length,
+        );
+        setCenterIndex(closestIndex);
+        return;
       }
 
       const viewportCenter = scrollPosition + viewportWidth / 2;
@@ -176,7 +248,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         applyCenterIndex(closestIndex);
       }
     },
-    [viewportWidth, itemWidth, list],
+    [viewportWidth, itemWidth, list, contentWidth],
   );
 
   const handleScrollBeginDrag = useCallback(() => {
@@ -201,19 +273,41 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
       }
       const maxIndex = Math.max(0, list.length - 1);
       const clamped = Math.max(0, Math.min(index, maxIndex));
-      const scrollX = Math.max(0, (clamped - 1) * itemWidth);
+      const scrollX =
+        Platform.OS === 'web'
+          ? webCarouselSnapScrollX(
+              clamped,
+              itemWidth,
+              contentWidth,
+              viewportWidth,
+            )
+          : Math.max(0, (clamped - 1) * itemWidth);
       setCenterIndex(clamped);
       lastScrollPositionRef.current = scrollX;
       scrollViewRef.current.scrollTo({x: scrollX, animated});
     },
-    [viewportWidth, itemWidth, list.length],
+    [viewportWidth, itemWidth, list.length, contentWidth],
+  );
+
+  const handleWebCategoryChipPress = useCallback(
+    (index, categoryId) => {
+      scrollToIndex(index, true);
+      emitCategorySelect(categoryId);
+    },
+    [scrollToIndex, emitCategorySelect],
   );
 
   const snapInterval = itemWidth;
-  const contentWidth = Math.max(viewportWidth, list.length * itemWidth);
   const initialScrollX =
     viewportWidth > 0
-      ? Math.max(0, (initialCenterIndex - 1) * itemWidth)
+      ? Platform.OS === 'web'
+        ? webCarouselSnapScrollX(
+            initialCenterIndex,
+            itemWidth,
+            contentWidth,
+            viewportWidth,
+          )
+        : Math.max(0, (initialCenterIndex - 1) * itemWidth)
       : 0;
 
   const scrollToInitialCenter = useCallback(
@@ -264,7 +358,9 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
       <ScrollView
         ref={scrollViewRef}
         contentOffset={
-          initialScrollX > 0 ? {x: initialScrollX, y: 0} : undefined
+          Platform.OS === 'web' || initialScrollX <= 0
+            ? undefined
+            : {x: initialScrollX, y: 0}
         }
         onLayout={event => {
           const width = event?.nativeEvent?.layout?.width ?? 0;
@@ -284,8 +380,6 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         scrollEnabled
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
-        snapToInterval={snapInterval}
-        snapToAlignment="start"
         bounces={false}
         pagingEnabled={false}
         onScroll={handleScroll}
@@ -295,7 +389,13 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         scrollEventThrottle={Platform.OS === 'android' ? 128 : 16}
         nestedScrollEnabled
         removeClippedSubviews={false}
-        disableIntervalMomentum
+        {...(Platform.OS === 'web'
+          ? {style: styles.webCarouselScroll}
+          : {
+              snapToInterval: snapInterval,
+              snapToAlignment: 'start',
+              disableIntervalMomentum: true,
+            })}
         {...(Platform.OS === 'android' ? {overScrollMode: 'never'} : {})}>
         {list.map((item, index) => (
           <CarouselCategoryItem
@@ -310,11 +410,45 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
           />
         ))}
       </ScrollView>
+      {Platform.OS === 'web' ? (
+        <View style={styles.webCategoryPicker}>
+          {list.map((item, index) => {
+            const selected = centerIndex === index;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.webCategoryChip,
+                  selected && styles.webCategoryChipSelected,
+                ]}
+                onPress={() => handleWebCategoryChipPress(index, item.id)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{selected}}>
+                <Text
+                  style={[
+                    styles.webCategoryChipText,
+                    selected && styles.webCategoryChipTextSelected,
+                  ]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  webCarouselScroll: {
+    width: '100%',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-x',
+  },
   carouselContent: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -335,6 +469,39 @@ const styles = StyleSheet.create({
   },
   fadedImage: {
     opacity: 0.2,
+  },
+  webCategoryPicker: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    width: '100%',
+  },
+  webCategoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    backgroundColor: 'rgba(30, 29, 39, 0.85)',
+  },
+  webCategoryChipSelected: {
+    borderColor: '#FFC40A',
+    backgroundColor: 'rgba(255, 196, 10, 0.15)',
+  },
+  webCategoryChipText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  webCategoryChipTextSelected: {
+    color: '#FFC40A',
+    fontFamily: 'Rubik-Medium',
   },
 });
 

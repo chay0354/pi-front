@@ -13,9 +13,13 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {
+  DEFAULT_MONTHLY_LISTING_QUOTA,
+  getHeaderTitle,
+  subscriptionTypes,
+} from '../utils/constant';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const BG = '#1e1d27';
 
@@ -45,6 +49,11 @@ const SuccessScreen = ({
     'קבוצת אביב';
   const displayEmail = subscription?.email || 'amirlevi@gmail.com';
   const subscriberNumber = subscription?.subscriber_number || '112345235';
+  const monthlyQuota =
+    Number(
+      subscription?.max_published_listings ??
+        subscription?.maxPublishedListings,
+    ) || DEFAULT_MONTHLY_LISTING_QUOTA;
 
   const renderStep = (label, active) => (
     <View
@@ -133,7 +142,8 @@ const SuccessScreen = ({
           <View style={styles.successTitleBlock}>
             <Text style={styles.successTitle}>הרישום בוצע בהצלחה!</Text>
             <Text style={styles.successSubtitle}>
-              ניתן לפרסם עד 65 מודעות בכל הקטגוריות
+              ניתן לפרסם עד {monthlyQuota} מודעות בכל הקטגוריות
+              {subscription?.promo_code ? ' (קופון הופעל)' : ''}
             </Text>
           </View>
 

@@ -14,7 +14,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {submitCompanyReport} from '../utils/api';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 // Figma 15:9841 — חברה | 10:35105 — professional | 34:9182 — broker
 const BG = '#2B2A39';

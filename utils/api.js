@@ -3,9 +3,11 @@
  */
 
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+const isNativeMobile = Platform.OS === 'android' || Platform.OS === 'ios';
 
 /** Strip trailing slashes so `${base}/api/...` never becomes `//api`. */
 export function normalizeApiBaseUrl(url) {
@@ -18,24 +20,206 @@ export function normalizeApiBaseUrl(url) {
   return s;
 }
 
-/** API base URL — only from EXPO_PUBLIC_API_URL in pi-front/.env (see app.config.js extra.apiUrl). */
+/** API base URL — same production host on web, iOS, and Android (EXPO_PUBLIC_API_URL). */
 export function getResolvedApiUrl() {
   const fromEnv = String(process.env.EXPO_PUBLIC_API_URL || '').trim();
   const fromExtra = String(Constants.expoConfig?.extra?.apiUrl || '').trim();
-  return normalizeApiBaseUrl(fromEnv || fromExtra);
+  const primary = fromEnv || fromExtra;
+  return normalizeApiBaseUrl(primary);
 }
 
-const API_URL = getResolvedApiUrl();
+/** Resolved per call so hot reload picks up .env changes without a stale module constant. */
+function apiBase() {
+  return getResolvedApiUrl();
+}
 
-/** @deprecated Use getResolvedApiUrl — same value, from .env only */
+/** @deprecated Use getResolvedApiUrl */
 export const getApiUrl = getResolvedApiUrl;
 
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
   console.log('[api] EXPO_PUBLIC_API_URL =', process.env.EXPO_PUBLIC_API_URL);
-  console.log('[api] API base =', API_URL);
+  console.log('[api] EXPO_PUBLIC_API_URL_ANDROID =', process.env.EXPO_PUBLIC_API_URL_ANDROID);
+  console.log('[api] platform =', Platform.OS);
+  console.log('[api] API base =', apiBase());
 }
 
 const DEFAULT_API_TIMEOUT_MS = 30000;
+
+function normalizeNativeFileUri(uri) {
+  const s = String(uri || '').trim();
+  if (!s) return '';
+  if (
+    s.startsWith('file://') ||
+    s.startsWith('content://') ||
+    s.startsWith('ph://') ||
+    s.startsWith('assets-library://')
+  ) {
+    return s;
+  }
+  return `file://${s}`;
+}
+
+/** Native multipart upload — reliable on Android/iOS to Vercel (fetch/XHR FormData often fails). */
+async function uploadNativeMultipart(url, file, fieldName, parameters = {}) {
+  const uri = normalizeNativeFileUri(file?.uri);
+  if (!uri) {
+    throw new Error('No file URI for upload');
+  }
+  const mimeType =
+    file?.type && String(file.type).trim()
+      ? String(file.type).trim()
+      : fieldName === 'video' || String(fieldName).includes('video')
+        ? 'video/mp4'
+        : 'image/jpeg';
+
+  const result = await FileSystem.uploadAsync(url, uri, {
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    fieldName,
+    mimeType,
+    parameters: Object.fromEntries(
+      Object.entries(parameters || {}).map(([k, v]) => [k, String(v ?? '')]),
+    ),
+    headers: {Accept: 'application/json'},
+  });
+
+  const body = result.body ?? '';
+  return {
+    ok: result.status >= 200 && result.status < 300,
+    status: result.status,
+    text: async () => body,
+    json: async () => {
+      if (!body) return {};
+      try {
+        return JSON.parse(body);
+      } catch {
+        return {};
+      }
+    },
+  };
+}
+
+/** RN Android fetch() is flaky for HTTPS GET to Vercel; XHR uses OkHttp reliably. */
+function shouldUseAndroidXhrForApi(url, method, body, headers = {}) {
+  if (Platform.OS !== 'android' || typeof XMLHttpRequest === 'undefined') {
+    return false;
+  }
+  const u = String(url || '');
+  if (!u.startsWith('http')) return false;
+  const base = apiBase();
+  if (!u.startsWith(base) && !u.includes('/api/')) return false;
+
+  const m = String(method || 'GET').toUpperCase();
+  if (m === 'GET' || m === 'HEAD' || m === 'DELETE') return true;
+
+  const ct = String(
+    headers['Content-Type'] || headers['content-type'] || '',
+  ).toLowerCase();
+  if (ct.includes('multipart/form-data')) return false;
+  if (
+    body != null &&
+    typeof body !== 'string' &&
+    typeof FormData !== 'undefined' &&
+    body instanceof FormData
+  ) {
+    return false;
+  }
+  return false;
+}
+
+function shouldUseAndroidXhrForMultipart(url, body) {
+  if (Platform.OS !== 'android' || typeof XMLHttpRequest === 'undefined') {
+    return false;
+  }
+  if (typeof FormData === 'undefined' || !(body instanceof FormData)) {
+    return false;
+  }
+  const u = String(url || '');
+  return (
+    u.includes('/api/upload') ||
+    u.includes('/api/upload-profile-pic') ||
+    u.includes('/api/subscription/submit')
+  );
+}
+
+function shouldUseAndroidXhrForJsonPost(method, body, headers = {}) {
+  if (Platform.OS !== 'android' || typeof XMLHttpRequest === 'undefined') {
+    return false;
+  }
+  if (typeof body !== 'string' || !body.length) return false;
+  const m = String(method || 'GET').toUpperCase();
+  if (m !== 'POST' && m !== 'PUT' && m !== 'PATCH') return false;
+  const ct = String(
+    headers['Content-Type'] || headers['content-type'] || '',
+  ).toLowerCase();
+  if (ct.includes('application/json')) return true;
+  const trimmed = body.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+function androidXhrFetch(url, options = {}) {
+  const {
+    timeoutMs = DEFAULT_API_TIMEOUT_MS,
+    headers = {},
+    body,
+    method = 'POST',
+  } = options;
+  const m = String(method).toUpperCase();
+  const isFormData =
+    typeof FormData !== 'undefined' && body instanceof FormData;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(m, url, true);
+    xhr.timeout = timeoutMs > 0 ? timeoutMs : 120000;
+    xhr.responseType = 'text';
+
+    Object.entries(headers).forEach(([key, value]) => {
+      if (isFormData && String(key).toLowerCase() === 'content-type') return;
+      if (value != null && value !== '') {
+        xhr.setRequestHeader(key, String(value));
+      }
+    });
+    if (
+      !isFormData &&
+      !headers['Content-Type'] &&
+      !headers['content-type'] &&
+      typeof body === 'string' &&
+      body.length
+    ) {
+      xhr.setRequestHeader('Content-Type', 'application/json');
+    }
+    if (!headers.Accept && !headers.accept) {
+      xhr.setRequestHeader('Accept', 'application/json');
+    }
+
+    xhr.onload = () => {
+      const responseText = xhr.responseText ?? '';
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        url: xhr.responseURL || url,
+        headers: {
+          get: name => xhr.getResponseHeader(name),
+        },
+        text: async () => responseText,
+        json: async () => {
+          if (!responseText) return {};
+          return JSON.parse(responseText);
+        },
+      });
+    };
+    xhr.onerror = () => {
+      reject(new TypeError('Network request failed'));
+    };
+    xhr.ontimeout = () => {
+      reject(new Error(`timeout after ${xhr.timeout}ms`));
+    };
+    xhr.send(
+      isFormData ? body : body != null && body !== '' ? body : undefined,
+    );
+  });
+}
 
 /**
  * Centralized fetch wrapper for backend calls.
@@ -59,8 +243,25 @@ export async function apiFetch(input, options = {}) {
   }
   const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(new Error('timeout')), timeoutMs) : null;
 
+  const useAndroidXhr =
+    shouldUseAndroidXhrForApi(url, method, rest.body, rest.headers || {}) ||
+    shouldUseAndroidXhrForJsonPost(method, rest.body, rest.headers || {}) ||
+    shouldUseAndroidXhrForMultipart(url, rest.body);
+
   try {
-    return await fetch(input, { ...rest, signal: controller.signal });
+    if (useAndroidXhr) {
+      return await androidXhrFetch(url, {
+        method,
+        headers: rest.headers || {},
+        body: rest.body,
+        timeoutMs,
+      });
+    }
+    return await fetch(input, {
+      ...rest,
+      signal: controller.signal,
+      ...(isWeb ? {cache: 'no-store'} : {}),
+    });
   } catch (error) {
     const message = String(error?.message || error || '');
     const isAbort = error?.name === 'AbortError' || /aborted/i.test(message);
@@ -72,15 +273,15 @@ export async function apiFetch(input, options = {}) {
         ? `timeout after ${timeoutMs}ms`
         : isAbort
           ? 'aborted'
-          : 'network unreachable';
+          : message || 'network request failed';
       const enriched = new Error(
         `[apiFetch] ${method} ${url} failed: ${reason}. ` +
-        `API base: ${API_URL}. Original: ${message || error}`,
+        `API base: ${apiBase()}. Original: ${message || error}`,
       );
       enriched.cause = error;
       enriched.url = url;
       enriched.method = method;
-      enriched.apiBase = API_URL;
+      enriched.apiBase = apiBase();
       throw enriched;
     }
     throw error;
@@ -160,37 +361,198 @@ async function toFormDataFile(file, fieldName = 'file') {
 }
 
 /**
+ * Upload local profile/company images first so submit is mostly JSON fields.
+ * Large multipart POSTs to Vercel often fail on Android with "Network request failed"
+ * even when smaller GET requests work fine.
+ */
+export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
+  const data = {...formData};
+  const outFiles = {...files};
+
+  const profileUri = outFiles.profilePicture?.uri;
+  if (profileUri && !data.profile_picture_url) {
+    if (String(profileUri).startsWith('http')) {
+      data.profile_picture_url = profileUri;
+      delete outFiles.profilePicture;
+    } else {
+      try {
+        const uploaded = await uploadProfilePicture(outFiles.profilePicture);
+        if (uploaded?.url) {
+          data.profile_picture_url = uploaded.url;
+        }
+        delete outFiles.profilePicture;
+      } catch (err) {
+        console.warn(
+          '[prepareSubscriptionSubmitPayload] profile pre-upload failed:',
+          err?.message || err,
+        );
+        // Pre-upload failed — drop local file so submit can continue without it.
+        delete outFiles.profilePicture;
+      }
+    }
+  }
+
+  const logoUri = outFiles.companyLogo?.uri;
+  if (logoUri && !data.company_logo_url) {
+    if (String(logoUri).startsWith('http')) {
+      data.company_logo_url = logoUri;
+      delete outFiles.companyLogo;
+    } else {
+      try {
+        const uploaded = await uploadFile(outFiles.companyLogo, 'company-logos');
+        if (uploaded?.url) {
+          data.company_logo_url = uploaded.url;
+        }
+        delete outFiles.companyLogo;
+      } catch (err) {
+        console.warn(
+          '[prepareSubscriptionSubmitPayload] logo pre-upload failed:',
+          err?.message || err,
+        );
+        delete outFiles.companyLogo;
+      }
+    }
+  }
+
+  const videoUri = outFiles.video?.uri;
+  if (videoUri && !data.video_url) {
+    if (String(videoUri).startsWith('http')) {
+      data.video_url = videoUri;
+      delete outFiles.video;
+    } else {
+      try {
+        const uploaded = await uploadFile(outFiles.video, 'profile-videos', {
+          timeoutMs: 180000,
+        });
+        if (uploaded?.url) {
+          data.video_url = uploaded.url;
+          console.log(
+            '[prepareSubscriptionSubmitPayload] intro video uploaded for story:',
+            uploaded.url,
+          );
+        }
+        delete outFiles.video;
+      } catch (err) {
+        console.warn(
+          '[prepareSubscriptionSubmitPayload] video pre-upload failed:',
+          err?.message || err,
+        );
+        delete outFiles.video;
+      }
+    }
+  }
+
+  return {formData: data, files: outFiles};
+}
+
+/** Build a strict JSON string for POST /api/subscription/submit (never object-literal text). */
+function toSubscriptionSubmitJsonBody(formData) {
+  const payload = {};
+  Object.keys(formData || {}).forEach(key => {
+    const value = formData[key];
+    if (value === undefined) return;
+    payload[key] = value;
+  });
+  const body = JSON.stringify(payload);
+  if (typeof body !== 'string' || !body.startsWith('{')) {
+    throw new Error('Failed to serialize subscription form');
+  }
+  return body;
+}
+
+/** True when submit must use multipart (local file URIs not yet uploaded). */
+function subscriptionSubmitHasFileAttachments(files = {}, formData = {}) {
+  if (formData.profile_picture_url || formData.company_logo_url) {
+    // Already remote URLs — no binary parts needed.
+  } else if (files.profilePicture || files.companyLogo) {
+    return true;
+  }
+  if (formData.video_url) {
+    // Already uploaded
+  } else if (files.video) {
+    return true;
+  }
+  if (Array.isArray(files.additionalImages) && files.additionalImages.length > 0) {
+    return true;
+  }
+  return false;
+}
+
+async function postSubscriptionSubmit(body, headers = {}) {
+  const isJson = typeof body === 'string';
+  const url = `${apiBase()}/api/subscription/submit`;
+  const response = await apiFetch(url, {
+    method: 'POST',
+    body,
+    headers: isJson
+      ? {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...headers,
+        }
+      : headers,
+    timeoutMs: 120000,
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const errorMsg =
+      data.details && data.error
+        ? `${data.error}: ${data.details}`
+        : data.error || data.message || 'Failed to submit subscription';
+    throw new Error(errorMsg);
+  }
+  return data;
+}
+
+/**
  * Submit subscription form
  * @param {Object} formData - Form data including subscription type, user info, etc.
  * @param {Object} files - Files to upload (profilePicture, additionalImages, companyLogo, video)
  * @returns {Promise} API response
  */
 export const submitSubscription = async (formData, files = {}) => {
+  const prepared = await prepareSubscriptionSubmitPayload(formData, files);
+  const payload = prepared.formData;
+  const attach = prepared.files;
+
   try {
+    const forceJson = !subscriptionSubmitHasFileAttachments(attach, payload);
+
+    if (forceJson) {
+      console.log(
+        '[submitSubscription] JSON →',
+        apiBase(),
+        payload.video_url ? '(includes intro video_url for story)' : '',
+      );
+      return await postSubscriptionSubmit(
+        toSubscriptionSubmitJsonBody(payload),
+      );
+    }
+
     const formDataToSend = new FormData();
 
     // Add all form fields
-    Object.keys(formData).forEach(key => {
-      if (formData[key] !== null && formData[key] !== undefined) {
-        if (Array.isArray(formData[key])) {
-          formDataToSend.append(key, JSON.stringify(formData[key]));
-        } else if (typeof formData[key] === 'object') {
-          formDataToSend.append(key, JSON.stringify(formData[key]));
+    Object.keys(payload).forEach(key => {
+      if (payload[key] !== null && payload[key] !== undefined) {
+        if (Array.isArray(payload[key])) {
+          formDataToSend.append(key, JSON.stringify(payload[key]));
+        } else if (typeof payload[key] === 'object') {
+          formDataToSend.append(key, JSON.stringify(payload[key]));
         } else {
-          formDataToSend.append(key, String(formData[key]));
+          formDataToSend.append(key, String(payload[key]));
         }
       }
     });
 
     // Add files: on web use Blob/File so server receives real file; on RN use { uri, type, name }
-    if (files.profilePicture && !formData.profile_picture_url) {
-      const toAppend = await toFormDataFile(files.profilePicture, 'profilePicture');
+    if (attach.profilePicture && !payload.profile_picture_url) {
+      const toAppend = await toFormDataFile(attach.profilePicture, 'profilePicture');
       if (toAppend) formDataToSend.append('profilePicture', toAppend);
     }
 
-    if (files.additionalImages && files.additionalImages.length > 0) {
-      for (let index = 0; index < files.additionalImages.length; index++) {
-        const image = files.additionalImages[index];
+    if (attach.additionalImages && attach.additionalImages.length > 0) {
+      for (let index = 0; index < attach.additionalImages.length; index++) {
+        const image = attach.additionalImages[index];
         const part = await toFormDataFile(image, 'additionalImage');
         if (part) {
           formDataToSend.append('additionalImages', part);
@@ -198,15 +560,15 @@ export const submitSubscription = async (formData, files = {}) => {
       }
     }
 
-    if (files.companyLogo) {
-      const logoAppend = await toFormDataFile(files.companyLogo, 'companyLogo');
+    if (attach.companyLogo) {
+      const logoAppend = await toFormDataFile(attach.companyLogo, 'companyLogo');
       if (logoAppend) {
         formDataToSend.append('companyLogo', logoAppend);
       }
     }
 
-    if (files.video) {
-      const videoAppend = await toFormDataFile(files.video, 'video');
+    if (attach.video) {
+      const videoAppend = await toFormDataFile(attach.video, 'video');
       if (videoAppend) {
         formDataToSend.append('video', videoAppend);
       } else {
@@ -216,22 +578,7 @@ export const submitSubscription = async (formData, files = {}) => {
       }
     }
 
-    const response = await apiFetch(`${API_URL}/api/subscription/submit`, {
-      method: 'POST',
-      body: formDataToSend,
-      // Don't set Content-Type header - let fetch set it with boundary
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      // Extract more detailed error message
-      const errorMsg =
-        data.error || data.message || 'Failed to submit subscription';
-      throw new Error(errorMsg);
-    }
-
-    return data;
+    return await postSubscriptionSubmit(formDataToSend, {});
   } catch (error) {
     console.error('Error submitting subscription:', error);
     throw error;
@@ -244,13 +591,24 @@ export const submitSubscription = async (formData, files = {}) => {
  * @returns {Promise<{ success: boolean, url: string }>}
  */
 export const uploadProfilePicture = async (file) => {
+  const url = `${apiBase()}/api/upload-profile-pic`;
+  if (isNativeMobile && file?.uri) {
+    const response = await uploadNativeMultipart(url, file, 'profilePicture');
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to upload profile picture');
+    }
+    return data;
+  }
+
   const formData = new FormData();
   const toAppend = await toFormDataFile(file, 'profilePicture');
   if (!toAppend) throw new Error('No profile picture to upload');
   formData.append('profilePicture', toAppend);
-  const response = await apiFetch(`${API_URL}/api/upload-profile-pic`, {
+  const response = await apiFetch(url, {
     method: 'POST',
     body: formData,
+    timeoutMs: 120000,
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to upload profile picture');
@@ -277,9 +635,9 @@ export const verifyEmail = async (
       email,
       subscriptionId,
       hasPassword: Boolean(password),
-      API_URL,
+      apiBase: apiBase(),
     });
-    const response = await apiFetch(`${API_URL}/api/subscription/verify`, {
+    const response = await apiFetch(`${apiBase()}/api/subscription/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -312,7 +670,7 @@ export const verifyEmail = async (
  * This route exists only after pi-back is deployed with set-password handler.
  */
 export const setSubscriptionPassword = async (subscriptionId, password) => {
-  const response = await apiFetch(`${API_URL}/api/subscription/set-password`, {
+  const response = await apiFetch(`${apiBase()}/api/subscription/set-password`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({subscriptionId, password}),
@@ -337,6 +695,34 @@ export const setSubscriptionPassword = async (subscriptionId, password) => {
 };
 
 /**
+ * Apply a promo code to a pending subscription (registration step 2).
+ * Raises max_published_listings above the default monthly quota.
+ */
+export const applySubscriptionPromoCode = async (subscriptionId, code) => {
+  const subId = String(subscriptionId || '').trim();
+  const codeNorm = String(code || '').trim();
+  if (!subId) {
+    throw new Error('חסר מזהה מנוי');
+  }
+  if (!codeNorm) {
+    throw new Error('יש להזין קוד קופון');
+  }
+  const response = await apiFetch(
+    `${apiBase()}/api/subscription/apply-promo-code`,
+    {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({subscriptionId: subId, code: codeNorm}),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || 'קוד הקופון אינו תקף');
+  }
+  return data;
+};
+
+/**
  * B2B sign-in with email and password.
  */
 export const loginWithPassword = async (email, password) => {
@@ -351,10 +737,10 @@ export const loginWithPassword = async (email, password) => {
 
   console.log('[api] loginWithPassword: request', {
     email: emailNorm,
-    apiBase: API_URL,
+    apiBase: apiBase(),
   });
 
-  const response = await apiFetch(`${API_URL}/api/auth/login`, {
+  const response = await apiFetch(`${apiBase()}/api/auth/login`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({email: emailNorm, password: pwd}),
@@ -374,7 +760,7 @@ export const loginWithPassword = async (email, password) => {
 };
 
 /**
- * Test only: mark subscription verified without code. Backend must set ALLOW_SKIP_EMAIL_VERIFICATION=1.
+ * Test only: mark subscription verified without code.
  */
 export const verifyEmailSkipTest = async (
   email,
@@ -386,7 +772,7 @@ export const verifyEmailSkipTest = async (
   }
   const body = {email: email || undefined, subscriptionId};
   if (password) body.password = password;
-  const response = await apiFetch(`${API_URL}/api/subscription/verify-skip-test`, {
+  const response = await apiFetch(`${apiBase()}/api/subscription/verify-skip-test`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -427,9 +813,9 @@ export const resendVerificationCode = async (
       email,
       subscriptionId,
       hasPassword: Boolean(password),
-      url: `${API_URL}/api/subscription/resend-code`,
+      url: `${apiBase()}/api/subscription/resend-code`,
     });
-    const response = await apiFetch(`${API_URL}/api/subscription/resend-code`, {
+    const response = await apiFetch(`${apiBase()}/api/subscription/resend-code`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -457,20 +843,34 @@ export const resendVerificationCode = async (
 };
 
 /**
- * Request מספר מנוי by email (שחזור קוד סודי). Server sends email if verified subscription exists.
+ * Forgot password — server resets B2B password and emails the new one.
+ * Uses recover-subscriber-code on Vercel until /api/auth/forgot-password is deployed.
  */
-export const recoverSubscriberCodeByEmail = async email => {
-  const response = await apiFetch(`${API_URL}/api/subscription/recover-subscriber-code`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email: String(email || '').trim()}),
-  });
-  const data = await response.json();
+export const recoverPasswordByEmail = async email => {
+  const body = JSON.stringify({email: String(email || '').trim()});
+  const headers = {'Content-Type': 'application/json'};
+  const postOpts = {method: 'POST', headers, body, timeoutMs: 60000};
+
+  let response = await apiFetch(
+    `${apiBase()}/api/auth/forgot-password`,
+    postOpts,
+  );
+  if (response.status === 404) {
+    response = await apiFetch(
+      `${apiBase()}/api/subscription/recover-subscriber-code`,
+      postOpts,
+    );
+  }
+
+  const data = await parseApiJsonResponse(response);
   if (!response.ok) {
     throw new Error(data.error || 'שגיאה בשליחת הבקשה');
   }
   return data;
 };
+
+/** @deprecated Use recoverPasswordByEmail */
+export const recoverSubscriberCodeByEmail = recoverPasswordByEmail;
 
 // Subscription IDs that returned 404 – skip refetch to avoid repeated 404 logs
 const subscription404Cache = new Set();
@@ -492,7 +892,7 @@ export const getSubscription = async subscriptionId => {
   }
   try {
     const response = await apiFetch(
-      `${API_URL}/api/subscription/${subscriptionId}`,
+      `${apiBase()}/api/subscription/${subscriptionId}`,
       {
         method: 'GET',
         headers: {
@@ -531,7 +931,7 @@ export const getSubscription = async subscriptionId => {
  */
 export const askSmartInfo = async (topic, topicLabel, address) => {
   try {
-    const response = await apiFetch(`${API_URL}/api/ai/smart-info`, {
+    const response = await apiFetch(`${apiBase()}/api/ai/smart-info`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, topicLabel, address: address || '' }),
@@ -556,7 +956,7 @@ export const getReviews = async (targetSubscriptionId) => {
   try {
     if (!targetSubscriptionId) return { success: true, reviews: [] };
     const response = await apiFetch(
-      `${API_URL}/api/reviews?target_subscription_id=${encodeURIComponent(targetSubscriptionId)}`,
+      `${apiBase()}/api/reviews?target_subscription_id=${encodeURIComponent(targetSubscriptionId)}`,
       { method: 'GET', headers: { 'Content-Type': 'application/json' } },
     );
     const data = await response.json();
@@ -592,7 +992,7 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
     if (listingId && String(listingId).trim()) {
       body.listing_id = String(listingId).trim();
     }
-    const response = await apiFetch(`${API_URL}/api/reviews`, {
+    const response = await apiFetch(`${apiBase()}/api/reviews`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -631,7 +1031,7 @@ export const registerRegularUser = async ({
     };
   }
   try {
-    const response = await apiFetch(`${API_URL}/api/users/register-regular`, {
+    const response = await apiFetch(`${apiBase()}/api/users/register-regular`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -657,7 +1057,7 @@ export const registerRegularUser = async ({
  * Send a follow request from one subscription user to another.
  */
 export const sendFollowRequest = async (requesterSubscriptionId, targetSubscriptionId) => {
-  const response = await apiFetch(`${API_URL}/api/follows/request`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/request`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -665,7 +1065,7 @@ export const sendFollowRequest = async (requesterSubscriptionId, targetSubscript
       target_subscription_id: targetSubscriptionId,
     }),
   });
-  const data = await response.json();
+  const data = await parseApiJson(response);
   if (!response.ok) throw new Error(data.error || 'Failed to send follow request');
   return data;
 };
@@ -674,7 +1074,7 @@ export const sendFollowRequest = async (requesterSubscriptionId, targetSubscript
  * Unfollow a user.
  */
 export const unfollowUser = async (followerSubscriptionId, followingSubscriptionId) => {
-  const response = await apiFetch(`${API_URL}/api/follows/unfollow`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/unfollow`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -691,7 +1091,7 @@ export const unfollowUser = async (followerSubscriptionId, followingSubscription
  * Accept or reject an incoming follow request.
  */
 export const respondToFollowRequest = async (requestId, actorSubscriptionId, action) => {
-  const response = await apiFetch(`${API_URL}/api/follows/requests/respond`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/requests/respond`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -709,7 +1109,7 @@ export const respondToFollowRequest = async (requestId, actorSubscriptionId, act
  * Withdraw a pending follow request you sent (requester cancels).
  */
 export const cancelFollowRequest = async (requesterSubscriptionId, targetSubscriptionId) => {
-  const response = await apiFetch(`${API_URL}/api/follows/requests/cancel`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/requests/cancel`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -722,6 +1122,21 @@ export const cancelFollowRequest = async (requesterSubscriptionId, targetSubscri
   return data;
 };
 
+async function parseApiJson(response) {
+  const text = typeof response.text === 'function' ? await response.text() : '';
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.trim().slice(0, 40);
+    throw new Error(
+      response.ok
+        ? 'Invalid server response'
+        : `Server error (${response.status})${snippet ? `: ${snippet}` : ''}`,
+    );
+  }
+}
+
 /**
  * Get follow status between viewer and target.
  */
@@ -730,9 +1145,31 @@ export const getFollowStatus = async (viewerId, targetId) => {
     viewer_id: String(viewerId || '').trim(),
     target_id: String(targetId || '').trim(),
   });
-  const response = await apiFetch(`${API_URL}/api/follows/status?${params.toString()}`);
-  const data = await response.json();
+  const response = await apiFetch(`${apiBase()}/api/follows/status?${params.toString()}`);
+  const data = await parseApiJson(response);
   if (!response.ok) throw new Error(data.error || 'Failed to fetch follow status');
+  return data;
+};
+
+/**
+ * Batch follow status for many targets (TikTok feed sidebar prefetch).
+ * @returns {Promise<{ success: boolean, status?: Record<string, { is_following: boolean, has_pending_request: boolean }> }>}
+ */
+export const getFollowStatusBatch = async (viewerId, targetIds) => {
+  const v = viewerId != null ? String(viewerId).trim() : '';
+  const list = Array.isArray(targetIds) ? targetIds : [];
+  if (!v || list.length === 0) {
+    return {success: true, status: {}};
+  }
+  const response = await apiFetch(`${apiBase()}/api/follows/status-batch`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({viewer_id: v, target_ids: list}),
+  });
+  const data = await parseApiJson(response);
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch follow status batch');
+  }
   return data;
 };
 
@@ -746,7 +1183,7 @@ export const getMutualFollowBatch = async (viewerId, targetIds) => {
   if (!v || list.length === 0) {
     return { success: true, mutual: {} };
   }
-  const response = await apiFetch(`${API_URL}/api/follows/mutual-batch`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/mutual-batch`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ viewer_id: v, target_ids: list }),
@@ -763,7 +1200,7 @@ export const getMutualFollowBatch = async (viewerId, targetIds) => {
  */
 export const getFollowStats = async userId => {
   const response = await apiFetch(
-    `${API_URL}/api/follows/stats?user_id=${encodeURIComponent(String(userId || '').trim())}`,
+    `${apiBase()}/api/follows/stats?user_id=${encodeURIComponent(String(userId || '').trim())}`,
     {cache: 'no-store'},
   );
   const data = await response.json();
@@ -781,7 +1218,7 @@ export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q =
   });
   if (viewerId) params.set('viewer_id', String(viewerId).trim());
   if (q && String(q).trim()) params.set('q', String(q).trim());
-  const response = await apiFetch(`${API_URL}/api/follows/hub?${params.toString()}`, {
+  const response = await apiFetch(`${apiBase()}/api/follows/hub?${params.toString()}`, {
     cache: 'no-store',
   });
   const data = await response.json();
@@ -805,7 +1242,7 @@ export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q =
  */
 export const submitImprovementFeedback = async (payload) => {
   try {
-    const response = await apiFetch(`${API_URL}/api/improvements-feedback`, {
+    const response = await apiFetch(`${apiBase()}/api/improvements-feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -854,7 +1291,7 @@ export const submitImprovementFeedback = async (payload) => {
  */
 export const submitCompanyReport = async (payload) => {
   try {
-    const response = await apiFetch(`${API_URL}/api/company-reports`, {
+    const response = await apiFetch(`${apiBase()}/api/company-reports`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -939,7 +1376,7 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
       };
     }
     const response = await apiFetch(
-      `${API_URL}/api/user/current?${params.toString()}`,
+      `${apiBase()}/api/user/current?${params.toString()}`,
       {
         method: 'GET',
         headers: {
@@ -975,11 +1412,44 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
  * @param {string} folder - Folder name in storage
  * @returns {Promise} API response with file URL
  */
-export const uploadFile = async (file, folder = 'general') => {
+export const uploadFile = async (file, folder = 'general', options = {}) => {
+  const timeoutMs =
+    options.timeoutMs != null ? options.timeoutMs : 120000;
+  const isVideoFolder = String(folder || '').includes('video');
   try {
+    const url = `${apiBase()}/api/upload`;
+
+    if (isNativeMobile && file?.uri) {
+      const nativeFile = {
+        uri: file.uri,
+        type:
+          file.type ||
+          (isVideoFolder ? 'video/mp4' : 'image/jpeg'),
+        name:
+          file.name ||
+          (isVideoFolder ? `video-${Date.now()}.mp4` : 'file.jpg'),
+      };
+      const response = await uploadNativeMultipart(
+        url,
+        nativeFile,
+        'file',
+        {folder},
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          data.error || data.message || 'Failed to upload file',
+        );
+      }
+      return data;
+    }
+
     const formData = new FormData();
     if (isWeb) {
-      const filePart = await toFormDataFile(file, 'file');
+      const filePart = await toFormDataFile(
+        file,
+        isVideoFolder ? 'video' : 'file',
+      );
       if (filePart instanceof File) {
         formData.append('file', filePart);
       } else {
@@ -990,17 +1460,19 @@ export const uploadFile = async (file, folder = 'general') => {
     } else {
       formData.append('file', {
         uri: file.uri,
-        type: file.type || 'image/jpeg',
-        name: file.name || 'file.jpg',
+        type: file.type || (isVideoFolder ? 'video/mp4' : 'image/jpeg'),
+        name:
+          file.name ||
+          (isVideoFolder ? `video-${Date.now()}.mp4` : 'file.jpg'),
       });
     }
     formData.append('folder', folder);
 
-    const response = await apiFetch(`${API_URL}/api/upload`, {
+    const response = await apiFetch(url, {
       method: 'POST',
       body: formData,
-      // Do not set Content-Type — fetch must add multipart boundary automatically.
-      // Setting "multipart/form-data" without boundary breaks multer and often yields 500 + HTML.
+      timeoutMs,
+      // Do not set Content-Type — fetch/XHR must add multipart boundary automatically.
     });
 
     const responseText = await response.text();
@@ -1089,7 +1561,7 @@ export const getListings = async (options = {}) => {
       params.append('permit', String(permit).trim());
     }
 
-    const url = `${API_URL}/api/listings?${params.toString()}`;
+    const url = `${apiBase()}/api/listings?${params.toString()}`;
     // console.log('🌐 [api.js] Fetching listings from:', url);
     // console.log('🌐 [api.js] API_URL:', API_URL);
     // console.log('🌐 [api.js] Options:', {status, category, subscriptionType, hasVideo, listingCondition, searchPurpose, feedPost, hospitalityNature, landInMortgage, permit});
@@ -1132,7 +1604,7 @@ export const getListings = async (options = {}) => {
  */
 export const updateListingFreeze = async (listingId, isFrozen) => {
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${listingId}`, {
+    const response = await apiFetch(`${apiBase()}/api/listings/${listingId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_frozen: !!isFrozen }),
@@ -1153,7 +1625,7 @@ export const getRecentUserSearches = async userEmail => {
   const email = userEmail ? String(userEmail).trim() : '';
   if (!email) return {success: true, recent: []};
   const response = await apiFetch(
-    `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
+    `${apiBase()}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
   );
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Failed to load recent searches');
@@ -1167,7 +1639,7 @@ export const recordUserSearch = async (userEmail, targetSubscriptionId) => {
     targetSubscriptionId != null ? String(targetSubscriptionId).trim() : '';
   if (!email || !target) return {success: false};
   try {
-    const response = await apiFetch(`${API_URL}/api/search/users/recent`, {
+    const response = await apiFetch(`${apiBase()}/api/search/users/recent`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({user_email: email, target_subscription_id: target}),
@@ -1190,7 +1662,7 @@ export const clearRecentUserSearches = async userEmail => {
   if (!email) return {success: false};
   try {
     const response = await apiFetch(
-      `${API_URL}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
+      `${apiBase()}/api/search/users/recent?user_email=${encodeURIComponent(email)}`,
       {method: 'DELETE'},
     );
     const data = await response.json().catch(() => ({}));
@@ -1210,7 +1682,7 @@ export const getBoostQuota = async userEmail => {
   const email = userEmail ? String(userEmail).trim() : '';
   if (!email) throw new Error('user_email required');
   const response = await apiFetch(
-    `${API_URL}/api/listings/boost-quota?user_email=${encodeURIComponent(email)}`,
+    `${apiBase()}/api/listings/boost-quota?user_email=${encodeURIComponent(email)}`,
   );
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Failed to load boost quota');
@@ -1229,7 +1701,7 @@ export const boostListing = async (listingId, userEmail) => {
   if (!id) throw new Error('listingId required');
   if (!email) throw new Error('user_email required');
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${id}/boost`, {
+    const response = await apiFetch(`${apiBase()}/api/listings/${id}/boost`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_email: email }),
@@ -1258,7 +1730,7 @@ export const boostListing = async (listingId, userEmail) => {
 export const recordListingView = async (listingId) => {
   if (!listingId) return;
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${listingId}/view`, { method: 'POST' });
+    const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/view`, { method: 'POST' });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to record view');
@@ -1271,7 +1743,7 @@ export const recordListingView = async (listingId) => {
 export const recordListingShare = async (listingId, count = 1) => {
   if (!listingId) return null;
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${listingId}/share`, {
+    const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/share`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({count: Number(count) || 1}),
@@ -1293,7 +1765,7 @@ export const recordListingShare = async (listingId, count = 1) => {
  */
 export const likeListing = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await apiFetch(`${API_URL}/api/listings/${listingId}/like`, {
+  const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/like`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: String(userId) }),
@@ -1311,7 +1783,7 @@ export const likeListing = async (listingId, userId) => {
  */
 export const unlikeListing = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await apiFetch(`${API_URL}/api/listings/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
+  const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
     method: 'DELETE',
   });
   const data = await response.json();
@@ -1327,7 +1799,7 @@ export const unlikeListing = async (listingId, userId) => {
  */
 export const likePost = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/like`, {
+  const response = await apiFetch(`${apiBase()}/api/posts/${listingId}/like`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: String(userId) }),
@@ -1345,7 +1817,7 @@ export const likePost = async (listingId, userId) => {
  */
 export const unlikePost = async (listingId, userId) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
-  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
+  const response = await apiFetch(`${apiBase()}/api/posts/${listingId}/like?user_id=${encodeURIComponent(String(userId))}`, {
     method: 'DELETE',
   });
   const data = await response.json();
@@ -1366,7 +1838,7 @@ export const getPostComments = async (listingId, userId = null) => {
   }
   const qs = params.toString();
   const response = await apiFetch(
-    `${API_URL}/api/posts/${listingId}/comments${qs ? `?${qs}` : ''}`,
+    `${apiBase()}/api/posts/${listingId}/comments${qs ? `?${qs}` : ''}`,
   );
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load comments');
@@ -1383,7 +1855,7 @@ export const getPostComments = async (listingId, userId = null) => {
 export const addPostComment = async (listingId, userId, text, imageUrl = null) => {
   if (!listingId || !userId) throw new Error('listingId and userId required');
   const u = imageUrl != null && String(imageUrl).trim() !== '' ? String(imageUrl).trim() : null;
-  const response = await apiFetch(`${API_URL}/api/posts/${listingId}/comments`, {
+  const response = await apiFetch(`${apiBase()}/api/posts/${listingId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1412,7 +1884,7 @@ export const reactToPostComment = async (listingId, commentId, userId, reactionT
     throw new Error('reactionType must be like or dislike');
   }
   const response = await apiFetch(
-    `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction`,
+    `${apiBase()}/api/posts/${listingId}/comments/${commentId}/reaction`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1438,7 +1910,7 @@ export const clearPostCommentReaction = async (listingId, commentId, userId) => 
     throw new Error('listingId, commentId and userId required');
   }
   const response = await apiFetch(
-    `${API_URL}/api/posts/${listingId}/comments/${commentId}/reaction?user_id=${encodeURIComponent(String(userId))}`,
+    `${apiBase()}/api/posts/${listingId}/comments/${commentId}/reaction?user_id=${encodeURIComponent(String(userId))}`,
     { method: 'DELETE' },
   );
   const data = await response.json();
@@ -1456,7 +1928,7 @@ export const getChatUnreadCount = async (userEmail, afterIso = null) => {
   if (!userEmail) return { success: true, count: 0 };
   const params = new URLSearchParams({ user_email: String(userEmail).trim().toLowerCase() });
   if (afterIso) params.set('after', afterIso);
-  const response = await apiFetch(`${API_URL}/api/chat/unread-count?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/chat/unread-count?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) return { success: true, count: 0 };
   return { success: true, count: typeof data.count === 'number' ? data.count : 0 };
@@ -1470,7 +1942,7 @@ export const getChatUnreadCount = async (userEmail, afterIso = null) => {
 export const getChatConversations = async (userEmail) => {
   if (!userEmail) return { success: true, conversations: [] };
   const email = String(userEmail).trim().toLowerCase();
-  const url = `${API_URL}/api/chat/conversations?user_email=${encodeURIComponent(email)}`;
+  const url = `${apiBase()}/api/chat/conversations?user_email=${encodeURIComponent(email)}`;
   const response = await apiFetch(url);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load conversations');
@@ -1569,7 +2041,7 @@ export const getDirectContactsForGroup = async (userEmail, q = '', audience = 'a
   if (aud === 'regular' || aud === 'non_regular' || aud === 'all') {
     params.set('audience', aud);
   }
-  const response = await apiFetch(`${API_URL}/api/chat/direct-contacts?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/chat/direct-contacts?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load contacts');
   return { success: !!data.success, contacts: data.contacts || [] };
@@ -1580,7 +2052,7 @@ export const getBrokersForGroupPicker = async (q, excludeEmail = null) => {
   const params = new URLSearchParams();
   if (q != null && String(q).trim()) params.set('q', String(q).trim());
   if (excludeEmail) params.set('exclude_email', String(excludeEmail).trim().toLowerCase());
-  const response = await apiFetch(`${API_URL}/api/brokers/group-picker?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/brokers/group-picker?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load brokers');
   return { success: !!data.success, brokers: data.brokers || [] };
@@ -1595,7 +2067,7 @@ export const getUsersForGroupPicker = async (q = '', excludeEmail = null, audien
   if (aud === 'regular' || aud === 'broker_only' || aud === 'non_regular' || aud === 'all') {
     params.set('audience', aud);
   }
-  const response = await apiFetch(`${API_URL}/api/users/group-picker?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/users/group-picker?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load users');
   return { success: !!data.success, users: data.users || [] };
@@ -1611,7 +2083,7 @@ export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind,
   if (groupImageUrl != null && String(groupImageUrl).trim()) {
     payload.group_image_url = String(groupImageUrl).trim();
   }
-  const response = await apiFetch(`${API_URL}/api/chat/groups`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1627,7 +2099,7 @@ export const addMembersToChatGroup = async ({ userEmail, conversationId, memberE
     conversation_id: String(conversationId || '').trim(),
     member_emails: (memberEmails || []).map((e) => String(e || '').trim().toLowerCase()).filter(Boolean),
   };
-  const response = await apiFetch(`${API_URL}/api/chat/groups/add-members`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups/add-members`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1643,14 +2115,14 @@ export const getGroupChatMessages = async (userEmail, conversationId) => {
     user_email: String(userEmail).trim().toLowerCase(),
     conversation_id: String(conversationId).trim(),
   });
-  const response = await apiFetch(`${API_URL}/api/chat/group-messages?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/chat/group-messages?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load messages');
   return data;
 };
 
 export const updateGroupDescription = async ({userEmail, conversationId, description}) => {
-  const response = await apiFetch(`${API_URL}/api/chat/group-description`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/group-description`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1665,7 +2137,7 @@ export const updateGroupDescription = async ({userEmail, conversationId, descrip
 };
 
 export const updateGroupTitle = async ({userEmail, conversationId, title}) => {
-  const response = await apiFetch(`${API_URL}/api/chat/group-title`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/group-title`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1680,7 +2152,7 @@ export const updateGroupTitle = async ({userEmail, conversationId, title}) => {
 };
 
 export const removeMemberFromChatGroup = async ({userEmail, conversationId, memberEmail}) => {
-  const response = await apiFetch(`${API_URL}/api/chat/groups/remove-member`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups/remove-member`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1695,7 +2167,7 @@ export const removeMemberFromChatGroup = async ({userEmail, conversationId, memb
 };
 
 export const updateGroupMemberRole = async ({userEmail, conversationId, targetEmail, role}) => {
-  const response = await apiFetch(`${API_URL}/api/chat/groups/member-role`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups/member-role`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1731,7 +2203,7 @@ export const sendGroupChatMessage = async (
     payload.listing_id = String(listingId).trim();
   }
   if (listingShare) payload.listing_share = true;
-  const response = await apiFetch(`${API_URL}/api/chat/group-messages`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/group-messages`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1749,7 +2221,7 @@ export const sendGroupChatMessage = async (
 export const getChatParticipantDisplay = async (userRef) => {
   if (!userRef) return { success: true, name: null, profileImageUrl: null };
   const ref = String(userRef).trim();
-  const url = `${API_URL}/api/chat/participant-display?user_ref=${encodeURIComponent(ref)}`;
+  const url = `${apiBase()}/api/chat/participant-display?user_ref=${encodeURIComponent(ref)}`;
   const response = await apiFetch(url);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load participant display');
@@ -1767,7 +2239,7 @@ export const getListingPreview = async (listingId) => {
   const id = String(listingId).trim();
   if (!id) return null;
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${encodeURIComponent(id)}/preview`);
+    const response = await apiFetch(`${apiBase()}/api/listings/${encodeURIComponent(id)}/preview`);
     const data = await response.json();
     if (!response.ok) return null;
     return data?.listing || null;
@@ -1782,14 +2254,14 @@ export const getChatMessages = async (myEmail, otherUserEmail) => {
     user_email: String(myEmail).trim().toLowerCase(),
     other_user_email: String(otherUserEmail).trim().toLowerCase(),
   });
-  const response = await apiFetch(`${API_URL}/api/chat/messages?${params.toString()}`);
+  const response = await apiFetch(`${apiBase()}/api/chat/messages?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load messages');
   return data;
 };
 
 export const respondToExclusiveOffer = async ({userEmail, conversationId, accept}) => {
-  const response = await apiFetch(`${API_URL}/api/chat/exclusive-offer/respond`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/exclusive-offer/respond`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1856,7 +2328,7 @@ export const sendChatMessage = async (
     payload.listing_id = String(listingId).trim();
   }
   if (listingShare) payload.listing_share = true;
-  const response = await apiFetch(`${API_URL}/api/chat/messages`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -1875,7 +2347,7 @@ export const uploadChatMedia = async (file) => {
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');
   formData.append('file', toAppend);
-  const response = await apiFetch(`${API_URL}/api/chat/upload-media`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/upload-media`, {
     method: 'POST',
     body: formData,
   });
@@ -1893,7 +2365,7 @@ export const uploadGroupImage = async (file) => {
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');
   formData.append('file', toAppend);
-  const response = await apiFetch(`${API_URL}/api/chat/upload-group-image`, {
+  const response = await apiFetch(`${apiBase()}/api/chat/upload-group-image`, {
     method: 'POST',
     body: formData,
   });
@@ -1926,7 +2398,7 @@ export const toSubscriptionId = id => {
  * @returns {Promise<{ success: boolean, rings?: Array }>}
  */
 export const getStoriesFeed = async () => {
-  const response = await apiFetch(`${API_URL}/api/stories/feed`, {
+  const response = await apiFetch(`${apiBase()}/api/stories/feed`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1941,7 +2413,7 @@ export const getStoriesFeed = async () => {
  * Company directory for home "חפשו עוד" (verified/active company subscriptions + ad counts)
  */
 export const getCompaniesDirectory = async () => {
-  const response = await apiFetch(`${API_URL}/api/companies/directory`, {
+  const response = await apiFetch(`${apiBase()}/api/companies/directory`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1956,7 +2428,7 @@ export const getCompaniesDirectory = async () => {
  * Professionals directory for home "חפשו עוד" (verified/active professional subscriptions)
  */
 export const getProfessionalsDirectory = async () => {
-  const response = await apiFetch(`${API_URL}/api/professionals/directory`, {
+  const response = await apiFetch(`${apiBase()}/api/professionals/directory`, {
     method: 'GET',
     headers: {'Content-Type': 'application/json'},
   });
@@ -1972,7 +2444,7 @@ export const getProfessionalsDirectory = async () => {
  * @param {{ subscription_id: string, media_url: string }} payload
  */
 export const createStory = async payload => {
-  const response = await apiFetch(`${API_URL}/api/stories`, {
+  const response = await apiFetch(`${apiBase()}/api/stories`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
@@ -1984,11 +2456,34 @@ export const createStory = async payload => {
   return data;
 };
 
+/**
+ * Profile intro videos saved on subscription.video_url appear in the home story ring.
+ * Also inserts a stories row when the table is available (best-effort, non-blocking).
+ */
+export async function syncSubscriptionProfileStory(subscription) {
+  const videoUrl =
+    subscription?.video_url != null
+      ? String(subscription.video_url).trim()
+      : '';
+  const subId =
+    subscription?.id != null ? String(subscription.id).trim() : '';
+  if (!videoUrl || !subId) return null;
+  try {
+    return await createStory({
+      subscription_id: subId,
+      media_url: videoUrl,
+    });
+  } catch (err) {
+    console.warn('[syncSubscriptionProfileStory]', err?.message || err);
+    return null;
+  }
+}
+
 export const createListing = async listingData => {
   try {
     console.log('Sending listing data to API:', listingData);
 
-    const response = await apiFetch(`${API_URL}/api/listings`, {
+    const response = await apiFetch(`${apiBase()}/api/listings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2020,7 +2515,7 @@ export const updateListing = async (listingId, listingData) => {
     throw new Error('Invalid listing id for update');
   }
   try {
-    const response = await apiFetch(`${API_URL}/api/listings/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`${apiBase()}/api/listings/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(listingData),

@@ -11,7 +11,9 @@ import Svg, {
 /**
  * Single source of truth for user profile photos with the gold gradient ring.
  *
- *   <ProfileAvatar uri={url} size={60} />
+ *   <ProfileAvatar uri={profileUrl} fallbackUri={companyLogoUrl} size={60} />
+ *
+ * Order: profile photo → fallbackUri (e.g. company logo) → initial letter.
  *
  * Implementation notes:
  * - The gold gradient ring is drawn with an SVG <Circle stroke="url(#...)">.
@@ -35,6 +37,7 @@ const nextGradientId = () =>
 
 export const ProfileAvatar = ({
   uri,
+  fallbackUri,
   name,
   size = 60,
   ringColors = DEFAULT_RING_COLORS,
@@ -44,13 +47,16 @@ export const ProfileAvatar = ({
   imageStyle,
   placeholderLabel,
   placeholderImage,
+  fallbackResizeMode = 'contain',
 }) => {
-  const [failed, setFailed] = useState(false);
+  const [primaryFailed, setPrimaryFailed] = useState(false);
+  const [fallbackFailed, setFallbackFailed] = useState(false);
   const [gradientId] = useState(nextGradientId);
 
   useEffect(() => {
-    setFailed(false);
-  }, [uri]);
+    setPrimaryFailed(false);
+    setFallbackFailed(false);
+  }, [uri, fallbackUri]);
 
   const ringWidth = Math.max(1, size * RING_RATIO);
   const gap = Math.max(0, size * GAP_RATIO);
@@ -63,12 +69,20 @@ export const ProfileAvatar = ({
   })();
   const fontSize = Math.max(12, Math.round(size * 0.38));
 
-  const Photo = uri && !failed ? (
+  const showPrimary = Boolean(uri) && !primaryFailed;
+  const showFallback = !showPrimary && Boolean(fallbackUri) && !fallbackFailed;
+  const displayUri = showPrimary ? uri : showFallback ? fallbackUri : null;
+  const displayResizeMode = showPrimary ? 'cover' : fallbackResizeMode;
+
+  const Photo = displayUri ? (
     <Image
-      source={{uri: String(uri)}}
+      source={{uri: String(displayUri)}}
       style={[styles.image, imageStyle]}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
+      resizeMode={displayResizeMode}
+      onError={() => {
+        if (showPrimary) setPrimaryFailed(true);
+        else if (showFallback) setFallbackFailed(true);
+      }}
     />
   ) : placeholderImage != null ? (
     <Image

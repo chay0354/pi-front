@@ -2,8 +2,8 @@ import React, {
   useRef,
   useState,
   useEffect,
-  useLayoutEffect,
   useMemo,
+  useCallback,
 } from 'react';
 import {
   View,
@@ -30,9 +30,10 @@ import {
   persistUnseenLikedCount,
 } from '../utils/tikTokLikedStorage';
 import {LinearGradient} from 'expo-linear-gradient';
+import {Video, ResizeMode} from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {ProfileAvatar, SharePostSheet} from '../components';
+import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
 import FeedBottomBar from '../components/FeedBottomBar';
 import {SvgXml} from '../utils/svgXml';
 import {Colors} from '../constants/styles';
@@ -64,7 +65,7 @@ import {
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 import {
   formatCompanyApartmentsLabel,
@@ -571,8 +572,10 @@ function newDeveloperComparableMaxRooms(listing, typeIds) {
   );
 }
 
+/** Same heart size on every TikTok overlay variant (broker, company, BnB, etc.). */
+const TIKTOK_OVERLAY_HEART_SIZE = 32;
+
 const TIKTOK_OVERLAY_ICONS = {
-  heart: require('../assets/tiktok-heart-icon.svg'),
   location: require('../assets/tiktok/location.png'),
   preSaleBadge: require('../assets/pre-sale.png'),
   postLike: require('../assets/tiktok/likes.png'),
@@ -906,6 +909,15 @@ const BNB_SIDEBAR_FILTERS = [
   },
 ];
 
+/** BnB TikTok: cap sidebar / overlay chip text so it truncates with "…" instead of overflowing. */
+const BNB_TIKTOK_LABEL_MAX_CHARS = 25;
+
+function truncateTikTokLabel(text, maxLen = BNB_TIKTOK_LABEL_MAX_CHARS) {
+  const s = String(text ?? '').trim();
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen).trimEnd()}...`;
+}
+
 const resolveFollowUuid = (...candidates) => {
   for (const candidate of candidates) {
     if (candidate == null) continue;
@@ -917,30 +929,122 @@ const resolveFollowUuid = (...candidates) => {
   return null;
 };
 
+const resolveListingFollowTargetId = listing =>
+  resolveFollowUuid(
+    listing?.subscription_id,
+    listing?.owner_id,
+    listing?.creator_subscription_id,
+  );
+
+const defaultFollowStatusEntry = () => ({
+  is_following: false,
+  has_pending_request: false,
+});
+
+const normalizeFollowStatusMap = (rawMap, targetIds = []) => {
+  const out = {...(rawMap || {})};
+  for (const id of targetIds) {
+    const key = id != null ? String(id).trim() : '';
+    if (!key) continue;
+    const row = out[key];
+    out[key] = {
+      is_following: !!row?.is_following,
+      has_pending_request: !!row?.has_pending_request,
+    };
+  }
+  return out;
+};
+
+async function prefetchFollowStatusForTargets(viewerSubId, targetIds) {
+  if (!viewerSubId || !targetIds?.length) return {};
+  const pairs = await Promise.all(
+    targetIds.map(async targetId => {
+      try {
+        const data = await getFollowStatus(viewerSubId, targetId);
+        return [
+          targetId,
+          {
+            is_following: !!data?.is_following,
+            has_pending_request: !!data?.has_pending_request,
+          },
+        ];
+      } catch {
+        return [targetId, defaultFollowStatusEntry()];
+      }
+    }),
+  );
+  return normalizeFollowStatusMap(Object.fromEntries(pairs), targetIds);
+}
+
 // Image Swiper Component for multiple photos - supports slideshow and collage
+const FEED_PAGE_MAX_WIDTH = 414;
+/** Always mount/preload this many feed pages below the current one (photos + videos). */
+const FEED_PRELOAD_BELOW_COUNT = 2;
+const FEED_PRELOAD_ABOVE_COUNT = 1;
+const FEED_FLATLIST_WINDOW_SIZE = FEED_PRELOAD_BELOW_COUNT * 2 + 1;
+
+function resolveFeedItemMediaUris(video) {
+  if (!video) return [];
+  const uris = [];
+  const pushUri = raw => {
+    const uri = raw != null ? String(raw).trim() : '';
+    if (uri && /^https?:\/\//i.test(uri)) uris.push(uri);
+  };
+
+  if (video.isUploaded) {
+    const feedVideoUri =
+      video.video && typeof video.video === 'object'
+        ? String(video.video.uri || video.video.url || '').trim()
+        : typeof video.video === 'string'
+          ? String(video.video).trim()
+          : '';
+    if (video.type === 'video' && feedVideoUri) {
+      pushUri(feedVideoUri);
+      return uris;
+    }
+    if (Array.isArray(video.images)) {
+      video.images.forEach(image => {
+        if (image == null) return;
+        if (typeof image === 'string') pushUri(image);
+        else if (typeof image === 'object') pushUri(image.uri ?? image.url);
+      });
+    }
+  }
+  return uris;
+}
+
 const ImageSwiper = ({
   images,
   screenHeight,
   video,
   displayOption = 'slideshow',
+  indicatorTop = TOP_BAR_HEIGHT + 8,
 }) => {
   const {width: winWidth} = useWindowDimensions();
+  const pageWidth = Math.min(Math.max(1, winWidth), FEED_PAGE_MAX_WIDTH);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
+    setCurrentImageIndex(0);
+    if (scrollViewRef.current && displayOption === 'slideshow') {
+      scrollViewRef.current.scrollTo({x: 0, animated: false});
+    }
+  }, [images, displayOption, pageWidth]);
+
+  useEffect(() => {
     if (scrollViewRef.current && displayOption === 'slideshow') {
       scrollViewRef.current.scrollTo({
-        x: currentImageIndex * winWidth,
+        x: currentImageIndex * pageWidth,
         animated: true,
       });
     }
-  }, [currentImageIndex, displayOption, winWidth]);
+  }, [currentImageIndex, displayOption, pageWidth]);
 
   const handleScroll = event => {
     if (displayOption === 'slideshow') {
       const contentOffsetX = event.nativeEvent.contentOffset.x;
-      const w = Math.max(1, winWidth);
+      const w = pageWidth;
       const newIndex = Math.round(contentOffsetX / w);
       if (newIndex !== currentImageIndex) {
         setCurrentImageIndex(newIndex);
@@ -962,12 +1066,13 @@ const ImageSwiper = ({
   if (displayOption === 'collage' && images.length > 0) {
     const slice = images.slice(0, 5);
     const imageCount = slice.length;
-    const layouts = getCollageCellLayouts(imageCount, winWidth, screenHeight);
+    const layouts = getCollageCellLayouts(imageCount, pageWidth, screenHeight);
 
     return (
       <View
         style={[
           styles.videoItem,
+          forceLtrStyle,
           {
             height: screenHeight,
             minHeight: screenHeight,
@@ -1027,6 +1132,7 @@ const ImageSwiper = ({
     <View
       style={[
         styles.videoItem,
+        forceLtrStyle,
         {
           height: screenHeight,
           minHeight: screenHeight,
@@ -1043,7 +1149,7 @@ const ImageSwiper = ({
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        style={styles.imageSwiper}
+        style={[styles.imageSwiper, forceLtrStyle]}
         scrollEnabled={!isSingleImage} // Disable scrolling for single image
       >
         {images.map((image, index) => {
@@ -1054,7 +1160,7 @@ const ImageSwiper = ({
               key={index}
               style={[
                 styles.swiperImageContainer,
-                {width: winWidth},
+                {width: pageWidth},
                 isSingleImage && styles.swiperImageContainerSingle,
               ]}>
               <Image
@@ -1062,7 +1168,7 @@ const ImageSwiper = ({
                 style={[
                   styles.swiperImage,
                   isSingleImage && styles.swiperImageSingle,
-                  {maxWidth: winWidth, maxHeight: screenHeight},
+                  {maxWidth: pageWidth, maxHeight: screenHeight},
                 ]}
                 resizeMode="contain"
               />
@@ -1071,7 +1177,7 @@ const ImageSwiper = ({
         })}
       </ScrollView>
       {images.length > 1 && (
-        <View style={styles.imageIndicator}>
+        <View style={[styles.imageIndicator, {top: indicatorTop}]}>
           {images.map((_, index) => (
             <View
               key={index}
@@ -1123,7 +1229,9 @@ const TikTokFeedScreen = ({
   const insets = useSafeAreaInsets();
   const topBarHeight = TOP_BAR_HEIGHT + insets.top;
   const bottomBarHeight = BOTTOM_BAR_HEIGHT + insets.bottom;
-  const scrollViewRef = useRef(null);
+  const feedListRef = useRef(null);
+  const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
+  const currentIndexRef = useRef(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const bottomSheetTranslateY = useRef(new Animated.Value(0)).current;
@@ -1135,13 +1243,19 @@ const TikTokFeedScreen = ({
   const [listingsError, setListingsError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh when this changes
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarPanActiveRef = useRef(false);
+  const sidebarPanDidDragRef = useRef(false);
+  const sidebarFeedScrollLockedRef = useRef(false);
+  const sidebarPendingTapRef = useRef(null);
+  const activeSidebarVideoRef = useRef(null);
+  const flushSidebarPendingTapRef = useRef(() => {});
   const SIDEBAR_INTRO_MAX_DOWN_FALLBACK = 420;
-  const SIDEBAR_HIDE_BOTTOM_COUNT = 2;
+  /** Final / stage 3: profile + this many top filter chips visible. */
+  const SIDEBAR_TOP_VISIBLE_FILTER_COUNT = 2;
+  const SIDEBAR_PROFILE_INTRO_NUDGE_UP = 16;
   const SIDEBAR_FILTER_HEIGHT_FALLBACK = 64;
-  const sidebarDragY = useRef(
-    new Animated.Value(SIDEBAR_INTRO_MAX_DOWN_FALLBACK),
-  ).current;
-  const sidebarDragOffset = useRef(SIDEBAR_INTRO_MAX_DOWN_FALLBACK); // keep in sync for pan responder
+  const sidebarDragY = useRef(new Animated.Value(0)).current;
+  const sidebarDragOffset = useRef(0); // keep in sync for pan responder
   const [sidebarViewportHeight, setSidebarViewportHeight] = useState(0);
   const [sidebarProfileHeight, setSidebarProfileHeight] = useState(60);
   const [sidebarFilterHeight, setSidebarFilterHeight] = useState(
@@ -1155,10 +1269,17 @@ const TikTokFeedScreen = ({
   ); // 'pics' | 'list' | 'video' | 'liked'
   const [likedListingIds, setLikedListingIds] = useState(new Set()); // persisted to AsyncStorage
   const [likedPostIds, setLikedPostIds] = useState(new Set()); // persisted to AsyncStorage
-  /** Unseen likes counter shown as a badge on the heart filter in the top bar. Resets when favorites screen opens. */
-  const [unseenLikedCount, setUnseenLikedCount] = useState(0);
+  /** Bumps on every like toggle so FlatList re-renders visible hearts immediately. */
+  const [likedUiRevision, setLikedUiRevision] = useState(0);
   const postLikePendingIdsRef = useRef(new Set()); // prevent duplicate taps/race requests per post
   const adLikePendingIdsRef = useRef(new Set()); // same for ad (listing) likes
+  const likedListingIdsRef = useRef(new Set());
+  const likedPostIdsRef = useRef(new Set());
+
+  likedListingIdsRef.current = likedListingIds;
+  likedPostIdsRef.current = likedPostIds;
+  /** Unseen likes counter shown as a badge on the heart filter in the top bar. Resets when favorites screen opens. */
+  const [unseenLikedCount, setUnseenLikedCount] = useState(0);
   const [showUserSearchPanel, setShowUserSearchPanel] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [failedSearchAvatarKeys, setFailedSearchAvatarKeys] = useState(
@@ -1180,21 +1301,14 @@ const TikTokFeedScreen = ({
   const [newCommentText, setNewCommentText] = useState('');
   const [commentImageAsset, setCommentImageAsset] = useState(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [sidebarFollowStatus, setSidebarFollowStatus] = useState({
-    isFollowing: false,
-    hasPendingRequest: false,
-    /** When false, do not show the + (avoids flash before getFollowStatus returns). */
-    resolved: false,
-  });
+  /** Prefetched with listings so sidebar + appears without per-slide delay. */
+  const [followStatusByTargetId, setFollowStatusByTargetId] = useState({});
   const [sidebarSendingFollow, setSidebarSendingFollow] = useState(false);
   const lastViewedListingIdRef = useRef(null); // avoid recording same view twice
   const [dimensions, setDimensions] = useState({
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
   });
-  const feedScrollY = useRef(new Animated.Value(0)).current;
-  const overlayBaseY = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const updateDimensions = () => {
       setDimensions({
@@ -1212,10 +1326,11 @@ const TikTokFeedScreen = ({
 
   const screenHeight = dimensions.height;
   const screenWidth = dimensions.width;
-  const feedOverlayTranslateY = useMemo(
-    () => Animated.subtract(overlayBaseY, feedScrollY),
-    [overlayBaseY, feedScrollY],
-  );
+  const feedPageHeight = Math.max(1, screenHeight);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   const categoryId = Number(selectedCategory);
   const isLandCategory = categoryId === 7; // קרקעות
@@ -1276,61 +1391,102 @@ const TikTokFeedScreen = ({
   }, [sidebarFiltersForFeed, selectedSidebarFilter]);
   const sidebarFilterCount = sidebarFiltersForFeed.length;
   const firstFilterTop = sidebarFilterLayouts[0]?.y;
-  const sidebarIntroMaxDown = useMemo(() => {
+  const lastFilterIndex = Math.max(0, sidebarFilterCount - 1);
+  const lastFilterLayout = sidebarFilterLayouts[lastFilterIndex];
+  const topTwoFilterIndex = Math.min(
+    SIDEBAR_TOP_VISIBLE_FILTER_COUNT - 1,
+    Math.max(0, sidebarFilterCount - 1),
+  );
+  const topTwoFilterLayout = sidebarFilterLayouts[topTwoFilterIndex];
+  /** Hold before intro: only the profile avatar is visible in the clip. */
+  const sidebarIntroProfileOnlyDown = useMemo(() => {
     if (sidebarViewportHeight <= 0) {
       return SIDEBAR_INTRO_MAX_DOWN_FALLBACK;
     }
     if (Number.isFinite(firstFilterTop) && firstFilterTop > 0) {
       return Math.max(0, sidebarViewportHeight - firstFilterTop);
     }
-    if (sidebarProfileHeight <= 0) {
-      return SIDEBAR_INTRO_MAX_DOWN_FALLBACK;
-    }
-    // Stage 1: keep only the profile image visible in the clipped sidebar viewport.
     return Math.max(0, sidebarViewportHeight - sidebarProfileHeight);
   }, [sidebarViewportHeight, sidebarProfileHeight, firstFilterTop]);
-  const SIDEBAR_DRAG_HIDE_BOTTOM_2 = useMemo(() => {
-    if (sidebarViewportHeight <= 0 || sidebarFilterCount === 0) {
-      return 150;
+  const sidebarIntroProfileOnlyHold = useMemo(
+    () =>
+      Math.max(0, sidebarIntroProfileOnlyDown - SIDEBAR_PROFILE_INTRO_NUDGE_UP),
+    [sidebarIntroProfileOnlyDown],
+  );
+  /** Stage 2: all chips visible; last chip flush to viewport bottom (no gap below it). */
+  const sidebarIntroAllIconsDown = useMemo(() => {
+    if (sidebarViewportHeight <= 0) {
+      return 0;
     }
-    const lastVisibleFilterIndex =
-      sidebarFilterCount - SIDEBAR_HIDE_BOTTOM_COUNT - 1;
-    const lastVisibleLayout = sidebarFilterLayouts[lastVisibleFilterIndex];
+    let lastBottom = 0;
     if (
-      lastVisibleFilterIndex >= 0 &&
-      lastVisibleLayout &&
-      Number.isFinite(lastVisibleLayout.y) &&
-      Number.isFinite(lastVisibleLayout.height)
+      lastFilterLayout &&
+      Number.isFinite(lastFilterLayout.y) &&
+      Number.isFinite(lastFilterLayout.height)
     ) {
-      const lastVisibleBottom =
-        Number(lastVisibleLayout.y) + Number(lastVisibleLayout.height);
-      return Math.max(0, sidebarViewportHeight - lastVisibleBottom);
+      lastBottom = lastFilterLayout.y + lastFilterLayout.height;
+    } else {
+      const safeFilterHeight =
+        sidebarFilterHeight > 0
+          ? sidebarFilterHeight
+          : SIDEBAR_FILTER_HEIGHT_FALLBACK;
+      lastBottom =
+        sidebarProfileHeight + sidebarFilterCount * safeFilterHeight;
+    }
+    if (lastBottom <= sidebarViewportHeight) {
+      return 0;
+    }
+    return lastBottom - sidebarViewportHeight;
+  }, [
+    sidebarViewportHeight,
+    sidebarProfileHeight,
+    sidebarFilterCount,
+    sidebarFilterHeight,
+    lastFilterLayout,
+  ]);
+  /** Stage 3 / resting: profile + top two chips — clip everything below 2nd filter. */
+  const sidebarIntroTopTwoOnlyDown = useMemo(() => {
+    if (sidebarViewportHeight <= 0 || sidebarFilterCount === 0) {
+      return 0;
+    }
+    if (
+      topTwoFilterLayout &&
+      Number.isFinite(topTwoFilterLayout.y) &&
+      Number.isFinite(topTwoFilterLayout.height)
+    ) {
+      const topTwoBottom = topTwoFilterLayout.y + topTwoFilterLayout.height;
+      return Math.max(0, sidebarViewportHeight - topTwoBottom);
     }
     const safeFilterHeight =
       sidebarFilterHeight > 0
         ? sidebarFilterHeight
         : SIDEBAR_FILTER_HEIGHT_FALLBACK;
-    const visibleFiltersAfterIntro = Math.max(
-      0,
-      sidebarFilterCount - SIDEBAR_HIDE_BOTTOM_COUNT,
+    const visibleFilterCount = Math.min(
+      SIDEBAR_TOP_VISIBLE_FILTER_COUNT,
+      sidebarFilterCount,
     );
-    const targetVisibleHeight =
-      sidebarProfileHeight + visibleFiltersAfterIntro * safeFilterHeight;
-    // Stage 3: move down until only the last 2 filter rows are clipped below.
-    return Math.max(0, sidebarViewportHeight - targetVisibleHeight);
+    const estimatedTopTwoBottom =
+      sidebarProfileHeight + visibleFilterCount * safeFilterHeight;
+    return Math.max(0, sidebarViewportHeight - estimatedTopTwoBottom);
   }, [
     sidebarViewportHeight,
     sidebarFilterCount,
     sidebarFilterHeight,
     sidebarProfileHeight,
-    sidebarFilterLayouts,
+    topTwoFilterLayout,
   ]);
   const sidebarDragMaxDown = Math.max(
-    sidebarIntroMaxDown,
-    SIDEBAR_DRAG_HIDE_BOTTOM_2,
+    sidebarIntroProfileOnlyDown,
+    sidebarIntroAllIconsDown,
+    sidebarIntroTopTwoOnlyDown,
   );
-  const isSidebarMeasurementReady =
+  const isSidebarProfileHoldReady =
     sidebarViewportHeight > 0 && sidebarProfileHeight > 0;
+  const isSidebarIntroAnimReady =
+    isSidebarProfileHoldReady &&
+    (sidebarFilterCount === 0 || Boolean(lastFilterLayout)) &&
+    (sidebarFilterCount < SIDEBAR_TOP_VISIBLE_FILTER_COUNT ||
+      Boolean(topTwoFilterLayout));
 
   const closeSheetAndOpenListing = opts => {
     setShowBottomSheet(false);
@@ -1356,6 +1512,8 @@ const TikTokFeedScreen = ({
         ]);
         setLikedListingIds(likedState.likedListingIds);
         setLikedPostIds(likedState.likedPostIds);
+        likedListingIdsRef.current = likedState.likedListingIds;
+        likedPostIdsRef.current = likedState.likedPostIds;
         setUnseenLikedCount(uid ? likedState.unseenLikedCount : 0);
         let topBar = rawTopBar;
         if (!uid && topBar === 'liked') {
@@ -1414,53 +1572,119 @@ const TikTokFeedScreen = ({
 
   // Initialize scroll position on mount
   useEffect(() => {
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({
-        y: 0,
-        animated: false,
-      });
-    }
+    feedListRef.current?.scrollToOffset({offset: 0, animated: false});
   }, []);
 
   // Auto-scroll sidebar intro once when TikTok feed opens:
-  // (1) profile only, (2) all visible, (3) hide bottom 2 filters.
+  // Hold profile-only → all icons (last flush bottom) → profile + top 2 chips.
+  const SIDEBAR_INTRO_START_DELAY_MS = 900;
   const sidebarIntroDone = useRef(false);
-  const useNativeDriver = Platform.OS !== 'web'; // web does not support native driver
+  const sidebarIntroHoldApplied = useRef(false);
+  const sidebarIntroAnimStarted = useRef(false);
+  const sidebarIntroTargetsRef = useRef({
+    profileHold: 0,
+    allIcons: 0,
+    topTwo: 0,
+  });
+  const [sidebarIntroVisible, setSidebarIntroVisible] = useState(false);
+  const [sidebarIntroFinished, setSidebarIntroFinished] = useState(false);
+  /** Intro uses JS driver so layout updates do not cancel native-driven animations. */
+  const sidebarAnimUseNativeDriver = false;
+
+  sidebarIntroTargetsRef.current = {
+    profileHold: sidebarIntroProfileOnlyHold,
+    allIcons: sidebarIntroAllIconsDown,
+    topTwo: sidebarIntroTopTwoOnlyDown,
+  };
+
   useEffect(() => {
-    if (selectedTopBarFilter === 'list' || sidebarIntroDone.current) return;
-    if (!isSidebarMeasurementReady) return;
-    sidebarIntroDone.current = true;
-    sidebarDragY.setValue(sidebarIntroMaxDown);
-    sidebarDragOffset.current = sidebarIntroMaxDown;
-    const scrollDuration = 900; // ms per scroll (slower)
-    const waitBetweenParts = 1000; // 1 sec between each part
-    const startDelay = 500; // ms before starting so user sees "all hidden"
-    const timer = setTimeout(() => {
-      Animated.sequence([
-        Animated.delay(waitBetweenParts), // wait 1s after part 1 (all hidden)
-        Animated.timing(sidebarDragY, {
-          toValue: 0,
-          duration: scrollDuration,
-          useNativeDriver,
-        }),
-        Animated.delay(waitBetweenParts), // wait 1s after part 2 (all visible)
-        Animated.timing(sidebarDragY, {
-          toValue: SIDEBAR_DRAG_HIDE_BOTTOM_2,
-          duration: scrollDuration,
-          useNativeDriver,
-        }),
-      ]).start(() => {
-        sidebarDragOffset.current = SIDEBAR_DRAG_HIDE_BOTTOM_2;
-      });
-    }, startDelay);
-    return () => clearTimeout(timer);
+    if (selectedTopBarFilter === 'list') {
+      sidebarIntroDone.current = false;
+      sidebarIntroHoldApplied.current = false;
+      sidebarIntroAnimStarted.current = false;
+      setSidebarIntroVisible(false);
+      setSidebarIntroFinished(false);
+      return;
+    }
+    if (sidebarIntroDone.current) {
+      setSidebarIntroVisible(true);
+      setSidebarIntroFinished(true);
+      return;
+    }
+    if (!isSidebarProfileHoldReady || sidebarIntroHoldApplied.current) return;
+    sidebarIntroHoldApplied.current = true;
+    sidebarDragY.setValue(sidebarIntroProfileOnlyHold);
+    sidebarDragOffset.current = sidebarIntroProfileOnlyHold;
+    setSidebarIntroVisible(true);
   }, [
     selectedTopBarFilter,
     sidebarDragY,
-    useNativeDriver,
-    sidebarIntroMaxDown,
-    SIDEBAR_DRAG_HIDE_BOTTOM_2,
-    isSidebarMeasurementReady,
+    sidebarIntroProfileOnlyHold,
+    isSidebarProfileHoldReady,
+  ]);
+
+  useEffect(() => {
+    if (selectedTopBarFilter === 'list') return;
+    if (
+      sidebarIntroDone.current ||
+      sidebarIntroAnimStarted.current ||
+      !sidebarIntroVisible ||
+      !isSidebarIntroAnimReady
+    ) {
+      return;
+    }
+    sidebarIntroAnimStarted.current = true;
+
+    let cancelled = false;
+    const scrollDuration = 900;
+    const waitBetweenParts = 1000;
+
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+
+      const measuredAllIcons = sidebarIntroTargetsRef.current.allIcons;
+      const measuredTopTwo = sidebarIntroTargetsRef.current.topTwo;
+      const measuredProfileHold = sidebarIntroTargetsRef.current.profileHold;
+
+      // Higher translateY = scrolled down more. profileY > topTwoY > allIconsY.
+      const allIconsY = Math.max(0, measuredAllIcons);
+      const topTwoY = Math.max(0, measuredTopTwo);
+      const profileY = Math.max(0, measuredProfileHold);
+
+      sidebarDragY.setValue(profileY);
+      sidebarDragOffset.current = profileY;
+
+      Animated.sequence([
+        Animated.timing(sidebarDragY, {
+          toValue: allIconsY,
+          duration: scrollDuration,
+          useNativeDriver: sidebarAnimUseNativeDriver,
+        }),
+        Animated.delay(waitBetweenParts),
+        Animated.timing(sidebarDragY, {
+          toValue: topTwoY,
+          duration: scrollDuration,
+          useNativeDriver: sidebarAnimUseNativeDriver,
+        }),
+      ]).start(({finished}) => {
+        if (cancelled || !finished) return;
+        sidebarIntroDone.current = true;
+        sidebarDragOffset.current = topTwoY;
+        setSidebarIntroFinished(true);
+      });
+    }, SIDEBAR_INTRO_START_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      sidebarDragY.stopAnimation();
+    };
+  }, [
+    selectedTopBarFilter,
+    sidebarDragY,
+    sidebarAnimUseNativeDriver,
+    isSidebarIntroAnimReady,
+    sidebarIntroVisible,
   ]);
 
   // Fetch listings from database (all users can see all published listings)
@@ -1583,30 +1807,15 @@ const TikTokFeedScreen = ({
         } else {
           setListingsError(null);
         }
-        console.log('✅ [TikTokFeedScreen] getListings returned:', result);
-
-        console.log('✅ Fetched listings result:', result);
-        console.log('📊 Result structure:', {
-          success: result.success,
-          listingsCount: result.listings?.length || 0,
-          hasListings: !!result.listings,
-        });
-
-        if (result.listings && result.listings.length > 0) {
-          console.log('📋 First listing details:', {
-            id: result.listings[0].id,
-            category: result.listings[0].category,
-            images: result.listings[0].listing_images?.length || 0,
-            videos: result.listings[0].listing_videos?.length || 0,
-            imageUrls:
-              result.listings[0].listing_images?.map(img => img.image_url) ||
-              [],
-          });
+        if (__DEV__) {
+          console.log(
+            '[TikTokFeedScreen] getListings:',
+            result?.listings?.length ?? 0,
+            'items',
+          );
         }
 
         if (result.success && result.listings) {
-          console.log(`Received ${result.listings.length} listings from API`);
-          console.log('Sample listing:', result.listings[0]);
 
           // Transform database listings to video format (include posts with image, video, or text only)
           const transformedListings = result.listings
@@ -1618,11 +1827,6 @@ const TikTokFeedScreen = ({
                 listing.description &&
                 String(listing.description).trim().length > 0;
               const include = hasMedia || hasDescription;
-              if (!include) {
-                console.log(
-                  `Skipping listing ${listing.id} - no images, videos, or description`,
-                );
-              }
               return include;
             })
             .map(listing => {
@@ -2066,20 +2270,33 @@ const TikTokFeedScreen = ({
             );
           }
 
-          console.log(
-            `Loaded ${displayListings.length} listings for category ${selectedCategory || 'all'}${
-              selectedTopBarFilter === 'video' ? ' (video filter)' : ''
-            }`,
+          let nextFollowStatusMap = {};
+          const viewerSubIdForPrefetch = resolveFollowUuid(
+            currentUser?.subscription_id,
+            currentUser?.owner_id,
+            currentUser?.id,
           );
-          console.log(
-            'Listings details:',
-            displayListings.map(l => ({
-              id: l.id,
-              category: l.category,
-              imagesCount: l.images.length,
-              hasVideo: !!l.video,
-            })),
-          );
+          if (
+            viewerSubIdForPrefetch &&
+            currentUser?.email &&
+            String(currentUser.email).trim() &&
+            displayListings.length > 0
+          ) {
+            const targetIds = [
+              ...new Set(
+                displayListings
+                  .map(resolveListingFollowTargetId)
+                  .filter(id => id && id !== viewerSubIdForPrefetch),
+              ),
+            ];
+            if (targetIds.length > 0) {
+              nextFollowStatusMap = await prefetchFollowStatusForTargets(
+                viewerSubIdForPrefetch,
+                targetIds,
+              );
+            }
+          }
+          setFollowStatusByTargetId(nextFollowStatusMap);
           setDbListings(displayListings);
           // Sync server liked state into local sets (add/remove) so yellow state stays consistent.
           if (currentUser?.id != null) {
@@ -2089,9 +2306,10 @@ const TikTokFeedScreen = ({
               displayListings.forEach(l => {
                 if (l?.id == null) return;
                 if (isPostVideo(l)) return;
-                if (l.liked === true) next.add(l.id);
-                else if (l.liked === false) next.delete(l.id);
+                if (l.liked === true) next.add(String(l.id));
+                else if (l.liked === false) next.delete(String(l.id));
               });
+              likedListingIdsRef.current = next;
               persistLikedListingIds(uid, next).catch(() => {});
               return next;
             });
@@ -2100,9 +2318,10 @@ const TikTokFeedScreen = ({
               displayListings.forEach(l => {
                 if (l?.id == null) return;
                 if (!isPostVideo(l)) return;
-                if (l.liked === true) next.add(l.id);
-                else if (l.liked === false) next.delete(l.id);
+                if (l.liked === true) next.add(String(l.id));
+                else if (l.liked === false) next.delete(String(l.id));
               });
+              likedPostIdsRef.current = next;
               persistLikedPostIds(uid, next).catch(() => {});
               return next;
             });
@@ -2113,11 +2332,13 @@ const TikTokFeedScreen = ({
             result,
           );
           setDbListings([]);
+          setFollowStatusByTargetId({});
         }
       } catch (error) {
         console.error('❌ Error fetching listings from database:', error);
         console.error('Error details:', error.message, error.stack);
         setDbListings([]);
+        setFollowStatusByTargetId({});
         setListingsError(error?.message || 'Failed to fetch listings');
       } finally {
         setLoadingListings(false);
@@ -2168,9 +2389,8 @@ const TikTokFeedScreen = ({
   const isItemLiked = item => {
     if (!currentUser?.id) return false;
     if (!item || item.id == null) return false;
-    return isPostVideo(item)
-      ? likedPostIds.has(item.id)
-      : likedListingIds.has(item.id);
+    const id = String(item.id);
+    return isPostVideo(item) ? likedPostIds.has(id) : likedListingIds.has(id);
   };
 
   /** Like / comment / share / user-search require sign-in — guests go to regular user registration. */
@@ -2191,17 +2411,19 @@ const TikTokFeedScreen = ({
     if (adLikePendingIdsRef.current.has(listingKey)) return;
     adLikePendingIdsRef.current.add(listingKey);
 
-    const isCurrentlyLiked = likedListingIds.has(listingId);
+    const isCurrentlyLiked = likedListingIdsRef.current.has(listingKey);
     const willBeLiked = !isCurrentlyLiked;
     const userId = currentUser?.id != null ? String(currentUser.id) : null;
 
-    setLikedListingIds(prev => {
-      const next = new Set(prev);
-      if (next.has(listingId)) next.delete(listingId);
-      else next.add(listingId);
-      if (userId) persistLikedListingIds(userId, next).catch(() => {});
-      return next;
-    });
+    const nextLikedIds = new Set(likedListingIdsRef.current);
+    if (isCurrentlyLiked) nextLikedIds.delete(listingKey);
+    else nextLikedIds.add(listingKey);
+    likedListingIdsRef.current = nextLikedIds;
+    setLikedListingIds(nextLikedIds);
+    setLikedUiRevision(r => r + 1);
+    if (userId) {
+      persistLikedListingIds(userId, nextLikedIds).catch(() => {});
+    }
     setUnseenLikedCount(prev => {
       const next = willBeLiked
         ? (Number(prev) || 0) + 1
@@ -2211,9 +2433,10 @@ const TikTokFeedScreen = ({
     });
     setDbListings(prev =>
       prev.map(l =>
-        l.id === listingId
+        String(l.id) === listingKey
           ? {
               ...l,
+              liked: willBeLiked,
               like_count: Math.max(
                 0,
                 (l.like_count || 0) + (willBeLiked ? 1 : -1),
@@ -2229,17 +2452,19 @@ const TikTokFeedScreen = ({
     }
 
     try {
-      if (willBeLiked) await likeListing(listingId, userId);
-      else await unlikeListing(listingId, userId);
+      if (willBeLiked) await likeListing(listingKey, userId);
+      else await unlikeListing(listingKey, userId);
     } catch (e) {
       console.warn('Like/unlike API failed:', e.message);
-      setLikedListingIds(prev => {
-        const next = new Set(prev);
-        if (willBeLiked) next.delete(listingId);
-        else next.add(listingId);
-        if (userId) persistLikedListingIds(userId, next).catch(() => {});
-        return next;
-      });
+      let revertedIds = new Set(likedListingIdsRef.current);
+      if (willBeLiked) revertedIds.delete(listingKey);
+      else revertedIds.add(listingKey);
+      likedListingIdsRef.current = revertedIds;
+      setLikedListingIds(revertedIds);
+      setLikedUiRevision(r => r + 1);
+      if (userId) {
+        persistLikedListingIds(userId, revertedIds).catch(() => {});
+      }
       setUnseenLikedCount(prev => {
         const next = willBeLiked
           ? Math.max(0, (Number(prev) || 0) - 1)
@@ -2249,9 +2474,10 @@ const TikTokFeedScreen = ({
       });
       setDbListings(prev =>
         prev.map(l =>
-          l.id === listingId
+          String(l.id) === listingKey
             ? {
                 ...l,
+                liked: !willBeLiked,
                 like_count: Math.max(
                   0,
                   (l.like_count || 0) + (willBeLiked ? -1 : 1),
@@ -2264,30 +2490,32 @@ const TikTokFeedScreen = ({
       adLikePendingIdsRef.current.delete(listingKey);
     }
   };
-  // Toggle post like (separate table/counter from ads)
+  // Toggle post like (separate table/counter from ads — not ad likes / favorites badge)
   const togglePostLiked = async listingId => {
     if (listingId == null) return;
     const listingKey = String(listingId);
     if (postLikePendingIdsRef.current.has(listingKey)) return;
     postLikePendingIdsRef.current.add(listingKey);
-    const isCurrentlyLiked = likedPostIds.has(listingId);
+
+    const isCurrentlyLiked = likedPostIdsRef.current.has(listingKey);
     const willBeLiked = !isCurrentlyLiked;
     const userId = currentUser?.id != null ? String(currentUser.id) : null;
 
-    // Optimistic UI update (toggle on/off)
-    setLikedPostIds(prev => {
-      const next = new Set(prev);
-      if (next.has(listingId)) next.delete(listingId);
-      else next.add(listingId);
-      if (userId) persistLikedPostIds(userId, next).catch(() => {});
-      return next;
-    });
-    // Optimistically update post_like_count
+    const nextLikedIds = new Set(likedPostIdsRef.current);
+    if (isCurrentlyLiked) nextLikedIds.delete(listingKey);
+    else nextLikedIds.add(listingKey);
+    likedPostIdsRef.current = nextLikedIds;
+    setLikedPostIds(nextLikedIds);
+    setLikedUiRevision(r => r + 1);
+    if (userId) {
+      persistLikedPostIds(userId, nextLikedIds).catch(() => {});
+    }
     setDbListings(prev =>
       prev.map(l =>
-        l.id === listingId
+        String(l.id) === listingKey
           ? {
               ...l,
+              liked: willBeLiked,
               post_like_count: Math.max(
                 0,
                 (l.post_like_count || 0) + (willBeLiked ? 1 : -1),
@@ -2303,23 +2531,25 @@ const TikTokFeedScreen = ({
     }
 
     try {
-      if (willBeLiked) await likePost(listingId, userId);
-      else await unlikePost(listingId, userId);
+      if (willBeLiked) await likePost(listingKey, userId);
+      else await unlikePost(listingKey, userId);
     } catch (e) {
       console.warn('Post like/unlike API failed:', e.message);
-      // Revert optimistic update if server call fails
-      setLikedPostIds(prev => {
-        const next = new Set(prev);
-        if (willBeLiked) next.delete(listingId);
-        else next.add(listingId);
-        if (userId) persistLikedPostIds(userId, next).catch(() => {});
-        return next;
-      });
+      const revertedIds = new Set(likedPostIdsRef.current);
+      if (willBeLiked) revertedIds.delete(listingKey);
+      else revertedIds.add(listingKey);
+      likedPostIdsRef.current = revertedIds;
+      setLikedPostIds(revertedIds);
+      setLikedUiRevision(r => r + 1);
+      if (userId) {
+        persistLikedPostIds(userId, revertedIds).catch(() => {});
+      }
       setDbListings(prev =>
         prev.map(l =>
-          l.id === listingId
+          String(l.id) === listingKey
             ? {
                 ...l,
+                liked: !willBeLiked,
                 post_like_count: Math.max(
                   0,
                   (l.post_like_count || 0) + (willBeLiked ? -1 : 1),
@@ -2337,9 +2567,10 @@ const TikTokFeedScreen = ({
     if (!item || item.id == null) return;
     if (!ensureSignedInOrRegister()) return;
     if (isPostVideo(item)) {
-      return togglePostLiked(item.id);
+      togglePostLiked(item.id);
+      return;
     }
-    return toggleAdLiked(item.id);
+    toggleAdLiked(item.id);
   };
   const closeCommentsSheet = () => {
     setShowCommentsSheet(false);
@@ -3306,15 +3537,6 @@ const TikTokFeedScreen = ({
     ? uploadedVideos
     : [...uploadedVideos, ...(includeMockWhenNoCategory ? allMockVideos : [])];
 
-  console.log(
-    `📊 Total videos to display: ${videos.length} (${uploadedVideos.length} from DB${selectedCategory ? '' : `, ${allMockVideos.length} mock`})`,
-  );
-  if (selectedCategory) {
-    console.log(
-      `📂 Showing ONLY database listings for category: ${selectedCategory}`,
-    );
-  }
-
   // Record a view when user lands on a DB listing (once per listing per session)
   useEffect(() => {
     const item = videos[currentIndex];
@@ -3328,52 +3550,129 @@ const TikTokFeedScreen = ({
     }
   }, [currentIndex, videos]);
 
-  // Define scroll handlers and panResponder before any early return (hooks must run every render)
-  const scrollToIndex = index => {
-    if (index >= 0 && index < videos.length && scrollViewRef.current) {
-      const targetY = index * screenHeight;
-      scrollViewRef.current.scrollTo({
-        y: targetY,
-        animated: true,
-      });
-      setCurrentIndex(index);
-    }
-  };
-
-  const handleNext = () => {
-    if (currentIndex < videos.length - 1) {
-      scrollToIndex(currentIndex + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      scrollToIndex(currentIndex - 1);
-    }
-  };
   useEffect(() => {
-    overlayBaseY.setValue(currentIndex * screenHeight);
-  }, [currentIndex, screenHeight, overlayBaseY]);
+    if (videos.length === 0) return;
+    for (let offset = 1; offset <= FEED_PRELOAD_BELOW_COUNT; offset++) {
+      const nextIndex = currentIndex + offset;
+      if (nextIndex >= videos.length) break;
+      resolveFeedItemMediaUris(videos[nextIndex]).forEach(uri => {
+        Image.prefetch(uri).catch(() => {});
+      });
+    }
+  }, [currentIndex, videos]);
 
-  const SWIPE_THRESHOLD = 40;
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          const {dy} = gestureState;
-          return Math.abs(dy) > 15;
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          const {dy} = gestureState;
-          if (dy < -SWIPE_THRESHOLD) {
-            handleNext();
-          } else if (dy > SWIPE_THRESHOLD) {
-            handlePrevious();
-          }
-        },
-      }),
-    [handleNext, handlePrevious],
+  // Define feed scroll handlers before any early return (hooks must run every render)
+  const syncFeedIndexFromOffset = useCallback(
+    y => {
+      if (videos.length === 0) return;
+      const nextIndex = Math.max(
+        0,
+        Math.min(videos.length - 1, Math.round(y / feedPageHeight)),
+      );
+      if (nextIndex === currentIndexRef.current) return;
+      currentIndexRef.current = nextIndex;
+      setCurrentIndex(nextIndex);
+    },
+    [feedPageHeight, videos.length],
+  );
+
+  const scrollToIndex = useCallback(
+    (index, animated = true) => {
+      const clamped = Math.max(0, Math.min(index, videos.length - 1));
+      if (!feedListRef.current || videos.length === 0) return;
+      const targetY = clamped * feedPageHeight;
+      feedListRef.current.scrollToOffset({offset: targetY, animated});
+      currentIndexRef.current = clamped;
+      setCurrentIndex(clamped);
+    },
+    [videos.length, feedPageHeight],
+  );
+
+  const handleNext = useCallback(() => {
+    if (currentIndexRef.current < videos.length - 1) {
+      scrollToIndex(currentIndexRef.current + 1);
+    }
+  }, [scrollToIndex, videos.length]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndexRef.current > 0) {
+      scrollToIndex(currentIndexRef.current - 1);
+    }
+  }, [scrollToIndex]);
+
+  useEffect(() => {
+    if (!feedListRef.current || videos.length === 0) return;
+    const targetY = currentIndexRef.current * feedPageHeight;
+    feedListRef.current.scrollToOffset({offset: targetY, animated: false});
+  }, [feedPageHeight, videos.length]);
+
+  useEffect(() => {
+    setScrollAnchorIndex(0);
+  }, [selectedCategory, videos.length]);
+
+  useEffect(() => {
+    if (videos.length === 0) {
+      currentIndexRef.current = 0;
+      setCurrentIndex(0);
+      return;
+    }
+    if (currentIndexRef.current >= videos.length) {
+      scrollToIndex(videos.length - 1, false);
+    }
+  }, [videos.length, scrollToIndex]);
+
+  const onFeedScroll = useCallback(
+    event => {
+      const y = event?.nativeEvent?.contentOffset?.y ?? 0;
+      const idx = Math.max(
+        0,
+        Math.min(videos.length - 1, Math.round(y / feedPageHeight)),
+      );
+      setScrollAnchorIndex(prev => (prev === idx ? prev : idx));
+    },
+    [feedPageHeight, videos.length],
+  );
+
+  const handleFeedScrollSettled = useCallback(
+    event => {
+      const y = event?.nativeEvent?.contentOffset?.y ?? 0;
+      syncFeedIndexFromOffset(y);
+      const idx = Math.max(
+        0,
+        Math.min(videos.length - 1, Math.round(y / feedPageHeight)),
+      );
+      setScrollAnchorIndex(idx);
+      if (Platform.OS !== 'web') return;
+      const snappedY = Math.round(y / feedPageHeight) * feedPageHeight;
+      if (Math.abs(y - snappedY) > 2 && feedListRef.current) {
+        feedListRef.current.scrollToOffset({offset: snappedY, animated: true});
+      }
+    },
+    [syncFeedIndexFromOffset, feedPageHeight, videos.length],
+  );
+
+  const getFeedItemLayout = useCallback(
+    (_, index) => ({
+      length: feedPageHeight,
+      offset: feedPageHeight * index,
+      index,
+    }),
+    [feedPageHeight],
+  );
+
+  const feedKeyExtractor = useCallback(item => String(item.id), []);
+
+  const shouldRenderFeedChrome = useCallback(
+    index => {
+      if (videos.length === 0) return false;
+      const inPreloadWindow = anchor =>
+        index >= anchor - FEED_PRELOAD_ABOVE_COUNT &&
+        index <= anchor + FEED_PRELOAD_BELOW_COUNT;
+      return (
+        inPreloadWindow(currentIndex) || inPreloadWindow(scrollAnchorIndex)
+      );
+    },
+    [currentIndex, scrollAnchorIndex, videos.length],
   );
 
   const BOTTOM_SHEET_DRAG_CLOSE_THRESHOLD = 56;
@@ -3430,32 +3729,114 @@ const TikTokFeedScreen = ({
   const SIDEBAR_DRAG_MAX_DOWN = sidebarDragMaxDown;
   // When all icons are visible (top), don't allow scrolling up past that
   const SIDEBAR_DRAG_MAX_UP = 0;
+
+  const lockFeedScrollForSidebar = useCallback(() => {
+    if (videos.length === 0 || sidebarFeedScrollLockedRef.current) return;
+    sidebarFeedScrollLockedRef.current = true;
+    feedListRef.current?.setNativeProps?.({scrollEnabled: false});
+  }, [videos.length]);
+
+  const unlockFeedScrollForSidebar = useCallback(() => {
+    sidebarPanActiveRef.current = false;
+    if (!sidebarFeedScrollLockedRef.current) {
+      sidebarPanDidDragRef.current = false;
+      return;
+    }
+    sidebarFeedScrollLockedRef.current = false;
+    if (videos.length > 0) {
+      feedListRef.current?.setNativeProps?.({scrollEnabled: true});
+    }
+    requestAnimationFrame(() => {
+      sidebarPanDidDragRef.current = false;
+    });
+  }, [videos.length]);
+
+  const handleSidebarTouchEnd = useCallback(() => {
+    if (sidebarPanActiveRef.current) return;
+    if (sidebarPendingTapRef.current && !sidebarPanDidDragRef.current) {
+      flushSidebarPendingTapRef.current();
+    }
+    unlockFeedScrollForSidebar();
+  }, [unlockFeedScrollForSidebar]);
+
   const sidebarPanResponder = useMemo(
-    () =>
-      PanResponder.create({
+    () => {
+      const dragThreshold = Platform.OS === 'web' ? 5 : 4;
+      const shouldSidebarDrag = gestureState => {
+        const {dy, dx} = gestureState;
+        return (
+          Math.abs(dy) > dragThreshold &&
+          Math.abs(dy) > Math.abs(dx) * 0.45
+        );
+      };
+      const clampSidebarDragY = dy =>
+        Math.max(
+          SIDEBAR_DRAG_MAX_UP,
+          Math.min(SIDEBAR_DRAG_MAX_DOWN, sidebarDragOffset.current + dy),
+        );
+      const noteSidebarDragMove = gestureState => {
+        if (!shouldSidebarDrag(gestureState)) return;
+        sidebarPanDidDragRef.current = true;
+        sidebarPendingTapRef.current = null;
+      };
+
+      return PanResponder.create({
+        // Only capture after vertical movement — taps on + / profile / filters still work.
         onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          const {dy} = gestureState;
-          return Math.abs(dy) > 8;
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          shouldSidebarDrag(gestureState),
+        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+          shouldSidebarDrag(gestureState),
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => sidebarPanDidDragRef.current,
+        onPanResponderGrant: () => {
+          sidebarPanActiveRef.current = true;
+          sidebarPanDidDragRef.current = false;
+          lockFeedScrollForSidebar();
+          sidebarDragY.stopAnimation(value => {
+            const base = Number.isFinite(value)
+              ? value
+              : sidebarDragOffset.current;
+            sidebarDragOffset.current = base;
+            sidebarDragY.setValue(base);
+          });
+          if (!sidebarIntroDone.current) {
+            sidebarIntroDone.current = true;
+            setSidebarIntroFinished(true);
+          }
         },
         onPanResponderMove: (_, gestureState) => {
-          const {dy} = gestureState;
-          const next = Math.max(
-            SIDEBAR_DRAG_MAX_UP,
-            Math.min(SIDEBAR_DRAG_MAX_DOWN, sidebarDragOffset.current + dy),
-          );
-          sidebarDragY.setValue(next);
+          noteSidebarDragMove(gestureState);
+          if (sidebarPanDidDragRef.current) {
+            sidebarDragY.setValue(clampSidebarDragY(gestureState.dy));
+          }
         },
         onPanResponderRelease: (_, gestureState) => {
-          const {dy} = gestureState;
-          const next = Math.max(
-            SIDEBAR_DRAG_MAX_UP,
-            Math.min(SIDEBAR_DRAG_MAX_DOWN, sidebarDragOffset.current + dy),
-          );
+          noteSidebarDragMove(gestureState);
+          const next = clampSidebarDragY(gestureState.dy);
           sidebarDragOffset.current = next;
+          sidebarDragY.setValue(next);
+          if (!sidebarPanDidDragRef.current) {
+            flushSidebarPendingTapRef.current();
+          }
+          unlockFeedScrollForSidebar();
         },
-      }),
-    [sidebarDragY],
+        onPanResponderTerminate: (_, gestureState) => {
+          noteSidebarDragMove(gestureState);
+          const next = clampSidebarDragY(gestureState.dy);
+          sidebarDragOffset.current = next;
+          sidebarDragY.setValue(next);
+          unlockFeedScrollForSidebar();
+        },
+      });
+    },
+    [
+      sidebarDragY,
+      SIDEBAR_DRAG_MAX_DOWN,
+      lockFeedScrollForSidebar,
+      unlockFeedScrollForSidebar,
+    ],
   );
 
   const currentVideo = videos[currentIndex] || null;
@@ -3465,26 +3846,41 @@ const TikTokFeedScreen = ({
     currentUser?.owner_id,
     currentUser?.id,
   );
-  const sidebarTargetSubId = resolveFollowUuid(
-    currentVideo?.subscription_id,
-    currentVideo?.owner_id,
-    currentVideo?.creator_subscription_id,
-    currentVideo?.id,
-  );
   const sidebarViewerEmail = currentUser?.email
     ? String(currentUser.email).trim().toLowerCase()
     : '';
-  const sidebarTargetEmail = currentVideo?.creator_email
-    ? String(currentVideo.creator_email).trim().toLowerCase()
-    : '';
-  const sidebarIsSelf =
-    (!!sidebarViewerSubId &&
-      !!sidebarTargetSubId &&
-      String(sidebarViewerSubId) === String(sidebarTargetSubId)) ||
-    (!!sidebarViewerEmail &&
-      !!sidebarTargetEmail &&
-      sidebarViewerEmail === sidebarTargetEmail);
   const isGuest = !currentUser || !String(currentUser?.email || '').trim();
+  const sidebarTargetSubId = resolveListingFollowTargetId(currentVideo);
+
+  const shouldShowFollowPlusForVideo = useCallback(
+    video => {
+      if (!video) return false;
+      const targetSubId = resolveListingFollowTargetId(video);
+      const targetEmail = video?.creator_email
+        ? String(video.creator_email).trim().toLowerCase()
+        : '';
+      const isSelf =
+        (!!sidebarViewerSubId &&
+          !!targetSubId &&
+          String(sidebarViewerSubId) === String(targetSubId)) ||
+        (!!sidebarViewerEmail &&
+          !!targetEmail &&
+          sidebarViewerEmail === targetEmail);
+      if (isSelf) return false;
+      if (!targetSubId && !targetEmail) return false;
+      if (isGuest) return true;
+      if (!targetSubId) return false;
+      const followRow = followStatusByTargetId[String(targetSubId)];
+      if (!followRow) return false;
+      return !followRow.is_following && !followRow.has_pending_request;
+    },
+    [
+      sidebarViewerSubId,
+      sidebarViewerEmail,
+      isGuest,
+      followStatusByTargetId,
+    ],
+  );
   const tikTokSheetListingCategoryNum =
     selectedCategory != null && selectedCategory !== ''
       ? parseInt(String(selectedCategory).trim(), 10)
@@ -3508,67 +3904,45 @@ const TikTokFeedScreen = ({
       (ok && regularUserAdListingCategoryIds.has(n))
     );
   }, [currentUser?.subscription_type, tikTokSheetListingCategoryNum]);
-  const sidebarShowFollowPlus =
-    !!currentVideo &&
-    !sidebarIsSelf &&
-    (!!sidebarTargetSubId || !!sidebarTargetEmail) &&
-    (isGuest
-      ? true
-      : sidebarFollowStatus.resolved &&
-        (!!sidebarViewerSubId || !!sidebarViewerEmail) &&
-        !sidebarFollowStatus.isFollowing &&
-        !sidebarFollowStatus.hasPendingRequest);
-
-  useLayoutEffect(() => {
-    if (
-      !sidebarViewerSubId ||
-      !sidebarTargetSubId ||
-      sidebarViewerSubId === sidebarTargetSubId
-    ) {
-      setSidebarFollowStatus({
-        isFollowing: false,
-        hasPendingRequest: false,
-        resolved: true,
-      });
-    } else {
-      setSidebarFollowStatus({
-        isFollowing: false,
-        hasPendingRequest: false,
-        resolved: false,
-      });
-    }
-  }, [sidebarViewerSubId, sidebarTargetSubId, currentIndex]);
 
   useEffect(() => {
     let cancelled = false;
     if (
+      isGuest ||
       !sidebarViewerSubId ||
       !sidebarTargetSubId ||
-      sidebarViewerSubId === sidebarTargetSubId
+      sidebarViewerSubId === sidebarTargetSubId ||
+      followStatusByTargetId[String(sidebarTargetSubId)] != null
     ) {
       return undefined;
     }
     getFollowStatus(sidebarViewerSubId, sidebarTargetSubId)
       .then(data => {
         if (cancelled) return;
-        setSidebarFollowStatus({
-          isFollowing: !!data?.is_following,
-          hasPendingRequest: !!data?.has_pending_request,
-          resolved: true,
-        });
+        setFollowStatusByTargetId(prev => ({
+          ...prev,
+          [String(sidebarTargetSubId)]: {
+            is_following: !!data?.is_following,
+            has_pending_request: !!data?.has_pending_request,
+          },
+        }));
       })
       .catch(() => {
         if (cancelled) return;
-        setSidebarFollowStatus({
-          isFollowing: false,
-          hasPendingRequest: false,
-          resolved: true,
-        });
+        setFollowStatusByTargetId(prev => ({
+          ...prev,
+          [String(sidebarTargetSubId)]: defaultFollowStatusEntry(),
+        }));
       });
     return () => {
       cancelled = true;
     };
-  }, [sidebarViewerSubId, sidebarTargetSubId, currentIndex]);
+  }, [
+    isGuest,
+    sidebarViewerSubId,
+    sidebarTargetSubId,
+    followStatusByTargetId,
+  ]);
 
   const resolveFollowUuidFromEmail = async email => {
     const normalized = email ? String(email).trim().toLowerCase() : '';
@@ -3587,57 +3961,131 @@ const TikTokFeedScreen = ({
     }
   };
 
-  const handleSidebarFollowRequest = async () => {
-    if (sidebarSendingFollow) return;
-    if (!currentUser || !String(currentUser?.email || '').trim()) {
-      if (typeof onOpenUserRegistration === 'function') {
-        onOpenUserRegistration();
+  const handleSidebarFollowRequest = useCallback(
+    async video => {
+      if (sidebarSendingFollow) return;
+      if (!video) return;
+      if (!currentUser || !String(currentUser?.email || '').trim()) {
+        if (typeof onOpenUserRegistration === 'function') {
+          onOpenUserRegistration();
+        }
+        return;
       }
+
+      const targetSubId = resolveListingFollowTargetId(video);
+      const targetEmail = video?.creator_email
+        ? String(video.creator_email).trim().toLowerCase()
+        : '';
+      const optimisticTargetKey = targetSubId ? String(targetSubId) : null;
+
+      if (optimisticTargetKey) {
+        setFollowStatusByTargetId(prev => ({
+          ...prev,
+          [optimisticTargetKey]: {
+            is_following: false,
+            has_pending_request: true,
+          },
+        }));
+      }
+
+      setSidebarSendingFollow(true);
+      try {
+        let requesterId = sidebarViewerSubId;
+        let targetId = targetSubId;
+
+        if (!requesterId) {
+          requesterId = await resolveFollowUuidFromEmail(sidebarViewerEmail);
+        }
+        if (!requesterId && sidebarViewerEmail) {
+          const reg = await registerRegularUser({
+            email: sidebarViewerEmail,
+            name: currentUser?.name || null,
+            phone: currentUser?.phone || null,
+            profilePictureUrl:
+              currentUser?.profile_picture_url ||
+              currentUser?.company_logo_url ||
+              null,
+          });
+          const newId = reg?.subscription?.id || null;
+          if (newId) {
+            requesterId = toSubscriptionId(newId) || null;
+          }
+        }
+
+        if (!targetId) {
+          targetId = await resolveFollowUuidFromEmail(targetEmail);
+        }
+        if (!requesterId || !targetId || requesterId === targetId) {
+          throw new Error('missing follow ids');
+        }
+
+        const result = await sendFollowRequest(requesterId, targetId);
+        const resolvedTargetKey = String(targetId);
+        setFollowStatusByTargetId(prev => ({
+          ...prev,
+          [resolvedTargetKey]: {
+            is_following: !!result?.already_following,
+            has_pending_request: !result?.already_following,
+          },
+        }));
+      } catch (err) {
+        if (optimisticTargetKey) {
+          setFollowStatusByTargetId(prev => ({
+            ...prev,
+            [optimisticTargetKey]: defaultFollowStatusEntry(),
+          }));
+        }
+        if (__DEV__) {
+          console.warn(
+            '[TikTokFeedScreen] follow request failed:',
+            err?.message || err,
+          );
+        }
+      } finally {
+        setSidebarSendingFollow(false);
+      }
+    },
+    [
+      sidebarSendingFollow,
+      currentUser,
+      sidebarViewerSubId,
+      sidebarViewerEmail,
+      onOpenUserRegistration,
+    ],
+  );
+
+  const markSidebarPendingTap = useCallback(tap => {
+    sidebarPendingTapRef.current = tap;
+  }, []);
+
+  const flushSidebarPendingTap = useCallback(() => {
+    const tap = sidebarPendingTapRef.current;
+    sidebarPendingTapRef.current = null;
+    if (!tap || sidebarPanDidDragRef.current) return;
+    if (videos.length === 0 && !loadingListings) return;
+
+    const video = activeSidebarVideoRef.current;
+    if (tap.type === 'profile') {
+      if (!video) {
+        onOpenUserProfile?.(null);
+        return;
+      }
+      onOpenUserProfile?.({...video, _fromTikTokPost: true});
       return;
     }
-    setSidebarSendingFollow(true);
-    try {
-      let requesterId = sidebarViewerSubId;
-      let targetId = sidebarTargetSubId;
-
-      if (!requesterId) {
-        requesterId = await resolveFollowUuidFromEmail(sidebarViewerEmail);
-      }
-      // Auto-create a backend record for regular users that registered locally
-      // (their currentUser.id is a fake `user-<ts>` value, so no UUID exists yet).
-      if (!requesterId && sidebarViewerEmail) {
-        const reg = await registerRegularUser({
-          email: sidebarViewerEmail,
-          name: currentUser?.name || null,
-          phone: currentUser?.phone || null,
-          profilePictureUrl:
-            currentUser?.profile_picture_url ||
-            currentUser?.company_logo_url ||
-            null,
-        });
-        const newId = reg?.subscription?.id || null;
-        if (newId) {
-          requesterId = toSubscriptionId(newId) || null;
-        }
-      }
-
-      if (!targetId) {
-        targetId = await resolveFollowUuidFromEmail(sidebarTargetEmail);
-      }
-      if (!requesterId || !targetId || requesterId === targetId) return;
-
-      await sendFollowRequest(requesterId, targetId);
-      setSidebarFollowStatus(prev => ({
-        ...prev,
-        hasPendingRequest: true,
-        resolved: true,
-      }));
-    } catch (_) {
-      // keep sidebar interaction silent to match feed behavior
-    } finally {
-      setSidebarSendingFollow(false);
+    if (tap.type === 'filter' && tap.id) {
+      setSelectedSidebarFilter(prev => (prev === tap.id ? null : tap.id));
     }
-  };
+  }, [
+    videos.length,
+    loadingListings,
+    handleSidebarFollowRequest,
+    onOpenUserProfile,
+  ]);
+
+  useEffect(() => {
+    flushSidebarPendingTapRef.current = flushSidebarPendingTap;
+  }, [flushSidebarPendingTap]);
 
   const bottomBarSource = isLandCategory
     ? require('../assets/lands/Frame 2 (2).png')
@@ -3672,7 +4120,198 @@ const TikTokFeedScreen = ({
       hasPostMediaMarker
     );
   }
-  const isPostListing = isPostVideo(currentVideo);
+  const getVideoOverlayMeta = video => {
+    if (!video) {
+      return {
+        isPostListing: false,
+        isCompanyListing: false,
+        isCompanyLandListing: false,
+        showBrokerStylePropertyOverlay: false,
+        isBnbListing: false,
+        isPartnersListing: false,
+        isBnbHotDeal: false,
+        brokerPurposeText: 'למכירה',
+        brokerLocationText: 'מיקום לא זמין',
+        companyLandLocationText: 'מיקום לא זמין',
+        brokerPriceText: '₪0',
+        partnersPurposeText: 'מחפש שותף',
+        partnersDisplayName: 'משתמש',
+        bnbTypeTagText: 'וילה',
+        bnbTitleText: 'ללא תיאור',
+        companyPrimaryAddress: '',
+        companySecondaryAddress: '',
+        companyBuildingsCount: 1,
+        companyFloorsCount: 0,
+        companyApartmentsCount: 0,
+      };
+    }
+    const isPostListing = isPostVideo(video);
+    const isCompanyListing =
+      !isPostListing &&
+      String(video.subscription_type || '').toLowerCase() ===
+        subscriptionTypes.company;
+    const isCompanyLandListing =
+      isCompanyListing && Number(video?.category) === 7;
+    const isBrokerListing =
+      !isPostListing &&
+      String(video.subscription_type || '').toLowerCase() ===
+        subscriptionTypes.broker;
+    const isUserPropertyListing =
+      !isPostListing &&
+      String(video.subscription_type || '').toLowerCase() ===
+        subscriptionTypes.user;
+    const showBrokerStylePropertyOverlay =
+      isBrokerListing || isUserPropertyListing;
+    const isBnbListing = !isPostListing && Number(video?.category) === 5;
+    const isPartnersListing = !isPostListing && Number(video?.category) === 3;
+    const isBnbHotDeal =
+      video?.hotDeal === true ||
+      video?.hotDeal === 'true' ||
+      video?.hot_deal === true ||
+      video?.hot_deal === 'true' ||
+      video?.hot_deal === 't' ||
+      video?.hot_deal === 1;
+    const brokerPurposeText = String(
+      video?.purpose || video?.searchPurpose || 'למכירה',
+    ).trim();
+    const brokerLocationText = String(
+      video?.address || 'מיקום לא זמין',
+    ).trim();
+    const companyLandLocationText = String(
+      video?.location ||
+        video?.land_address ||
+        video?.address ||
+        'מיקום לא זמין',
+    ).trim();
+    const brokerPriceText = (() => {
+      const explicit = String(video?.price || '').trim();
+      if (explicit) return explicit;
+      const raw = Number(
+        video?.rawPrice ??
+          video?.price_raw ??
+          video?.price_value ??
+          video?.price ??
+          0,
+      );
+      if (Number.isFinite(raw) && raw > 0) return `₪${raw.toLocaleString()}`;
+      return '₪0';
+    })();
+    const partnersPurposeText = String(
+      video?.searchPurpose || 'מחפש שותף',
+    ).trim();
+    const partnersDisplayName = String(
+      video?.creator_name ||
+        video?.creatorName ||
+        video?.creator_full_name ||
+        video?.full_name ||
+        video?.name ||
+        'משתמש',
+    ).trim();
+    const bnbTypeTagText = (() => {
+      const map = {
+        room: 'חדר',
+        housing_unit: 'יחידת דיור',
+        house: 'בית',
+        'b&b': 'צימר',
+        bnb: 'צימר',
+        holiday_apartment: 'דירת נופש',
+        villa: 'וילה',
+        special: 'מיוחדים',
+        rural: 'כפרי',
+        experiences: 'חוויות',
+        landscapes: 'נופים',
+        nature: 'טבע',
+        desert: 'מדבר',
+        on_the_beach: 'על הים',
+        with_pool: 'עם בריכה',
+        apartment: 'דירה',
+        private: 'בית פרטי',
+        penthouse: 'פנטהאוז',
+      };
+      const candidates = [
+        video?.property_type,
+        video?.apartmentTypeId,
+        video?.apartment_type,
+        video?.preferred_apartment_type,
+        video?.bnbType,
+        video?.apartmentType,
+      ];
+      for (const candidate of candidates) {
+        const raw = String(candidate || '')
+          .trim()
+          .toLowerCase();
+        if (map[raw]) return map[raw];
+      }
+      return 'וילה';
+    })();
+    const bnbTitleText = String(video?.description || 'ללא תיאור').trim();
+    const companyAddressLines = isCompanyListing
+      ? String(video?.location || video?.address || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+      : [];
+    const companyPrimaryAddress = companyAddressLines[0] || '';
+    const companySecondaryAddress = companyAddressLines.slice(1).join(', ');
+    const companyBuildingsCount = Math.max(
+      1,
+      Number(video?.companyBuildingCount) || 1,
+    );
+    const companyFloorsCount = Math.max(
+      0,
+      Number(video?.companyFloorCount) || 0,
+    );
+    const companyApartmentsCount = Math.max(
+      0,
+      Number(video?.companyApartmentCount) || 0,
+    );
+    return {
+      isPostListing,
+      isCompanyListing,
+      isCompanyLandListing,
+      showBrokerStylePropertyOverlay,
+      isBnbListing,
+      isPartnersListing,
+      isBnbHotDeal,
+      brokerPurposeText,
+      brokerLocationText,
+      companyLandLocationText,
+      brokerPriceText,
+      partnersPurposeText,
+      partnersDisplayName,
+      bnbTypeTagText,
+      bnbTitleText,
+      companyPrimaryAddress,
+      companySecondaryAddress,
+      companyBuildingsCount,
+      companyFloorsCount,
+      companyApartmentsCount,
+    };
+  };
+
+  const {
+    isPostListing,
+    isCompanyListing,
+    isCompanyLandListing,
+    showBrokerStylePropertyOverlay,
+    isBnbListing,
+    isPartnersListing,
+    isBnbHotDeal,
+    brokerPurposeText,
+    brokerLocationText,
+    companyLandLocationText,
+    brokerPriceText,
+    partnersPurposeText,
+    partnersDisplayName,
+    bnbTypeTagText,
+    bnbTitleText,
+    companyPrimaryAddress,
+    companySecondaryAddress,
+    companyBuildingsCount,
+    companyFloorsCount,
+    companyApartmentsCount,
+  } = getVideoOverlayMeta(currentVideo);
+
   const currentComments = (commentsByPost[activeCommentsPostId] || []).map(
     normalizePostComment,
   );
@@ -3686,136 +4325,6 @@ const TikTokFeedScreen = ({
       : 0;
     return Math.max(serverCount, loadedCount);
   };
-  const isCompanyListing =
-    currentVideo &&
-    !isPostVideo(currentVideo) &&
-    String(currentVideo.subscription_type || '').toLowerCase() ===
-      subscriptionTypes.company;
-  /** קרקעות (7) + company — Figma 1:171137 (purpose, price, location; not building stats). */
-  const isCompanyLandListing =
-    isCompanyListing && Number(currentVideo?.category) === 7;
-  const isBrokerListing =
-    currentVideo &&
-    !isPostVideo(currentVideo) &&
-    String(currentVideo.subscription_type || '').toLowerCase() ===
-      subscriptionTypes.broker;
-  const isUserPropertyListing =
-    currentVideo &&
-    !isPostVideo(currentVideo) &&
-    String(currentVideo.subscription_type || '').toLowerCase() ===
-      subscriptionTypes.user;
-  /** Same bottom card as broker: purpose + ₪price + address (not title + צפיות/לייקים). */
-  const showBrokerStylePropertyOverlay =
-    isBrokerListing || isUserPropertyListing;
-  const isBnbListing =
-    currentVideo &&
-    !isPostVideo(currentVideo) &&
-    Number(currentVideo?.category) === 5;
-  const isPartnersListing =
-    currentVideo &&
-    !isPostVideo(currentVideo) &&
-    Number(currentVideo?.category) === 3;
-  const isBnbHotDeal =
-    currentVideo?.hotDeal === true ||
-    currentVideo?.hotDeal === 'true' ||
-    currentVideo?.hot_deal === true ||
-    currentVideo?.hot_deal === 'true' ||
-    currentVideo?.hot_deal === 't' ||
-    currentVideo?.hot_deal === 1;
-  const brokerPurposeText = String(
-    currentVideo?.purpose || currentVideo?.searchPurpose || 'למכירה',
-  ).trim();
-  const brokerLocationText = String(
-    currentVideo?.address || 'מיקום לא זמין',
-  ).trim();
-  const companyLandLocationText = String(
-    currentVideo?.location ||
-      currentVideo?.land_address ||
-      currentVideo?.address ||
-      'מיקום לא זמין',
-  ).trim();
-  const brokerPriceText = (() => {
-    const explicit = String(currentVideo?.price || '').trim();
-    if (explicit) return explicit;
-    const raw = Number(
-      currentVideo?.rawPrice ??
-        currentVideo?.price_raw ??
-        currentVideo?.price_value ??
-        currentVideo?.price ??
-        0,
-    );
-    if (Number.isFinite(raw) && raw > 0) return `₪${raw.toLocaleString()}`;
-    return '₪0';
-  })();
-  const partnersPurposeText = String(
-    currentVideo?.searchPurpose || 'מחפש שותף',
-  ).trim();
-  const partnersDisplayName = String(
-    currentVideo?.creator_name ||
-      currentVideo?.creatorName ||
-      currentVideo?.creator_full_name ||
-      currentVideo?.full_name ||
-      currentVideo?.name ||
-      'משתמש',
-  ).trim();
-  const bnbTypeTagText = (() => {
-    const map = {
-      room: 'חדר',
-      housing_unit: 'יחידת דיור',
-      house: 'בית',
-      'b&b': 'צימר',
-      bnb: 'צימר',
-      holiday_apartment: 'דירת נופש',
-      villa: 'וילה',
-      special: 'מיוחדים',
-      rural: 'כפרי',
-      experiences: 'חוויות',
-      landscapes: 'נופים',
-      nature: 'טבע',
-      desert: 'מדבר',
-      on_the_beach: 'על הים',
-      with_pool: 'עם בריכה',
-      apartment: 'דירה',
-      private: 'בית פרטי',
-      penthouse: 'פנטהאוז',
-    };
-    const candidates = [
-      currentVideo?.property_type,
-      currentVideo?.apartmentTypeId,
-      currentVideo?.apartment_type,
-      currentVideo?.preferred_apartment_type,
-      currentVideo?.bnbType,
-      currentVideo?.apartmentType,
-    ];
-    for (const candidate of candidates) {
-      const raw = String(candidate || '')
-        .trim()
-        .toLowerCase();
-      if (map[raw]) return map[raw];
-    }
-    return 'וילה';
-  })();
-  const bnbTitleText = String(currentVideo?.description || 'ללא תיאור').trim();
-  const companyAddressLines = isCompanyListing
-    ? String(currentVideo?.location || currentVideo?.address || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-    : [];
-  const companyPrimaryAddress = companyAddressLines[0] || '';
-  const companySecondaryAddress = companyAddressLines.slice(1).join(', ');
-  const companyBuildingsCount = Math.max(
-    1,
-    Number(currentVideo?.companyBuildingCount) || 1,
-  );
-  const companyFloorsCount = Math.max(
-    0,
-    Number(currentVideo?.companyFloorCount) || 0,
-  );
-  const companyApartmentsCount = Math.max(
-    0,
-    Number(currentVideo?.companyApartmentCount) || 0,
-  );
   const userSearchSourceListings =
     showUserSearchPanel && allUsersSearchListings.length > 0
       ? allUsersSearchListings
@@ -4127,18 +4636,723 @@ const TikTokFeedScreen = ({
     );
   };
 
-  if (showInitialLoading) {
+  const feedPageDimensions = {
+    height: feedPageHeight,
+    minHeight: feedPageHeight,
+    maxHeight: feedPageHeight,
+  };
+
+  const renderFeedPageSidebarContent = (
+    video,
+    pageProfileUrl,
+    isActivePage,
+    sidebarDragMode = false,
+  ) => (
+    <>
+      <View
+        style={[styles.sidebarProfileWrap, feedIsEmpty && styles.chromeDisabledDim]}>
+        {sidebarDragMode ? (
+          <View
+            style={styles.sidebarProfileAvatarBtn}
+            onTouchStart={() => markSidebarPendingTap({type: 'profile'})}
+            onLayout={
+              isActivePage
+                ? event => {
+                    const h = event?.nativeEvent?.layout?.height;
+                    if (h > 0) setSidebarProfileHeight(h);
+                  }
+                : undefined
+            }>
+            <ProfileAvatar uri={pageProfileUrl} size={60} />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.sidebarProfileAvatarBtn}
+            onPress={() => {
+              if (feedIsEmpty) return;
+              if (!video) return onOpenUserProfile?.(null);
+              onOpenUserProfile?.({...video, _fromTikTokPost: true});
+            }}
+            activeOpacity={feedIsEmpty ? 1 : 0.8}
+            disabled={feedIsEmpty}
+            onLayout={
+              isActivePage
+                ? event => {
+                    const h = event?.nativeEvent?.layout?.height;
+                    if (h > 0) setSidebarProfileHeight(h);
+                  }
+                : undefined
+            }>
+            <ProfileAvatar uri={pageProfileUrl} size={60} />
+          </TouchableOpacity>
+        )}
+        {isActivePage && shouldShowFollowPlusForVideo(video) ? (
+          <TouchableOpacity
+            style={styles.sidebarFollowBadge}
+            onPress={() => handleSidebarFollowRequest(video)}
+            disabled={feedIsEmpty || sidebarSendingFollow}
+            activeOpacity={0.8}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
+            <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {sidebarFiltersForFeed.map((filter, filterIndex) => {
+        const isSelected = selectedSidebarFilter === filter.id;
+        const labelText = String(filter.label || '');
+        const allowSidebarLabelWrap = isPartnersCategory;
+        const truncateSidebarLabel = isBnbCategory;
+        const displaySidebarLabel = truncateSidebarLabel
+          ? truncateTikTokLabel(labelText)
+          : labelText;
+        const nextFilter = sidebarFiltersForFeed[filterIndex + 1];
+        const partnersTightStack =
+          isPartnersCategory &&
+          filter.id === 'partners_posts' &&
+          nextFilter?.id === 'partners_professional';
+        const filterLayoutHandler = isActivePage
+          ? event => {
+              const layout = event?.nativeEvent?.layout;
+              if (!layout) return;
+              const {y, height} = layout;
+              if (
+                !Number.isFinite(y) ||
+                !Number.isFinite(height) ||
+                height <= 0
+              )
+                return;
+              if (filterIndex === 0) setSidebarFilterHeight(height);
+              setSidebarFilterLayouts(prev => {
+                const existing = prev[filterIndex];
+                if (
+                  existing &&
+                  existing.y === y &&
+                  existing.height === height
+                ) {
+                  return prev;
+                }
+                return {...prev, [filterIndex]: {y, height}};
+              });
+            }
+          : undefined;
+        const filterInner = (
+          <>
+            {filter.svg ? (
+              <SvgXml
+                xml={filter.svg(isSelected ? '#FFC40A' : '#FFFFFF')}
+                width={32}
+                height={32}
+                style={styles.sidebarFilterIcon}
+              />
+            ) : (
+              <Image
+                source={filter.icon}
+                style={[
+                  styles.sidebarFilterIcon,
+                  isSelected && styles.filterIconSelectedTint,
+                ]}
+                resizeMode="contain"
+              />
+            )}
+            <Text
+              numberOfLines={allowSidebarLabelWrap ? 2 : 1}
+              ellipsizeMode={allowSidebarLabelWrap ? 'clip' : 'tail'}
+              adjustsFontSizeToFit={
+                !allowSidebarLabelWrap && !truncateSidebarLabel
+              }
+              minimumFontScale={allowSidebarLabelWrap ? 1 : 0.72}
+              style={[
+                styles.sidebarFilterLabel,
+                truncateSidebarLabel && styles.sidebarFilterLabelBnb,
+                allowSidebarLabelWrap && styles.sidebarFilterLabelWrap,
+                isSelected && styles.sidebarFilterLabelSelected,
+              ]}>
+              {displaySidebarLabel}
+            </Text>
+          </>
+        );
+        if (sidebarDragMode) {
+          return (
+            <View
+              key={filter.id}
+              style={[
+                styles.sidebarFilterBtn,
+                partnersTightStack && styles.sidebarFilterBtnPartnersTight,
+                filterIndex === sidebarFiltersForFeed.length - 1 &&
+                  styles.sidebarFilterBtnLast,
+              ]}
+              onTouchStart={() =>
+                markSidebarPendingTap({type: 'filter', id: filter.id})
+              }
+              onLayout={filterLayoutHandler}>
+              {filterInner}
+            </View>
+          );
+        }
+        return (
+          <TouchableOpacity
+            key={filter.id}
+            style={[
+              styles.sidebarFilterBtn,
+              partnersTightStack && styles.sidebarFilterBtnPartnersTight,
+              filterIndex === sidebarFiltersForFeed.length - 1 &&
+                styles.sidebarFilterBtnLast,
+            ]}
+            onPress={() => {
+              setSelectedSidebarFilter(prev =>
+                prev === filter.id ? null : filter.id,
+              );
+            }}
+            activeOpacity={0.7}
+            onLayout={filterLayoutHandler}>
+            {filterInner}
+          </TouchableOpacity>
+        );
+      })}
+    </>
+  );
+
+  const renderFeedPageSidebar = (video, index) => {
+    const isActivePage = index === currentIndex;
+    const pageProfileUrl = getUserProfileImageUrl(video);
+    const staticSidebarY = sidebarIntroFinished
+      ? sidebarIntroTopTwoOnlyDown
+      : sidebarIntroProfileOnlyHold;
+    if (isActivePage) {
+      activeSidebarVideoRef.current = video;
+    }
+
     return (
       <View
         style={[
-          styles.container,
-          {justifyContent: 'center', alignItems: 'center'},
-        ]}>
-        <ActivityIndicator size="large" color={Colors.yellowIcons} />
-        <Text style={{color: '#fff', marginTop: 20}}>טוען רשימות...</Text>
+          styles.feedPageSidebar,
+          {bottom: bottomBarHeight},
+          styles.feedPageSidebarDrag,
+          sidebarCollapsed && isActivePage && {top: 360},
+        ]}
+        pointerEvents={isActivePage ? 'auto' : 'none'}
+        onTouchStart={isActivePage ? lockFeedScrollForSidebar : undefined}
+        onTouchEnd={isActivePage ? handleSidebarTouchEnd : undefined}
+        onTouchCancel={isActivePage ? handleSidebarTouchEnd : undefined}>
+        <View
+          style={[
+            styles.sidebarImageWrap,
+            sidebarCollapsed && isActivePage && styles.sidebarImageWrapCollapsed,
+            isActivePage && !sidebarIntroVisible && styles.sidebarIntroHidden,
+          ]}
+          onLayout={
+            isActivePage
+              ? event => {
+                  const h = event?.nativeEvent?.layout?.height;
+                  if (h > 0) setSidebarViewportHeight(h);
+                }
+              : undefined
+          }>
+          {isActivePage ? (
+            <Animated.View
+              style={[
+                styles.sidebarDragContent,
+                {transform: [{translateY: sidebarDragY}]},
+              ]}
+              {...sidebarPanResponder.panHandlers}>
+              {renderFeedPageSidebarContent(video, pageProfileUrl, true, true)}
+            </Animated.View>
+          ) : (
+            <View
+              style={[
+                styles.sidebarDragContent,
+                {transform: [{translateY: staticSidebarY}]},
+              ]}>
+              {renderFeedPageSidebarContent(video, pageProfileUrl, false)}
+            </View>
+          )}
+        </View>
       </View>
     );
-  }
+  };
+
+  const renderFeedPageActionOverlay = video => {
+    const o = getVideoOverlayMeta(video);
+    return (
+      <View
+        style={[styles.feedPageActions, {bottom: insets.bottom + 80}]}
+        pointerEvents="box-none">
+        {o.isCompanyLandListing ? (
+          <View style={styles.brokerOverlayInfo} pointerEvents="box-none">
+            <View style={styles.brokerTopRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+              <View style={styles.brokerPurposePill}>
+                <Text style={styles.brokerPurposeText}>{o.brokerPurposeText}</Text>
+              </View>
+            </View>
+            <Text style={styles.brokerPriceText} numberOfLines={1} pointerEvents="none">
+              {o.brokerPriceText}
+            </Text>
+            <View style={styles.brokerLocationRow} pointerEvents="box-none">
+              <Image
+                source={TIKTOK_OVERLAY_ICONS.location}
+                style={styles.brokerLocationIcon}
+                resizeMode="contain"
+                pointerEvents="none"
+              />
+              <Text
+                style={styles.brokerLocationText}
+                numberOfLines={2}
+                pointerEvents="none">
+                {o.companyLandLocationText}
+              </Text>
+            </View>
+          </View>
+        ) : o.isCompanyListing ? (
+          <View style={styles.companyOverlayInfo} pointerEvents="box-none">
+            <View style={styles.companyTopRow} pointerEvents="box-none">
+              <Image
+                source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
+                style={styles.companyPreSaleBadge}
+                resizeMode="contain"
+              />
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.companyHeartButton]}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.companyAddressWrap} pointerEvents="box-none">
+              <Text
+                style={styles.companyAddressText}
+                numberOfLines={2}
+                pointerEvents="none">
+                {o.companyPrimaryAddress}
+                {o.companySecondaryAddress ? `,\n${o.companySecondaryAddress}` : ''}
+              </Text>
+            </View>
+            <View style={styles.companyStatsRow} pointerEvents="box-none">
+              <View style={styles.companyStatItem}>
+                <Text style={styles.companyStatText}>
+                  {formatCompanyBuildingsLabel(o.companyBuildingsCount)}
+                </Text>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.companyBuilding}
+                  style={styles.companyStatIcon}
+                />
+              </View>
+              <View style={styles.companyStatItem}>
+                <Text style={styles.companyStatText}>
+                  {formatCompanyFloorsLabel(o.companyFloorsCount)}
+                </Text>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.companyStairs}
+                  style={styles.companyStatIcon}
+                />
+              </View>
+              <View style={styles.companyStatItem}>
+                <Text style={styles.companyStatText}>
+                  {formatCompanyApartmentsLabel(o.companyApartmentsCount)}
+                </Text>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.companyDoor}
+                  style={styles.companyStatIcon}
+                />
+              </View>
+            </View>
+          </View>
+        ) : o.isPostListing ? (
+          <View style={styles.postActionsInfo} pointerEvents="box-none">
+            <View style={styles.postActionsRow} pointerEvents="box-none">
+              <View style={styles.postActionItem}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postView}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(video?.view_count ?? 0)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => {
+                  if (!ensureSignedInOrRegister()) return;
+                  setSharePost(video);
+                }}
+                activeOpacity={0.85}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postShare}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(
+                    (video?.id != null && shareCountOverrides[video.id] != null
+                      ? shareCountOverrides[video.id]
+                      : video?.share_count) ?? 0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => openCommentsForPost(video)}
+                activeOpacity={0.85}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postComment}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(getDisplayedCommentCount(video))}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => togglePostLiked(video.id)}
+                activeOpacity={0.85}>
+                <PostFeedLikeIcon liked={isItemLiked(video)} size={32} />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(video?.post_like_count ?? 0)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : o.isBnbListing ? (
+          <View style={styles.brokerOverlayInfo} pointerEvents="box-none">
+            <View style={styles.brokerTopRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+              <View style={styles.bnbTagsRow}>
+                <View style={styles.bnbPrimaryTag}>
+                  <Text style={styles.bnbPrimaryTagText}>
+                    {o.isBnbHotDeal ? 'Hot deal' : 'לינה'}
+                  </Text>
+                </View>
+                <View style={styles.bnbSecondaryTag}>
+                  <Text
+                    style={styles.bnbSecondaryTagText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail">
+                    {truncateTikTokLabel(o.bnbTypeTagText)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.bnbPriceRow} pointerEvents="box-none">
+              <Text style={styles.bnbPriceMainText} numberOfLines={1} pointerEvents="none">
+                {o.brokerPriceText}
+              </Text>
+              <View style={styles.bnbPriceDivider} pointerEvents="none" />
+              <View style={styles.bnbPricePerNightLabels} pointerEvents="none">
+                <Text style={styles.bnbPriceLabel}>מחיר </Text>
+                <Text style={styles.bnbPriceLabel}>ללילה</Text>
+              </View>
+            </View>
+            <Text
+              style={styles.brokerPriceText}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              pointerEvents="none">
+              {truncateTikTokLabel(o.bnbTitleText)}
+            </Text>
+            <View style={styles.brokerLocationRow} pointerEvents="box-none">
+              <Image
+                source={TIKTOK_OVERLAY_ICONS.location}
+                style={styles.brokerLocationIcon}
+                resizeMode="contain"
+                pointerEvents="none"
+              />
+              <Text
+                style={styles.brokerLocationText}
+                numberOfLines={1}
+                pointerEvents="none">
+                {o.brokerLocationText}
+              </Text>
+            </View>
+          </View>
+        ) : o.isPartnersListing ? (
+          <View style={styles.partnersOverlayInfo} pointerEvents="box-none">
+            <View style={styles.partnersTopRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+              <View style={styles.partnersMetaColumn}>
+                <View style={styles.partnersPurposePill}>
+                  <Text style={styles.partnersPurposeText}>
+                    {o.partnersPurposeText}
+                  </Text>
+                </View>
+                <Text
+                  style={styles.partnersNameText}
+                  numberOfLines={1}
+                  pointerEvents="none">
+                  {o.partnersDisplayName}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : o.showBrokerStylePropertyOverlay ? (
+          <View style={styles.brokerOverlayInfo} pointerEvents="box-none">
+            <View style={styles.brokerTopRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={[styles.actionIconButton, styles.brokerHeartButton]}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+              <View style={styles.brokerPurposePill}>
+                <Text style={styles.brokerPurposeText}>{o.brokerPurposeText}</Text>
+              </View>
+            </View>
+            <Text style={styles.brokerPriceText} numberOfLines={1} pointerEvents="none">
+              {o.brokerPriceText}
+            </Text>
+            <View style={styles.brokerLocationRow} pointerEvents="box-none">
+              <Image
+                source={TIKTOK_OVERLAY_ICONS.location}
+                style={styles.brokerLocationIcon}
+                resizeMode="contain"
+                pointerEvents="none"
+              />
+              <Text
+                style={styles.brokerLocationText}
+                numberOfLines={1}
+                pointerEvents="none">
+                {o.brokerLocationText}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.propertyInfo} pointerEvents="box-none">
+            <View style={styles.topRow} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.actionIconButton}
+                onPress={() => toggleLiked(video)}>
+                <TikTokHeartIcon
+                  liked={isItemLiked(video)}
+                  size={TIKTOK_OVERLAY_HEART_SIZE}
+                  style={[
+                    styles.overlayHeartIcon,
+                    isItemLiked(video) && styles.actionIconLiked,
+                  ]}
+                />
+              </TouchableOpacity>
+              {!isPostVideo(video) &&
+                (video?.category === 3 ? (
+                  <View style={styles.forRentButton}>
+                    <Text style={styles.forRentText}>
+                      {video?.searchPurpose || 'מטרת החיפוש'}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.forRentButton}>
+                    <Text style={styles.forRentText}>
+                      {video?.purpose || 'להשכרה'}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+            {!isPostVideo(video) &&
+              (video?.category === 3 ? (
+                <View style={styles.locationContainer} pointerEvents="box-none">
+                  <Text style={styles.locationText} pointerEvents="none">
+                    {video?.preferredApartmentType
+                      ? `${video.preferredApartmentType}`
+                      : ''}
+                    {video?.preferredGender ? ` • ${video.preferredGender}` : ''}
+                    {video?.preferredAgeMin && video?.preferredAgeMax
+                      ? ` • גיל ${video.preferredAgeMin}-${video.preferredAgeMax}`
+                      : ''}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.locationContainer} pointerEvents="box-none">
+                  <Text style={styles.locationText} pointerEvents="none">
+                    {video?.location || 'תל אביב, רוטשילד 54'}
+                  </Text>
+                  <Image
+                    source={TIKTOK_OVERLAY_ICONS.location}
+                    style={styles.locationIcon}
+                    resizeMode="contain"
+                    pointerEvents="none"
+                  />
+                </View>
+              ))}
+            {video?.fromDatabase && (
+              <View style={styles.viewsLikesRow} pointerEvents="box-none">
+                <Text style={styles.viewsLikesText} pointerEvents="none">
+                  {formatCount(video?.view_count ?? 0)} צפיות
+                </Text>
+                <Text style={styles.viewsLikesDot} pointerEvents="none">
+                  {' • '}
+                </Text>
+                <Text style={styles.viewsLikesText} pointerEvents="none">
+                  {formatCount(video?.like_count ?? 0)} לייקים
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const wrapFeedPage = (video, index, media) => (
+    <View style={[styles.videoItem, styles.feedPage, feedPageDimensions]}>
+      {media}
+      {shouldRenderFeedChrome(index) ? (
+        <View style={styles.feedPageChrome} pointerEvents="box-none">
+          {renderFeedPageSidebar(video, index)}
+          {renderFeedPageActionOverlay(video)}
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderFeedMedia = (video, index) => {
+    const isActiveFeedPage = index === currentIndex;
+    if (video.isUploaded) {
+      if (video.isTextOnlyPost && video.description) {
+        return (
+          <LinearGradient
+            colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
+            style={styles.textPostCardGradient}>
+            <Text style={styles.textPostCardDescription} numberOfLines={10}>
+              {video.description}
+            </Text>
+          </LinearGradient>
+        );
+      }
+      const feedVideoUri =
+        video.video && typeof video.video === 'object'
+          ? String(video.video.uri || video.video.url || '').trim()
+          : typeof video.video === 'string'
+            ? String(video.video).trim()
+            : '';
+      if (video.type === 'video' && feedVideoUri) {
+        return Platform.OS === 'web' ? (
+          <video
+            src={feedVideoUri}
+            style={styles.videoElement}
+            autoPlay={isActiveFeedPage}
+            loop
+            muted
+            playsInline
+          />
+        ) : (
+          <Video
+            source={{uri: feedVideoUri}}
+            style={styles.feedVideoPlayer}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay={isActiveFeedPage}
+            isLooping
+            isMuted
+            useNativeControls={false}
+          />
+        );
+      }
+      if (video.images && video.images.length > 0) {
+        const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
+        const displayMode = rawOpt === 'collage' ? 'collage' : 'slideshow';
+        const isPostWithOverlay =
+          isPostVideo(video) &&
+          hasMeaningfulPostDescription(video.description);
+        return (
+          <>
+            <ImageSwiper
+              images={video.images}
+              screenHeight={feedPageHeight}
+              video={video}
+              displayOption={displayMode}
+              indicatorTop={topBarHeight + 36}
+            />
+            {isPostWithOverlay ? (
+              <View style={styles.postOverlayLtr} pointerEvents="none">
+                <View
+                  style={[
+                    styles.postDescriptionOverlay,
+                    {
+                      left: video.overlayX ?? 80,
+                      top: video.overlayY ?? 80,
+                    },
+                  ]}>
+                  <Text
+                    style={styles.postDescriptionOverlayText}
+                    numberOfLines={6}>
+                    {video.description}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </>
+        );
+      }
+    }
+    return (
+      <View style={styles.videoImageContainer}>
+        <Image
+          source={getTikImage(video.image)}
+          style={styles.videoImage}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  };
+
+  const renderFeedItem = useCallback(
+    ({item: video, index}) =>
+      wrapFeedPage(video, index, renderFeedMedia(video, index)),
+    [
+      feedPageHeight,
+      currentIndex,
+      scrollAnchorIndex,
+      sidebarIntroVisible,
+      sidebarIntroFinished,
+      selectedSidebarFilter,
+      feedIsEmpty,
+      videos.length,
+      likedUiRevision,
+    ],
+  );
 
   return (
     <View style={styles.container}>
@@ -4729,157 +5943,9 @@ const TikTokFeedScreen = ({
         </View>
       )}
 
-      {/* Feed view: sidebar, nav, full-screen items */}
+      {/* Feed view: per-page chrome scrolls with each item; nav stays fixed */}
       {!showUserSearchPanel && selectedTopBarFilter !== 'list' && (
         <>
-          {/* Sidebar - draggable: hold and swipe up/down; bottom icons disappear off screen when dragged down */}
-          <Animated.View
-            style={[
-              styles.sidebar,
-              {bottom: bottomBarHeight},
-              sidebarCollapsed && {top: 360},
-              {transform: [{translateY: feedOverlayTranslateY}]},
-            ]}
-            {...sidebarPanResponder.panHandlers}>
-            <View
-              style={[
-                styles.sidebarImageWrap,
-                sidebarCollapsed && styles.sidebarImageWrapCollapsed,
-              ]}
-              onLayout={event => {
-                const h = event?.nativeEvent?.layout?.height;
-                if (h > 0) setSidebarViewportHeight(h);
-              }}>
-              <Animated.View
-                style={[
-                  styles.sidebarDragContent,
-                  {transform: [{translateY: sidebarDragY}]},
-                ]}>
-                {/* Profile pic of current ad uploader. Tap passes full listing (with creator_*, subscription_id from API) to UserProfileScreen. */}
-                <TouchableOpacity
-                  style={[
-                    styles.sidebarProfileWrap,
-                    feedIsEmpty && styles.chromeDisabledDim,
-                  ]}
-                  onPress={() => {
-                    if (feedIsEmpty) return;
-                    const v = videos[currentIndex];
-                    if (!v) return onOpenUserProfile?.(null);
-                    onOpenUserProfile?.({...v, _fromTikTokPost: true});
-                  }}
-                  activeOpacity={feedIsEmpty ? 1 : 0.8}
-                  disabled={feedIsEmpty}
-                  onLayout={event => {
-                    const h = event?.nativeEvent?.layout?.height;
-                    if (h > 0) setSidebarProfileHeight(h);
-                  }}>
-                  <ProfileAvatar uri={sidebarProfileUrl} size={60} />
-                  {sidebarShowFollowPlus ? (
-                    <TouchableOpacity
-                      style={styles.sidebarFollowBadge}
-                      onPress={handleSidebarFollowRequest}
-                      disabled={feedIsEmpty || sidebarSendingFollow}
-                      activeOpacity={0.8}>
-                      {sidebarSendingFollow ? (
-                        <Text style={styles.sidebarFollowBadgeText}>...</Text>
-                      ) : (
-                        <MaterialCommunityIcons
-                          name="plus"
-                          size={16}
-                          color="#FFFFFF"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ) : null}
-                </TouchableOpacity>
-                {sidebarFiltersForFeed.map((filter, index) => {
-                  const isSelected = selectedSidebarFilter === filter.id;
-                  const labelText = String(filter.label || '');
-                  const allowSidebarLabelWrap = isPartnersCategory;
-                  const nextFilter = sidebarFiltersForFeed[index + 1];
-                  const partnersTightStack =
-                    isPartnersCategory &&
-                    filter.id === 'partners_posts' &&
-                    nextFilter?.id === 'partners_professional';
-                  return (
-                    <TouchableOpacity
-                      key={filter.id}
-                      style={[
-                        styles.sidebarFilterBtn,
-                        partnersTightStack &&
-                          styles.sidebarFilterBtnPartnersTight,
-                        index === sidebarFiltersForFeed.length - 1 &&
-                          styles.sidebarFilterBtnLast,
-                      ]}
-                      onPress={() => {
-                        setSelectedSidebarFilter(prev =>
-                          prev === filter.id ? null : filter.id,
-                        );
-                      }}
-                      activeOpacity={0.7}
-                      onLayout={event => {
-                        const layout = event?.nativeEvent?.layout;
-                        if (!layout) return;
-                        const {y, height} = layout;
-                        if (
-                          !Number.isFinite(y) ||
-                          !Number.isFinite(height) ||
-                          height <= 0
-                        )
-                          return;
-                        if (index === 0) setSidebarFilterHeight(height);
-                        setSidebarFilterLayouts(prev => {
-                          const existing = prev[index];
-                          if (
-                            existing &&
-                            existing.y === y &&
-                            existing.height === height
-                          ) {
-                            return prev;
-                          }
-                          return {
-                            ...prev,
-                            [index]: {y, height},
-                          };
-                        });
-                      }}>
-                      {filter.svg ? (
-                        <SvgXml
-                          xml={filter.svg(isSelected ? '#FFC40A' : '#FFFFFF')}
-                          width={32}
-                          height={32}
-                          style={styles.sidebarFilterIcon}
-                        />
-                      ) : (
-                        <Image
-                          source={filter.icon}
-                          style={[
-                            styles.sidebarFilterIcon,
-                            isSelected && styles.filterIconSelectedTint,
-                          ]}
-                          resizeMode="contain"
-                        />
-                      )}
-                      <Text
-                        numberOfLines={allowSidebarLabelWrap ? 2 : 1}
-                        ellipsizeMode={allowSidebarLabelWrap ? 'clip' : 'tail'}
-                        adjustsFontSizeToFit={!allowSidebarLabelWrap}
-                        minimumFontScale={allowSidebarLabelWrap ? 1 : 0.72}
-                        style={[
-                          styles.sidebarFilterLabel,
-                          allowSidebarLabelWrap &&
-                            styles.sidebarFilterLabelWrap,
-                          isSelected && styles.sidebarFilterLabelSelected,
-                        ]}>
-                        {labelText}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </Animated.View>
-            </View>
-          </Animated.View>
-
           {/* Navigation buttons */}
           <View style={styles.navigationButtons}>
             <TouchableOpacity
@@ -4905,7 +5971,16 @@ const TikTokFeedScreen = ({
             </TouchableOpacity>
           </View>
 
-          {feedIsEmpty ? (
+          {showInitialLoading ? (
+            <View
+              style={[
+                styles.feedLoadingFullScreen,
+                {top: topBarHeight, bottom: bottomBarHeight},
+              ]}>
+              <ActivityIndicator size="large" color={Colors.yellowIcons} />
+              <Text style={styles.feedLoadingText}>טוען רשימות...</Text>
+            </View>
+          ) : feedIsEmpty ? (
             <View
               style={[
                 styles.feedEmptyFullScreen,
@@ -4915,662 +5990,41 @@ const TikTokFeedScreen = ({
               {renderEmptyCategoryBody()}
             </View>
           ) : (
-            <>
-              <View
-                style={[styles.scrollView, {height: screenHeight}]}
-                {...panResponder.panHandlers}>
-                <Animated.ScrollView
-                  ref={scrollViewRef}
-                  showsVerticalScrollIndicator={false}
-                  style={[styles.scrollView, {height: screenHeight}]}
-                  contentContainerStyle={styles.scrollContent}
-                  onScroll={Animated.event(
-                    [{nativeEvent: {contentOffset: {y: feedScrollY}}}],
-                    {useNativeDriver: false},
-                  )}
-                  scrollEventThrottle={16}
-                  onMomentumScrollEnd={event => {
-                    const y = event?.nativeEvent?.contentOffset?.y ?? 0;
-                    const nextIndex = Math.max(
-                      0,
-                      Math.min(
-                        videos.length - 1,
-                        Math.round(y / Math.max(1, screenHeight)),
-                      ),
-                    );
-                    setCurrentIndex(nextIndex);
-                  }}
-                  scrollEnabled={false}
-                  bounces={false}>
-                  {videos.map((video, index) => {
-                    // Handle uploaded content
-                    if (video.isUploaded) {
-                      // Text-only post (from post editor with no image/video)
-                      if (video.isTextOnlyPost && video.description) {
-                        return (
-                          <View
-                            key={video.id}
-                            style={[
-                              styles.videoItem,
-                              {
-                                height: screenHeight,
-                                minHeight: screenHeight,
-                                maxHeight: screenHeight,
-                              },
-                            ]}>
-                            <LinearGradient
-                              colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
-                              style={styles.textPostCardGradient}>
-                              <Text
-                                style={styles.textPostCardDescription}
-                                numberOfLines={10}>
-                                {video.description}
-                              </Text>
-                            </LinearGradient>
-                          </View>
-                        );
-                      }
-                      // Video-first only when type === 'video' (respects feed_display_priority vs images).
-                      if (
-                        video.type === 'video' &&
-                        video.video &&
-                        video.video.uri
-                      ) {
-                        return (
-                          <View
-                            key={video.id}
-                            style={[
-                              styles.videoItem,
-                              {
-                                height: screenHeight,
-                                minHeight: screenHeight,
-                                maxHeight: screenHeight,
-                              },
-                            ]}>
-                            {Platform.OS === 'web' ? (
-                              <video
-                                src={video.video.uri}
-                                style={styles.videoElement}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                              />
-                            ) : (
-                              <Text style={styles.videoPlaceholder}>
-                                Video: {video.video.name}
-                              </Text>
-                            )}
-                          </View>
-                        );
-                      }
-                      // Images (collage / slideshow) when priority is main image, or video-only row fell through without URI.
-                      if (video.images && video.images.length > 0) {
-                        const rawOpt = String(
-                          video.displayOption || 'slideshow',
-                        ).toLowerCase();
-                        const displayMode =
-                          rawOpt === 'collage' ? 'collage' : 'slideshow';
-
-                        const isPostWithOverlay =
-                          isPostVideo(video) &&
-                          hasMeaningfulPostDescription(video.description);
-
-                        // Display images with swipe or collage; for posts with text, show description over image
-                        return (
-                          <View
-                            key={video.id}
-                            style={[
-                              styles.videoItem,
-                              {
-                                height: screenHeight,
-                                minHeight: screenHeight,
-                                maxHeight: screenHeight,
-                                position: 'relative',
-                              },
-                            ]}>
-                            <ImageSwiper
-                              images={video.images}
-                              screenHeight={screenHeight}
-                              video={video}
-                              displayOption={displayMode}
-                            />
-                            {isPostWithOverlay && (
-                              <View
-                                style={styles.postOverlayLtr}
-                                pointerEvents="none">
-                                <View
-                                  style={[
-                                    styles.postDescriptionOverlay,
-                                    {
-                                      left: video.overlayX ?? 80,
-                                      top: video.overlayY ?? 80,
-                                    },
-                                  ]}>
-                                  <Text
-                                    style={styles.postDescriptionOverlayText}
-                                    numberOfLines={6}>
-                                    {video.description}
-                                  </Text>
-                                </View>
-                              </View>
-                            )}
-                          </View>
-                        );
-                      }
-                    }
-
-                    // Handle mock data (existing images)
-                    return (
-                      <View
-                        key={video.id}
-                        style={[
-                          styles.videoItem,
-                          {
-                            height: screenHeight,
-                            minHeight: screenHeight,
-                            maxHeight: screenHeight,
-                          },
-                        ]}>
-                        <View style={styles.videoImageContainer}>
-                          <Image
-                            source={getTikImage(video.image)}
-                            style={styles.videoImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                      </View>
-                    );
-                  })}
-                </Animated.ScrollView>
-              </View>
-
-              {/* Action overlay - default listing style + special company listing style */}
-              <Animated.View
-                style={[
-                  styles.actionIconsContainer,
-                  {
-                    transform: [{translateY: feedOverlayTranslateY}],
-                    bottom: insets.bottom + 80,
-                  },
-                ]}
-                pointerEvents="box-none">
-                {isCompanyLandListing ? (
-                  <View
-                    style={styles.brokerOverlayInfo}
-                    pointerEvents="box-none">
-                    <View style={styles.brokerTopRow} pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconButton,
-                          styles.brokerHeartButton,
-                        ]}
-                        onPress={() => toggleLiked(currentVideo)}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            styles.brokerActionIcon,
-                            isItemLiked(currentVideo) && styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(currentVideo)
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      <View style={styles.brokerPurposePill}>
-                        <Text style={styles.brokerPurposeText}>
-                          {brokerPurposeText}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text
-                      style={styles.brokerPriceText}
-                      numberOfLines={1}
-                      pointerEvents="none">
-                      {brokerPriceText}
-                    </Text>
-                    <View
-                      style={styles.brokerLocationRow}
-                      pointerEvents="box-none">
-                      <Image
-                        source={TIKTOK_OVERLAY_ICONS.location}
-                        style={styles.brokerLocationIcon}
-                        resizeMode="contain"
-                        pointerEvents="none"
-                      />
-                      <Text
-                        style={styles.brokerLocationText}
-                        numberOfLines={2}
-                        pointerEvents="none">
-                        {companyLandLocationText}
-                      </Text>
-                    </View>
-                  </View>
-                ) : isCompanyListing ? (
-                  <View
-                    style={styles.companyOverlayInfo}
-                    pointerEvents="box-none">
-                    <View style={styles.companyTopRow} pointerEvents="box-none">
-                      <Image
-                        source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
-                        style={styles.companyPreSaleBadge}
-                        resizeMode="contain"
-                      />
-                      <TouchableOpacity
-                        style={styles.actionIconButton}
-                        onPress={() => toggleLiked(currentVideo)}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            isItemLiked(currentVideo) && styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(currentVideo)
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <View
-                      style={styles.companyAddressWrap}
-                      pointerEvents="box-none">
-                      <Text
-                        style={styles.companyAddressText}
-                        numberOfLines={2}
-                        pointerEvents="none">
-                        {companyPrimaryAddress}
-                        {companySecondaryAddress
-                          ? `,\n${companySecondaryAddress}`
-                          : ''}
-                      </Text>
-                    </View>
-                    <View
-                      style={styles.companyStatsRow}
-                      pointerEvents="box-none">
-                      <View style={styles.companyStatItem}>
-                        <Text style={styles.companyStatText}>
-                          {formatCompanyBuildingsLabel(companyBuildingsCount)}
-                        </Text>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.companyBuilding}
-                          style={styles.companyStatIcon}
-                        />
-                      </View>
-                      <View style={styles.companyStatItem}>
-                        <Text style={styles.companyStatText}>
-                          {formatCompanyFloorsLabel(companyFloorsCount)}
-                        </Text>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.companyStairs}
-                          style={styles.companyStatIcon}
-                        />
-                      </View>
-                      <View style={styles.companyStatItem}>
-                        <Text style={styles.companyStatText}>
-                          {formatCompanyApartmentsLabel(companyApartmentsCount)}
-                        </Text>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.companyDoor}
-                          style={styles.companyStatIcon}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                ) : isPostListing ? (
-                  <View style={styles.postActionsInfo} pointerEvents="box-none">
-                    <View
-                      style={styles.postActionsRow}
-                      pointerEvents="box-none">
-                      <View style={styles.postActionItem}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.postView}
-                          style={styles.postActionIcon}
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.postActionCountText}>
-                          {formatCount(currentVideo?.view_count ?? 0)}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.postActionItem}
-                        onPress={() => {
-                          if (!ensureSignedInOrRegister()) return;
-                          setSharePost(currentVideo);
-                        }}
-                        activeOpacity={0.85}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.postShare}
-                          style={styles.postActionIcon}
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.postActionCountText}>
-                          {formatCount(
-                            (currentVideo?.id != null &&
-                            shareCountOverrides[currentVideo.id] != null
-                              ? shareCountOverrides[currentVideo.id]
-                              : currentVideo?.share_count) ?? 0,
-                          )}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.postActionItem}
-                        onPress={() => openCommentsForPost(currentVideo)}
-                        activeOpacity={0.85}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.postComment}
-                          style={styles.postActionIcon}
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.postActionCountText}>
-                          {formatCount(getDisplayedCommentCount(currentVideo))}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.postActionItem}
-                        onPress={() => toggleLiked(currentVideo)}
-                        activeOpacity={0.85}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.postLike}
-                          style={styles.postActionIcon}
-                          tintColor={
-                            isItemLiked(currentVideo) ? '#FFC40A' : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                        <Text style={styles.postActionCountText}>
-                          {formatCount(currentVideo?.post_like_count ?? 0)}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : isBnbListing ? (
-                  <View style={styles.bnbOverlayInfo} pointerEvents="box-none">
-                    <View style={styles.bnbTopRow} pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconButton,
-                          styles.brokerHeartButton,
-                        ]}
-                        onPress={() => toggleLiked(videos[currentIndex])}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            styles.brokerActionIcon,
-                            isItemLiked(videos[currentIndex]) &&
-                              styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(videos[currentIndex])
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      <View style={styles.bnbTagsRow}>
-                        <View style={styles.bnbPrimaryTag}>
-                          <Text style={styles.bnbPrimaryTagText}>
-                            {isBnbHotDeal ? 'Hot deal' : 'לינה'}
-                          </Text>
-                        </View>
-                        <View style={styles.bnbSecondaryTag}>
-                          <Text
-                            style={styles.bnbSecondaryTagText}
-                            numberOfLines={1}>
-                            {bnbTypeTagText}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.bnbPriceRow} pointerEvents="box-none">
-                      <Text style={styles.bnbPriceLabel} pointerEvents="none">
-                        מחיר
-                      </Text>
-                      <View
-                        style={styles.bnbPriceDivider}
-                        pointerEvents="none"
-                      />
-                      <Text
-                        style={styles.bnbPriceMainText}
-                        numberOfLines={1}
-                        pointerEvents="none">
-                        {brokerPriceText}
-                      </Text>
-                      <Text
-                        style={styles.bnbPriceSuffixText}
-                        pointerEvents="none">
-                        ללילה
-                      </Text>
-                    </View>
-                    <Text
-                      style={styles.bnbTitleText}
-                      numberOfLines={1}
-                      pointerEvents="none">
-                      {bnbTitleText}
-                    </Text>
-                    <View
-                      style={styles.brokerLocationRow}
-                      pointerEvents="box-none">
-                      <Text
-                        style={styles.brokerLocationText}
-                        numberOfLines={1}
-                        pointerEvents="none">
-                        {brokerLocationText}
-                      </Text>
-                      <Image
-                        source={TIKTOK_OVERLAY_ICONS.location}
-                        style={styles.brokerLocationIcon}
-                        resizeMode="contain"
-                        pointerEvents="none"
-                      />
-                    </View>
-                  </View>
-                ) : isPartnersListing ? (
-                  <View
-                    style={styles.partnersOverlayInfo}
-                    pointerEvents="box-none">
-                    <View
-                      style={styles.partnersTopRow}
-                      pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconButton,
-                          styles.brokerHeartButton,
-                        ]}
-                        onPress={() => toggleLiked(videos[currentIndex])}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            styles.brokerActionIcon,
-                            isItemLiked(videos[currentIndex]) &&
-                              styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(videos[currentIndex])
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      <View style={styles.partnersPurposePill}>
-                        <Text style={styles.partnersPurposeText}>
-                          {partnersPurposeText}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text
-                      style={styles.partnersNameText}
-                      numberOfLines={1}
-                      pointerEvents="none">
-                      {partnersDisplayName}
-                    </Text>
-                  </View>
-                ) : showBrokerStylePropertyOverlay ? (
-                  <View
-                    style={styles.brokerOverlayInfo}
-                    pointerEvents="box-none">
-                    <View style={styles.brokerTopRow} pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconButton,
-                          styles.brokerHeartButton,
-                        ]}
-                        onPress={() => toggleLiked(videos[currentIndex])}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            styles.brokerActionIcon,
-                            isItemLiked(videos[currentIndex]) &&
-                              styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(videos[currentIndex])
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      <View style={styles.brokerPurposePill}>
-                        <Text style={styles.brokerPurposeText}>
-                          {brokerPurposeText}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text
-                      style={styles.brokerPriceText}
-                      numberOfLines={1}
-                      pointerEvents="none">
-                      {brokerPriceText}
-                    </Text>
-                    <View
-                      style={styles.brokerLocationRow}
-                      pointerEvents="box-none">
-                      <Image
-                        source={TIKTOK_OVERLAY_ICONS.location}
-                        style={styles.brokerLocationIcon}
-                        resizeMode="contain"
-                        pointerEvents="none"
-                      />
-                      <Text
-                        style={styles.brokerLocationText}
-                        numberOfLines={1}
-                        pointerEvents="none">
-                        {brokerLocationText}
-                      </Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.propertyInfo} pointerEvents="box-none">
-                    <View style={styles.topRow} pointerEvents="box-none">
-                      <TouchableOpacity
-                        style={styles.actionIconButton}
-                        onPress={() => toggleLiked(videos[currentIndex])}>
-                        <Image
-                          source={TIKTOK_OVERLAY_ICONS.heart}
-                          style={[
-                            styles.actionIcon,
-                            isItemLiked(videos[currentIndex]) &&
-                              styles.actionIconLiked,
-                          ]}
-                          tintColor={
-                            isItemLiked(videos[currentIndex])
-                              ? 'rgba(255, 196, 10, 1)'
-                              : undefined
-                          }
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      {!isPostVideo(videos[currentIndex]) &&
-                        (videos[currentIndex]?.category === 3 ? (
-                          <View style={styles.forRentButton}>
-                            <Text style={styles.forRentText}>
-                              {videos[currentIndex]?.searchPurpose ||
-                                'מטרת החיפוש'}
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.forRentButton}>
-                            <Text style={styles.forRentText}>
-                              {videos[currentIndex]?.purpose || 'להשכרה'}
-                            </Text>
-                          </View>
-                        ))}
-                    </View>
-                    {!isPostVideo(videos[currentIndex]) &&
-                      (videos[currentIndex]?.category === 3 ? (
-                        <View
-                          style={styles.locationContainer}
-                          pointerEvents="box-none">
-                          <Text
-                            style={styles.locationText}
-                            pointerEvents="none">
-                            {videos[currentIndex]?.preferredApartmentType
-                              ? `${videos[currentIndex].preferredApartmentType}`
-                              : ''}
-                            {videos[currentIndex]?.preferredGender
-                              ? ` • ${videos[currentIndex].preferredGender}`
-                              : ''}
-                            {videos[currentIndex]?.preferredAgeMin &&
-                            videos[currentIndex]?.preferredAgeMax
-                              ? ` • גיל ${videos[currentIndex].preferredAgeMin}-${videos[currentIndex].preferredAgeMax}`
-                              : ''}
-                          </Text>
-                        </View>
-                      ) : (
-                        <View
-                          style={styles.locationContainer}
-                          pointerEvents="box-none">
-                          <Text
-                            style={styles.locationText}
-                            pointerEvents="none">
-                            {videos[currentIndex]?.location ||
-                              'תל אביב, רוטשילד 54'}
-                          </Text>
-                          <Image
-                            source={TIKTOK_OVERLAY_ICONS.location}
-                            style={styles.locationIcon}
-                            resizeMode="contain"
-                            pointerEvents="none"
-                          />
-                        </View>
-                      ))}
-                    {videos[currentIndex]?.fromDatabase && (
-                      <View
-                        style={styles.viewsLikesRow}
-                        pointerEvents="box-none">
-                        <Text
-                          style={styles.viewsLikesText}
-                          pointerEvents="none">
-                          {formatCount(videos[currentIndex]?.view_count ?? 0)}{' '}
-                          צפיות
-                        </Text>
-                        <Text style={styles.viewsLikesDot} pointerEvents="none">
-                          {' • '}
-                        </Text>
-                        <Text
-                          style={styles.viewsLikesText}
-                          pointerEvents="none">
-                          {formatCount(videos[currentIndex]?.like_count ?? 0)}{' '}
-                          לייקים
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </Animated.View>
-            </>
+            <FlatList
+              ref={feedListRef}
+              data={videos}
+              extraData={likedUiRevision}
+              keyExtractor={feedKeyExtractor}
+              renderItem={renderFeedItem}
+              getItemLayout={getFeedItemLayout}
+              showsVerticalScrollIndicator={false}
+              style={[
+                styles.scrollView,
+                styles.feedScrollView,
+                {height: feedPageHeight},
+                Platform.OS === 'web' && styles.feedScrollViewWeb,
+              ]}
+              scrollEventThrottle={16}
+              onScroll={onFeedScroll}
+              onMomentumScrollEnd={handleFeedScrollSettled}
+              onScrollEndDrag={handleFeedScrollSettled}
+              scrollEnabled={!feedIsEmpty}
+              pagingEnabled
+              snapToInterval={feedPageHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              disableIntervalMomentum
+              directionalLockEnabled
+              nestedScrollEnabled
+              bounces={Platform.OS === 'ios'}
+              overScrollMode="never"
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={FEED_PRELOAD_BELOW_COUNT + 1}
+              maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
+              windowSize={FEED_FLATLIST_WINDOW_SIZE}
+              removeClippedSubviews={false}
+              updateCellsBatchingPeriod={50}
+            />
           )}
         </>
       )}
@@ -6077,7 +6531,7 @@ const styles = StyleSheet.create({
   },
   postOverlayLtr: {
     ...StyleSheet.absoluteFillObject,
-    direction: 'ltr',
+    ...forceLtrStyle,
     zIndex: 30,
     elevation: 30,
   },
@@ -6388,6 +6842,20 @@ const styles = StyleSheet.create({
     zIndex: 30,
     backgroundColor: '#000',
   },
+  feedLoadingFullScreen: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 30,
+    backgroundColor: '#000',
+  },
+  feedLoadingText: {
+    color: '#fff',
+    marginTop: 20,
+    fontSize: 16,
+  },
   listCard: {
     width: '100%',
     maxWidth: 414,
@@ -6562,13 +7030,20 @@ const styles = StyleSheet.create({
     margin: 0,
     padding: 0,
   },
+  feedScrollView: {
+    flexGrow: 0,
+  },
+  feedScrollViewWeb: {
+    scrollSnapType: 'y mandatory',
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
+  },
   scrollContent: {
     width: '100%',
     maxWidth: 414,
     flexDirection: 'column',
     margin: 0,
     padding: 0,
-    paddingBottom: 80,
   },
   videoItem: {
     position: 'relative',
@@ -6580,6 +7055,40 @@ const styles = StyleSheet.create({
     margin: 0,
     padding: 0,
     borderWidth: 0,
+    ...(Platform.OS === 'web' ? {scrollSnapAlign: 'start', scrollSnapStop: 'always'} : {}),
+  },
+  feedPage: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  feedPageChrome: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 10,
+  },
+  feedPageSidebar: {
+    position: 'absolute',
+    right: 10,
+    top: SIDEBAR_TOP,
+    flexDirection: 'column',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  feedPageSidebarDrag: Platform.select({
+    web: {touchAction: 'none'},
+    ios: {zIndex: 25},
+    android: {elevation: 25},
+    default: {},
+  }),
+  feedPageActions: {
+    position: 'absolute',
+    left: 20,
+    flexDirection: 'column',
+    alignItems: flexStart,
+    zIndex: 20,
   },
   textPostCardGradient: {
     flex: 1,
@@ -6790,6 +7299,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     minHeight: 0,
   },
+  sidebarIntroHidden: {
+    opacity: 0,
+  },
   sidebarDragContent: {
     alignItems: 'center',
     width: '100%',
@@ -6851,6 +7363,10 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     maxWidth: 72,
   },
+  sidebarFilterLabelBnb: {
+    maxWidth: 72,
+    overflow: 'hidden',
+  },
   sidebarFilterLabelWrap: {
     maxWidth: 72,
     minHeight: 32,
@@ -6864,6 +7380,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  sidebarProfileAvatarBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sidebarFollowBadge: {
     position: 'absolute',
@@ -6875,7 +7396,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1D27',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
+    zIndex: 4,
+    elevation: 4,
   },
   sidebarFollowBadgeText: {
     color: '#FFFFFF',
@@ -6931,8 +7453,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
-    gap: 14,
+    gap: 6,
     marginBottom: 12,
+  },
+  companyHeartButton: {
+    marginLeft: 0,
+    marginRight: 0,
   },
   companyTagPill: {
     minHeight: 38,
@@ -6996,14 +7522,22 @@ const styles = StyleSheet.create({
   },
   partnersOverlayInfo: {
     width: 334,
+    maxWidth: '96%',
     alignItems: flexStart,
-    gap: 16,
   },
   partnersTopRow: {
     flexDirection: 'row-reverse',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: flexStart,
     gap: 14,
+  },
+  /** Purpose pill + name stacked; aligned to the right (under מחפש להכניס), not full-width left. */
+  partnersMetaColumn: {
+    flexDirection: 'column',
+    alignItems: flexStart,
+    gap: 10,
+    flexShrink: 1,
+    maxWidth: 280,
   },
   partnersPurposePill: {
     backgroundColor: '#FFFFFF',
@@ -7022,12 +7556,13 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   partnersNameText: {
-    width: '100%',
     color: '#F7F3E6',
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'right',
+    alignSelf: flexStart,
+    maxWidth: '100%',
   },
   brokerTopRow: {
     flexDirection: 'row-reverse',
@@ -7036,9 +7571,9 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 12,
   },
-  brokerActionIcon: {
-    width: 32,
-    height: 32,
+  overlayHeartIcon: {
+    width: TIKTOK_OVERLAY_HEART_SIZE,
+    height: TIKTOK_OVERLAY_HEART_SIZE,
   },
   brokerHeartButton: {
     marginLeft: 0,
@@ -7089,18 +7624,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     tintColor: '#FFFFFF',
-  },
-  bnbOverlayInfo: {
-    width: 334,
-    alignItems: flexStart,
-  },
-  bnbTopRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: flexStart,
-    gap: 12,
-    marginBottom: 18,
-    width: '100%',
   },
   bnbTagsRow: {
     flexDirection: 'row-reverse',
@@ -7156,11 +7679,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   bnbPriceRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: flexStart,
     width: '100%',
     gap: 7,
+    marginBottom: 5,
   },
   bnbPriceLabel: {
     color: '#F7F3E6',
@@ -7168,6 +7692,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Medium',
     letterSpacing: 0.5447,
+    textAlign: 'left',
+  },
+  bnbPricePerNightLabels: {
+    alignItems: flexStart,
+    marginBottom: 4,
   },
   bnbPriceDivider: {
     width: 1,
@@ -7181,25 +7710,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
-    maxWidth: 165,
-  },
-  bnbPriceSuffixText: {
-    color: '#F7F3E6',
-    fontSize: 14,
-    lineHeight: 16,
-    fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.5447,
-    marginBottom: 4,
-  },
-  bnbTitleText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    lineHeight: 32,
-    fontFamily: 'Rubik-Regular',
     textAlign: 'left',
-    width: '100%',
-    marginTop: 2,
+    maxWidth: 165,
+    ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   postActionsInfo: {
     width: 334,
@@ -7303,6 +7816,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 10,
+    ...Platform.select({
+      ios: {transform: [{translateX: -18}]},
+      android: {transform: [{translateX: -18}]},
+      default: {},
+    }),
   },
   commentAuthorWrap: {
     alignItems: flexStart,
@@ -7645,11 +8163,10 @@ const styles = StyleSheet.create({
     height: '100%',
     objectFit: 'cover',
   },
-  videoPlaceholder: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    writingDirection: 'rtl',
+  feedVideoPlayer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
   },
   imageSwiper: {
     width: '100%',
@@ -7681,7 +8198,6 @@ const styles = StyleSheet.create({
   },
   imageIndicator: {
     position: 'absolute',
-    top: TOP_BAR_HEIGHT + 8,
     left: 0,
     right: 0,
     flexDirection: 'row-reverse',

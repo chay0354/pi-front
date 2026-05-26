@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /** Figma 10:31152 — full-screen ביקורות list (RTL). */
 const BG = '#1E1D27';

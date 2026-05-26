@@ -10,7 +10,7 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const PARTNER_PREF_ICONS = {
   age: require('../assets/new-profile-pages/partheners/ages20-30.png'),
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   },
   sectionTop: {
     gap: 20,
-    alignItems: 'flex-end',
+    alignItems: flexStart,
     marginBottom: 4,
   },
   tagsRow: {
@@ -359,7 +359,9 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 37,
     color: CREAM,
-    textAlign: 'left',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    alignSelf: flexStart,
     width: '100%',
   },
   line: {

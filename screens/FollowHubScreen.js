@@ -15,7 +15,7 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 import {
   getFollowHubRows,

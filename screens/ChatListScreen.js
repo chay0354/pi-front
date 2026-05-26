@@ -35,7 +35,7 @@ import {
 } from '../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart} from '../utils/rtlLayout';
 
 /** Main chats list panel — matches Figma node 8:3115 */
 const CHAT_LIST_PANEL_BG = '#2B2A39';

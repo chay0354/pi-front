@@ -7,7 +7,9 @@ import {
   Alert,
   AppState,
   Platform,
+  Linking,
 } from 'react-native';
+import {forceRtlStyle} from './utils/rtlLayout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AdsForm,
@@ -172,7 +174,7 @@ const DEFAULT_TIKTOK_TOP_FILTER = 'pics';
  */
 export default function App() {
   const [fontsLoaded] = useFonts(fonts);
-  const [currentScreen, setCurrentScreen] = useState(screenName.login);
+  const [currentScreen, setCurrentScreen] = useState(screenName.home);
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
   const setCurrentUser = useCallback(u => {
@@ -232,7 +234,7 @@ export default function App() {
   const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null);
   // 'userProfile' | 'home' | 'settings' | 'tikTokFeed' | 'favorites' | null
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
-  const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שחזור קוד סודי success screen
+  const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שכחתי סיסמה success screen
   const [postEditorConfig, setPostEditorConfig] = useState(() => ({
     publishTarget: 'post',
     returnScreen: screenName.tikTokFeed,
@@ -280,10 +282,10 @@ export default function App() {
           const read = await AsyncStorage.getItem(piWelcomeReadKey(user));
           setPiWelcomeRead(read === 'true');
         } else {
-          setCurrentScreen(screenName.login);
+          setCurrentScreen(screenName.home);
         }
       } catch (error) {
-        setCurrentScreen(screenName.login);
+        setCurrentScreen(screenName.home);
       }
     };
 
@@ -500,7 +502,7 @@ export default function App() {
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <PresenceProvider userEmail={presenceUserEmail}>
         <SafeAreaProvider>
-          <View style={[styles.container, {direction: 'rtl'}]}>
+          <View style={[styles.container, forceRtlStyle]}>
             {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
             {__DEV__ && typeof window !== 'undefined' && (
               <View
@@ -535,7 +537,6 @@ export default function App() {
                   // the search panel. Home category buttons must always land on default feed (pics), not
                   // search or favorites.
                   setTikTokUserSearchOpenTrigger(0);
-                  setTikTokFeedRefreshKey(k => k + 1);
                   try {
                     await AsyncStorage.setItem(
                       TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
@@ -884,7 +885,24 @@ export default function App() {
             {currentScreen === screenName.userProfile && (
               <UserProfileScreen
                 onClose={() => setCurrentScreen(profileReturnScreen)}
-                onCall={() => {}}
+                onCall={phone => {
+                  const u = profileUser;
+                  const tel = String(
+                    phone ||
+                      u?.phone ||
+                      u?.contact_details?.phone ||
+                      u?.contact_details?.phones?.[0] ||
+                      '',
+                  ).trim();
+                  if (!tel) {
+                    Alert.alert('', 'אין מספר טלפון');
+                    return;
+                  }
+                  const telUrl = `tel:${tel.replace(/[^\d+]/g, '')}`;
+                  Linking.openURL(telUrl).catch(() => {
+                    Alert.alert('', `פנייה בטלפון ${tel}`);
+                  });
+                }}
                 onMessage={() => {
                   const u = profileUser;
                   const displayName =
@@ -1534,6 +1552,7 @@ export default function App() {
             )}
             {currentScreen === screenName.secretCodeRecovery && (
               <SecretCodeRecoveryScreen
+                userEmail={String(currentUser?.email || '').trim()}
                 onClose={() => setCurrentScreen(screenName.settings)}
                 onSent={em => {
                   setSecretRecoveryEmail(em);

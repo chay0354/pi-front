@@ -20,10 +20,11 @@ import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
 import {categoryImages} from '../utils/constant';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import AmenityQuantityPill from '../components/AmenityQuantityPill';
 import {RadioIcon} from '../components/FormsElement/RadioIcon';
 import PublishValidationModal from '../components/PublishValidationModal';
 import {PRICE_COUNTER_STEP_DEFAULT} from '../utils/priceInput';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 /**
  * Age Range Slider Component
@@ -1689,41 +1690,15 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       {hasQuantity && isSelected && (
                         <View style={styles.amenityQuantitySelector}>
                           {[4, 3, 2, 1].map(qty => (
-                            <TouchableOpacity
+                            <AmenityQuantityPill
                               key={qty}
+                              qty={qty}
+                              selected={quantity === qty}
                               onPress={() => setAmenityQuantity(amenity, qty)}
-                              style={styles.amenityQuantityButtonContainer}>
-                              {quantity === qty ? (
-                                <LinearGradient
-                                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                                  locations={[0.0456, 0.5076, 0.8831]}
-                                  start={{x: 0, y: 0}}
-                                  end={{x: 1, y: 1}}
-                                  style={styles.amenityQuantityButtonSelected}>
-                                  <Text
-                                    style={styles.amenityQuantityTextSelected}>
-                                    {qty}
-                                  </Text>
-                                  <View
-                                    style={styles.amenityQuantityDotSelected}>
-                                    <LinearGradient
-                                      colors={['#FEE787', '#BD9947', '#9C6522']}
-                                      locations={[0.0456, 0.5076, 0.8831]}
-                                      start={{x: 0, y: 0}}
-                                      end={{x: 1, y: 1}}
-                                      style={styles.amenityQuantityDotInner}
-                                    />
-                                  </View>
-                                </LinearGradient>
-                              ) : (
-                                <View style={styles.amenityQuantityButton}>
-                                  <Text style={styles.amenityQuantityText}>
-                                    {qty}
-                                  </Text>
-                                  <View style={styles.amenityQuantityDot} />
-                                </View>
-                              )}
-                            </TouchableOpacity>
+                              style={styles.amenityQuantityButtonContainer}
+                              textSize={14}
+                              inactiveBorderColor="#8C85B3"
+                            />
                           ))}
                         </View>
                       )}

@@ -20,7 +20,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart} from '../utils/rtlLayout';
 
 /**
  * SubscriptionFormScreen Component
@@ -1557,8 +1557,8 @@ const styles = StyleSheet.create({
   },
   companyLogoWrap: {
     width: '100%',
-    // maxWidth: 366,
-    alignItems: flexEnd,
+    alignItems: 'center',
+    alignSelf: 'center',
     marginTop: 2,
     paddingHorizontal: 24,
   },
@@ -1567,6 +1567,7 @@ const styles = StyleSheet.create({
     height: 104,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
   },
   companyLogoCircle: {
     width: 104,

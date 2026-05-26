@@ -11,16 +11,14 @@ import {
   useWindowDimensions,
   I18nManager,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
-import {flexStart} from '../index';
+import AmenityQuantityPill from '../components/AmenityQuantityPill';
+import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const INPUT_BORDER = '#8C85B3';
-const GOLD = ['#FEE787', '#BD9947', '#9C6522'];
-const GOLD_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 const MENU_ICON = require('../assets/buttom-bar/rooms_number.png');
 const FILTER_CHECK = require('../assets/filter-check.png');
@@ -174,35 +172,13 @@ const RoomsFilterScreen = ({
   const OptionPills = ({selected, onSelect}) => (
     <View style={styles.amenityQuantitySelector}>
       {[4, 3, 2, 1].map(qty => (
-        <TouchableOpacity
+        <AmenityQuantityPill
           key={qty}
+          qty={qty}
+          selected={selected === qty}
           onPress={() => onSelect(qty)}
-          style={styles.amenityQuantityButtonContainer}>
-          {selected === qty ? (
-            <LinearGradient
-              colors={GOLD}
-              locations={GOLD_LOCATIONS}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
-              style={styles.amenityQuantityButtonSelected}>
-              <Text style={styles.amenityQuantityTextSelected}>{qty}</Text>
-              <View style={styles.amenityQuantityDotSelected}>
-                <LinearGradient
-                  colors={GOLD}
-                  locations={GOLD_LOCATIONS}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.amenityQuantityDotInner}
-                />
-              </View>
-            </LinearGradient>
-          ) : (
-            <View style={styles.amenityQuantityButton}>
-              <Text style={styles.amenityQuantityText}>{qty}</Text>
-              <View style={styles.amenityQuantityDot} />
-            </View>
-          )}
-        </TouchableOpacity>
+          style={styles.amenityQuantityButtonContainer}
+        />
       ))}
     </View>
   );
@@ -389,7 +365,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: INPUT_BORDER,
     overflow: 'hidden',
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   counterButtonLeft: {
     flex: 1,

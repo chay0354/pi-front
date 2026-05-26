@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import {askSmartInfo} from '../utils/api';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CONTENT_W = Math.min(366, SCREEN_W - 48);

@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
@@ -233,10 +234,12 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
 
 const OnboardingOverlay = ({imageSource, onNext, onSkip}) => {
   const {width: screenWidth, height: screenHeight} = Dimensions.get('window');
-  const skipWidth = screenWidth * 0.3;
+  const skipWidth = screenWidth * 0.1;
   const skipHeight = screenHeight * 0.1;
   const nextWidth = screenWidth * 0.4;
   const nextHeight = screenHeight * 0.2;
+  // RTL mirrors left/right — use start side so the tap zone stays visually top-right.
+  const skipCorner = I18nManager.isRTL ? {left: 0} : {right: 0};
   return (
     <View style={styles.onboardingOverlay} pointerEvents="box-none">
       <Image
@@ -249,7 +252,7 @@ const OnboardingOverlay = ({imageSource, onNext, onSkip}) => {
         onPress={onSkip}
         style={[
           styles.onboardingSkipZone,
-          styles.onboardingSkipZoneRtl,
+          skipCorner,
           {width: skipWidth, height: skipHeight},
         ]}
       />
@@ -459,12 +462,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     backgroundColor: 'transparent',
-  },
-  onboardingSkipZoneRtl: {
-    right: 0,
-  },
-  onboardingSkipZoneLtr: {
-    left: 0,
   },
   onboardingNextZone: {
     position: 'absolute',

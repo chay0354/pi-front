@@ -14,7 +14,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getReviews, submitReview} from '../utils/api';
 import RatingImprovePicker from '../components/RatingImprovePicker';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const imgBack =
   'https://www.figma.com/api/mcp/asset/a65e2691-fd86-48b9-9865-87c80bdc1758';

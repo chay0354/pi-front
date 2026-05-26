@@ -14,7 +14,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 /**
  * Polished notice when publish is blocked by missing required fields (ad upload flows).

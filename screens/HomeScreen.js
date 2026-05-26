@@ -13,7 +13,7 @@ import MenuIcon from '../components/MenuIcon';
 import Carusel from '../components/Carusel';
 import ProfilePic from '../components/ProfilePic';
 import {Colors, Spacing} from '../constants/styles';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart} from '../utils/rtlLayout';
 
 /**
  * HomeScreen Component

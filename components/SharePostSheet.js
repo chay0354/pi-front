@@ -25,7 +25,7 @@ import {
   sendGroupChatMessage,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
 const SHEET_HEIGHT = Math.min(640, Math.round(SCREEN_HEIGHT * 0.82));

@@ -8,7 +8,7 @@ import {Text} from 'react-native';
 import {Divider} from './Divider';
 import {CardPriceField} from './CardPriceField';
 import {Colors} from '../../constants/styles';
-import {flexEnd} from '../../index';
+import {flexEnd} from '../../utils/rtlLayout';
 
 export const GeneralDetailsWithRadio = ({
   groups,

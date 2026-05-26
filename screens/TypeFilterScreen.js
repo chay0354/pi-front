@@ -12,7 +12,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
-import {flexStart} from '../index';
+import {flexStart} from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';

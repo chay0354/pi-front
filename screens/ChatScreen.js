@@ -9,6 +9,7 @@ import {
   Image,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Alert,
@@ -50,7 +51,7 @@ import ExclusiveOfferResponseCard, {
   formatPrice,
 } from '../components/ExclusiveOfferResponseCard';
 import {usePresence} from '../hooks/PresenceContext';
-import {flexEnd, flexStart} from '../index';
+import {flexEnd, flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -317,6 +318,7 @@ const ChatScreen = ({
   const [exclusiveRespondLoading, setExclusiveRespondLoading] = useState(false);
   const [groupDescDraft, setGroupDescDraft] = useState('');
   const [savingGroupDesc, setSavingGroupDesc] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef(null);
   const recordingRef = useRef(null);
   const recordStartedAtRef = useRef(0);
@@ -1998,8 +2000,56 @@ const ChatScreen = ({
     setExclusiveMessage(buildExclusiveTemplate(exclusiveMonths));
   }, [showExclusiveOfferModal, buildExclusiveTemplate, exclusiveMonths]);
 
+  useEffect(() => {
+    const onShow = event => {
+      const nextHeight = event?.endCoordinates?.height ?? 0;
+      setKeyboardHeight(nextHeight);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd({animated: true});
+      });
+    };
+    const onHide = () => setKeyboardHeight(0);
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    const syncWebKeyboardInset = () => {
+      const inset = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop,
+      );
+      setKeyboardHeight(inset);
+    };
+
+    syncWebKeyboardInset();
+    viewport.addEventListener('resize', syncWebKeyboardInset);
+    viewport.addEventListener('scroll', syncWebKeyboardInset);
+    return () => {
+      viewport.removeEventListener('resize', syncWebKeyboardInset);
+      viewport.removeEventListener('scroll', syncWebKeyboardInset);
+    };
+  }, []);
+
+  const composerBottomInset =
+    keyboardHeight > 0
+      ? keyboardHeight
+      : Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 0);
+
   return (
-    <View style={[styles.container, {paddingBottom: insets.bottom}]}>
+    <View style={styles.container}>
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         {isGroupThread ? (
           <>
@@ -2111,10 +2161,7 @@ const ChatScreen = ({
         )}
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.chatArea}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}>
+      <View style={styles.chatArea}>
         <View style={styles.chatBackground}>
           <Image
             source={require('../assets/pi-chat/background.png')}
@@ -2126,6 +2173,10 @@ const ChatScreen = ({
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === 'ios' ? 'interactive' : 'on-drag'
+            }
             onContentSizeChange={() =>
               scrollRef.current?.scrollToEnd({animated: true})
             }>
@@ -2251,7 +2302,18 @@ const ChatScreen = ({
           </ScrollView>
         </View>
 
-        <View style={styles.inputRow}>
+        <View
+          style={[
+            styles.composerShell,
+            isWeb
+              ? {
+                  bottom: keyboardHeight > 0 ? keyboardHeight : 0,
+                  paddingBottom:
+                    keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 8),
+                }
+              : {paddingBottom: composerBottomInset},
+          ]}>
+          <View style={styles.inputRow}>
           <TouchableOpacity
             style={styles.inputBarIconBtn}
             activeOpacity={0.7}
@@ -2342,8 +2404,9 @@ const ChatScreen = ({
               />
             </Pressable>
           )}
+          </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <Modal
         visible={showExclusiveOfferModal}
@@ -2755,7 +2818,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 8,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   headerBackBtn: {
     justifyContent: 'center',
@@ -2775,7 +2838,7 @@ const styles = StyleSheet.create({
     alignItems: flexEnd,
     flex: 1,
     minWidth: 0,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   headerTitle: {
     color: '#fff',
@@ -3322,7 +3385,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   offerTimelineLtr: {
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   offerTimelineTrack: {
     height: 4,
@@ -3461,6 +3524,17 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: Platform.OS === 'web' ? 100 : 24,
     flexGrow: 1,
+  },
+  composerShell: {
+    flexShrink: 0,
+    backgroundColor: CHAT_CHROME_BG,
+    ...(isWeb && {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 10,
+    }),
   },
   dateLabel: {
     textAlign: 'center',
@@ -3687,17 +3761,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+    paddingBottom: 12,
     backgroundColor: CHAT_CHROME_BG,
     gap: 8,
     flexShrink: 0,
-    ...(isWeb && {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      zIndex: 10,
-    }),
   },
   /** Matches input pill single-line height (32 outer) */
   inputBarIconBtn: {

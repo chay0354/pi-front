@@ -2,6 +2,12 @@ import React from 'react';
 import {View, StyleSheet, Image} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {FigmaCheckbox} from '../FigmaCheckbox';
+import {
+  GOLD_GRADIENT_COLORS,
+  GOLD_GRADIENT_LOCATIONS,
+  goldGradientEnd,
+  goldGradientStart,
+} from '../../utils/goldGradient';
 
 /**
  * Classic selected state matches list radios in OfficeListingScreen (e.g. סוג דירה):
@@ -19,10 +25,10 @@ export const RadioIcon = ({isSelected, useFigmaStyle}) => {
   }
   return (
     <LinearGradient
-      colors={['#FEE787', '#BD9947', '#9C6522']}
-      locations={[0.0456, 0.5076, 0.8831]}
-      start={{x: 0, y: 0}}
-      end={{x: 1, y: 1}}
+      colors={GOLD_GRADIENT_COLORS}
+      locations={GOLD_GRADIENT_LOCATIONS}
+      start={goldGradientStart}
+      end={goldGradientEnd}
       style={styles.selectedGradient}>
       <Image
         source={require('../../assets/checkbox-selected.png')}

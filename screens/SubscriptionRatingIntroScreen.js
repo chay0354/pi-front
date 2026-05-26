@@ -13,7 +13,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
-import {flexEnd} from '../index';
+import {flexEnd} from '../utils/rtlLayout';
 
 const BG = '#1e1d27';
 const MODAL_BACKDROP = '#00000080';

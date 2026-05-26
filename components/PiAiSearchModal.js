@@ -47,7 +47,14 @@ import {
   shouldShowCommercialLogoBadge,
   getCompanyLogoUrlFromListing,
 } from '../utils/listingGridCardFigma';
-import {flexEnd, flexStart} from '../index';
+import {flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
+
+/** Pi badge is always LTR (number then star) — isolated from RTL list rows. */
+const piBadgeLtrDirection =
+  Platform.OS === 'web' ? {direction: 'ltr'} : null;
+/** Web StyleSheet omits direction; native uses I18nManager + forceRtlStyle on rows. */
+const listRtlDirection =
+  Platform.OS === 'web' ? {direction: 'rtl'} : null;
 
 // Palette mirrored from EditPublishAdScreen so this screen matches the rest
 // of the publishing flow.
@@ -417,7 +424,6 @@ const PiAiSearchModal = ({
             style={[
               styles.listResultStatText,
               styles.listResultStatTextCell,
-              {textAlign: 'left'},
             ]}>
             {s.label}
           </Text>
@@ -430,10 +436,14 @@ const PiAiSearchModal = ({
       const roomsD = formatApartmentRoomsOrFloorForDisplay(listing?.rooms);
       const areaD = formatApartmentAreaForDisplay(listing?.area);
       const floorD = formatApartmentRoomsOrFloorForDisplay(listing?.floor);
-      const textRow = [
-        styles.listResultStatTextInline,
-        styles.listResultStatAptTextWrap,
-      ];
+      const statText =
+        key === 'rooms' && roomsD != null
+          ? `${roomsD} חדרים`
+          : key === 'area' && areaD != null
+            ? `${areaD} ${HEB_M2}`
+            : key === 'floor' && floorD != null
+              ? `קומה ${floorD}`
+              : s.label;
       const floorIconStyle =
         key === 'floor'
           ? [styles.listResultStatIcon, styles.listResultStatIconFlipped]
@@ -447,42 +457,14 @@ const PiAiSearchModal = ({
               resizeMode="contain"
             />
           </View>
-          {key === 'rooms' && roomsD != null ? (
-            <Text
-              style={[...textRow, styles.listResultStatTextCell]}
-              textAlign={'left'}
-              writingDirection="rtl">
-              <Text style={styles.listResultStatValueText}>{roomsD}</Text>
-              <Text style={styles.listResultStatLabelText}> חדרים</Text>
-            </Text>
-          ) : key === 'area' && areaD != null ? (
-            <Text
-              style={[...textRow, styles.listResultStatTextCell]}
-              textAlign={'left'}
-              writingDirection="rtl">
-              <Text style={styles.listResultStatValueText}>{areaD}</Text>
-              <Text style={styles.listResultStatLabelText}> {HEB_M2}</Text>
-            </Text>
-          ) : key === 'floor' && floorD != null ? (
-            <Text
-              style={[...textRow, styles.listResultStatTextCell]}
-              textAlign={'left'}
-              writingDirection="rtl">
-              <Text style={styles.listResultStatLabelText}>קומה </Text>
-              <Text style={styles.listResultStatValueText}>{floorD}</Text>
-            </Text>
-          ) : (
-            <Text
-              style={[
-                styles.listResultStatText,
-                styles.listResultStatAptTextWrap,
-                styles.listResultStatTextCell,
-              ]}
-              textAlign={'left'}
-              writingDirection="rtl">
-              {s.label}
-            </Text>
-          )}
+          <Text
+            style={[
+              styles.listResultStatText,
+              styles.listResultStatAptTextWrap,
+              styles.listResultStatTextCell,
+            ]}>
+            {statText}
+          </Text>
         </View>
       );
     };
@@ -490,10 +472,10 @@ const PiAiSearchModal = ({
     return (
       <TouchableOpacity
         key={listing.id}
-        style={styles.listResultCard}
+        style={[styles.listResultCard, listRtlDirection]}
         activeOpacity={0.85}
         onPress={() => handleOpenListing(listing)}>
-        <View style={styles.listResultThumbCol}>
+        <View style={[styles.listResultThumbCol, listRtlDirection]}>
           {primaryUri ? (
             <Image
               source={{uri: primaryUri}}
@@ -512,30 +494,26 @@ const PiAiSearchModal = ({
             </View>
           )}
         </View>
-        <View style={[styles.listResultMid, {alignItems: flexStart}]}>
+        <View style={[styles.listResultMid, listRtlDirection]}>
           <Text
-            style={[styles.listResultPrice, {textAlign: 'left'}]}
+            style={styles.listResultPrice}
             numberOfLines={2}>
             {cardPriceLabel}
           </Text>
-          <View
-            style={[
-              styles.listResultAddressRow,
-              {alignItems: flexEnd, justifyContent: flexEnd},
-            ]}>
-            <Text
-              style={[styles.listResultAddress, {textAlign: 'left'}]}
-              numberOfLines={2}>
-              {addr}
-            </Text>
+          <View style={[styles.listResultAddressRow, listRtlDirection]}>
             <Image
               source={require('../assets/liked-ads/location.png')}
               style={styles.listResultLocationIcon}
               resizeMode="contain"
             />
+            <Text
+              style={styles.listResultAddress}
+              numberOfLines={2}>
+              {addr}
+            </Text>
           </View>
           {showPreSaleBadge ? (
-            <View style={styles.listResultPurposeRow}>
+            <View style={[styles.listResultPurposeRow, listRtlDirection]}>
               <TouchableOpacity
                 onPress={e => {
                   e?.stopPropagation?.();
@@ -564,7 +542,7 @@ const PiAiSearchModal = ({
               />
             </View>
           ) : (
-            <View style={styles.listResultPurposeRow}>
+            <View style={[styles.listResultPurposeRow, listRtlDirection]}>
               <TouchableOpacity
                 onPress={e => {
                   e?.stopPropagation?.();
@@ -597,11 +575,11 @@ const PiAiSearchModal = ({
               </View>
             </View>
           )}
-          <View style={[styles.listResultStatsRow, {justifyContent: flexEnd}]}>
+          <View style={[styles.listResultStatsRow, listRtlDirection]}>
             {isCompany ? (
               <>
                 {renderListCompanyStat(apartmentsStat)}
-                <View style={styles.listResultStatsPairGroup}>
+                <View style={[styles.listResultStatsPairGroup, listRtlDirection]}>
                   {renderListCompanyStat(buildingsStat)}
                   {renderListCompanyStat(floorsStat)}
                 </View>
@@ -609,7 +587,7 @@ const PiAiSearchModal = ({
             ) : (
               <>
                 {renderListAptStat('rooms')}
-                <View style={styles.listResultStatsPairGroup}>
+                <View style={[styles.listResultStatsPairGroup, listRtlDirection]}>
                   {renderListAptStat('area')}
                   {renderListAptStat('floor')}
                 </View>
@@ -618,7 +596,7 @@ const PiAiSearchModal = ({
           </View>
         </View>
         {showCommercialLogo && commercialLogoUrl ? (
-          <View style={styles.listResultActions}>
+          <View style={[styles.listResultActions, listRtlDirection]}>
             <View
               style={styles.listResultCommercialLogoWrap}
               pointerEvents="box-none">
@@ -631,8 +609,10 @@ const PiAiSearchModal = ({
             </View>
           </View>
         ) : showPiRating ? (
-          <View style={styles.listResultActions}>
-            <View style={styles.listResultPiRow} pointerEvents="box-none">
+          <View style={[styles.listResultActions, listRtlDirection]}>
+            <View
+              style={[styles.listResultPiRow, piBadgeLtrDirection]}
+              pointerEvents="box-none">
               <Text style={styles.listResultPiText}>{String(displayPi)}</Text>
               <Image
                 source={piBadgeImage}
@@ -1027,12 +1007,12 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 8,
     rowGap: 6,
     marginTop: 2,
-    writingDirection: 'rtl',
+    ...forceRtlStyle,
   },
   listResultHeartInPurposeRow: {
     width: 32,
@@ -1048,7 +1028,7 @@ const styles = StyleSheet.create({
   listResultCard: {
     width: '100%',
     minHeight: 108,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: CARD_BG,
     borderRadius: 12,
@@ -1056,6 +1036,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     gap: 10,
+    ...forceRtlStyle,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1072,6 +1053,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     justifyContent: 'center',
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   listResultThumb: {
     width: 88,
@@ -1095,6 +1077,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     overflow: 'visible',
+    alignItems: flexStart,
+    ...forceRtlStyle,
   },
   listResultPrice: {
     color: '#F7F3E6',
@@ -1103,12 +1087,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     width: '100%',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   listResultAddressRow: {
     width: '100%',
     flexDirection: 'row',
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: flexStart,
+    gap: 6,
+    ...forceRtlStyle,
   },
   listResultAddress: {
     flex: 1,
@@ -1117,6 +1105,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 21,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
     writingDirection: 'rtl',
   },
   listResultLocationIcon: {
@@ -1142,14 +1131,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   listResultStatsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: flexStart,
+    gap: 6,
     width: '100%',
     marginTop: 6,
     overflow: 'visible',
     zIndex: 2,
+    ...forceRtlStyle,
     ...Platform.select({
       android: {elevation: 2},
       default: {},
@@ -1158,14 +1149,16 @@ const styles = StyleSheet.create({
   listResultStatsPairGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   listResultStatGroup: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
     flexShrink: 0,
+    ...forceRtlStyle,
   },
   listResultStatIconBox: {
     width: 18,
@@ -1190,6 +1183,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.2,
+    textAlign: 'left',
     writingDirection: 'rtl',
     flexShrink: 0,
     ...Platform.select({
@@ -1212,6 +1206,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
+    textAlign: 'left',
+    writingDirection: 'rtl',
     ...Platform.select({
       android: {includeFontPadding: false, textAlignVertical: 'center'},
       web: {whiteSpace: 'nowrap'},
@@ -1224,6 +1220,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Regular',
     letterSpacing: 0.25,
+    textAlign: 'left',
+    writingDirection: 'rtl',
     ...Platform.select({
       android: {includeFontPadding: false, textAlignVertical: 'center'},
       web: {whiteSpace: 'nowrap'},
@@ -1239,12 +1237,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 2,
+    ...forceRtlStyle,
   },
   listResultPiRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 0,
+    gap: 2,
+    position: 'relative',
+    flexShrink: 0,
+    ...forceLtrStyle,
   },
   listResultPiText: {
     color: '#FFD275',
@@ -1252,13 +1253,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
-    marginRight: -2,
+    zIndex: 1,
+    ...forceLtrStyle,
   },
   listResultPiBadge: {
     width: 60,
     height: 60,
-    marginLeft: -14,
-    marginTop: 0,
+    position: 'absolute',
+    marginLeft: -6,
+    top: -22,
     ...Platform.select({
       web: {objectFit: 'cover'},
       default: {},

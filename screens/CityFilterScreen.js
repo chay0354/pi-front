@@ -14,7 +14,13 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
-import {flexStart} from '../index';
+import {
+  flexStart,
+  forceLtrStyle,
+  getRangeSliderPercentFromEvent,
+  rangeSliderThumbStyle,
+  rangeSliderTrailingFillStyle,
+} from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -24,26 +30,6 @@ const TEXT_CLUE = 'rgba(255,255,255,0.35)';
 
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
-
-function getSliderPercentFromEvent(nativeEvent, trackWidth, sliderViewRef) {
-  const w = trackWidth > 0 ? trackWidth : 1;
-  const ne = nativeEvent;
-  if (typeof ne.locationX === 'number' && !Number.isNaN(ne.locationX)) {
-    return Math.max(0, Math.min(100, (ne.locationX / w) * 100));
-  }
-  const node = sliderViewRef && sliderViewRef.current;
-  const touch = ne.touches?.[0] || ne;
-  if (
-    node &&
-    typeof node.getBoundingClientRect === 'function' &&
-    (touch?.clientX != null || touch?.pageX != null)
-  ) {
-    const rect = node.getBoundingClientRect();
-    const x = (touch.clientX != null ? touch.clientX : touch.pageX) - rect.left;
-    return Math.max(0, Math.min(100, (x / (rect.width || w)) * 100));
-  }
-  return 0;
-}
 
 function percentToDistanceKm(percent) {
   const steps = DISTANCE_OPTIONS.length - 1;
@@ -81,14 +67,54 @@ const CityFilterScreen = ({
     initialFilter?.immediateEntry ?? false,
   );
 
+  const [sliderWidth, setSliderWidth] = useState(1);
   const sliderWidthRef = useRef(1);
+  const sliderWindowXRef = useRef(0);
   const sliderRef = useRef(null);
 
-  const thumbLeft = useMemo(() => {
+  const thumbPercent = useMemo(() => {
     const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(distanceKm));
-    const ratio = idx / (DISTANCE_OPTIONS.length - 1);
-    return `${ratio * 100}%`;
+    return (idx / (DISTANCE_OPTIONS.length - 1)) * 100;
   }, [distanceKm]);
+
+  const syncSliderMeasure = useCallback(() => {
+    const node = sliderRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') return;
+    node.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        sliderWindowXRef.current = x;
+        sliderWidthRef.current = width;
+        setSliderWidth(width);
+      }
+    });
+  }, []);
+
+  const percentFromNativeEvent = useCallback(nativeEvent => {
+    return getRangeSliderPercentFromEvent(
+      nativeEvent,
+      sliderWidthRef.current,
+      sliderWindowXRef.current,
+      sliderRef,
+    );
+  }, []);
+
+  const refreshMeasureThen = useCallback(
+    (nativeEvent, onReady) => {
+      const node = sliderRef.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        onReady(percentFromNativeEvent(nativeEvent));
+        return;
+      }
+      node.measureInWindow((x, _y, width) => {
+        if (width > 0) {
+          sliderWindowXRef.current = x;
+          sliderWidthRef.current = width;
+        }
+        onReady(percentFromNativeEvent(nativeEvent));
+      });
+    },
+    [percentFromNativeEvent],
+  );
 
   const applyDistanceFromPercent = useCallback(percent => {
     setDistanceKm(percentToDistanceKm(percent));
@@ -104,25 +130,13 @@ const CityFilterScreen = ({
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => true,
         onPanResponderGrant: evt => {
-          const w = sliderWidthRef.current;
-          const percent = getSliderPercentFromEvent(
-            evt.nativeEvent,
-            w,
-            sliderRef,
-          );
-          applyDistanceFromPercent(percent);
+          refreshMeasureThen(evt.nativeEvent, applyDistanceFromPercent);
         },
         onPanResponderMove: evt => {
-          const w = sliderWidthRef.current;
-          const percent = getSliderPercentFromEvent(
-            evt.nativeEvent,
-            w,
-            sliderRef,
-          );
-          applyDistanceFromPercent(percent);
+          refreshMeasureThen(evt.nativeEvent, applyDistanceFromPercent);
         },
       }),
-    [applyDistanceFromPercent],
+    [applyDistanceFromPercent, refreshMeasureThen],
   );
 
   const hidePurpose = isBnb || isPartners;
@@ -240,10 +254,7 @@ const CityFilterScreen = ({
           <View
             ref={sliderRef}
             style={styles.sliderTrackWrap}
-            onLayout={e => {
-              const w = e.nativeEvent.layout.width;
-              if (w > 0) sliderWidthRef.current = w;
-            }}
+            onLayout={syncSliderMeasure}
             {...panResponder.panHandlers}
             collapsable={false}>
             <View style={styles.sliderMarkers}>
@@ -257,15 +268,14 @@ const CityFilterScreen = ({
               <View style={styles.sliderTrack}>
                 {DISTANCE_OPTIONS.map((_, idx) => {
                   if (idx === DISTANCE_OPTIONS.length - 1) return null;
+                  const dotPct =
+                    (idx / (DISTANCE_OPTIONS.length - 1)) * 100;
                   return (
                     <View
                       key={`dot-${idx}`}
                       style={[
                         styles.sliderDot,
-                        {
-                          left: `${(idx / (DISTANCE_OPTIONS.length - 1)) * 100}%`,
-                          marginLeft: -2,
-                        },
+                        rangeSliderThumbStyle(sliderWidth, dotPct, 4),
                       ]}
                     />
                   );
@@ -275,7 +285,10 @@ const CityFilterScreen = ({
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0.5, y: 0}}
                   end={{x: 0.5, y: 1}}
-                  style={[styles.sliderTrackFill, {left: thumbLeft}]}
+                  style={[
+                    styles.sliderTrackFill,
+                    rangeSliderTrailingFillStyle(sliderWidth, thumbPercent),
+                  ]}
                 />
               </View>
               <LinearGradient
@@ -284,10 +297,7 @@ const CityFilterScreen = ({
                 end={{x: 0.79, y: 0.87}}
                 style={[
                   styles.sliderThumb,
-                  {
-                    left: thumbLeft,
-                    marginLeft: -(KNOB_SIZE / 2),
-                  },
+                  rangeSliderThumbStyle(sliderWidth, thumbPercent, KNOB_SIZE),
                 ]}
               />
             </View>
@@ -425,13 +435,14 @@ const styles = StyleSheet.create({
   sliderTrackWrap: {
     marginTop: 10,
     paddingVertical: 10,
-    direction: 'ltr',
+    ...forceLtrStyle,
   },
   sliderMarkers: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    ...forceLtrStyle,
   },
   sliderMarkerCell: {
     width: 31,
@@ -449,6 +460,7 @@ const styles = StyleSheet.create({
     height: KNOB_SIZE,
     justifyContent: 'center',
     position: 'relative',
+    ...forceLtrStyle,
   },
   sliderTrack: {
     height: 4,
@@ -468,7 +480,6 @@ const styles = StyleSheet.create({
   sliderTrackFill: {
     position: 'absolute',
     top: 0,
-    right: 0,
     height: '100%',
     borderRadius: 1000,
   },

@@ -1,4 +1,6 @@
 import {StyleSheet, View} from 'react-native';
+import {forceLtrStyle} from '../../utils/rtlLayout';
+
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
@@ -40,7 +42,7 @@ export const RadioOptions = ({
 const styles = StyleSheet.create({
   optionsContainer: {
     flexDirection: 'row',
-    direction: 'ltr',
+    ...forceLtrStyle,
     justifyContent: 'space-between',
   },
 });

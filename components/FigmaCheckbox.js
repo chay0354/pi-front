@@ -3,17 +3,14 @@ import {View, StyleSheet} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 
-// Figma-style circular checkbox used across TikTok-feed bottom filters.
-//
-// variant="check" (default) — gold gradient ring + dark inner with a gold
-//   check glyph. Used by Preferences, City, Price, Office and all other
-//   filters.
-// variant="dot" — Figma node 23:94391. 22 × 22 circle with a dark fill, thin
-//   gold border when active, and a small gold-gradient dot centered inside.
-//   Used by סוג דירה (apartment type) and סוג (Type) list rows.
+import {
+  GOLD_GRADIENT_COLORS,
+  GOLD_GRADIENT_LOCATIONS,
+  goldGradientEnd,
+  goldGradientStart,
+} from '../utils/goldGradient';
 
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
-const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
+// Figma-style circular checkbox used across TikTok-feed bottom filters.
 const PILL_BORDER = '#4D4966';
 const DOT_BG = '#27262F';
 const CHECK_COLOR = '#F4AD39';
@@ -34,10 +31,10 @@ const CheckVariant = ({checked, size, style}) => {
   const innerSize = Math.max(size - 4, 0);
   return (
     <LinearGradient
-      colors={GOLD_GRADIENT}
+      colors={GOLD_GRADIENT_COLORS}
       locations={GOLD_GRADIENT_LOCATIONS}
-      start={{x: 0, y: 0}}
-      end={{x: 1, y: 1}}
+      start={goldGradientStart}
+      end={goldGradientEnd}
       style={[
         styles.outerCentered,
         {width: size, height: size, borderRadius: size / 2},
@@ -80,10 +77,10 @@ const DotVariant = ({checked, size, style}) => {
       ]}>
       {checked ? (
         <LinearGradient
-          colors={GOLD_GRADIENT}
+          colors={GOLD_GRADIENT_COLORS}
           locations={GOLD_GRADIENT_LOCATIONS}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
+          start={goldGradientStart}
+          end={goldGradientEnd}
           style={{
             width: dotSize,
             height: dotSize,
