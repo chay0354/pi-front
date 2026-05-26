@@ -30,6 +30,35 @@ function googleEmbedSrc(address) {
   return `https://maps.google.com/maps?q=${q}&z=15&hl=iw&output=embed`;
 }
 
+/** Google Embed API rejects direct navigation — must load inside an iframe (WebView needs HTML wrapper). */
+function googleEmbedHtml(address) {
+  const src = googleEmbedSrc(address).replace(/"/g, '&quot;');
+  return `<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #161a26; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<iframe title="מיקום הנכס" src="${src}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+</body>
+</html>`;
+}
+
+function hasNativeMapsSdkKey() {
+  if (Platform.OS === 'android') {
+    return Boolean(String(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY || '').trim());
+  }
+  if (Platform.OS === 'ios') {
+    return true;
+  }
+  return false;
+}
+
 function externalMapsUrl(address) {
   const q = encodeURIComponent(address);
   if (Platform.OS === 'ios') {
@@ -45,17 +74,17 @@ export default function LocationMap({address, containerStyle}) {
   const [coords, setCoords] = useState(null);
   const [loading, setLoading] = useState(false);
   const addr = address && String(address).trim() ? String(address).trim() : '';
-  const embedUri = useMemo(() => googleEmbedSrc(addr), [addr]);
+  const embedHtml = useMemo(() => googleEmbedHtml(addr), [addr]);
   const mapsUri = useMemo(() => externalMapsUrl(addr), [addr]);
   const [region, setRegion] = useState(null);
-
-  if (!addr) return null;
+  const useNativeMap = hasNativeMapsSdkKey();
 
   useEffect(() => {
+    if (!addr) return undefined;
     let isMounted = true;
 
     async function fetchCoords() {
-      if (Platform.OS === 'web') return;
+      if (Platform.OS === 'web' || !useNativeMap) return;
       setLoading(true);
       try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
@@ -99,7 +128,9 @@ export default function LocationMap({address, containerStyle}) {
     return () => {
       isMounted = false;
     };
-  }, [addr]);
+  }, [addr, useNativeMap]);
+
+  if (!addr) return null;
 
   const openFullMap = async () => {
     if (!mapsUri) return;
@@ -127,7 +158,7 @@ export default function LocationMap({address, containerStyle}) {
       <View style={styles.loaderWrap}>
         <ActivityIndicator size="small" color="#f2c200" />
       </View>
-    ) : coords && region && MapView && Marker && Callout ? (
+    ) : useNativeMap && coords && region && MapView && Marker && Callout ? (
       <View style={styles.nativeMapWrap}>
         <MapView
           style={styles.map}
@@ -157,13 +188,27 @@ export default function LocationMap({address, containerStyle}) {
         </TouchableOpacity>
       </View>
     ) : (
-      <WebView
-        style={styles.webView}
-        source={{uri: embedUri}}
-        scrollEnabled={false}
-        javaScriptEnabled
-        domStorageEnabled
-      />
+      <View style={styles.nativeMapWrap}>
+        <WebView
+          style={styles.webView}
+          source={{html: embedHtml}}
+          originWhitelist={['*']}
+          scrollEnabled={false}
+          javaScriptEnabled
+          domStorageEnabled
+          setSupportMultipleWindows={false}
+        />
+        <TouchableOpacity
+          onPress={openFullMap}
+          activeOpacity={0.85}
+          style={styles.expandButton}>
+          <Image
+            source={require('../assets/full_screen.png')}
+            style={styles.expandIcon}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </View>
     );
 
   return (

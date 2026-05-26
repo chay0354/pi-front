@@ -1006,11 +1006,6 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
   }
 };
 
-/**
- * Ensure a regular (subscription_type='user') backend record exists for this email,
- * returning the full subscription (with a real UUID `id`).
- * Idempotent: returns existing record if one is found by email.
- */
 export const registerRegularUser = async ({
   email,
   name = null,
@@ -1050,6 +1045,35 @@ export const registerRegularUser = async ({
   } catch (error) {
     console.error('registerRegularUser error:', error);
     return { success: false, error: error.message, subscription: null };
+  }
+};
+
+/**
+ * Sign in or register a regular user via Google ID token (verified on pi-back).
+ */
+export const loginOrRegisterWithGoogle = async (idToken) => {
+  const token = idToken != null ? String(idToken).trim() : '';
+  if (!token) {
+    return {success: false, error: 'Missing Google token', subscription: null};
+  }
+  try {
+    const response = await apiFetch(`${apiBase()}/api/auth/google`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id_token: token}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data?.error || 'Google sign-in failed',
+        subscription: null,
+      };
+    }
+    return data;
+  } catch (error) {
+    console.error('loginOrRegisterWithGoogle error:', error);
+    return {success: false, error: error.message, subscription: null};
   }
 };
 

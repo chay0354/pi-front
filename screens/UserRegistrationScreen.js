@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   ScrollView,
@@ -39,11 +39,50 @@ const UserRegistrationScreen = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleTrigger, setGoogleTrigger] = useState(0);
+  const [GoogleAuthComponent, setGoogleAuthComponent] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const MIN_PASSWORD_LENGTH = 8;
   const PROFILE_PLACEHOLDER = require('../assets/add-image-1.png');
   const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
   const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
+
+  const finishAuthWithSubscription = useCallback(
+    (
+      reg,
+      {
+        fallbackEmail = '',
+        fallbackName = '',
+        fallbackPhone = '',
+        fallbackProfilePictureUrl = null,
+      } = {},
+    ) => {
+      if (!reg || !reg.success || !reg.subscription || !reg.subscription.id) {
+        setErrorMessage(
+          (reg && reg.error) || 'לא הצלחנו להתחבר. נסה שוב.',
+        );
+        return false;
+      }
+
+      const sub = reg.subscription;
+      const user = {
+        ...sub,
+        id: sub.id,
+        subscription_type: sub.subscription_type || subscriptionTypes.user,
+        email: sub.email || fallbackEmail,
+        name: sub.name || fallbackName || sub.email || fallbackEmail,
+        phone: sub.phone || fallbackPhone || null,
+        profile_picture_url:
+          sub.profile_picture_url || fallbackProfilePictureUrl || null,
+        status: sub.status || 'verified',
+      };
+
+      if (onSuccess) onSuccess(user);
+      return true;
+    },
+    [onSuccess],
+  );
 
   const requestMediaPermission = async () => {
     if (Platform.OS !== 'web') {
@@ -180,26 +219,50 @@ const UserRegistrationScreen = ({
         return;
       }
 
-      const user = {
-        ...reg.subscription,
-        id: reg.subscription.id,
-        subscription_type:
-          reg.subscription.subscription_type || subscriptionTypes.user,
-        email: reg.subscription.email || emailTrim,
-        name: reg.subscription.name || name,
-        phone: reg.subscription.phone || phoneTrim,
-        profile_picture_url:
-          reg.subscription.profile_picture_url || profilePictureUrl,
-        status: reg.subscription.status || 'verified',
-      };
-
-      if (onSuccess) onSuccess(user);
+      finishAuthWithSubscription(reg, {
+        fallbackEmail: emailTrim,
+        fallbackName: name,
+        fallbackPhone: phoneTrim,
+        fallbackProfilePictureUrl: profilePictureUrl,
+      });
     } catch (err) {
       setErrorMessage(err.message || 'אירעה שגיאה. נסה שוב.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    const webClientId = String(
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+    ).trim();
+    if (!webClientId) {
+      setErrorMessage(
+        'Google Sign-In לא מוגדר. הוסף EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ל-.env והפעל מחדש את Expo.',
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      let AuthComponent = GoogleAuthComponent;
+      if (!AuthComponent) {
+        const mod = await import('../components/GoogleRegistrationAuth');
+        AuthComponent = mod.default;
+        setGoogleAuthComponent(() => AuthComponent);
+      }
+      setGoogleTrigger(n => n + 1);
+    } catch (err) {
+      setGoogleLoading(false);
+      setErrorMessage(
+        err?.message ||
+          'Google Sign-In דורש rebuild של האפליקציה: npm run android',
+      );
+    }
+  };
+
+  const busy = submitting || googleLoading;
 
   return (
     <View style={styles.container}>
@@ -347,7 +410,7 @@ const UserRegistrationScreen = ({
 
             <TouchableOpacity
               onPress={handleRegister}
-              disabled={submitting}
+              disabled={busy}
               style={styles.registerButtonWrap}
               activeOpacity={0.9}>
               <LinearGradient
@@ -375,13 +438,22 @@ const UserRegistrationScreen = ({
             <View style={styles.socialWrap}>
               <TouchableOpacity
                 style={styles.socialButtonImageWrap}
-                onPress={() => {}}
+                onPress={handleGoogleSignIn}
+                disabled={busy}
                 activeOpacity={0.85}>
                 <Image
                   source={GOOGLE_BUTTON_IMAGE}
-                  style={styles.socialButtonImage}
+                  style={[
+                    styles.socialButtonImage,
+                    busy && styles.socialButtonDisabled,
+                  ]}
                   resizeMode="cover"
                 />
+                {googleLoading ? (
+                  <View style={styles.socialLoadingOverlay}>
+                    <ActivityIndicator color="#1E1D27" />
+                  </View>
+                ) : null}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -402,6 +474,15 @@ const UserRegistrationScreen = ({
           </TouchableOpacity>
         </View>
       </ScrollView>
+      {GoogleAuthComponent ? (
+        <GoogleAuthComponent
+          triggerNonce={googleTrigger}
+          onTriggerConsumed={() => {}}
+          onLoadingChange={setGoogleLoading}
+          onError={msg => setErrorMessage(msg)}
+          onSuccess={reg => finishAuthWithSubscription(reg)}
+        />
+      ) : null}
     </View>
   );
 };
@@ -664,10 +745,20 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 1000,
     overflow: 'hidden',
+    position: 'relative',
   },
   socialButtonImage: {
     width: '100%',
     height: '100%',
+  },
+  socialButtonDisabled: {
+    opacity: 0.55,
+  },
+  socialLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(43, 42, 57, 0.35)',
   },
   footerCancel: {
     fontSize: 18,

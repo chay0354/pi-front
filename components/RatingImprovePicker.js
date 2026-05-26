@@ -1,23 +1,18 @@
 import React, {useCallback} from 'react';
-import {View, Image, Pressable, StyleSheet, Text, Platform} from 'react-native';
-/**
- * 1:1 with Figma node 8:79005 — five discrete star/rating options (1…5) + optional layout for profile.
- * Each option: dark tile #2B2A39, 12px radius, 10px padding, 35px star art from design export.
- */
-const STAR_SOURCES = [
-  require('../assets/improve/figma-star-1.svg'),
-  require('../assets/improve/figma-star-2.svg'),
-  require('../assets/improve/figma-star-3.svg'),
-  require('../assets/improve/figma-star-4.svg'),
-  require('../assets/improve/figma-star-5.svg'),
-];
+import {View, Pressable, StyleSheet, Text, Platform} from 'react-native';
+import {SvgXml} from '../utils/svgXml';
+import {FIGMA_RATING_STARS} from '../assets/improve/figmaRatingStarSvgs';
 
-const STAR_SIZE = 35;
-/** Fifth star art only; tile slot stays 35×35, icon may extend past the cube. */
-const STAR_SIZE_5 = 52;
-const STAR5_OFFSET = (STAR_SIZE - STAR_SIZE_5) / 2; // center oversized icon on 35px slot
+/**
+ * 1:1 with Figma node 8:78507 — five discrete star/rating options (1…5).
+ * Tile: #2B2A39, 12px radius, 10px padding. Star art via SvgXml (native-safe).
+ */
+const STAR_SIZE = 34.892;
+const STAR_SIZE_5 = 50.892;
+const STAR5_OFFSET = (STAR_SIZE - STAR_SIZE_5) / 2;
 const TILE_PAD = 10;
 const RADIUS = 12;
+const GAP = 24;
 const NUM_COLOR = '#1E1D27';
 
 /**
@@ -40,6 +35,7 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
         {[1, 2, 3, 4, 5].map(n => {
           const selected = v === n;
           const isFifth = n === 5;
+          const starXml = FIGMA_RATING_STARS[n - 1];
           return (
             <Pressable
               key={n}
@@ -57,25 +53,23 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
                   : v === n
                     ? `דירוג ${n} מתוך 5, נבחר`
                     : `בחר דירוג ${n} מתוך 5`
-              }
-            >
+              }>
               <View
                 style={[styles.starInner, isFifth && styles.starInnerFifthArt]}>
                 {isFifth ? (
                   <View style={styles.star5Layer} pointerEvents="none">
-                    <Image
-                      source={STAR_SOURCES[4]}
-                      style={styles.star5LayerImg}
-                      resizeMode="contain"
-                      accessible={false}
+                    <SvgXml
+                      xml={starXml}
+                      width={STAR_SIZE_5}
+                      height={STAR_SIZE_5}
                     />
                   </View>
                 ) : (
-                  <Image
-                    source={STAR_SOURCES[n - 1]}
-                    style={styles.starImg}
-                    resizeMode="contain"
-                    accessible={false}
+                  <SvgXml
+                    xml={starXml}
+                    width={STAR_SIZE}
+                    height={STAR_SIZE}
+                    style={styles.starSvg}
                   />
                 )}
                 <View style={styles.starNumberWrap} pointerEvents="none">
@@ -98,12 +92,13 @@ const styles = StyleSheet.create({
   },
   row: {
     width: '100%',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     flexWrap: 'nowrap',
+    gap: GAP,
     overflow: 'visible',
-    writingDirection: 'rtl',
+    direction: 'ltr',
   },
   tile: {
     backgroundColor: '#2B2A39',
@@ -141,15 +136,7 @@ const styles = StyleSheet.create({
     zIndex: 0,
     ...Platform.select({web: {userSelect: 'none'}, default: {}}),
   },
-  star5LayerImg: {
-    width: '100%',
-    height: '100%',
-    ...Platform.select({web: {display: 'block', userSelect: 'none'}, default: {}}),
-  },
-  starImg: {
-    ...StyleSheet.absoluteFillObject,
-    width: STAR_SIZE,
-    height: STAR_SIZE,
+  starSvg: {
     zIndex: 0,
     ...Platform.select({web: {display: 'block', userSelect: 'none'}, default: {}}),
   },
@@ -157,6 +144,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 2,
     zIndex: 1,
   },
   starNumber: {
@@ -164,6 +152,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 20,
     fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
     letterSpacing: 0.2,
     textAlign: 'center',
   },

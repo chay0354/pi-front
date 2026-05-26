@@ -36,6 +36,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
 import FeedBottomBar from '../components/FeedBottomBar';
 import {SvgXml} from '../utils/svgXml';
+import {getCachedSvgXml} from '../utils/svgIconCache';
 import {Colors} from '../constants/styles';
 import {officeSidebarSvgs} from '../assets/office-filters/svgIcons';
 import {bnbSidebarSvgs} from '../assets/bnb-filters/svgIcons';
@@ -53,6 +54,7 @@ import {
   clearPostCommentReaction,
   getReviews,
   getFollowStatus,
+  getFollowStatusBatch,
   sendFollowRequest,
   getCurrentUser,
   registerRegularUser,
@@ -936,6 +938,54 @@ const resolveListingFollowTargetId = listing =>
     listing?.creator_subscription_id,
   );
 
+const getListingFollowTargetKeys = listing => {
+  const keys = new Set();
+  for (const candidate of [
+    listing?.subscription_id,
+    listing?.owner_id,
+    listing?.creator_subscription_id,
+  ]) {
+    const uuid = toSubscriptionId(candidate);
+    if (uuid) keys.add(String(uuid));
+  }
+  return [...keys];
+};
+
+const getFollowRowForVideo = (map, video) => {
+  for (const key of getListingFollowTargetKeys(video)) {
+    const row = map?.[key];
+    if (row) return row;
+  }
+  return null;
+};
+
+const patchFollowStatusForVideo = (prev, video, patch, extraKeys = []) => {
+  const keys = new Set([
+    ...getListingFollowTargetKeys(video),
+    ...extraKeys.filter(Boolean).map(String),
+  ]);
+  if (keys.size === 0) return prev;
+  const next = {...prev};
+  for (const key of keys) {
+    next[key] = {...(next[key] || defaultFollowStatusEntry()), ...patch};
+  }
+  return next;
+};
+
+const mergeFollowStatusMaps = (prev, fetched) => {
+  const merged = {...(fetched || {})};
+  for (const [key, row] of Object.entries(prev || {})) {
+    if (!row?.has_pending_request || row?.is_following) continue;
+    const server = merged[key];
+    if (server?.is_following) continue;
+    merged[key] = {
+      ...(server || defaultFollowStatusEntry()),
+      has_pending_request: true,
+    };
+  }
+  return merged;
+};
+
 const defaultFollowStatusEntry = () => ({
   is_following: false,
   has_pending_request: false,
@@ -957,23 +1007,12 @@ const normalizeFollowStatusMap = (rawMap, targetIds = []) => {
 
 async function prefetchFollowStatusForTargets(viewerSubId, targetIds) {
   if (!viewerSubId || !targetIds?.length) return {};
-  const pairs = await Promise.all(
-    targetIds.map(async targetId => {
-      try {
-        const data = await getFollowStatus(viewerSubId, targetId);
-        return [
-          targetId,
-          {
-            is_following: !!data?.is_following,
-            has_pending_request: !!data?.has_pending_request,
-          },
-        ];
-      } catch {
-        return [targetId, defaultFollowStatusEntry()];
-      }
-    }),
-  );
-  return normalizeFollowStatusMap(Object.fromEntries(pairs), targetIds);
+  try {
+    const data = await getFollowStatusBatch(viewerSubId, targetIds);
+    return normalizeFollowStatusMap(data?.status || {}, targetIds);
+  } catch {
+    return normalizeFollowStatusMap({}, targetIds);
+  }
 }
 
 // Image Swiper Component for multiple photos - supports slideshow and collage
@@ -1245,6 +1284,8 @@ const TikTokFeedScreen = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarPanActiveRef = useRef(false);
   const sidebarPanDidDragRef = useRef(false);
+  /** True while finger is on profile / follow + — blocks sidebar pan from stealing the tap. */
+  const sidebarBlockPanRef = useRef(false);
   const sidebarFeedScrollLockedRef = useRef(false);
   const sidebarPendingTapRef = useRef(null);
   const activeSidebarVideoRef = useRef(null);
@@ -1271,6 +1312,11 @@ const TikTokFeedScreen = ({
   const [likedPostIds, setLikedPostIds] = useState(new Set()); // persisted to AsyncStorage
   /** Bumps on every like toggle so FlatList re-renders visible hearts immediately. */
   const [likedUiRevision, setLikedUiRevision] = useState(0);
+  /** Bumps when sidebar follow + visibility changes so FlatList re-renders without refresh. */
+  const [followUiRevision, setFollowUiRevision] = useState(0);
+  const bumpFollowUiRevision = useCallback(() => {
+    setFollowUiRevision(r => r + 1);
+  }, []);
   const postLikePendingIdsRef = useRef(new Set()); // prevent duplicate taps/race requests per post
   const adLikePendingIdsRef = useRef(new Set()); // same for ad (listing) likes
   const likedListingIdsRef = useRef(new Set());
@@ -2270,34 +2316,39 @@ const TikTokFeedScreen = ({
             );
           }
 
-          let nextFollowStatusMap = {};
           const viewerSubIdForPrefetch = resolveFollowUuid(
             currentUser?.subscription_id,
             currentUser?.owner_id,
             currentUser?.id,
           );
-          if (
+          const followPrefetchTargetIds =
             viewerSubIdForPrefetch &&
             currentUser?.email &&
             String(currentUser.email).trim() &&
             displayListings.length > 0
-          ) {
-            const targetIds = [
-              ...new Set(
-                displayListings
-                  .map(resolveListingFollowTargetId)
-                  .filter(id => id && id !== viewerSubIdForPrefetch),
-              ),
-            ];
-            if (targetIds.length > 0) {
-              nextFollowStatusMap = await prefetchFollowStatusForTargets(
-                viewerSubIdForPrefetch,
-                targetIds,
-              );
-            }
-          }
-          setFollowStatusByTargetId(nextFollowStatusMap);
+              ? [
+                  ...new Set(
+                    displayListings
+                      .map(resolveListingFollowTargetId)
+                      .filter(id => id && id !== viewerSubIdForPrefetch),
+                  ),
+                ]
+              : [];
+
           setDbListings(displayListings);
+          setLoadingListings(false);
+
+          if (followPrefetchTargetIds.length > 0) {
+            void prefetchFollowStatusForTargets(
+              viewerSubIdForPrefetch,
+              followPrefetchTargetIds,
+            ).then(nextFollowStatusMap => {
+              setFollowStatusByTargetId(prev =>
+                mergeFollowStatusMaps(prev, nextFollowStatusMap),
+              );
+              bumpFollowUiRevision();
+            });
+          }
           // Sync server liked state into local sets (add/remove) so yellow state stays consistent.
           if (currentUser?.id != null) {
             const uid = String(currentUser.id);
@@ -3785,9 +3836,9 @@ const TikTokFeedScreen = ({
         onStartShouldSetPanResponder: () => false,
         onStartShouldSetPanResponderCapture: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          shouldSidebarDrag(gestureState),
+          !sidebarBlockPanRef.current && shouldSidebarDrag(gestureState),
         onMoveShouldSetPanResponderCapture: (_, gestureState) =>
-          shouldSidebarDrag(gestureState),
+          !sidebarBlockPanRef.current && shouldSidebarDrag(gestureState),
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => sidebarPanDidDragRef.current,
         onPanResponderGrant: () => {
@@ -3869,9 +3920,11 @@ const TikTokFeedScreen = ({
       if (isSelf) return false;
       if (!targetSubId && !targetEmail) return false;
       if (isGuest) return true;
-      if (!targetSubId) return false;
-      const followRow = followStatusByTargetId[String(targetSubId)];
-      if (!followRow) return false;
+      if (!targetSubId && getListingFollowTargetKeys(video).length === 0) {
+        return false;
+      }
+      const followRow = getFollowRowForVideo(followStatusByTargetId, video);
+      if (!followRow) return true;
       return !followRow.is_following && !followRow.has_pending_request;
     },
     [
@@ -3926,6 +3979,7 @@ const TikTokFeedScreen = ({
             has_pending_request: !!data?.has_pending_request,
           },
         }));
+        bumpFollowUiRevision();
       })
       .catch(() => {
         if (cancelled) return;
@@ -3933,6 +3987,7 @@ const TikTokFeedScreen = ({
           ...prev,
           [String(sidebarTargetSubId)]: defaultFollowStatusEntry(),
         }));
+        bumpFollowUiRevision();
       });
     return () => {
       cancelled = true;
@@ -3942,6 +3997,7 @@ const TikTokFeedScreen = ({
     sidebarViewerSubId,
     sidebarTargetSubId,
     followStatusByTargetId,
+    bumpFollowUiRevision,
   ]);
 
   const resolveFollowUuidFromEmail = async email => {
@@ -3976,17 +4032,14 @@ const TikTokFeedScreen = ({
       const targetEmail = video?.creator_email
         ? String(video.creator_email).trim().toLowerCase()
         : '';
-      const optimisticTargetKey = targetSubId ? String(targetSubId) : null;
 
-      if (optimisticTargetKey) {
-        setFollowStatusByTargetId(prev => ({
-          ...prev,
-          [optimisticTargetKey]: {
+        setFollowStatusByTargetId(prev =>
+          patchFollowStatusForVideo(prev, video, {
             is_following: false,
             has_pending_request: true,
-          },
-        }));
-      }
+          }),
+        );
+      bumpFollowUiRevision();
 
       setSidebarSendingFollow(true);
       try {
@@ -4020,21 +4073,23 @@ const TikTokFeedScreen = ({
         }
 
         const result = await sendFollowRequest(requesterId, targetId);
-        const resolvedTargetKey = String(targetId);
-        setFollowStatusByTargetId(prev => ({
-          ...prev,
-          [resolvedTargetKey]: {
-            is_following: !!result?.already_following,
-            has_pending_request: !result?.already_following,
-          },
-        }));
+        setFollowStatusByTargetId(prev =>
+          patchFollowStatusForVideo(
+            prev,
+            video,
+            {
+              is_following: !!result?.already_following,
+              has_pending_request: !result?.already_following,
+            },
+            [targetId],
+          ),
+        );
+        bumpFollowUiRevision();
       } catch (err) {
-        if (optimisticTargetKey) {
-          setFollowStatusByTargetId(prev => ({
-            ...prev,
-            [optimisticTargetKey]: defaultFollowStatusEntry(),
-          }));
-        }
+        setFollowStatusByTargetId(prev =>
+          patchFollowStatusForVideo(prev, video, defaultFollowStatusEntry()),
+        );
+        bumpFollowUiRevision();
         if (__DEV__) {
           console.warn(
             '[TikTokFeedScreen] follow request failed:',
@@ -4051,6 +4106,7 @@ const TikTokFeedScreen = ({
       sidebarViewerSubId,
       sidebarViewerEmail,
       onOpenUserRegistration,
+      bumpFollowUiRevision,
     ],
   );
 
@@ -4075,10 +4131,16 @@ const TikTokFeedScreen = ({
     }
     if (tap.type === 'filter' && tap.id) {
       setSelectedSidebarFilter(prev => (prev === tap.id ? null : tap.id));
+      return;
+    }
+    if (tap.type === 'follow') {
+      if (sidebarSendingFollow) return;
+      handleSidebarFollowRequest(video);
     }
   }, [
     videos.length,
     loadingListings,
+    sidebarSendingFollow,
     handleSidebarFollowRequest,
     onOpenUserProfile,
   ]);
@@ -4689,6 +4751,12 @@ const TikTokFeedScreen = ({
         {isActivePage && shouldShowFollowPlusForVideo(video) ? (
           <TouchableOpacity
             style={styles.sidebarFollowBadge}
+            onPressIn={() => {
+              sidebarBlockPanRef.current = true;
+            }}
+            onPressOut={() => {
+              sidebarBlockPanRef.current = false;
+            }}
             onPress={() => handleSidebarFollowRequest(video)}
             disabled={feedIsEmpty || sidebarSendingFollow}
             activeOpacity={0.8}
@@ -4739,7 +4807,10 @@ const TikTokFeedScreen = ({
           <>
             {filter.svg ? (
               <SvgXml
-                xml={filter.svg(isSelected ? '#FFC40A' : '#FFFFFF')}
+                xml={getCachedSvgXml(
+                  filter.svg,
+                  isSelected ? '#FFC40A' : '#FFFFFF',
+                )}
                 width={32}
                 height={32}
                 style={styles.sidebarFilterIcon}
@@ -5338,6 +5409,11 @@ const TikTokFeedScreen = ({
     );
   };
 
+  const feedListExtraData = useMemo(
+    () => ({likedUiRevision, followUiRevision}),
+    [likedUiRevision, followUiRevision],
+  );
+
   const renderFeedItem = useCallback(
     ({item: video, index}) =>
       wrapFeedPage(video, index, renderFeedMedia(video, index)),
@@ -5351,6 +5427,8 @@ const TikTokFeedScreen = ({
       feedIsEmpty,
       videos.length,
       likedUiRevision,
+      followUiRevision,
+      sidebarSendingFollow,
     ],
   );
 
@@ -5993,7 +6071,7 @@ const TikTokFeedScreen = ({
             <FlatList
               ref={feedListRef}
               data={videos}
-              extraData={likedUiRevision}
+              extraData={feedListExtraData}
               keyExtractor={feedKeyExtractor}
               renderItem={renderFeedItem}
               getItemLayout={getFeedItemLayout}

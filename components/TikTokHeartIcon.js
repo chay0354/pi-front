@@ -8,15 +8,16 @@ function heartSvgXml(fillColor) {
   return `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="${HEART_PATH}" fill="${fillColor}"/></svg>`;
 }
 
+const HEART_XML_LIKED = heartSvgXml('rgba(255, 196, 10, 1)');
+const HEART_XML_DEFAULT = heartSvgXml('#FFFFFF');
+
 /**
  * TikTok feed overlay heart — SVG fill updates instantly on web and native.
  */
 export function TikTokHeartIcon({liked = false, size = 32, style}) {
-  const fill = liked ? 'rgba(255, 196, 10, 1)' : '#FFFFFF';
-
   return (
     <SvgXml
-      xml={heartSvgXml(fill)}
+      xml={liked ? HEART_XML_LIKED : HEART_XML_DEFAULT}
       width={size}
       height={size}
       style={style}

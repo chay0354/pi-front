@@ -11,12 +11,45 @@ import {
   useWindowDimensions,
   PanResponder,
   Platform,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {CalendarModal} from '../components/FormsElement/CalendarModal';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
-import {flexEnd, forceLtrStyle, getRangeSliderPercentFromEvent, rangeSliderFillStyle, rangeSliderThumbStyle} from '../utils/rtlLayout';
+import {flexEnd, getRangeSliderPercentFromEvent} from '../utils/rtlLayout';
+
+/**
+ * RTL-visual slider helpers (price screen owns these locally so the shared helpers,
+ * which compensate to LTR-visual, keep working for the other filter screens).
+ *
+ *   Native (Android/iOS): app forces RTL + swapLeftAndRightInRTL, so `left: X%`
+ *     becomes `right: X%` automatically — 0% sits on the right.
+ *   Web: <html dir="rtl"> doesn't flip absolute `left` — use `right` directly.
+ */
+const RANGE_SLIDER_THUMB_SIZE = 22;
+const IS_WEB = Platform.OS === 'web';
+
+function priceThumbStyle(percent) {
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  return IS_WEB
+    ? {right: `${p}%`, marginRight: -RANGE_SLIDER_THUMB_SIZE / 2}
+    : {left: `${p}%`, marginLeft: -RANGE_SLIDER_THUMB_SIZE / 2};
+}
+
+function priceFillStyle(minPercent, maxPercent) {
+  const min = Math.max(0, Math.min(100, Number(minPercent) || 0));
+  const max = Math.max(0, Math.min(100, Number(maxPercent) || 0));
+  const w = Math.max(0, max - min);
+  return IS_WEB
+    ? {right: `${min}%`, width: `${w}%`}
+    : {left: `${min}%`, width: `${w}%`};
+}
+
+/** Touch X is always LTR-physical; map to value% by flipping under RTL visual. */
+const PRICE_SLIDER_IS_RTL_VISUAL = IS_WEB || I18nManager.isRTL;
+const touchPercentToValuePercent = touchPercent =>
+  PRICE_SLIDER_IS_RTL_VISUAL ? 100 - touchPercent : touchPercent;
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -142,12 +175,13 @@ const PriceFilterScreen = ({
   }, []);
 
   const percentFromNativeEvent = useCallback(nativeEvent => {
-    return getRangeSliderPercentFromEvent(
+    const raw = getRangeSliderPercentFromEvent(
       nativeEvent,
       sliderWidthRef.current,
       sliderWindowXRef.current,
       sliderRef,
     );
+    return touchPercentToValuePercent(raw);
   }, []);
 
   const handleSliderPressAtPercent = useCallback(
@@ -378,23 +412,17 @@ const PriceFilterScreen = ({
             <View
               style={[
                 styles.sliderTrackFill,
-                rangeSliderFillStyle(sliderWidth, minPercent, maxPercent),
+                priceFillStyle(minPercent, maxPercent),
               ]}
             />
           </View>
           <View
-            style={[
-              styles.sliderThumb,
-              rangeSliderThumbStyle(sliderWidth, minPercent),
-            ]}
+            style={[styles.sliderThumb, priceThumbStyle(minPercent)]}
             pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
           <View
-            style={[
-              styles.sliderThumb,
-              rangeSliderThumbStyle(sliderWidth, maxPercent),
-            ]}
+            style={[styles.sliderThumb, priceThumbStyle(maxPercent)]}
             pointerEvents="none">
             <View style={styles.sliderThumbCore} />
           </View>
@@ -537,7 +565,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 24,
     gap: 8,
-    ...forceLtrStyle,
   },
   priceInputGroup: {
     flex: 1,
@@ -553,7 +580,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 6,
     overflow: 'hidden',
-    ...forceLtrStyle,
   },
   pricePillText: {
     color: '#fff',
@@ -592,7 +618,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 24,
-    ...forceLtrStyle,
   },
   sliderTrack: {
     width: '100%',

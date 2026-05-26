@@ -13,7 +13,6 @@ import {forceRtlStyle} from './utils/rtlLayout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AdsForm,
-  HomeScreen,
   Home,
   SelectedProjectsScreen,
   ProfessionalsDirectoryScreen,
@@ -72,9 +71,22 @@ import {
   pickTopViewedListingForProfile,
   mergeHubRowIntoListingPayload,
 } from './utils/pickTopViewedListingForProfile';
-import {useFonts} from 'expo-font';
-import {fonts} from './utils/fonts';
+import {useFonts, loadAsync as loadFontsAsync} from 'expo-font';
+import {criticalFonts, deferredFonts} from './utils/fonts';
+import {schedulePreloadAppAssets} from './utils/preloadAppAssets';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
+
+const AppBootLoading = () => (
+  <View
+    style={{
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#1e1d27',
+    }}>
+    <ActivityIndicator size="large" color="#ffffff" />
+  </View>
+);
 
 const screenName = {
   home: 'home',
@@ -173,7 +185,13 @@ const DEFAULT_TIKTOK_TOP_FILTER = 'pics';
  * Entry point for the PI Real Estate application
  */
 export default function App() {
-  const [fontsLoaded] = useFonts(fonts);
+  const [fontsLoaded] = useFonts(criticalFonts);
+
+  useEffect(() => {
+    if (!fontsLoaded) return undefined;
+    loadFontsAsync(deferredFonts).catch(() => {});
+    return schedulePreloadAppAssets();
+  }, [fontsLoaded]);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
@@ -480,17 +498,7 @@ export default function App() {
   }, []);
 
   if (!fontsLoaded) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#1e1d27',
-        }}>
-        <ActivityIndicator size="large" color="#ffffff" />
-      </View>
-    );
+    return <AppBootLoading />;
   }
 
   const presenceUserEmail =
