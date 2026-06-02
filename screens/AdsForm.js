@@ -18,20 +18,24 @@ import {
   PanResponder,
   Dimensions,
   I18nManager,
-  InteractionManager,
   Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import {FormScrollProvider, useFormScroll} from '../utils/formKeyboardScroll';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  AD_VIDEO_PICKER_OPTIONS,
+  ensureMediaLibraryPermission,
+} from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
   uploadFile,
   errorMessageFromUnknown,
   createListing,
+  createSalesImageStory,
   updateListing,
-  toSubscriptionId,
+  resolveSubscriptionId,
   getResolvedApiUrl,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
@@ -47,6 +51,7 @@ import {
   PRICE_COUNTER_STEP_PER_NIGHT,
   PRICE_COUNTER_STEP_ROOMMATE_BUDGET,
 } from '../utils/priceInput';
+import {PublishAdButton} from '../components/FormsElement/PublishAdButton';
 import {buildGlobalGroundFieldList} from '../utils/globalGroundAdFields';
 import {
   AccommodationOffers,
@@ -476,28 +481,6 @@ const AD_IMAGE_PICKER_QUALITY = 0.85;
 const ADS_FORM_HEADER_HEIGHT = 64;
 const ADS_FORM_PUBLISH_FOOTER_HEIGHT = 92;
 
-const AD_VIDEO_PICKER_OPTIONS = {
-  mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-  allowsEditing: false,
-  quality: 1,
-  videoMaxDuration: 120,
-};
-
-const ensureMediaLibraryPermission = async () => {
-  if (Platform.OS === 'web') return true;
-  const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
-  if (existing.status === 'granted') return true;
-  const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (requested.status !== 'granted') {
-    Alert.alert(
-      'הרשאה נדרשת',
-      'נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים.',
-    );
-    return false;
-  }
-  return true;
-};
-
 /**
  * AdsForm Component
  * Form for creating an office listing
@@ -510,6 +493,9 @@ const AdsForm = ({
   initialBnbHostType = null,
   /** Navigate to post composer for current category; return path is set by App. */
   onOpenPostEditor = null,
+  /** Set when PostEditor returns to AdsForm after publishing a sales-image post. */
+  pendingSalesImageFromEditor = null,
+  onPendingSalesImageConsumed = null,
 }) => {
   const insets = useSafeAreaInsets();
   const [propertyType, setPropertyType] = useState(null);
@@ -1016,9 +1002,13 @@ const AdsForm = ({
       const u = String(salesImageRaw).trim();
       setSalesImage({uri: u});
       setSalesImageUrl(u);
+      salesImageCompanionPendingRef.current = false;
+      salesImageStoryAlreadyCreatedRef.current = true;
     } else {
       setSalesImage(null);
       setSalesImageUrl(null);
+      salesImageCompanionPendingRef.current = false;
+      salesImageStoryAlreadyCreatedRef.current = false;
     }
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
@@ -1069,6 +1059,20 @@ const AdsForm = ({
     requestPermissions();
   }, []);
 
+  useEffect(() => {
+    const pending = pendingSalesImageFromEditor;
+    if (!pending?.url) return;
+    const url = String(pending.url).trim();
+    if (!url) return;
+    setSalesImage({uri: url});
+    setSalesImageUrl(url);
+    salesImageStoryAlreadyCreatedRef.current =
+      pending.storyAlreadyCreated === true ||
+      pending.feedPostAlreadyCreated === true;
+    salesImageCompanionPendingRef.current = !salesImageStoryAlreadyCreatedRef.current;
+    onPendingSalesImageConsumed?.();
+  }, [pendingSalesImageFromEditor, onPendingSalesImageConsumed]);
+
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
   const [mainImageUrl, setMainImageUrl] = useState(null);
@@ -1097,6 +1101,10 @@ const AdsForm = ({
   const salesImageInputRef = useRef(null);
   const [salesImage, setSalesImage] = useState(null);
   const [salesImageUrl, setSalesImageUrl] = useState(null);
+  /** True when a companion story still needs to be created on publish. */
+  const salesImageCompanionPendingRef = useRef(false);
+  /** True when PostEditor already published the sales image as a story. */
+  const salesImageStoryAlreadyCreatedRef = useRef(false);
   // Land form radio groups (תב״ע, קרקע במושב, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
@@ -1401,6 +1409,8 @@ const AdsForm = ({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
+        salesImageCompanionPendingRef.current = true;
+        salesImageStoryAlreadyCreatedRef.current = false;
         setSalesImage({
           uri: asset.uri,
           type: asset.type || 'image/jpeg',
@@ -1416,6 +1426,8 @@ const AdsForm = ({
   const handleSalesImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
+      salesImageCompanionPendingRef.current = true;
+      salesImageStoryAlreadyCreatedRef.current = false;
       setSalesImage({
         uri: URL.createObjectURL(file),
         type: file.type,
@@ -1499,38 +1511,27 @@ const AdsForm = ({
     }
   };
 
-  const pickVideoFromLibrary = async () => {
-    const permitted = await ensureMediaLibraryPermission();
-    if (!permitted) return;
-    const result = await ImagePicker.launchImageLibraryAsync(AD_VIDEO_PICKER_OPTIONS);
-    if (!result.canceled && result.assets?.[0]) {
-      setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
-      setHasVideo(true);
-    }
-  };
-
   const handleVideoUpload = async () => {
     if (Platform.OS === 'web' && videoInputRef.current) {
       videoInputRef.current.click();
       return;
     }
     try {
-      const run = () =>
-        pickVideoFromLibrary().catch(error => {
-          console.log('video picker error:', error);
-          Alert.alert(
-            'שגיאה בבחירת סרטון',
-            error?.message || 'לא ניתן לפתוח את ספריית הסרטונים.',
-          );
-        });
-      if (Platform.OS === 'android') {
-        InteractionManager.runAfterInteractions(run);
-      } else {
-        await run();
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync(
+        AD_VIDEO_PICKER_OPTIONS,
+      );
+      if (!result.canceled && result.assets?.[0]) {
+        setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
+        setHasVideo(true);
       }
     } catch (error) {
-      console.log('video upload handler error:', error);
-      Alert.alert('שגיאה בבחירת סרטון', error?.message || '');
+      console.log('video picker error:', error);
+      Alert.alert(
+        'שגיאה בבחירת סרטון',
+        error?.message || 'לא ניתן לפתוח את ספריית הסרטונים.',
+      );
     }
   };
 
@@ -1675,31 +1676,11 @@ const AdsForm = ({
     }
   };
 
-  /** Gray vs yellow PNGs differ in size; one combined ratio caused letterboxing on the other */
-  const publishAspectRatios = useMemo(() => {
-    const fbGray = 1004 / 174;
-    const fbYellow = 990 / 162;
-    try {
-      const gray = Image.resolveAssetSource(
-        require('../assets/ad-uplaud/button-gray.png'),
-      );
-      const yel = Image.resolveAssetSource(
-        require('../assets/ad-uplaud/button-yelow.png'),
-      );
-      return {
-        gray: gray?.width && gray?.height ? gray.width / gray.height : fbGray,
-        yellow: yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
-      };
-    } catch (_) {
-      return {gray: fbGray, yellow: fbYellow};
-    }
-  }, []);
-
   const handlePublish = async () => {
     try {
       setUploading(true);
 
-      // Must match rendered `adsFormFields` so validation & companion-post logic stay in sync with visible fields (e.g. salesimage).
+      // Must match rendered `adsFormFields` so validation & companion-story logic stay in sync with visible fields (e.g. salesimage).
       const fields = adsFormFields;
       const fieldKeys = fields.map(f => f.key);
       const generalDetailsField = fields.find(f => f.key === 'generaldetails');
@@ -1963,7 +1944,7 @@ const AdsForm = ({
           ? {
               status: 'published',
               subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: toSubscriptionId(currentUser?.id) || null,
+              subscriptionId: resolveSubscriptionId(currentUser),
               // Category 3 specific fields
               searchPurpose,
               preferredApartmentType,
@@ -1992,7 +1973,7 @@ const AdsForm = ({
           : {
               status: 'published',
               subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: toSubscriptionId(currentUser?.id) || null,
+              subscriptionId: resolveSubscriptionId(currentUser),
               // Standard listing fields for other categories
               propertyType,
               area: (() => {
@@ -2119,36 +2100,33 @@ const AdsForm = ({
         ? await updateListing(existingListingId, listingData)
         : await createListing(listingData);
 
-      // Mirror תמונה מכירתית as a feed post (same image, same listing category) — only when user chose a new file this publish (avoid duplicate posts on re-save).
-      const salesImageIsNewUpload = hasLocalMediaFile(salesImage);
-      if (
+      // Mirror תמונה מכירתית as a home story (bottom strip), not a feed post.
+      const publisherSubId = resolveSubscriptionId(currentUser);
+      const shouldCreateSalesImageStory =
         uploadedSalesImageUrl &&
         fieldKeys.includes('salesimage') &&
-        salesImageIsNewUpload
-      ) {
+        !salesImageStoryAlreadyCreatedRef.current &&
+        (hasLocalMediaFile(salesImage) || salesImageCompanionPendingRef.current);
+      if (shouldCreateSalesImageStory) {
         try {
-          const subId = toSubscriptionId(currentUser?.id);
-          if (subId) {
-            await createListing({
-              category: listingCategory,
-              status: 'published',
-              subscriptionId: subId,
-              subscriptionType: currentUser?.subscription_type || null,
-              mainImageUrl: uploadedSalesImageUrl,
-              description: 'פוסט',
-              feedPost: true,
-              feed_post: true,
-              propertyType: 'post',
-              price: 0,
+          if (!publisherSubId) {
+            console.warn(
+              '[AdsForm] Companion sales-image story skipped: no subscription id on currentUser',
+            );
+          } else {
+            await createSalesImageStory({
+              imageUrl: uploadedSalesImageUrl,
+              subscriptionId: publisherSubId,
             });
-            // Drop local file so another "פרסם" without changing the image does not create another companion post.
+            salesImageCompanionPendingRef.current = false;
+            salesImageStoryAlreadyCreatedRef.current = true;
             setSalesImage({uri: uploadedSalesImageUrl});
             setSalesImageUrl(uploadedSalesImageUrl);
           }
         } catch (mirrorErr) {
           console.warn(
-            '[AdsForm] Companion sales-image post failed:',
-            mirrorErr?.message || mirrorErr,
+            '[AdsForm] Companion sales-image story failed:',
+            errorMessageFromUnknown(mirrorErr, 'Unknown error'),
           );
         }
       }
@@ -2182,46 +2160,11 @@ const AdsForm = ({
   console.log('ads form screen', adsFormFields);
 
   const publishButton = (
-    <TouchableOpacity
+    <PublishAdButton
       onPress={handlePublish}
-      disabled={uploading || !formReadyToPublish}
-      accessibilityState={{disabled: uploading || !formReadyToPublish}}
-      accessibilityLabel="פרסם"
-      style={[
-        styles.publishButtonTouchable,
-        Platform.OS === 'web' && !uploading && formReadyToPublish
-          ? {cursor: 'pointer'}
-          : Platform.OS === 'web'
-            ? {cursor: 'not-allowed'}
-            : null,
-      ]}
-      activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
-      <View style={styles.publishButtonImageWrap}>
-        <Image
-          source={
-            formReadyToPublish
-              ? require('../assets/ad-uplaud/button-yelow.png')
-              : require('../assets/ad-uplaud/button-gray.png')
-          }
-          style={[
-            styles.publishButtonImage,
-            {
-              aspectRatio: formReadyToPublish
-                ? publishAspectRatios.yellow
-                : publishAspectRatios.gray,
-            },
-          ]}
-          resizeMode="contain"
-        />
-        {uploading ? (
-          <View
-            style={styles.publishButtonSpinnerOverlay}
-            pointerEvents="none">
-            <ActivityIndicator size="small" color="#000" />
-          </View>
-        ) : null}
-      </View>
-    </TouchableOpacity>
+      uploading={uploading}
+      ready={formReadyToPublish}
+    />
   );
 
   return (
@@ -2787,46 +2730,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 10,
-  },
-  displayOption: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 25,
-  },
-  publishButtonTouchable: {
-    marginHorizontal: 20,
-    marginTop: 0,
-    marginBottom: 0,
-    alignSelf: 'stretch',
-    paddingVertical: 0,
-  },
-  publishButtonImageWrap: {
-    width: '100%',
-    position: 'relative',
-    overflow: 'hidden',
-    alignSelf: 'stretch',
-    ...Platform.select({
-      web: {fontSize: 0, lineHeight: 0},
-      default: {},
-    }),
-  },
-  publishButtonImage: {
-    width: '100%',
-    height: undefined,
-    marginVertical: 0,
-    paddingVertical: 0,
-    ...Platform.select({
-      web: {
-        display: 'block',
-        verticalAlign: 'top',
-      },
-      default: {},
-    }),
-  },
-  publishButtonSpinnerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   preferenceSection: {
     marginBottom: 20,

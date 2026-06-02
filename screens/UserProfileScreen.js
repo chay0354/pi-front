@@ -60,6 +60,7 @@ import BnbListingProfileContent from '../components/BnbListingProfileContent';
 import PartnersListingProfileContent from '../components/PartnersListingProfileContent';
 import CompanyLandListingProfileContent from '../components/CompanyLandListingProfileContent';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
+import {buildProfileAdFeatureLabels} from '../utils/listingAmenities';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {flexEnd, flexStart, forceRtlStyle} from '../utils/rtlLayout';
 
@@ -1497,70 +1498,10 @@ const UserProfileScreen = ({
   // }
 
   // Always show 9 property features in design order; use "ללא [field name]" when no data.
-  const adFeatures = React.useMemo(() => {
-    if (!lastAd) return [];
-    const am =
-      lastAd.amenities && typeof lastAd.amenities === 'object'
-        ? lastAd.amenities
-        : null;
-    const r =
-      lastAd.rooms != null && lastAd.rooms !== '' ? Number(lastAd.rooms) : null;
-    const a =
-      lastAd.area != null && lastAd.area !== '' ? Number(lastAd.area) : null;
-    const f =
-      lastAd.floor != null && lastAd.floor !== '' ? Number(lastAd.floor) : null;
-    const cond = lastAd.condition && String(lastAd.condition).trim();
-    const condLabel = cond
-      ? cond === 'renovated' || cond === 'משופץ'
-        ? 'משופץ'
-        : cond === 'new' || cond === 'חדש'
-          ? 'חדש'
-          : cond === 'old' || cond === 'ישן'
-            ? 'ישן'
-            : cond
-      : null;
-    const parking = am ? (am.parking ?? am.parking_spaces) : null;
-    return [
-      {iconKey: 'area', label: a != null && !isNaN(a) ? `${a} מ"ר` : 'ללא מ"ר'},
-      {
-        iconKey: 'rooms',
-        label: r != null && !isNaN(r) ? `${r} חדרים` : 'ללא חדרים',
-      },
-      {
-        iconKey: 'floor',
-        label: f != null && !isNaN(f) ? `קומה ${f}` : 'ללא קומה',
-      },
-      {
-        iconKey: 'balcony',
-        label: am && (am.balcony || am.mirpeset) ? 'מרפסת' : 'ללא מרפסת',
-      },
-      {
-        iconKey: 'elevator',
-        label: am && (am.elevator || am.maala) ? 'מעלית' : 'ללא מעלית',
-      },
-      {
-        iconKey: 'parking',
-        label:
-          parking != null
-            ? typeof parking === 'number'
-              ? `חנייה ${parking}`
-              : 'חנייה'
-            : 'ללא חנייה',
-      },
-      {
-        iconKey: 'mamad',
-        label: am && (am.mamad || am.mamad_room) ? 'ממ"ד' : 'ללא ממ"ד',
-      },
-      {iconKey: 'condition', label: condLabel || 'ללא מצב'},
-      {
-        iconKey: 'immediate',
-        label:
-          am && (am.immediate_entry || am.entry_immediate)
-            ? 'כניסה מיידית'
-            : 'ללא כניסה מיידית',
-      },
-    ];
-  }, [lastAd]);
+  const adFeatures = React.useMemo(
+    () => buildProfileAdFeatureLabels(lastAd),
+    [lastAd],
+  );
 
   const projectOffersCards = React.useMemo(() => {
     if (!isCompany || !lastAd) return [];

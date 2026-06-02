@@ -39,7 +39,7 @@ import {
   uploadFile,
   createListing,
   createStory,
-  toSubscriptionId,
+  resolveSubscriptionId,
 } from '../utils/api';
 import {forceLtrStyle} from '../utils/rtlLayout';
 
@@ -772,7 +772,7 @@ const PostEditorScreen = ({
         throw new Error('העלאה הצליחה בלי כתובת קובץ');
       }
 
-      const subId = toSubscriptionId(currentUser?.id);
+      const subId = resolveSubscriptionId(currentUser);
       if (!subId) {
         Alert.alert(
           'לא ניתן לפרסם',
@@ -882,6 +882,17 @@ const PostEditorScreen = ({
       showSub?.remove?.();
       hideSub?.remove?.();
     };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1405,7 +1416,8 @@ const PostEditorScreen = ({
             resizeMode={ResizeMode.COVER}
             shouldPlay
             isLooping
-            isMuted
+            isMuted={false}
+            volume={1.0}
             useNativeControls={Platform.OS === 'web'}
           />
         ) : activeTab === TAB_CAMERA && backgroundImageUri ? (

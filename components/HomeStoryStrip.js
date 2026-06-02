@@ -45,7 +45,7 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
 });
 
 /**
- * Story rings (yellow border): users with at least one story slide (profile video and/or video posts); tap opens viewer.
+ * Story rings (yellow border): profile video, story slides, and video posts; tap opens viewer.
  */
 const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
   const renderItem = useCallback(

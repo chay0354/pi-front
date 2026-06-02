@@ -14,6 +14,10 @@ import {
   I18nManager,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  AD_VIDEO_PICKER_OPTIONS,
+  ensureMediaLibraryPermission,
+} from '../utils/mediaLibraryPermission';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -278,11 +282,11 @@ const SubscriptionFormScreen = ({
     }
 
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: true,
-        quality: 1,
-      });
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync(
+        AD_VIDEO_PICKER_OPTIONS,
+      );
 
       if (!result.canceled && result.assets?.[0]) {
         setVideo(buildPickedVideoFile(result.assets[0]));

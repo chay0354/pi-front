@@ -266,6 +266,8 @@ export default function App() {
     /** DB listing category for the next publish; null = fall back to selectedCategory in PostEditor */
     listingCategoryId: null,
   }));
+  /** Sales image composed in PostEditor before returning to AdsForm. */
+  const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] = useState(null);
   // Feed filters (price, rooms, city, apartment type) – applied client-side in TikTokFeedScreen
   const [feedFilters, setFeedFilters] = useState(INITIAL_FEED_FILTERS);
   /** Filter modals return here on save/cancel (TikTok feed vs Favorites). */
@@ -1218,7 +1220,17 @@ export default function App() {
                 publishCategoryId={postEditorConfig.listingCategoryId}
                 currentUser={currentUser}
                 onClose={() => setCurrentScreen(postEditorConfig.returnScreen)}
-                onPublish={() => {
+                onPublish={payload => {
+                  if (
+                    postEditorConfig.returnScreen === screenName.adsForm &&
+                    payload?.url
+                  ) {
+                    setAdsFormPendingSalesImage({
+                      url: payload.url,
+                      storyAlreadyCreated:
+                        postEditorConfig.publishTarget === 'story',
+                    });
+                  }
                   if (postEditorConfig.publishTarget === 'post') {
                     setTimeout(() => {
                       setTikTokFeedRefreshKey(prev => prev + 1);
@@ -1232,6 +1244,10 @@ export default function App() {
                 initialCategory={selectedCategory}
                 initialListing={editingListing}
                 initialBnbHostType={editingListing ? null : bnbPublishHostType}
+                pendingSalesImageFromEditor={adsFormPendingSalesImage}
+                onPendingSalesImageConsumed={() =>
+                  setAdsFormPendingSalesImage(null)
+                }
                 onOpenPostEditor={listingCategoryId => {
                   if (!currentUser) {
                     setReturnToScreenAfterAuth('adsForm');
@@ -1245,7 +1261,7 @@ export default function App() {
                       : NaN;
                   const listingCat = Number.isFinite(n) && n > 0 ? n : null;
                   setPostEditorConfig({
-                    publishTarget: 'post',
+                    publishTarget: 'story',
                     returnScreen: screenName.adsForm,
                     listingCategoryId: listingCat,
                   });

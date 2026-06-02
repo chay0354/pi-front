@@ -15,6 +15,10 @@ import {
   I18nManager,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  AD_VIDEO_PICKER_OPTIONS,
+  ensureMediaLibraryPermission,
+} from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing, getApiUrl} from '../utils/api';
@@ -28,6 +32,8 @@ import {flexStart, formHeadingStyle, formRtlContainerStyle} from '../utils/rtlLa
 import {CountUpdate} from '../components/FormsElement/CountUpdate';
 import {CardPriceField} from '../components/FormsElement/CardPriceField';
 import {Title} from '../components/FormsElement/Title';
+import {PublishAdButton} from '../components/FormsElement/PublishAdButton';
+import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {Divider} from '../components/FormsElement/Divider';
 
 /**
@@ -382,13 +388,13 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       return;
     }
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: true,
-        quality: 1,
-      });
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync(
+        AD_VIDEO_PICKER_OPTIONS,
+      );
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         setVideoFile({
           uri: asset.uri,
@@ -464,25 +470,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   ]);
 
   const formReadyToPublish = publishBlockingErrors.length === 0;
-
-  const publishAspectRatios = useMemo(() => {
-    const fbGray = 1004 / 174;
-    const fbYellow = 990 / 162;
-    try {
-      const gray = Image.resolveAssetSource(
-        require('../assets/ad-uplaud/button-gray.png'),
-      );
-      const yel = Image.resolveAssetSource(
-        require('../assets/ad-uplaud/button-yelow.png'),
-      );
-      return {
-        gray: gray?.width && gray?.height ? gray.width / gray.height : fbGray,
-        yellow: yel?.width && yel?.height ? yel.width / yel.height : fbYellow,
-      };
-    } catch (_) {
-      return {gray: fbGray, yellow: fbYellow};
-    }
-  }, []);
 
   const handlePublish = async () => {
     try {
@@ -898,20 +885,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       <ActivityIndicator size="large" color="#fff" />
                       <Text style={styles.videoPreviewText}>מעלה סרטון...</Text>
                     </View>
-                  ) : videoFile ? (
-                    <View style={styles.videoPreview}>
-                      {Platform.OS === 'web' ? (
-                        <video
-                          src={videoFile.uri}
-                          style={styles.videoPreviewElement}
-                          controls={false}
-                        />
-                      ) : (
-                        <Text style={styles.videoPreviewText}>
-                          Video Selected
-                        </Text>
-                      )}
-                    </View>
+                  ) : videoFile?.uri ? (
+                    <VideoPreviewThumb uri={videoFile.uri} style={styles.videoPreviewFill} />
                   ) : (
                     <View style={styles.videoUploadContent}>
                       <Image
@@ -1025,20 +1000,8 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       <ActivityIndicator size="large" color="#fff" />
                       <Text style={styles.videoPreviewText}>מעלה סרטון...</Text>
                     </View>
-                  ) : videoFile ? (
-                    <View style={styles.videoPreview}>
-                      {Platform.OS === 'web' ? (
-                        <video
-                          src={videoFile.uri}
-                          style={styles.videoPreviewElement}
-                          controls={false}
-                        />
-                      ) : (
-                        <Text style={styles.videoPreviewText}>
-                          Video Selected
-                        </Text>
-                      )}
-                    </View>
+                  ) : videoFile?.uri ? (
+                    <VideoPreviewThumb uri={videoFile.uri} style={styles.videoPreviewFill} />
                   ) : (
                     <Image
                       source={require('../assets/image-insert.png')}
@@ -1732,46 +1695,12 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         )}
 
         {/* Publish Button — full PNG; aspect ratio from asset */}
-        <TouchableOpacity
+        <PublishAdButton
           onPress={handlePublish}
-          disabled={uploading || !formReadyToPublish}
-          accessibilityState={{disabled: uploading || !formReadyToPublish}}
-          accessibilityLabel="פרסם"
-          style={[
-            styles.publishButtonTouchable,
-            Platform.OS === 'web' && !uploading && formReadyToPublish
-              ? {cursor: 'pointer'}
-              : Platform.OS === 'web'
-                ? {cursor: 'not-allowed'}
-                : null,
-          ]}
-          activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
-          <View style={styles.publishButtonImageWrap}>
-            <Image
-              source={
-                formReadyToPublish
-                  ? require('../assets/ad-uplaud/button-yelow.png')
-                  : require('../assets/ad-uplaud/button-gray.png')
-              }
-              style={[
-                styles.publishButtonImage,
-                {
-                  aspectRatio: formReadyToPublish
-                    ? publishAspectRatios.yellow
-                    : publishAspectRatios.gray,
-                },
-              ]}
-              resizeMode="contain"
-            />
-            {uploading ? (
-              <View
-                style={styles.publishButtonSpinnerOverlay}
-                pointerEvents="none">
-                <ActivityIndicator size="small" color="#000" />
-              </View>
-            ) : null}
-          </View>
-        </TouchableOpacity>
+          uploading={uploading}
+          ready={formReadyToPublish}
+          style={{marginBottom: 8}}
+        />
       </ScrollView>
       <PublishValidationModal
         visible={publishValidationVisible}
@@ -2276,41 +2205,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  publishButtonTouchable: {
-    marginHorizontal: 20,
-    marginTop: 0,
-    marginBottom: 8,
-    alignSelf: 'stretch',
-    paddingVertical: 0,
-  },
-  publishButtonImageWrap: {
-    width: '100%',
-    position: 'relative',
-    overflow: 'hidden',
-    alignSelf: 'stretch',
-    ...Platform.select({
-      web: {fontSize: 0, lineHeight: 0},
-      default: {},
-    }),
-  },
-  publishButtonImage: {
-    width: '100%',
-    height: undefined,
-    marginVertical: 0,
-    paddingVertical: 0,
-    ...Platform.select({
-      web: {
-        display: 'block',
-        verticalAlign: 'top',
-      },
-      default: {},
-    }),
-  },
-  publishButtonSpinnerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   uploadingContainer: {
     width: '100%',
     height: '100%',
@@ -2366,6 +2260,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',
+  },
+  videoPreviewFill: {
+    width: '100%',
+    height: '100%',
   },
   videoPreviewText: {
     color: '#fff',

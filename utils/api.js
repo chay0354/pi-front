@@ -2564,10 +2564,43 @@ const UUID_REGEX =
  * @returns {string|null}
  */
 export const toSubscriptionId = id => {
-  if (id == null || typeof id !== 'string') return null;
-  const trimmed = id.trim();
+  if (id == null) return null;
+  const trimmed = String(id).trim();
   return UUID_REGEX.test(trimmed) ? trimmed : null;
 };
+
+/** Resolve DB subscription UUID from common user/listing shapes. */
+export function resolveSubscriptionId(userOrId) {
+  if (userOrId == null) return null;
+  if (typeof userOrId !== 'object') {
+    return toSubscriptionId(userOrId);
+  }
+  const candidates = [
+    userOrId.id,
+    userOrId.subscription_id,
+    userOrId.subscriptionId,
+    userOrId.owner_id,
+    userOrId.ownerId,
+  ];
+  for (const candidate of candidates) {
+    const resolved = toSubscriptionId(candidate);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+/** Mirror תמונה מכירתית as a home story ring slide (not a TikTok feed post). */
+export async function createSalesImageStory({imageUrl, subscriptionId}) {
+  const url = String(imageUrl || '').trim();
+  if (!url) {
+    throw new Error('Sales image URL is required');
+  }
+  const subId = resolveSubscriptionId(subscriptionId);
+  if (!subId) {
+    throw new Error('Valid subscription id is required');
+  }
+  return createStory({subscription_id: subId, media_url: url});
+}
 
 /**
  * Create a new listing

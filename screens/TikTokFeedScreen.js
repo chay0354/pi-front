@@ -31,7 +31,7 @@ import {
   persistUnseenLikedCount,
 } from '../utils/tikTokLikedStorage';
 import {LinearGradient} from 'expo-linear-gradient';
-import {Video, ResizeMode} from 'expo-av';
+import {Video, ResizeMode, Audio} from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
@@ -1466,6 +1466,17 @@ const TikTokFeedScreen = ({
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
   });
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     const updateDimensions = () => {
       setDimensions({
@@ -5523,7 +5534,6 @@ const TikTokFeedScreen = ({
             style={styles.videoElement}
             autoPlay={isActiveFeedPage}
             loop
-            muted
             playsInline
           />
         ) : (
@@ -5533,7 +5543,8 @@ const TikTokFeedScreen = ({
             resizeMode={ResizeMode.COVER}
             shouldPlay={isActiveFeedPage}
             isLooping
-            isMuted
+            isMuted={false}
+            volume={1.0}
             useNativeControls={false}
           />
         );
