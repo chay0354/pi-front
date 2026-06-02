@@ -9,60 +9,22 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Dimensions,
-  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {loginWithPassword} from '../utils/api';
 
-const ONBOARDING_IMAGES = [
-  require('../assets/onbording/1.png'),
-  require('../assets/onbording/2.png'),
-  require('../assets/onbording/3.png'),
-  require('../assets/onbording/4.png'),
-  require('../assets/onbording/5.png'),
-  require('../assets/onbording/6.png'),
-  require('../assets/onbording/7.png'),
-  require('../assets/onbording/8.png'),
-  require('../assets/onbording/9.png'),
-  require('../assets/onbording/10.png'),
-  require('../assets/onbording/11.png'),
-  require('../assets/onbording/12.png'),
-];
-
 /**
  * LoginScreen Component
  * Login page for registered users to sign in
  */
-const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
+const LoginScreen = ({onClose, onLoginSuccess}) => {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingIndex, setOnboardingIndex] = useState(0);
-
-  const handleStartOnboarding = () => {
-    setOnboardingIndex(0);
-    setShowOnboarding(true);
-  };
-
-  const handleOnboardingFinish = () => {
-    setShowOnboarding(false);
-    setOnboardingIndex(0);
-    if (onSkipToHome) onSkipToHome();
-  };
-
-  const handleOnboardingNext = () => {
-    if (onboardingIndex >= ONBOARDING_IMAGES.length - 1) {
-      handleOnboardingFinish();
-      return;
-    }
-    setOnboardingIndex(idx => idx + 1);
-  };
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -209,65 +171,8 @@ const LoginScreen = ({onClose, onLoginSuccess, onSkipToHome}) => {
               <Text style={styles.loginButtonText}>התחבר</Text>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.onboardingTestButton}
-            onPress={handleStartOnboarding}
-            activeOpacity={0.85}>
-            <Text style={styles.onboardingTestButtonText}>
-              מבחן עלייה למטוס
-            </Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {showOnboarding ? (
-        <OnboardingOverlay
-          imageSource={ONBOARDING_IMAGES[onboardingIndex]}
-          onNext={handleOnboardingNext}
-          onSkip={handleOnboardingFinish}
-        />
-      ) : null}
-    </View>
-  );
-};
-
-const OnboardingOverlay = ({imageSource, onNext, onSkip}) => {
-  const {width: screenWidth, height: screenHeight} = Dimensions.get('window');
-  const skipWidth = screenWidth * 0.1;
-  const skipHeight = screenHeight * 0.1;
-  const nextWidth = screenWidth * 0.4;
-  const nextHeight = screenHeight * 0.2;
-  // RTL mirrors left/right — use start side so the tap zone stays visually top-right.
-  const skipCorner = I18nManager.isRTL ? {left: 0} : {right: 0};
-  return (
-    <View style={styles.onboardingOverlay} pointerEvents="box-none">
-      <Image
-        source={imageSource}
-        style={styles.onboardingImage}
-        resizeMode="contain"
-      />
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onSkip}
-        style={[
-          styles.onboardingSkipZone,
-          skipCorner,
-          {width: skipWidth, height: skipHeight},
-        ]}
-      />
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onNext}
-        style={[
-          styles.onboardingNextZone,
-          {
-            width: nextWidth,
-            height: nextHeight,
-            left: (screenWidth - nextWidth) / 2,
-          },
-        ]}
-      />
     </View>
   );
 };
@@ -430,43 +335,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Rubik-Medium',
     color: Colors.darkBackground,
-  },
-  onboardingTestButton: {
-    marginTop: 12,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,196,10,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  onboardingTestButtonText: {
-    color: Colors.white100,
-    fontSize: 16,
-    fontFamily: 'Rubik-Medium',
-  },
-  onboardingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#1E1D27',
-    zIndex: 1000,
-  },
-  onboardingImage: {
-    width: '100%',
-    height: '100%',
-  },
-  onboardingSkipZone: {
-    position: 'absolute',
-    top: 0,
-    backgroundColor: 'transparent',
-  },
-  onboardingNextZone: {
-    position: 'absolute',
-    bottom: 0,
-    backgroundColor: 'transparent',
   },
 });
 

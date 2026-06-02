@@ -10,7 +10,7 @@ import {
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';
 import {RadioIcon} from './RadioIcon';
-import {forceLtrStyle} from '../../utils/rtlLayout';
+import {flexStart, textAlign} from '../../utils/rtlLayout';
 
 export const RadioWithText = ({
   isNotLastIndex,
@@ -29,7 +29,7 @@ export const RadioWithText = ({
   /** Figma/TikTok-style check — only פרטים כלליים / הפרויקט מציע accordions */
   useFigmaStyleIcon = false,
 }) => {
-  const rowJustify = 'flex-end';
+  const rowJustify = flexStart;
   return (
     <View key={index} style={containerStyle}>
       <TouchableOpacity
@@ -44,7 +44,7 @@ export const RadioWithText = ({
         onLongPress={onLongPress}
         delayLongPress={450}
         activeOpacity={0.7}>
-        <Text style={[styles.radioOptionText, {textAlign:'right'}]}>
+        <Text style={[styles.radioOptionText, {textAlign}]}>
           {title}
           {isRequired && <Text style={styles.requiredStar}>*</Text>}
         </Text>
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 20,
-    ...forceLtrStyle,
+    width: '100%',
   },
   radioOptionText: {
     color: Colors.whiteGeneral,

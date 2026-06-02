@@ -8,7 +8,7 @@ import {Text} from 'react-native';
 import {Divider} from './Divider';
 import {CardPriceField} from './CardPriceField';
 import {Colors} from '../../constants/styles';
-import {flexEnd} from '../../utils/rtlLayout';
+import {formHeadingStyle, textAlign} from '../../utils/rtlLayout';
 
 export const GeneralDetailsWithRadio = ({
   groups,
@@ -52,11 +52,7 @@ export const GeneralDetailsWithRadio = ({
     const rows = radioOptions.groups || [];
     return (
       <FormContainer style={styles.companyOfficeFigmaCard}>
-        <Text
-          style={[
-            styles.companyOfficeSectionHeading,
-            {textAlign: 'left', alignSelf: flexEnd},
-          ]}>
+        <Text style={[styles.companyOfficeSectionHeading, formHeadingStyle]}>
           {radioOptions.title}
         </Text>
         {rows.map((group, gi) => {
@@ -128,7 +124,7 @@ export const GeneralDetailsWithRadio = ({
     <FormContainer>
       <Title text={radioOptions.title} required={radioOptions.titleRequired} />
       {toggleableOfferGroups && !accordionGroups ? (
-        <Text style={[styles.toggleHint, {textAlign: 'left'}]}>
+        <Text style={[styles.toggleHint, {textAlign}]}>
           לחצו על השורה כדי להסיר או להחזיר סוג דירה מהמודעה
         </Text>
       ) : null}
@@ -197,9 +193,10 @@ export const GeneralDetailsWithRadio = ({
                         <React.Fragment key={key}>
                           {f.subTitle && (
                             <Text
-                              style={[styles.subFields, {textAlign: 'left'}]}>
+                              style={[styles.subFields, {textAlign}]}
+                              numberOfLines={1}>
                               {f.subTitle}
-                              {f.subTitleRequired && '*'}
+                              {f.subTitleRequired ? '*' : ''}
                             </Text>
                           )}
                           <CountUpdate
@@ -213,6 +210,7 @@ export const GeneralDetailsWithRadio = ({
                             isArea={!!f.isArea}
                             isDivider={false}
                             isLast={!isNotLastIndex}
+                            variant="figmaOffice"
                             containerStyle={{marginBottom: 0}}
                           />
                         </React.Fragment>
@@ -226,9 +224,10 @@ export const GeneralDetailsWithRadio = ({
                         <React.Fragment key={key}>
                           {f.subTitle && (
                             <Text
-                              style={[styles.subFields, {textAlign: 'left'}]}>
+                              style={[styles.subFields, {textAlign}]}
+                              numberOfLines={1}>
                               {f.subTitle}
-                              {f.subTitleRequired && '*'}
+                              {f.subTitleRequired ? '*' : ''}
                             </Text>
                           )}
                           <CardPriceField
@@ -314,5 +313,6 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     marginBottom: 10,
     fontFamily: 'Rubik-Regular',
+    flexShrink: 0,
   },
 });

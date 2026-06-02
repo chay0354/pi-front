@@ -58,8 +58,9 @@ export const VideoUpload = ({
                     controls={false}
                   />
                 ) : (
-                  // TODO: Video for mobile
-                  <Text style={styles.videoPreviewText}>Video Selected</Text>
+                  <Text style={styles.videoPreviewText}>
+                    {videoFile?.name ? `סרטון נבחר: ${videoFile.name}` : 'סרטון נבחר'}
+                  </Text>
                 )}
               </View>
             ) : (
@@ -71,7 +72,7 @@ export const VideoUpload = ({
                 />
                 <Text style={styles.videoText}>העלה סרטון</Text>
                 <View style={styles.uploadButtonContainer}>
-                  <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
+                  <Text style={styles.uploadButtonText}>העלאת סרטון</Text>
                 </View>
               </>
             )}

@@ -20,6 +20,7 @@ import {
   TextInput,
   FlatList,
   useWindowDimensions,
+  InteractionManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -233,6 +234,20 @@ const ListCardImages = ({images, width, height = 252}) => {
       </View>
     </View>
   );
+};
+
+/**
+ * Format an integer shekel amount with comma thousand separators.
+ *
+ * Avoids `Number.prototype.toLocaleString()` without an explicit locale
+ * because on Hermes / certain device locales it can return prices like
+ * "1.234.567" (dot thousand separators) which users read as a malformed
+ * decimal (e.g. "XXX.XX.XXX"). This regex-based formatter is deterministic
+ * across all platforms and locales.
+ */
+const formatShekelPrice = value => {
+  const num = Math.round(Math.max(0, Number(value) || 0));
+  return `₪${String(num).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 };
 
 /** True when the listing row is a feed post (not a regular ad). */
@@ -1052,6 +1067,73 @@ function resolveFeedItemMediaUris(video) {
   return uris;
 }
 
+/** Warm the RN image cache for the next feed pages (photos; videos use poster URLs when present). */
+function prefetchFeedMediaItems(items, startIndex = 0, count = 3) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const end = Math.min(items.length, startIndex + Math.max(1, count));
+  for (let i = startIndex; i < end; i++) {
+    resolveFeedItemMediaUris(items[i]).forEach(uri => {
+      Image.prefetch(uri).catch(() => {});
+    });
+    const poster = items[i]?.images?.[0]?.uri;
+    if (poster && /^https?:\/\//i.test(String(poster))) {
+      Image.prefetch(String(poster).trim()).catch(() => {});
+    }
+  }
+}
+
+/** Collect remote image URIs for the first feed page (poster + first photo). */
+function collectFirstPageImageUris(items) {
+  const uris = [];
+  const first = items?.[0];
+  if (!first) return uris;
+  resolveFeedItemMediaUris(first).forEach(uri => {
+    if (/^https?:\/\//i.test(uri) && !/\.(mp4|m3u8|webm|mov)(\?|$)/i.test(uri)) {
+      uris.push(uri);
+    }
+  });
+  const poster = first.images?.[0]?.uri;
+  if (poster && /^https?:\/\//i.test(String(poster))) {
+    uris.push(String(poster).trim());
+  }
+  return Array.from(new Set(uris));
+}
+
+/**
+ * Wait for first-page images to land in the RN image cache so the user sees the
+ * feed already populated instead of placeholders. Capped so a slow network
+ * doesn't strand the loading spinner indefinitely.
+ */
+function waitForFirstPageImages(items, timeoutMs = 1800) {
+  const uris = collectFirstPageImageUris(items);
+  if (uris.length === 0) return Promise.resolve();
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    Promise.allSettled(uris.map(u => Image.prefetch(u)))
+      .then(() => {
+        clearTimeout(timer);
+        finish();
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        finish();
+      });
+  });
+}
+
+function buildListingsFetchCacheKey(category, sidebarFilter, topBarFilter, userId) {
+  return `${category ?? 'all'}|${sidebarFilter ?? ''}|${topBarFilter ?? ''}|${userId ?? ''}`;
+}
+
+const FEED_IMAGE_PROPS =
+  Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
+
 const ImageSwiper = ({
   images,
   screenHeight,
@@ -1062,10 +1144,12 @@ const ImageSwiper = ({
   const {width: winWidth} = useWindowDimensions();
   const pageWidth = Math.min(Math.max(1, winWidth), FEED_PAGE_MAX_WIDTH);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [erroredKeys, setErroredKeys] = useState(() => new Set());
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
     setCurrentImageIndex(0);
+    setErroredKeys(new Set());
     if (scrollViewRef.current && displayOption === 'slideshow') {
       scrollViewRef.current.scrollTo({x: 0, animated: false});
     }
@@ -1101,6 +1185,21 @@ const ImageSwiper = ({
     return '';
   };
 
+  // Category fallback shown when a remote image is missing or fails to load.
+  // Keeps the feed from rendering a pure-black slide (common for some
+  // מסחר/category 8 ads whose main_image_url is null or unreachable).
+  const fallbackCategoryImage =
+    categoryImages[Number(video?.category)] || categoryImages[1];
+
+  const markImageErrored = key => {
+    setErroredKeys(prev => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
+
   // Collage view — dedicated geometry per image count (2–5): see utils/collageLayouts.js
   if (displayOption === 'collage' && images.length > 0) {
     const slice = images.slice(0, 5);
@@ -1124,9 +1223,14 @@ const ImageSwiper = ({
             const layout = layouts[index];
             if (!layout) return null;
             const uri = resolveImageUri(image);
+            const collageKey = `collage-${index}`;
+            const useFallback = !uri || erroredKeys.has(collageKey);
+            const imageSource = useFallback
+              ? fallbackCategoryImage
+              : {uri};
             return (
               <View
-                key={`collage-${index}-${uri || 'empty'}`}
+                key={`${collageKey}-${uri || 'empty'}`}
                 style={[
                   styles.collageImageContainer,
                   {
@@ -1140,21 +1244,23 @@ const ImageSwiper = ({
                     backgroundColor: '#000',
                   },
                 ]}>
-                {uri ? (
-                  <Image
-                    source={{uri}}
-                    style={[
-                      imageCount === 1
-                        ? styles.collageImageSingle
-                        : styles.collageImage,
-                      imageCount === 1 && {
-                        maxWidth: layout.width,
-                        maxHeight: layout.height,
-                      },
-                    ]}
-                    resizeMode={imageCount === 1 ? 'contain' : 'cover'}
-                  />
-                ) : null}
+                <Image
+                  source={imageSource}
+                  {...FEED_IMAGE_PROPS}
+                  style={[
+                    imageCount === 1
+                      ? styles.collageImageSingle
+                      : styles.collageImage,
+                    imageCount === 1 && {
+                      maxWidth: layout.width,
+                      maxHeight: layout.height,
+                    },
+                  ]}
+                  resizeMode={
+                    useFallback || imageCount === 1 ? 'contain' : 'cover'
+                  }
+                  onError={() => markImageErrored(collageKey)}
+                />
               </View>
             );
           })}
@@ -1193,7 +1299,9 @@ const ImageSwiper = ({
       >
         {images.map((image, index) => {
           const uri = resolveImageUri(image);
-          if (!uri) return null;
+          const slideKey = `slide-${index}`;
+          const useFallback = !uri || erroredKeys.has(slideKey);
+          const imageSource = useFallback ? fallbackCategoryImage : {uri};
           return (
             <View
               key={index}
@@ -1203,13 +1311,15 @@ const ImageSwiper = ({
                 isSingleImage && styles.swiperImageContainerSingle,
               ]}>
               <Image
-                source={{uri}}
+                source={imageSource}
+                {...FEED_IMAGE_PROPS}
                 style={[
                   styles.swiperImage,
                   isSingleImage && styles.swiperImageSingle,
                   {maxWidth: pageWidth, maxHeight: screenHeight},
                 ]}
                 resizeMode="contain"
+                onError={() => markImageErrored(slideKey)}
               />
             </View>
           );
@@ -1269,6 +1379,7 @@ const TikTokFeedScreen = ({
   const topBarHeight = TOP_BAR_HEIGHT + insets.top;
   const bottomBarHeight = BOTTOM_BAR_HEIGHT + insets.bottom;
   const feedListRef = useRef(null);
+  const listingsFetchCacheRef = useRef(new Map());
   const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
   const currentIndexRef = useRef(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1459,7 +1570,18 @@ const TikTokFeedScreen = ({
       Math.max(0, sidebarIntroProfileOnlyDown - SIDEBAR_PROFILE_INTRO_NUDGE_UP),
     [sidebarIntroProfileOnlyDown],
   );
-  /** Stage 2: all chips visible; last chip flush to viewport bottom (no gap below it). */
+  /**
+   * Stage 2: anchor the LAST filter chip flush with the viewport bottom (no
+   * gap below it, profile floats in mid-viewport above the chips).
+   *
+   * translateY here is positive-down, matching the other two intro stages:
+   * `T = viewportHeight - lastBottom` pushes the content down just enough so
+   * that the last chip's bottom edge sits on the viewport bottom. If the
+   * content is taller than the viewport we cannot translate negatively
+   * (clamped at 0), so we top-align and accept that the last chip will be
+   * partially clipped — better than the previous behaviour which over-shifted
+   * downwards and hid even more of the bottom chip.
+   */
   const sidebarIntroAllIconsDown = useMemo(() => {
     if (sidebarViewportHeight <= 0) {
       return 0;
@@ -1479,10 +1601,7 @@ const TikTokFeedScreen = ({
       lastBottom =
         sidebarProfileHeight + sidebarFilterCount * safeFilterHeight;
     }
-    if (lastBottom <= sidebarViewportHeight) {
-      return 0;
-    }
-    return lastBottom - sidebarViewportHeight;
+    return Math.max(0, sidebarViewportHeight - lastBottom);
   }, [
     sidebarViewportHeight,
     sidebarProfileHeight,
@@ -1737,8 +1856,27 @@ const TikTokFeedScreen = ({
   // Filter by selectedCategory and selectedSidebarFilter if provided
   useEffect(() => {
     const fetchListings = async () => {
+      const cacheKey = buildListingsFetchCacheKey(
+        selectedCategory,
+        selectedSidebarFilter,
+        selectedTopBarFilter,
+        currentUser?.id,
+      );
+      const cachedListings = listingsFetchCacheRef.current.get(cacheKey);
+      if (Array.isArray(cachedListings) && cachedListings.length > 0) {
+        setDbListings(cachedListings);
+        setLoadingListings(false);
+        prefetchFeedMediaItems(
+          cachedListings,
+          0,
+          FEED_PRELOAD_BELOW_COUNT + 1,
+        );
+      }
+
       try {
-        setLoadingListings(true);
+        if (!cachedListings?.length) {
+          setLoadingListings(true);
+        }
         const parsedCategory = selectedCategory
           ? parseInt(String(selectedCategory), 10)
           : NaN;
@@ -2000,7 +2138,7 @@ const TikTokFeedScreen = ({
                   ? String(listing.search_address).trim()
                   : null,
                 rawPrice: numericBasePrice,
-                price: `₪${numericBasePrice.toLocaleString()}`,
+                price: formatShekelPrice(numericBasePrice),
                 purpose: listing.purpose === 'rent' ? 'להשכרה' : 'למכירה',
                 listingPurpose: listing.purpose === 'rent' ? 'rent' : 'sale',
                 planApproval: normalizeLandThreeState(listing.plan_approval),
@@ -2193,15 +2331,7 @@ const TikTokFeedScreen = ({
             ? parseInt(String(selectedCategory), 10)
             : NaN;
           const filteredListings = Number.isFinite(selectedCatNum)
-            ? afterTopBar.filter(listing => {
-                const matches = listing.category === selectedCatNum;
-                if (!matches) {
-                  console.log(
-                    `Listing ${listing.id} category ${listing.category} doesn't match selected ${selectedCategory}`,
-                  );
-                }
-                return matches;
-              })
+            ? afterTopBar.filter(listing => listing.category === selectedCatNum)
             : afterTopBar;
 
           const finalListings =
@@ -2329,13 +2459,24 @@ const TikTokFeedScreen = ({
               ? [
                   ...new Set(
                     displayListings
+                      .slice(0, 24)
                       .map(resolveListingFollowTargetId)
                       .filter(id => id && id !== viewerSubIdForPrefetch),
                   ),
-                ]
+                ].slice(0, 20)
               : [];
 
+          listingsFetchCacheRef.current.set(cacheKey, displayListings);
+          prefetchFeedMediaItems(
+            displayListings,
+            0,
+            FEED_PRELOAD_BELOW_COUNT + 1,
+          );
           setDbListings(displayListings);
+          // Keep the spinner up until the first page's image lands in the RN
+          // image cache (or the soft timeout fires) so users don't see a blank
+          // bubble for a beat after the feed becomes interactive.
+          await waitForFirstPageImages(displayListings);
           setLoadingListings(false);
 
           if (followPrefetchTargetIds.length > 0) {
@@ -2349,32 +2490,34 @@ const TikTokFeedScreen = ({
               bumpFollowUiRevision();
             });
           }
-          // Sync server liked state into local sets (add/remove) so yellow state stays consistent.
+          // Sync server liked state after first paint so media can appear sooner.
           if (currentUser?.id != null) {
             const uid = String(currentUser.id);
-            setLikedListingIds(prev => {
-              const next = new Set(prev);
-              displayListings.forEach(l => {
-                if (l?.id == null) return;
-                if (isPostVideo(l)) return;
-                if (l.liked === true) next.add(String(l.id));
-                else if (l.liked === false) next.delete(String(l.id));
+            InteractionManager.runAfterInteractions(() => {
+              setLikedListingIds(prev => {
+                const next = new Set(prev);
+                displayListings.forEach(l => {
+                  if (l?.id == null) return;
+                  if (isPostVideo(l)) return;
+                  if (l.liked === true) next.add(String(l.id));
+                  else if (l.liked === false) next.delete(String(l.id));
+                });
+                likedListingIdsRef.current = next;
+                persistLikedListingIds(uid, next).catch(() => {});
+                return next;
               });
-              likedListingIdsRef.current = next;
-              persistLikedListingIds(uid, next).catch(() => {});
-              return next;
-            });
-            setLikedPostIds(prev => {
-              const next = new Set(prev);
-              displayListings.forEach(l => {
-                if (l?.id == null) return;
-                if (!isPostVideo(l)) return;
-                if (l.liked === true) next.add(String(l.id));
-                else if (l.liked === false) next.delete(String(l.id));
+              setLikedPostIds(prev => {
+                const next = new Set(prev);
+                displayListings.forEach(l => {
+                  if (l?.id == null) return;
+                  if (!isPostVideo(l)) return;
+                  if (l.liked === true) next.add(String(l.id));
+                  else if (l.liked === false) next.delete(String(l.id));
+                });
+                likedPostIdsRef.current = next;
+                persistLikedPostIds(uid, next).catch(() => {});
+                return next;
               });
-              likedPostIdsRef.current = next;
-              persistLikedPostIds(uid, next).catch(() => {});
-              return next;
             });
           }
         } else {
@@ -3603,12 +3746,19 @@ const TikTokFeedScreen = ({
 
   useEffect(() => {
     if (videos.length === 0) return;
-    for (let offset = 1; offset <= FEED_PRELOAD_BELOW_COUNT; offset++) {
-      const nextIndex = currentIndex + offset;
-      if (nextIndex >= videos.length) break;
-      resolveFeedItemMediaUris(videos[nextIndex]).forEach(uri => {
+    const start = Math.max(0, currentIndex - FEED_PRELOAD_ABOVE_COUNT);
+    const end = Math.min(
+      videos.length - 1,
+      currentIndex + FEED_PRELOAD_BELOW_COUNT,
+    );
+    for (let i = start; i <= end; i++) {
+      resolveFeedItemMediaUris(videos[i]).forEach(uri => {
         Image.prefetch(uri).catch(() => {});
       });
+      const poster = videos[i]?.images?.[0]?.uri;
+      if (poster && /^https?:\/\//i.test(String(poster))) {
+        Image.prefetch(String(poster).trim()).catch(() => {});
+      }
     }
   }, [currentIndex, videos]);
 
@@ -4255,7 +4405,7 @@ const TikTokFeedScreen = ({
           video?.price ??
           0,
       );
-      if (Number.isFinite(raw) && raw > 0) return `₪${raw.toLocaleString()}`;
+      if (Number.isFinite(raw) && raw > 0) return formatShekelPrice(raw);
       return '₪0';
     })();
     const partnersPurposeText = String(
@@ -4897,7 +5047,7 @@ const TikTokFeedScreen = ({
       <View
         style={[
           styles.feedPageSidebar,
-          {bottom: bottomBarHeight},
+          {bottom: BOTTOM_BAR_HEIGHT},
           styles.feedPageSidebarDrag,
           sidebarCollapsed && isActivePage && {top: 360},
         ]}
@@ -4946,7 +5096,7 @@ const TikTokFeedScreen = ({
     const o = getVideoOverlayMeta(video);
     return (
       <View
-        style={[styles.feedPageActions, {bottom: insets.bottom + 80}]}
+        style={[styles.feedPageActions, {bottom: BOTTOM_BAR_HEIGHT}]}
         pointerEvents="box-none">
         {o.isCompanyLandListing ? (
           <View style={styles.brokerOverlayInfo} pointerEvents="box-none">
@@ -5340,6 +5490,33 @@ const TikTokFeedScreen = ({
             ? String(video.video).trim()
             : '';
       if (video.type === 'video' && feedVideoUri) {
+        if (!isActiveFeedPage) {
+          const posterUri =
+            video.images?.[0]?.uri != null
+              ? String(video.images[0].uri).trim()
+              : '';
+          if (posterUri) {
+            return (
+              <Image
+                source={{uri: posterUri}}
+                {...FEED_IMAGE_PROPS}
+                style={styles.feedVideoPlayer}
+                resizeMode="cover"
+              />
+            );
+          }
+          // No poster available — show the category placeholder rather than
+          // a fully black slide while the video is paused/off-screen.
+          return (
+            <View style={styles.feedVideoPlayer}>
+              <Image
+                source={getTikImage(video.image ?? video.category)}
+                style={styles.videoImage}
+                resizeMode="contain"
+              />
+            </View>
+          );
+        }
         return Platform.OS === 'web' ? (
           <video
             src={feedVideoUri}
@@ -5401,7 +5578,7 @@ const TikTokFeedScreen = ({
     return (
       <View style={styles.videoImageContainer}>
         <Image
-          source={getTikImage(video.image)}
+          source={getTikImage(video.image ?? video.category)}
           style={styles.videoImage}
           resizeMode="contain"
         />
@@ -5659,6 +5836,10 @@ const TikTokFeedScreen = ({
                           : null) ||
                         item.recentTargetId ||
                         null;
+                      // Figma node 943:117840 — RTL row: profile + text on the
+                      // right, dedicated dismiss (X) button on the left so the
+                      // user can hide a single result without clearing the
+                      // entire list.
                       return (
                         <View key={item.key} style={styles.userSearchRow}>
                           <TouchableOpacity
@@ -5698,7 +5879,7 @@ const TikTokFeedScreen = ({
                                   : null
                               }
                               name={item.name}
-                              size={66}
+                              size={60}
                             />
                             <View style={styles.userSearchTextWrap}>
                               <Text
@@ -5714,45 +5895,90 @@ const TikTokFeedScreen = ({
                                       : NaN,
                                   );
                                   if (!Number.isFinite(n) || n < 1) {
-                                    return null;
-                                  }
-                                  const isFive = n >= 5;
-                                  return (
-                                    <>
+                                    return item.subtitle ? (
                                       <Text
                                         style={styles.userSearchMetaText}
                                         numberOfLines={1}>
                                         {item.subtitle}
                                       </Text>
-                                      {isFive ? (
-                                        // <View
-                                        //   style={styles.userSearchFiveStarWrap}
-                                        //   pointerEvents="none">
-                                        <Image
-                                          source={
-                                            TIKTOK_OVERLAY_ICONS.ratingFiveStars
-                                          }
-                                          style={styles.userSearchFiveStarIcon}
-                                          resizeMode="contain"
-                                        />
-                                      ) : (
-                                        // </View>
-                                        <Image
-                                          source={
-                                            TIKTOK_OVERLAY_ICONS.ratingOneToFour
-                                          }
-                                          style={styles.userSearchStarIcon}
-                                          resizeMode="contain"
-                                        />
-                                      )}
-                                      <Text style={styles.userSearchMetaCount}>
-                                        {String(n)}
-                                      </Text>
+                                    ) : null;
+                                  }
+                                  const isFive = n >= 5;
+                                  // RTL reading order (right → left): subtitle,
+                                  // star, number. With the force-RTL base and
+                                  // `flexDirection: 'row'`, the first child sits
+                                  // on the right, so subtitle is rendered first.
+                                  return (
+                                    <>
+                                      {item.subtitle ? (
+                                        <Text
+                                          style={styles.userSearchMetaText}
+                                          numberOfLines={1}>
+                                          {item.subtitle}
+                                        </Text>
+                                      ) : null}
+                                      <View
+                                        style={[
+                                          styles.userSearchMetaStarGroup,
+                                          isFive &&
+                                            styles.userSearchMetaStarGroupFive,
+                                        ]}>
+                                        {/* Figma 943:117842 — 16×16 slot,
+                                            ring star overflows ~4px/side (24px). */}
+                                        {isFive ? (
+                                          <View
+                                            style={
+                                              styles.userSearchFiveStarWrap
+                                            }
+                                            pointerEvents="none">
+                                            <Image
+                                              source={
+                                                TIKTOK_OVERLAY_ICONS.ratingFiveStars
+                                              }
+                                              style={
+                                                styles.userSearchFiveStarIcon
+                                              }
+                                              resizeMode="contain"
+                                            />
+                                          </View>
+                                        ) : (
+                                          <Image
+                                            source={
+                                              TIKTOK_OVERLAY_ICONS.ratingOneToFour
+                                            }
+                                            style={styles.userSearchStarIcon}
+                                            resizeMode="contain"
+                                          />
+                                        )}
+                                        <Text
+                                          style={styles.userSearchMetaCount}>
+                                          {String(n)}
+                                        </Text>
+                                      </View>
                                     </>
                                   );
                                 })()}
                               </View>
                             </View>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                            style={styles.userSearchDismissBtn}
+                            onPress={() =>
+                              setHiddenSearchKeys(prev => {
+                                const next = new Set(prev);
+                                next.add(item.key);
+                                return next;
+                              })
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel="הסר מהרשימה">
+                            <MaterialCommunityIcons
+                              name="close"
+                              size={24}
+                              color="#FFFFFF"
+                            />
                           </TouchableOpacity>
                         </View>
                       );
@@ -6100,7 +6326,7 @@ const TikTokFeedScreen = ({
               initialNumToRender={FEED_PRELOAD_BELOW_COUNT + 1}
               maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
               windowSize={FEED_FLATLIST_WINDOW_SIZE}
-              removeClippedSubviews={false}
+              removeClippedSubviews={Platform.OS === 'android'}
               updateCellsBatchingPeriod={50}
             />
           )}
@@ -6580,7 +6806,7 @@ const TikTokFeedScreen = ({
 /** Absolute header (back, filters, search). Keep linked offsets (`userSearchPanel`, list `marginTop`) in sync. */
 const TOP_BAR_HEIGHT = 52;
 /** Matches `FeedBottomBar` height — list view scroll area ends above this. */
-const BOTTOM_BAR_HEIGHT = 70;
+const BOTTOM_BAR_HEIGHT = 60;
 /** Right action column; preserves ~35px gap under the bar (was 115 when the bar was 80px). */
 const SIDEBAR_TOP = 35 + TOP_BAR_HEIGHT;
 
@@ -6694,7 +6920,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFC40A',
     borderRadius: 20,
     backgroundColor: '#1E1D27',
-    flexDirection: 'row-reverse',
+    // Force-RTL base: `row` puts the text field on the right (where typing
+    // begins) and the clear (X) button on the left end.
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
     marginHorizontal: 0,
@@ -6704,7 +6932,7 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
+    marginRight: 4,
   },
   userSearchInput: {
     flex: 1,
@@ -6751,11 +6979,15 @@ const styles = StyleSheet.create({
   userSearchListContent: {
     paddingBottom: 20,
   },
+  // User-search list row — Figma node 943:117840 / 943:117842. The app runs
+  // force-RTL (I18nManager.forceRTL + web dir="rtl"), so a plain
+  // `flexDirection: 'row'` already lays children right → left: profile + text
+  // on the start (right) side, dismiss (X) button on the end (left) side.
   userSearchRow: {
     height: 83,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: flexStart,
+    justifyContent: 'flex-start',
     gap: 18,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
@@ -6766,25 +6998,39 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    // justifyContent: flexEnd,
     gap: 10,
   },
   userSearchTextWrap: {
     flex: 1,
-    alignItems: flexEnd,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
     gap: 8,
   },
   userSearchName: {
     color: '#F7F3E6',
     fontSize: 18,
+    lineHeight: 24,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'left',
+    fontWeight: '500',
+    textAlign: 'right',
   },
+  // Meta row under force-RTL: first child (subtitle) sits on the right, the
+  // star-group to its left, so the visual reading order right → left is
+  // subtitle → star → number.
   userSearchMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: flexEnd,
+    gap: 10,
+  },
+  userSearchMetaStarGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
+  },
+  // Figma node 943:117842 — the 5★ variant uses a slightly wider gap (6px)
+  // between the burst icon and the rating number than the 1–4★ variant (4px).
+  userSearchMetaStarGroupFive: {
+    gap: 6,
   },
   userSearchMetaText: {
     color: 'rgba(255,255,255,0.8)',
@@ -6798,7 +7044,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: 'right',
+    minWidth: 11,
+  },
+  userSearchDismissBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   userSearchRatingIcon: {
     width: 14,
@@ -6809,17 +7063,21 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
   },
-  /** 5-star wrap: keeps the row height small while letting the glow-style icon overflow bigger (like Figma). */
+  /** Figma 943:117842 — 16×16 layout slot; ring star overflows ~4px per side. */
   userSearchFiveStarWrap: {
     width: 16,
     height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'relative',
     overflow: 'visible',
+    flexShrink: 0,
   },
   userSearchFiveStarIcon: {
-    width: 40,
-    height: 40,
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 24,
+    height: 24,
+    ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
   },
   userSearchRatingGlowWrap: {
     width: 18,

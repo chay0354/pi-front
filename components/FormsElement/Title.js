@@ -1,34 +1,49 @@
 import React from 'react';
-import {StyleSheet, Text} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {Colors} from '../../constants/styles';
+import {formLabelRowStyle, textAlign} from '../../utils/rtlLayout';
+
 export const Title = ({
   text = '',
   required = false,
   textStyle = {},
   starStyle,
 }) => {
-  const titleAlignSelf = 'flex-start';
+  const {marginBottom, ...titleTextStyle} = textStyle || {};
   return (
-    <Text
+    <View
       style={[
-        styles.title,
-        {alignSelf: titleAlignSelf, textAlign: 'left'},
-        textStyle,
+        styles.row,
+        formLabelRowStyle,
+        marginBottom != null ? {marginBottom} : null,
       ]}>
-      {text}
-      {required && <Text style={[styles.star, starStyle]}>*</Text>}
-    </Text>
+      <Text
+        style={[styles.title, {textAlign}, titleTextStyle]}
+        numberOfLines={1}>
+        {text}
+      </Text>
+      {required ? (
+        <Text style={[styles.star, starStyle]} numberOfLines={1}>
+          *
+        </Text>
+      ) : null}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  row: {
+    marginBottom: 20,
+    maxWidth: '100%',
+  },
   title: {
     color: Colors.whiteGeneral,
     fontSize: 18,
-    marginBottom: 15,
     fontFamily: 'Rubik-Regular',
+    flexShrink: 1,
   },
   star: {
     color: Colors.yellowIcons,
+    flexShrink: 0,
   },
 });

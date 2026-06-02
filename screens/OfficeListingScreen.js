@@ -24,7 +24,11 @@ import AmenityQuantityPill from '../components/AmenityQuantityPill';
 import {RadioIcon} from '../components/FormsElement/RadioIcon';
 import PublishValidationModal from '../components/PublishValidationModal';
 import {PRICE_COUNTER_STEP_DEFAULT} from '../utils/priceInput';
-import {flexStart} from '../utils/rtlLayout';
+import {flexStart, formHeadingStyle, formRtlContainerStyle} from '../utils/rtlLayout';
+import {CountUpdate} from '../components/FormsElement/CountUpdate';
+import {CardPriceField} from '../components/FormsElement/CardPriceField';
+import {Title} from '../components/FormsElement/Title';
+import {Divider} from '../components/FormsElement/Divider';
 
 /**
  * Age Range Slider Component
@@ -202,18 +206,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
   const [preferredAgeMax, setPreferredAgeMax] = useState(100);
   const [preferences, setPreferences] = useState({}); // { nonSmokers: false, students: false, etc. }
   const [budget, setBudget] = useState(1000);
-  const [budgetDraft, setBudgetDraft] = useState('1000');
-  const [priceDraft, setPriceDraft] = useState('1000000');
-  const [areaDraft, setAreaDraft] = useState('1');
-  const [roomsDraft, setRoomsDraft] = useState('1');
-  const [floorDraft, setFloorDraft] = useState('1');
-  const budgetInputWidth = Math.max(20, String(budgetDraft || '').length * 11);
-  const priceInputWidth = Math.max(20, String(priceDraft || '').length * 11);
-  const areaInputWidth = Math.max(20, String(areaDraft || '').length * 11);
-  const roomsInputWidth = Math.max(20, String(roomsDraft || '').length * 11);
-  const floorInputWidth = Math.max(20, String(floorDraft || '').length * 11);
-  const budgetInputRef = useRef(null);
-  const priceInputRef = useRef(null);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -228,63 +220,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       }
     }
   }, [initialCategory]);
-
-  useEffect(() => {
-    setBudgetDraft(String(Math.max(0, Number(budget) || 0)));
-  }, [budget]);
-
-  useEffect(() => {
-    setPriceDraft(String(Math.max(0, Number(price) || 0)));
-  }, [price]);
-
-  useEffect(() => {
-    setAreaDraft(String(Math.max(1, Number(area) || 1)));
-  }, [area]);
-
-  useEffect(() => {
-    setRoomsDraft(String(Math.max(1, Number(rooms) || 1)));
-  }, [rooms]);
-
-  useEffect(() => {
-    setFloorDraft(String(Math.max(1, Number(floor) || 1)));
-  }, [floor]);
-
-  const parseNumericDraft = (value, min = 0) => {
-    const digitsOnly = String(value || '').replace(/[^\d]/g, '');
-    const parsed = Number.parseInt(digitsOnly || String(min), 10);
-    if (Number.isNaN(parsed)) return min;
-    return Math.max(min, parsed);
-  };
-
-  const commitBudgetDraft = () => {
-    const next = parseNumericDraft(budgetDraft, 0);
-    setBudget(next);
-    setBudgetDraft(String(next));
-  };
-
-  const commitPriceDraft = () => {
-    const next = parseNumericDraft(priceDraft, 0);
-    setPrice(next);
-    setPriceDraft(String(next));
-  };
-
-  const commitAreaDraft = () => {
-    const next = parseNumericDraft(areaDraft, 1);
-    setArea(next);
-    setAreaDraft(String(next));
-  };
-
-  const commitRoomsDraft = () => {
-    const next = parseNumericDraft(roomsDraft, 1);
-    setRooms(next);
-    setRoomsDraft(String(next));
-  };
-
-  const commitFloorDraft = () => {
-    const next = parseNumericDraft(floorDraft, 1);
-    setFloor(next);
-    setFloorDraft(String(next));
-  };
 
   // Media uploads - store file objects and uploaded URLs
   const [mainImage, setMainImage] = useState(null);
@@ -1373,41 +1308,12 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
             {/* Container 5: Budget */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                התקציב שלי<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.priceInput}>
-                <TouchableOpacity
-                  style={styles.counterButtonLeft}
-                  onPress={() => setBudget(Math.max(0, budget - 1000))}>
-                  <Text style={styles.counterButton}>+</Text>
-                </TouchableOpacity>
-                <View style={styles.counterDivider} />
-                <Pressable
-                  style={styles.counterValueContainer}
-                  onPress={() => budgetInputRef.current?.focus?.()}>
-                  <View style={styles.valueRow}>
-                    <Text style={styles.priceValue}>₪</Text>
-                    <TextInput
-                      ref={budgetInputRef}
-                      style={[styles.valueInput, {width: budgetInputWidth}]}
-                      value={budgetDraft}
-                      onChangeText={setBudgetDraft}
-                      onBlur={commitBudgetDraft}
-                      onSubmitEditing={commitBudgetDraft}
-                      keyboardType="numeric"
-                      returnKeyType="done"
-                      showSoftInputOnFocus
-                    />
-                  </View>
-                </Pressable>
-                <View style={styles.counterDivider} />
-                <TouchableOpacity
-                  style={styles.counterButtonRight}
-                  onPress={() => setBudget(budget + 1000)}>
-                  <Text style={styles.counterButton}>-</Text>
-                </TouchableOpacity>
-              </View>
+              <Title text="התקציב שלי" required />
+              <CardPriceField
+                price={budget}
+                setPrice={setBudget}
+                counterStep={1000}
+              />
             </View>
 
             {/* Container 6: Additional Details */}
@@ -1510,9 +1416,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
             {/* Container 3: Property Type */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                סוג הנכס<Text style={styles.required}>*</Text>
-              </Text>
+              <Title text="סוג הנכס" required textStyle={{marginBottom: 0}} />
               <View style={styles.radioGroup}>
                 <TouchableOpacity
                   style={styles.radioOption}
@@ -1567,106 +1471,43 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
             {/* Container 4: General Details */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>פרטים כלליים</Text>
+              <Text style={[styles.generalDetailsHeading, formHeadingStyle]}>
+                פרטים כלליים
+              </Text>
 
-              {/* Area */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  שטח הנכס<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setArea(Math.max(1, area - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <View style={styles.valueRow}>
-                      <Text style={styles.counterValueSuffix}>מ"ר</Text>
-                      <TextInput
-                        style={[styles.valueInput, {width: areaInputWidth}]}
-                        value={areaDraft}
-                        onChangeText={setAreaDraft}
-                        onBlur={commitAreaDraft}
-                        onSubmitEditing={commitAreaDraft}
-                        keyboardType="numeric"
-                        returnKeyType="done"
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setArea(area + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Rooms */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  מספר חדרים<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setRooms(Math.max(1, rooms - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <TextInput
-                      style={[styles.valueInput, {width: roomsInputWidth}]}
-                      value={roomsDraft}
-                      onChangeText={setRoomsDraft}
-                      onBlur={commitRoomsDraft}
-                      onSubmitEditing={commitRoomsDraft}
-                      keyboardType="numeric"
-                      returnKeyType="done"
-                    />
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setRooms(rooms + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Floor */}
-              <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>
-                  קומה<Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.counterInput}>
-                  <TouchableOpacity
-                    style={styles.counterButtonLeft}
-                    onPress={() => setFloor(Math.max(1, floor - 1))}>
-                    <Text style={styles.counterButton}>+</Text>
-                  </TouchableOpacity>
-                  <View style={styles.counterDivider} />
-                  <View style={styles.counterValueContainer}>
-                    <TextInput
-                      style={[styles.valueInput, {width: floorInputWidth}]}
-                      value={floorDraft}
-                      onChangeText={setFloorDraft}
-                      onBlur={commitFloorDraft}
-                      onSubmitEditing={commitFloorDraft}
-                      keyboardType="numeric"
-                      returnKeyType="done"
-                    />
-                  </View>
-                  <View style={styles.counterDivider} />
-                  <TouchableOpacity
-                    style={styles.counterButtonRight}
-                    onPress={() => setFloor(floor + 1)}>
-                    <Text style={styles.counterButton}>-</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <CountUpdate
+                variant="figmaOffice"
+                title="שטח הנכס"
+                required
+                count={area}
+                setCount={setArea}
+                isArea
+                min={1}
+                isDivider={false}
+                isLast={false}
+              />
+              <Divider style={styles.generalDetailsDivider} />
+              <CountUpdate
+                variant="figmaOffice"
+                title="מספר חדרים"
+                required
+                count={rooms}
+                setCount={setRooms}
+                min={1}
+                isDivider={false}
+                isLast={false}
+              />
+              <Divider style={styles.generalDetailsDivider} />
+              <CountUpdate
+                variant="figmaOffice"
+                title="קומה"
+                required
+                count={floor}
+                setCount={setFloor}
+                min={1}
+                isDivider={false}
+                isLast={false}
+              />
 
               {/* Amenities */}
               {['חנייה', 'מרפסת', 'מעלית', 'ממ"ד', 'כניסה מיידית'].map(
@@ -1832,43 +1673,12 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
             {/* Container 7: Price */}
             <View style={styles.formContainer}>
-              <Text style={styles.sectionTitle}>
-                מחיר<Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.priceInput}>
-                <TouchableOpacity
-                  style={styles.counterButtonLeft}
-                  onPress={() =>
-                    setPrice(Math.max(0, price - PRICE_COUNTER_STEP_DEFAULT))
-                  }>
-                  <Text style={styles.counterButton}>+</Text>
-                </TouchableOpacity>
-                <View style={styles.counterDivider} />
-                <Pressable
-                  style={styles.counterValueContainer}
-                  onPress={() => priceInputRef.current?.focus?.()}>
-                  <View style={styles.valueRow}>
-                    <Text style={styles.priceValue}>₪</Text>
-                    <TextInput
-                      ref={priceInputRef}
-                      style={[styles.valueInput, {width: priceInputWidth}]}
-                      value={priceDraft}
-                      onChangeText={setPriceDraft}
-                      onBlur={commitPriceDraft}
-                      onSubmitEditing={commitPriceDraft}
-                      keyboardType="numeric"
-                      returnKeyType="done"
-                      showSoftInputOnFocus
-                    />
-                  </View>
-                </Pressable>
-                <View style={styles.counterDivider} />
-                <TouchableOpacity
-                  style={styles.counterButtonRight}
-                  onPress={() => setPrice(price + PRICE_COUNTER_STEP_DEFAULT)}>
-                  <Text style={styles.counterButton}>-</Text>
-                </TouchableOpacity>
-              </View>
+              <Title text="מחיר" required />
+              <CardPriceField
+                price={price}
+                setPrice={setPrice}
+                counterStep={PRICE_COUNTER_STEP_DEFAULT}
+              />
             </View>
 
             {/* Address Section */}
@@ -2017,15 +1827,28 @@ const styles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 20,
     marginBottom: 20,
+    ...formRtlContainerStyle,
   },
   sectionTitle: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 15,
+    flexShrink: 0,
   },
   sectionTitleMargin: {
     marginTop: 20,
+  },
+  generalDetailsHeading: {
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: '#D2D0DC',
+    marginBottom: 24,
+  },
+  generalDetailsDivider: {
+    height: 1,
+    backgroundColor: '#343243',
+    marginVertical: 20,
   },
   required: {
     color: Colors.yellowIcons,
@@ -2180,6 +2003,8 @@ const styles = StyleSheet.create({
   radioOptionText: {
     color: '#fff',
     fontSize: 16,
+    textAlign: 'right',
+    flexShrink: 1,
   },
   radioSpacer: {
     width: 15,

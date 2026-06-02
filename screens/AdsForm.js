@@ -18,12 +18,17 @@ import {
   PanResponder,
   Dimensions,
   I18nManager,
+  InteractionManager,
+  Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
+import {FormScrollProvider, useFormScroll} from '../utils/formKeyboardScroll';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
   uploadFile,
+  errorMessageFromUnknown,
   createListing,
   updateListing,
   toSubscriptionId,
@@ -134,7 +139,7 @@ function buildCompanyOfficeRepeatGroups(count) {
         {
           type: 'price',
           key: `office_${i}_price`,
-          subTitle: 'מחיר למטר',
+          subTitle: 'מחיר\u00A0למטר',
           subTitleRequired: true,
         },
       ],
@@ -168,7 +173,7 @@ function buildCompanyWholeFloorRepeatGroups(count) {
         {
           type: 'price',
           key: `whole_floor_${i}_price`,
-          subTitle: 'מחיר למטר',
+          subTitle: 'מחיר\u00A0למטר',
           subTitleRequired: true,
         },
       ],
@@ -202,7 +207,7 @@ function buildCat8CommercialRepeatGroups(count) {
         {
           type: 'price',
           key: `cat8_commercial_space_${i}_price`,
-          subTitle: 'מחיר למטר',
+          subTitle: 'מחיר\u00A0למטר',
           subTitleRequired: true,
         },
       ],
@@ -236,7 +241,7 @@ function buildCat8WholeFloorRepeatGroups(count) {
         {
           type: 'price',
           key: `cat8_whole_floor_${i}_price`,
-          subTitle: 'מחיר למטר',
+          subTitle: 'מחיר\u00A0למטר',
           subTitleRequired: true,
         },
       ],
@@ -463,6 +468,34 @@ const fileFromPickerAsset = (asset, kind = 'image') => {
     (String(asset.type || '').includes('/') ? asset.type : defaultMime);
   const name = asset.fileName || asset.filename || defaultName;
   return {uri: asset.uri, type, name};
+};
+
+/** Smaller JPEGs upload faster on mobile; still sharp enough for listing photos. */
+const AD_IMAGE_PICKER_QUALITY = 0.85;
+
+const ADS_FORM_HEADER_HEIGHT = 64;
+const ADS_FORM_PUBLISH_FOOTER_HEIGHT = 92;
+
+const AD_VIDEO_PICKER_OPTIONS = {
+  mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+  allowsEditing: false,
+  quality: 1,
+  videoMaxDuration: 120,
+};
+
+const ensureMediaLibraryPermission = async () => {
+  if (Platform.OS === 'web') return true;
+  const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
+  if (existing.status === 'granted') return true;
+  const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (requested.status !== 'granted') {
+    Alert.alert(
+      'הרשאה נדרשת',
+      'נדרשת הרשאה לגישה לספריית המדיה כדי להעלות תמונות וסרטונים.',
+    );
+    return false;
+  }
+  return true;
 };
 
 /**
@@ -1330,7 +1363,7 @@ const AdsForm = ({
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          quality: 1,
+          quality: AD_IMAGE_PICKER_QUALITY,
         });
 
         if (!result.canceled && result.assets[0]) {
@@ -1364,7 +1397,7 @@ const AdsForm = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 1,
+        quality: AD_IMAGE_PICKER_QUALITY,
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
@@ -1439,7 +1472,7 @@ const AdsForm = ({
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          quality: 1,
+          quality: AD_IMAGE_PICKER_QUALITY,
         });
 
         if (!result.canceled && result.assets[0]) {
@@ -1466,27 +1499,38 @@ const AdsForm = ({
     }
   };
 
+  const pickVideoFromLibrary = async () => {
+    const permitted = await ensureMediaLibraryPermission();
+    if (!permitted) return;
+    const result = await ImagePicker.launchImageLibraryAsync(AD_VIDEO_PICKER_OPTIONS);
+    if (!result.canceled && result.assets?.[0]) {
+      setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
+      setHasVideo(true);
+    }
+  };
+
   const handleVideoUpload = async () => {
     if (Platform.OS === 'web' && videoInputRef.current) {
       videoInputRef.current.click();
-    } else {
-      // Native mobile - use expo-image-picker for video
-      try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-          allowsEditing: true,
-          quality: 1,
-          // videoMaxDuration: 300, // 5 minutes max
+      return;
+    }
+    try {
+      const run = () =>
+        pickVideoFromLibrary().catch(error => {
+          console.log('video picker error:', error);
+          Alert.alert(
+            'שגיאה בבחירת סרטון',
+            error?.message || 'לא ניתן לפתוח את ספריית הסרטונים.',
+          );
         });
-
-        if (!result.canceled && result.assets?.[0]) {
-          setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
-          setHasVideo(true);
-        }
-      } catch (error) {
-        console.log('errrorr', error);
-        alert('שגיאה בבחירת סרטון: ' + error.message);
+      if (Platform.OS === 'android') {
+        InteractionManager.runAfterInteractions(run);
+      } else {
+        await run();
       }
+    } catch (error) {
+      console.log('video upload handler error:', error);
+      Alert.alert('שגיאה בבחירת סרטון', error?.message || '');
     }
   };
 
@@ -1612,13 +1656,18 @@ const AdsForm = ({
   /** Mandatory fields satisfied — yellow asset + press enabled (still respects uploading). */
   const formReadyToPublish = publishBlockingErrors.length === 0;
 
-  const uploadAdsMedia = async (fileObj, folder, progressKey) => {
+  const uploadAdsMedia = async (fileObj, folder, progressKey, options = {}) => {
     if (!hasLocalMediaFile(fileObj)) return null;
+    const isVideo = String(folder || '').includes('video');
     setUploadProgress(prev => ({...prev, [progressKey]: true}));
     try {
-      const result = await uploadFile(fileObj, folder);
+      const result = await uploadFile(fileObj, folder, {
+        timeoutMs: options.timeoutMs ?? (isVideo ? 300000 : 120000),
+      });
       if (!result?.url) {
-        throw new Error(result?.error || 'Upload failed');
+        throw new Error(
+          errorMessageFromUnknown(result?.error, 'Upload failed'),
+        );
       }
       return result.url;
     } finally {
@@ -1789,85 +1838,118 @@ const AdsForm = ({
         }
       }
 
-      // Upload main image (skip for category 3; skip if already have URL from edit)
+      // Upload remaining media in parallel (much faster than one-by-one on mobile).
+      const uploadJobs = [];
+
       if (category !== 3 && !uploadedMainImageUrl && hasLocalMediaFile(mainImage)) {
-        try {
-          uploadedMainImageUrl = await uploadAdsMedia(
-            mainImage,
-            'listings/images',
-            'mainImage',
-          );
-        } catch (error) {
-          console.log('main image upload error:', error);
-          alert('שגיאה בהעלאת התמונה הראשית. נסה שוב.');
-          setUploading(false);
-          return;
-        }
+        uploadJobs.push({
+          key: 'main',
+          index: null,
+          fatal: true,
+          fatalMessage: 'שגיאה בהעלאת התמונה הראשית. נסה שוב.',
+          run: () => uploadAdsMedia(mainImage, 'listings/images', 'mainImage'),
+        });
       }
 
-      // Upload additional images
       for (let i = 0; i < additionalImages.length; i++) {
         if (hasLocalMediaFile(additionalImages[i])) {
-          try {
-            uploadedAdditionalImageUrls[i] = await uploadAdsMedia(
-              additionalImages[i],
-              'listings/images',
-              `additional-${i}`,
-            );
-          } catch (error) {
-            console.log(`additional image ${i} upload error:`, error);
-          }
+          uploadJobs.push({
+            key: 'additional',
+            index: i,
+            fatal: false,
+            run: () =>
+              uploadAdsMedia(
+                additionalImages[i],
+                'listings/images',
+                `additional-${i}`,
+              ),
+          });
         }
       }
 
-      // Upload video if exists
       if (!uploadedVideoUrl && hasLocalMediaFile(videoFile)) {
-        try {
-          uploadedVideoUrl = await uploadAdsMedia(
-            videoFile,
-            'listings/videos',
-            'video',
-          );
-        } catch (error) {
-          console.log('video upload error:', error);
-          alert('שגיאה בהעלאת הסרטון. נסה שוב.');
-          setUploading(false);
-          return;
-        }
+        uploadJobs.push({
+          key: 'video',
+          index: null,
+          fatal: true,
+          fatalMessage: 'שגיאה בהעלאת הסרטון. נסה שוב.',
+          run: () => uploadAdsMedia(videoFile, 'listings/videos', 'video'),
+        });
       }
 
       let uploadedSalesImageUrl = null;
       if (salesImage?.uri && !hasLocalMediaFile(salesImage)) {
         uploadedSalesImageUrl = salesImage.uri || salesImageUrl;
       } else if (hasLocalMediaFile(salesImage)) {
-        try {
-          uploadedSalesImageUrl = await uploadAdsMedia(
-            salesImage,
-            'listings/images',
-            'salesImage',
-          );
-        } catch (err) {
-          console.warn('[AdsForm] sales image upload failed:', err.message);
-        }
+        uploadJobs.push({
+          key: 'sales',
+          index: null,
+          fatal: false,
+          run: () => uploadAdsMedia(salesImage, 'listings/images', 'salesImage'),
+        });
       }
 
       let uploadedBnbBusinessLogoUrl = null;
       if (category === 5 && bnbHostType === 'business') {
-        if (initialListing && bnbBusinessLogo?.uri && !hasLocalMediaFile(bnbBusinessLogo)) {
+        if (
+          initialListing &&
+          bnbBusinessLogo?.uri &&
+          !hasLocalMediaFile(bnbBusinessLogo)
+        ) {
           uploadedBnbBusinessLogoUrl =
             bnbBusinessLogo.uri || bnbBusinessLogoUrl;
         } else if (hasLocalMediaFile(bnbBusinessLogo)) {
+          uploadJobs.push({
+            key: 'bnbLogo',
+            index: null,
+            fatal: true,
+            fatalMessage: 'שגיאה בהעלאת הלוגו. נסה שוב.',
+            run: () =>
+              uploadAdsMedia(
+                bnbBusinessLogo,
+                'listings/images',
+                'bnbBusinessLogo',
+              ),
+          });
+        }
+      }
+
+      const uploadOutcomes = await Promise.all(
+        uploadJobs.map(async job => {
           try {
-            uploadedBnbBusinessLogoUrl = await uploadAdsMedia(
-              bnbBusinessLogo,
-              'listings/images',
-              'bnbBusinessLogo',
-            );
+            const url = await job.run();
+            return {...job, ok: true, url};
           } catch (error) {
-            alert('שגיאה בהעלאת הלוגו. נסה שוב.');
+            return {...job, ok: false, error};
+          }
+        }),
+      );
+
+      for (const outcome of uploadOutcomes) {
+        if (!outcome.ok) {
+          console.log(`${outcome.key} upload error:`, outcome.error);
+          if (outcome.fatal) {
+            const detail = errorMessageFromUnknown(outcome.error, '');
+            alert(
+              detail && detail !== outcome.fatalMessage
+                ? `${outcome.fatalMessage}\n${detail}`
+                : outcome.fatalMessage,
+            );
             setUploading(false);
             return;
           }
+          continue;
+        }
+        if (outcome.key === 'main') {
+          uploadedMainImageUrl = outcome.url;
+        } else if (outcome.key === 'additional') {
+          uploadedAdditionalImageUrls[outcome.index] = outcome.url;
+        } else if (outcome.key === 'video') {
+          uploadedVideoUrl = outcome.url;
+        } else if (outcome.key === 'sales') {
+          uploadedSalesImageUrl = outcome.url;
+        } else if (outcome.key === 'bnbLogo') {
+          uploadedBnbBusinessLogoUrl = outcome.url;
         }
       }
 
@@ -2089,7 +2171,8 @@ const AdsForm = ({
         onClose();
       }
     } catch (error) {
-      const errorMessage = error.message || 'שגיאה בפרסום המודעה. נסה שוב.';
+      const errorMessage =
+        errorMessageFromUnknown(error, 'שגיאה בפרסום המודעה. נסה שוב.');
       alert(errorMessage);
     } finally {
       setUploading(false);
@@ -2097,6 +2180,49 @@ const AdsForm = ({
   };
 
   console.log('ads form screen', adsFormFields);
+
+  const publishButton = (
+    <TouchableOpacity
+      onPress={handlePublish}
+      disabled={uploading || !formReadyToPublish}
+      accessibilityState={{disabled: uploading || !formReadyToPublish}}
+      accessibilityLabel="פרסם"
+      style={[
+        styles.publishButtonTouchable,
+        Platform.OS === 'web' && !uploading && formReadyToPublish
+          ? {cursor: 'pointer'}
+          : Platform.OS === 'web'
+            ? {cursor: 'not-allowed'}
+            : null,
+      ]}
+      activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
+      <View style={styles.publishButtonImageWrap}>
+        <Image
+          source={
+            formReadyToPublish
+              ? require('../assets/ad-uplaud/button-yelow.png')
+              : require('../assets/ad-uplaud/button-gray.png')
+          }
+          style={[
+            styles.publishButtonImage,
+            {
+              aspectRatio: formReadyToPublish
+                ? publishAspectRatios.yellow
+                : publishAspectRatios.gray,
+            },
+          ]}
+          resizeMode="contain"
+        />
+        {uploading ? (
+          <View
+            style={styles.publishButtonSpinnerOverlay}
+            pointerEvents="none">
+            <ActivityIndicator size="small" color="#000" />
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -2111,10 +2237,12 @@ const AdsForm = ({
         <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+      <FormScrollProvider
+        headerOffset={insets.top + ADS_FORM_HEADER_HEIGHT}
+        footerOffset={ADS_FORM_PUBLISH_FOOTER_HEIGHT + insets.bottom}>
+        <AdsFormKeyboardScroll
+          publishButton={publishButton}
+          bottomInset={insets.bottom}>
         {/* For category 3, show new form fields. For other categories, show existing form */}
 
         <>
@@ -2567,48 +2695,8 @@ const AdsForm = ({
           })}
         </>
 
-        {/* Publish Button — full PNG (gray / yellow); aspect ratio from asset */}
-        <TouchableOpacity
-          onPress={handlePublish}
-          disabled={uploading || !formReadyToPublish}
-          accessibilityState={{disabled: uploading || !formReadyToPublish}}
-          accessibilityLabel="פרסם"
-          style={[
-            styles.publishButtonTouchable,
-            Platform.OS === 'web' && !uploading && formReadyToPublish
-              ? {cursor: 'pointer'}
-              : Platform.OS === 'web'
-                ? {cursor: 'not-allowed'}
-                : null,
-          ]}
-          activeOpacity={formReadyToPublish && !uploading ? 0.85 : 1}>
-          <View style={styles.publishButtonImageWrap}>
-            <Image
-              source={
-                formReadyToPublish
-                  ? require('../assets/ad-uplaud/button-yelow.png')
-                  : require('../assets/ad-uplaud/button-gray.png')
-              }
-              style={[
-                styles.publishButtonImage,
-                {
-                  aspectRatio: formReadyToPublish
-                    ? publishAspectRatios.yellow
-                    : publishAspectRatios.gray,
-                },
-              ]}
-              resizeMode="contain"
-            />
-            {uploading ? (
-              <View
-                style={styles.publishButtonSpinnerOverlay}
-                pointerEvents="none">
-                <ActivityIndicator size="small" color="#000" />
-              </View>
-            ) : null}
-          </View>
-        </TouchableOpacity>
-      </ScrollView>
+        </AdsFormKeyboardScroll>
+      </FormScrollProvider>
       <PublishValidationModal
         visible={publishValidationVisible}
         messages={publishValidationMessages}
@@ -2617,6 +2705,39 @@ const AdsForm = ({
     </View>
   );
 };
+
+function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
+  const {scrollRef, keyboardInset, onScroll} = useFormScroll();
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoid}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingBottom: keyboardInset > 0 ? 12 : 24},
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScroll={onScroll}
+        scrollEventThrottle={16}>
+        {children}
+      </ScrollView>
+      <View
+        style={[
+          styles.publishFooter,
+          {paddingBottom: Math.max(bottomInset, 8)},
+        ]}>
+        {publishButton}
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -2648,6 +2769,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1E1D27',
   },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  publishFooter: {
+    backgroundColor: '#1E1D27',
+    paddingTop: 4,
+  },
   scrollContent: {
     paddingBottom: 24,
     backgroundColor: '#1E1D27',
@@ -2668,7 +2796,7 @@ const styles = StyleSheet.create({
   publishButtonTouchable: {
     marginHorizontal: 20,
     marginTop: 0,
-    marginBottom: 8,
+    marginBottom: 0,
     alignSelf: 'stretch',
     paddingVertical: 0,
   },

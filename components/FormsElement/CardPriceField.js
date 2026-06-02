@@ -1,21 +1,17 @@
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TextInput,
-  Pressable,
-} from 'react-native';
-import {Colors} from '../../constants/styles';
 import React, {useEffect, useRef, useState} from 'react';
+import {StyleSheet, View} from 'react-native';
 import {PRICE_COUNTER_STEP_DEFAULT} from '../../utils/priceInput';
+import {Colors} from '../../constants/styles';
+import {CounterStepper} from './CounterStepper';
 
 export const CardPriceField = ({
   price = 0,
   setPrice,
   counterStep = PRICE_COUNTER_STEP_DEFAULT,
+  style,
 }) => {
   const safeSetPrice = typeof setPrice === 'function' ? setPrice : () => {};
+  const step = counterStep;
   const inputRef = useRef(null);
   const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
@@ -33,116 +29,29 @@ export const CardPriceField = ({
   };
 
   return (
-    <View style={styles.priceInput}>
-      <TouchableOpacity
-        style={styles.counterButtonLeft}
-        onPress={() =>
-          safeSetPrice(Math.max(0, (price || 0) - counterStep))
-        }>
-        <Text style={styles.counterButtonMinus}>−</Text>
-      </TouchableOpacity>
-      <View style={styles.counterDivider} />
-      <Pressable
-        style={styles.counterValueContainer}
-        onPress={() => inputRef.current?.focus?.()}>
-        <View style={styles.priceValueRow}>
-          <Text style={styles.priceValue}>₪</Text>
-          <TextInput
-            ref={inputRef}
-            style={[styles.priceValueInput, {width: inputWidth}]}
-            value={draftPrice}
-            onChangeText={setDraftPrice}
-            onBlur={commitDraftPrice}
-            onSubmitEditing={commitDraftPrice}
-            keyboardType="numeric"
-            returnKeyType="done"
-            textAlign="center"
-            showSoftInputOnFocus
-          />
-        </View>
-      </Pressable>
-      <View style={styles.counterDivider} />
-      <TouchableOpacity
-        style={styles.counterButtonRight}
-        onPress={() => safeSetPrice((price || 0) + counterStep)}>
-        <Text style={styles.counterButtonPlus}>+</Text>
-      </TouchableOpacity>
-    </View>
+    <CounterStepper
+      inputRef={inputRef}
+      value={draftPrice}
+      onChangeText={setDraftPrice}
+      onBlur={commitDraftPrice}
+      onSubmitEditing={commitDraftPrice}
+      onIncrement={() => safeSetPrice((price || 0) + step)}
+      onDecrement={() => safeSetPrice(Math.max(0, (price || 0) - step))}
+      suffix="₪"
+      suffixAfter
+      suffixStyle={styles.currencySuffix}
+      inputWidth={inputWidth}
+      style={[styles.priceInput, style]}
+    />
   );
 };
 
 const styles = StyleSheet.create({
   priceInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 52,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    overflow: 'hidden',
-    marginBottom: 22,
+    marginBottom: 0,
   },
-  priceValue: {
+  currencySuffix: {
     color: Colors.yellowIcons,
-    fontSize: 18,
     fontFamily: 'Rubik-Medium',
-  },
-  price: {color: Colors.whiteGeneral},
-  priceValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  priceValueInput: {
-    color: Colors.whiteGeneral,
-    fontSize: 18,
-    fontFamily: 'Rubik-Medium',
-    minWidth: 0,
-    textAlign: 'center',
-    paddingVertical: 0,
-    marginLeft: 6,
-  },
-  counterButtonLeft: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopLeftRadius: 32,
-    borderBottomLeftRadius: 32,
-  },
-  counterButtonRight: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopRightRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  counterButton: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  counterButtonMinus: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: '600',
-  },
-  counterButtonPlus: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  counterDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#343243',
-  },
-  counterValueContainer: {
-    flex: 2,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

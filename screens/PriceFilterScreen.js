@@ -64,7 +64,12 @@ const INITIAL_MAX_PRICE_BNB = 1000;
 const MENU_ICON = require('../assets/buttom-bar/price.png');
 const CALENDAR_ICON = require('../assets/calendarIcon.png');
 
-const formatPrice = n => `₪${Math.max(0, Number(n) || 0).toLocaleString()}`;
+// Use a regex-based formatter (instead of `Number.toLocaleString()` without an
+// explicit locale) so prices always render with comma thousand separators
+// like "₪1,234,567" — never the dot style that some device locales / Hermes
+// builds produce (e.g. "1.234.567") which users read as a malformed decimal.
+const formatPrice = n =>
+  `₪${String(Math.round(Math.max(0, Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 
 const toIsoDate = value => {
   if (!value) return null;
@@ -344,7 +349,9 @@ const PriceFilterScreen = ({
                   value={
                     minFocused
                       ? minDraft
-                      : Math.max(0, Number(minPrice) || 0).toLocaleString()
+                      : String(
+                          Math.round(Math.max(0, Number(minPrice) || 0)),
+                        ).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                   }
                   onFocus={() => {
                     setMinFocused(true);
@@ -372,7 +379,9 @@ const PriceFilterScreen = ({
                   value={
                     maxFocused
                       ? maxDraft
-                      : Math.max(0, Number(maxPrice) || 0).toLocaleString()
+                      : String(
+                          Math.round(Math.max(0, Number(maxPrice) || 0)),
+                        ).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                   }
                   onFocus={() => {
                     setMaxFocused(true);

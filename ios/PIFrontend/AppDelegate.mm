@@ -1,12 +1,17 @@
 #import "AppDelegate.h"
 
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTI18nUtil.h>
 #import <React/RCTLinkingManager.h>
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+  // Always RTL — independent of device system language (Hebrew app layout).
+  [[RCTI18nUtil sharedInstance] allowRTL:YES];
+  [[RCTI18nUtil sharedInstance] forceRTL:YES];
+
   self.moduleName = @"main";
 
   // You can add your custom initial props in the dictionary below.

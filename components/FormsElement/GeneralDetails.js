@@ -7,7 +7,7 @@ import {RadioWithText} from './RadioWithText';
 import {RadioButton} from './RadioButton';
 import AmenityQuantityPill from '../AmenityQuantityPill';
 import {Divider} from './Divider';
-import {flexEnd, flexStart} from '../../utils/rtlLayout';
+import {flexEnd, formHeadingStyle} from '../../utils/rtlLayout';
 
 export const GeneralDetails = ({
   area,
@@ -40,7 +40,7 @@ export const GeneralDetails = ({
     <FormContainer>
       {hasCounterFields ? (
         <>
-          <Text style={[styles.sectionHeading, {alignSelf: flexStart}]}>
+          <Text style={[styles.sectionHeading, formHeadingStyle]}>
             פרטים כלליים
           </Text>
           {counterData.map((counter, index) => (
@@ -53,6 +53,7 @@ export const GeneralDetails = ({
                 isDivider={false}
                 isArea={counter.isArea}
                 min={counter.min}
+                variant="figmaOffice"
                 containerStyle={{marginBottom: 0}}
               />
               {index < counterData.length - 1 ? (

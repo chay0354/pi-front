@@ -1,15 +1,10 @@
-import React, {useEffect, useState} from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  TextInput,
-  I18nManager,
-} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {StyleSheet, Text, View} from 'react-native';
 import {Title} from './Title';
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';
+import {formLabelRowStyle, textAlign} from '../../utils/rtlLayout';
+import {CounterStepper} from './CounterStepper';
 
 export const CountUpdate = ({
   title,
@@ -25,10 +20,9 @@ export const CountUpdate = ({
   containerStyle,
   deviderStyle,
 }) => {
-  const rowEndAlign = 'flex-start';
-  const suffixSpacing = {marginRight: 6};
   const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
   const minVal = typeof min === 'number' ? min : 0;
+  const inputRef = useRef(null);
   const [draft, setDraft] = useState(
     String(Math.max(minVal, Number(count ?? 0))),
   );
@@ -51,62 +45,40 @@ export const CountUpdate = ({
   };
 
   const counterPill = (
-    <View
+    <CounterStepper
+      inputRef={inputRef}
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={commitDraft}
+      onSubmitEditing={commitDraft}
+      onIncrement={() => safeSetCount((count ?? 0) + 1)}
+      onDecrement={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}
+      suffix={isArea ? 'מ"ר' : undefined}
+      suffixAfter
+      inputWidth={inputWidth}
       style={[
         styles.counterInput,
         variant === 'figmaOffice' && styles.counterInputFigma,
         counterInputStyle,
-      ]}>
-      <TouchableOpacity
-        style={styles.counterButtonLeft}
-        onPress={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}>
-        <Text style={styles.counterButtonMinus}>−</Text>
-      </TouchableOpacity>
-      <View style={styles.counterDivider} />
-      <View style={styles.counterValueContainer}>
-        <View style={styles.counterValueRow}>
-          {isArea ? (
-            <Text style={[styles.counterValueSuffix, suffixSpacing]}>מ"ר</Text>
-          ) : null}
-          <TextInput
-            style={[
-              styles.counterValueInput,
-              variant === 'figmaOffice' && styles.counterValueInputFigma,
-              {width: inputWidth},
-            ]}
-            value={draft}
-            onChangeText={setDraft}
-            onBlur={commitDraft}
-            onSubmitEditing={commitDraft}
-            keyboardType="numeric"
-            returnKeyType="done"
-            textAlign="center"
-          />
-        </View>
-      </View>
-      <View style={styles.counterDivider} />
-      <TouchableOpacity
-        style={styles.counterButtonRight}
-        onPress={() => safeSetCount((count ?? 0) + 1)}>
-        <Text style={styles.counterButtonPlus}>+</Text>
-      </TouchableOpacity>
-    </View>
+      ]}
+    />
   );
+
+  const figmaLabel = title ? (
+    <View style={styles.figmaOfficeLabelRow}>
+      <Text style={styles.figmaOfficeLabelText} numberOfLines={1}>
+        {title}
+      </Text>
+      {required ? <Text style={styles.figmaOfficeStar}>*</Text> : null}
+    </View>
+  ) : null;
 
   if (variant === 'figmaOffice') {
     return (
       <View style={[{marginBottom: isLast ? 0 : 0}, containerStyle]}>
-        {title ? (
-          <View
-            style={[styles.figmaOfficeLabelRow, {justifyContent: rowEndAlign}]}>
-            <Text style={[styles.figmaOfficeLabelText, {textAlign:'left'}]}>
-              {title}
-            </Text>
-            {required ? <Text style={styles.figmaOfficeStar}>*</Text> : null}
-          </View>
-        ) : null}
+        {figmaLabel}
         {counterPill}
-        {isDivider && <Divider style={deviderStyle} />}
+        {isDivider ? <Divider style={deviderStyle} /> : null}
       </View>
     );
   }
@@ -117,114 +89,37 @@ export const CountUpdate = ({
         <Title
           text={title}
           required={required}
-          textStyle={{marginBottom: 15}}
+          textStyle={{marginBottom: 0}}
         />
       ) : null}
       {counterPill}
-      {isDivider && <Divider style={deviderStyle} />}
+      {isDivider ? <Divider style={deviderStyle} /> : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   counterInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 52,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    overflow: 'hidden',
-    marginBottom: 22,
+    marginBottom: 0,
   },
   counterInputFigma: {
     marginBottom: 0,
   },
   figmaOfficeLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    ...formLabelRowStyle,
     marginBottom: 20,
   },
   figmaOfficeLabelText: {
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
+    flexShrink: 1,
+    textAlign,
   },
   figmaOfficeStar: {
     color: Colors.yellowIcons,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-  },
-  counterButtonLeft: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopLeftRadius: 32,
-    borderBottomLeftRadius: 32,
-  },
-  counterButtonRight: {
-    flex: 1,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopRightRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  counterButton: {
-    color: '#fff',
-    fontSize: 18,
-    fontFamily: 'Rubik-Medium',
-  },
-  counterButtonMinus: {
-    color: '#fff',
-    fontSize: 22,
-    fontFamily: 'Rubik-Medium',
-  },
-  counterButtonPlus: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Rubik-Medium',
-  },
-  counterDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#343243',
-  },
-  counterValueContainer: {
-    flex: 2,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  counterValue: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  counterValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  counterValueInput: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    minWidth: 0,
-    textAlign: 'center',
-    paddingVertical: 0,
-  },
-  counterValueInputFigma: {
-    fontFamily: 'Rubik-Medium',
-    fontWeight: '500',
-    lineHeight: 24,
-  },
-  counterValueSuffix: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
+    flexShrink: 0,
   },
 });

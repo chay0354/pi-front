@@ -95,7 +95,11 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
             isDivider={false}
             containerStyle={{marginBottom: 0}}
           />
-          <Text style={[styles.subFields, {textAlign:'left'}, sideMargin]}>מחיר*</Text>
+          <Text
+            style={[styles.subFields, {textAlign: 'left'}, sideMargin]}
+            numberOfLines={1}>
+            מחיר*
+          </Text>
           <CardPriceField
             title={'מחיר'}
             price={land.price}
@@ -151,6 +155,7 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     marginBottom: 10,
     fontFamily: 'Rubik-Regular',
+    flexShrink: 0,
   },
   radioOption: {
     flexDirection: 'row',

@@ -170,18 +170,18 @@ const getTextVisualStyle = (baseColor, bgMode = 0) => {
 
 /**
  * Self-contained editing text input.
- * - Fully UNCONTROLLED (uses defaultValue) — on Android, controlled
- *   multiline TextInputs can drop typed characters when the parent
- *   re-renders. Uncontrolled avoids this entirely.
- * - Tracks the latest text in a ref (updated from BOTH onChangeText and
- *   onChange) so finishEditing can read it via getText().
+ * - Uses internal state (not parent-controlled) so Android/iOS keep typed
+ *   text when the parent re-renders (toolbar, keyboard inset, styles).
+ * - Tracks the latest text in a ref (updated from onChangeText, onChange,
+ *   and onEndEditing) so finishEditing can read it via getText().
  * - Reads the underlying native input value as a last-resort fallback so
- *   we never lose what the user actually typed.
+ *   we never lose what the user actually typed when Done is pressed.
  */
 const EditingTextBox = forwardRef(
-  ({initialText, onTextChange, ...inputProps}, ref) => {
+  ({initialText, onTextChange, onEndEditing, ...inputProps}, ref) => {
     const initial = String(initialText ?? '');
     const textRef = useRef(initial);
+    const [text, setText] = useState(initial);
     const inputRef = useRef(null);
 
     const readNativeValue = () => {
@@ -208,12 +208,11 @@ const EditingTextBox = forwardRef(
       ref,
       () => ({
         getText: () => {
-          const fromRef = textRef.current;
-          if (fromRef && String(fromRef).length > 0) return String(fromRef);
-          // Fallback to whatever the native input currently shows
+          const fromState = String(textRef.current ?? '');
+          if (fromState.length > 0) return fromState;
           const native = readNativeValue();
           if (native && String(native).length > 0) return String(native);
-          return String(fromRef ?? '');
+          return fromState;
         },
         focus: () => inputRef.current?.focus?.(),
         blur: () => inputRef.current?.blur?.(),
@@ -223,29 +222,85 @@ const EditingTextBox = forwardRef(
 
     const handleText = next => {
       const v = String(next ?? '');
+      if (v === textRef.current) return;
       textRef.current = v;
+      setText(v);
       onTextChange?.(v);
+    };
+
+    const handleEndEditing = e => {
+      const t = e?.nativeEvent?.text;
+      // Android/iOS multiline often reports nativeEvent.text as "" on blur even
+      // when the field still contains text — never wipe a non-empty draft.
+      if (typeof t === 'string' && t.length > 0) {
+        handleText(t);
+      } else {
+        onTextChange?.(textRef.current);
+      }
+      onEndEditing?.(e);
     };
 
     return (
       <TextInput
         {...inputProps}
         ref={inputRef}
-        defaultValue={initial}
+        value={text}
         onChangeText={handleText}
         onChange={e => {
           const t = e?.nativeEvent?.text;
           if (typeof t === 'string') handleText(t);
         }}
+        onEndEditing={handleEndEditing}
       />
     );
   },
 );
 
+const STAGE_TEXT_PAD_Y = 12;
+/** Inset from the stage start edge (LTR coords inside stageLtr). */
+const STAGE_TEXT_PAD_LEFT = 8;
+/** Smaller right inset — keeps the clip border closer to the phone edge. */
+const STAGE_TEXT_PAD_RIGHT = 2;
+
+const getTextBlockBoxWidth = stageWidth =>
+  Math.max(
+    80,
+    Math.max(1, Number(stageWidth) || 300) -
+      STAGE_TEXT_PAD_LEFT -
+      STAGE_TEXT_PAD_RIGHT,
+  );
+
+const clampTextBlockPosition = (x, y, blockW, blockH, stageW, stageH) => {
+  const sw = Math.max(1, Number(stageW) || 1);
+  const sh = Math.max(1, Number(stageH) || 1);
+  const bw = Math.min(
+    Math.max(1, Number(blockW) || 1),
+    sw - STAGE_TEXT_PAD_LEFT - STAGE_TEXT_PAD_RIGHT,
+  );
+  const bh = Math.max(1, Number(blockH) || 1);
+  return {
+    x: Math.max(
+      STAGE_TEXT_PAD_LEFT,
+      Math.min(Number(x) || 0, sw - bw - STAGE_TEXT_PAD_RIGHT),
+    ),
+    y: Math.max(
+      STAGE_TEXT_PAD_Y,
+      Math.min(Number(y) || 0, sh - bh - STAGE_TEXT_PAD_Y),
+    ),
+  };
+};
+
+const getDefaultTextBlockY = (stageH, blockH = 40) => {
+  const sh = Math.max(1, Number(stageH) || 1);
+  const bh = Math.max(1, Number(blockH) || 1);
+  return Math.max(STAGE_TEXT_PAD_Y, (sh - bh) / 2);
+};
+
 const DraggableTextBlock = React.memo(
   ({
     block,
     stageWidth,
+    stageHeight,
     selectedColor,
     zIndex,
     isBeingEdited,
@@ -262,29 +317,48 @@ const DraggableTextBlock = React.memo(
 
     const touchStartTime = useRef(0);
     const hasMoved = useRef(false);
-    // Tracks whether initial alignment-based positioning has been applied
     const hasAligned = useRef(false);
+    const blockSizeRef = useRef({w: 0, h: 0});
 
-    // block.x === null means "needs alignment computation on first layout"
-    const initialX =
-      block.x === null
-        ? Math.max(0, (stageWidth > 0 ? stageWidth : 300) / 2 - 75)
-        : (block.x ?? 0);
+    const stageW = stageWidth > 0 ? stageWidth : 300;
+    const stageH = stageHeight > 0 ? stageHeight : 300;
+    const boxWidth = getTextBlockBoxWidth(stageW);
+
+    const initialPos = clampTextBlockPosition(
+      block.x ?? STAGE_TEXT_PAD_LEFT,
+      block.y ?? getDefaultTextBlockY(stageH, blockSizeRef.current.h || 40),
+      boxWidth,
+      40,
+      stageW,
+      stageH,
+    );
 
     const position = useRef(
-      new Animated.ValueXY({x: initialX, y: block.y ?? 0}),
+      new Animated.ValueXY({x: initialPos.x, y: initialPos.y}),
     ).current;
 
     useEffect(() => {
       hasAligned.current = false;
-      const sw = stageWidth > 0 ? stageWidth : 300;
-      const nextX =
-        block.x === null || block.x === undefined
-          ? Math.max(0, sw / 2 - 75)
-          : block.x;
-      const nextY = block.y ?? 0;
-      position.setValue({x: nextX, y: nextY});
-    }, [block.id, block.x, block.y, stageWidth]);
+      const nextPos = clampTextBlockPosition(
+        block.x ?? STAGE_TEXT_PAD_LEFT,
+        block.y ??
+          getDefaultTextBlockY(stageH, blockSizeRef.current.h || 40),
+        boxWidth,
+        blockSizeRef.current.h || 40,
+        stageW,
+        stageH,
+      );
+      position.setValue({x: nextPos.x, y: nextPos.y});
+    }, [
+      block.id,
+      block.x,
+      block.y,
+      block.text,
+      block.fontSize,
+      block.align,
+      stageWidth,
+      stageHeight,
+    ]);
 
     const panResponder = useRef(
       PanResponder.create({
@@ -314,10 +388,20 @@ const DraggableTextBlock = React.memo(
           if (!hasMoved.current && elapsed < 400) {
             onPressRef.current();
           } else {
-            onUpdatePositionRef.current(
-              block.id,
+            const blockH = blockSizeRef.current.h || 40;
+            const clamped = clampTextBlockPosition(
               position.x._value,
               position.y._value,
+              boxWidth,
+              blockH,
+              stageW,
+              stageH,
+            );
+            position.setValue({x: clamped.x, y: clamped.y});
+            onUpdatePositionRef.current(
+              block.id,
+              clamped.x,
+              clamped.y,
             );
           }
         },
@@ -325,30 +409,39 @@ const DraggableTextBlock = React.memo(
     ).current;
 
     const handleLayout = e => {
-      if (hasAligned.current) return;
-      // Skip alignment while the block is being edited. During edit the
-      // visible Text is empty (opacity 0, text="") so wrapper width is just
-      // padding — aligning here would commit a wrong x/y and pin the block
-      // to (0,0) once Done is pressed. Defer until the block is actually
-      // shown with its real text content.
       if (isBeingEdited) return;
-      if (block.x !== null && block.x !== undefined) {
-        hasAligned.current = true;
+
+      const blockH = e.nativeEvent.layout.height;
+      blockSizeRef.current = {w: boxWidth, h: blockH};
+
+      const hasText = String(block.text ?? '').trim().length > 0;
+      if (hasText && blockH < 8) return;
+
+      const targetX = block.x ?? STAGE_TEXT_PAD_LEFT;
+      const targetY =
+        block.y ??
+        position.y._value ??
+        getDefaultTextBlockY(stageH, blockSizeRef.current.h || blockH);
+      const clamped = clampTextBlockPosition(
+        targetX,
+        targetY,
+        boxWidth,
+        blockH,
+        stageW,
+        stageH,
+      );
+
+      if (
+        hasAligned.current &&
+        Math.abs(clamped.x - position.x._value) < 1 &&
+        Math.abs(clamped.y - position.y._value) < 1
+      ) {
         return;
       }
+
       hasAligned.current = true;
-      const blockW = e.nativeEvent.layout.width;
-      const sw = stageWidth > 0 ? stageWidth : 300;
-      let newX;
-      if (block.align === 'center') {
-        newX = (sw - blockW) / 2;
-      } else if (block.align === 'right') {
-        newX = sw - blockW - 10;
-      } else {
-        newX = 10;
-      }
-      position.x.setValue(newX);
-      onUpdatePositionRef.current(block.id, newX, position.y._value);
+      position.setValue({x: clamped.x, y: clamped.y});
+      onUpdatePositionRef.current(block.id, clamped.x, clamped.y);
     };
 
     const visual = getTextVisualStyle(
@@ -365,8 +458,9 @@ const DraggableTextBlock = React.memo(
             zIndex,
             left: 0,
             top: 0,
+            width: boxWidth,
+            maxWidth: boxWidth,
             opacity: isBeingEdited ? 0 : 1,
-            // translateX/Y — not swapped by I18nManager.swapLeftAndRightInRTL (unlike `left`/`top`)
             transform: position.getTranslateTransform(),
           },
           visual.backgroundColor !== 'transparent' && {
@@ -380,8 +474,9 @@ const DraggableTextBlock = React.memo(
             TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
             {
               color: visual.textColor,
-              textAlign: block.align ?? 'right',
+              textAlign: block.align ?? 'center',
               writingDirection: 'rtl',
+              width: '100%',
               fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
               lineHeight: Math.round(
                 (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
@@ -544,7 +639,7 @@ const PostEditorScreen = ({
   const [backgroundImageUri, setBackgroundImageUri] = useState(null);
   const [backgroundVideoAsset, setBackgroundVideoAsset] = useState(null);
   const [selectedFormat, setSelectedFormat] = useState(null);
-  const [textAlignMode, setTextAlignMode] = useState('right');
+  const [textAlignMode, setTextAlignMode] = useState('center');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
   const [colorPageIndex, setColorPageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(COLOR_PAGES[0][0]);
@@ -554,11 +649,13 @@ const PostEditorScreen = ({
   const [textBlocks, setTextBlocks] = useState([]);
   const [editingTextBlockId, setEditingTextBlockId] = useState(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
   const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
   const editingInputRef = useRef(null);
+  const editingFieldLayoutRef = useRef(null);
   const editingTextDraftRef = useRef('');
   const isFinishingEditRef = useRef(false);
   const stageLayoutRef = useRef({width: 0, height: 0});
@@ -761,26 +858,29 @@ const PostEditorScreen = ({
     formatToolbarHeight,
   ]);
 
+  /** Safe-area padding under the format bar (keyboard lift uses `bottom` on Android). */
+  const formatToolbarSafeBottom = Math.max(bottom, 8);
+
   useEffect(() => {
-    const onShow = () => {
+    const onShow = event => {
       setIsKeyboardVisible(true);
+      setKeyboardHeight(event?.endCoordinates?.height ?? 0);
     };
     const onHide = () => {
       setIsKeyboardVisible(false);
       setSelectedFormat(null);
+      setKeyboardHeight(0);
     };
 
-    // iOS: willShow/willHide gives smoother & reliable coordinates
-    const showSub = Keyboard.addListener('keyboardWillShow', onShow);
-    const hideSub = Keyboard.addListener('keyboardWillHide', onHide);
-    // Android: willShow isn't always fired
-    const showSub2 = Keyboard.addListener('keyboardDidShow', onShow);
-    const hideSub2 = Keyboard.addListener('keyboardDidHide', onHide);
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
     return () => {
       showSub?.remove?.();
       hideSub?.remove?.();
-      showSub2?.remove?.();
-      hideSub2?.remove?.();
     };
   }, []);
 
@@ -810,38 +910,53 @@ const PostEditorScreen = ({
     editingTextDraftRef.current = next;
   };
 
+  const syncEditingDraftFromInput = () => {
+    const latest = String(
+      editingInputRef.current?.getText?.() ?? editingTextDraftRef.current ?? '',
+    );
+    editingTextDraftRef.current = latest;
+    return latest;
+  };
+
   const readLatestEditingText = () => {
-    const fromBox = editingInputRef.current?.getText?.();
-    if (fromBox != null && String(fromBox).length > 0) {
-      return String(fromBox);
-    }
-    return String(editingTextDraftRef.current ?? '');
+    const draft = String(editingTextDraftRef.current ?? '');
+    const fromBox = String(editingInputRef.current?.getText?.() ?? '');
+    // Prefer whichever source has more content (handles Done/blur sync lag).
+    if (fromBox.trim().length >= draft.trim().length) return fromBox;
+    return draft;
   };
 
   const finishEditing = () => {
-    if (!editingTextBlockId) return;
+    if (!editingTextBlockId || isFinishingEditRef.current) return;
+    syncEditingDraftFromInput();
     const blockId = editingTextBlockId;
 
     // CRITICAL: Capture text into a local variable BEFORE any setState calls.
-    // React 18 batches state updates so updater functions run AFTER this
-    // event handler returns. By then refs may have been cleared. Closing
-    // over a local variable guarantees the captured value is preserved.
     const capturedText = readLatestEditingText().trim();
 
     isFinishingEditRef.current = true;
 
-    // Prefer the largest stage height we've ever measured (i.e. before the
-    // keyboard opened). At Done time the keyboard is still up, so
-    // stageLayoutRef.current.height is the smaller, keyboard-shrunken value.
-    // Using that would place the text near the top of the full-size stage.
-    const stageH =
-      maxStageHeightRef.current > 0
-        ? maxStageHeightRef.current
-        : stageLayoutRef.current.height > 0
-          ? stageLayoutRef.current.height
-          : stageLayout.height > 0
-            ? stageLayout.height
-            : 300;
+    // Use the live stage size (keyboard still up) so Y matches where the user typed.
+    const stageHForFinish =
+      stageLayoutRef.current.height > 0
+        ? stageLayoutRef.current.height
+        : stageLayout.height > 0
+          ? stageLayout.height
+          : 300;
+
+    const stageW =
+      stageLayoutRef.current.width > 0
+        ? stageLayoutRef.current.width
+        : stageLayout.width > 0
+          ? stageLayout.width
+          : 300;
+    const boxW = getTextBlockBoxWidth(stageW);
+    const fieldLayout = editingFieldLayoutRef.current;
+    const inputH = fieldLayout?.height ?? 90;
+    const targetY =
+      fieldLayout?.y != null
+        ? fieldLayout.y
+        : getDefaultTextBlockY(stageHForFinish, inputH);
 
     setTextBlocks(prev => {
       const cur = prev.find(b => b.id === blockId);
@@ -851,6 +966,14 @@ const PostEditorScreen = ({
       }
       const isNew = cur?.x === null || cur?.x === undefined;
       const hadY = cur?.y != null && cur?.y !== undefined;
+      const nextPos = clampTextBlockPosition(
+        isNew ? STAGE_TEXT_PAD_LEFT : (cur?.x ?? STAGE_TEXT_PAD_LEFT),
+        hadY ? cur.y : targetY,
+        boxW,
+        inputH,
+        stageW,
+        stageHForFinish,
+      );
       return prev.map(b =>
         b.id === blockId
           ? {
@@ -859,17 +982,14 @@ const PostEditorScreen = ({
               color: selectedColor,
               textStyleIndex: selectedTextStyleIndex,
               align: textAlignMode,
-              x: isNew ? (textAlignMode === 'left' ? 10 : null) : b.x,
-              y: hadY
-                ? b.y
-                : isNew
-                  ? Math.max(24, Math.min(stageH * 0.42, stageH - 72))
-                  : b.y,
+              x: nextPos.x,
+              y: nextPos.y,
             }
           : b,
       );
     });
 
+    editingFieldLayoutRef.current = null;
     editingTextDraftRef.current = '';
     setEditingTextBlockId(null);
     isFinishingEditRef.current = false;
@@ -908,7 +1028,7 @@ const PostEditorScreen = ({
     setEditingTextBlockId(id);
     setSelectedTextStyleIndex(block.textStyleIndex ?? 0);
     setSelectedColor(block.color ?? COLOR_PAGES[0][0]);
-    setTextAlignMode(block.align ?? 'right');
+    setTextAlignMode(block.align ?? 'center');
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
       if (editingInputRef.current?.focus) editingInputRef.current.focus();
@@ -916,7 +1036,25 @@ const PostEditorScreen = ({
   };
 
   const updateBlockPosition = (id, x, y) => {
-    setTextBlocks(prev => prev.map(b => (b.id === id ? {...b, x, y} : b)));
+    const sw = stageLayoutRef.current.width || stageLayout.width || 300;
+    const sh =
+      maxStageHeightRef.current ||
+      stageLayoutRef.current.height ||
+      stageLayout.height ||
+      300;
+    const clamped = clampTextBlockPosition(
+      x,
+      y,
+      getTextBlockBoxWidth(sw),
+      40,
+      sw,
+      sh,
+    );
+    setTextBlocks(prev =>
+      prev.map(b =>
+        b.id === id ? {...b, x: clamped.x, y: clamped.y} : b,
+      ),
+    );
   };
 
   const bringMediaImageToFront = id => {
@@ -1155,10 +1293,12 @@ const PostEditorScreen = ({
     setTextBlocks([]);
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
+    editingFieldLayoutRef.current = null;
     isFinishingEditRef.current = false;
     setSelectedFormat(null);
     setTextModeOverlayText('');
     setTextContent('');
+    setTextAlignMode('center');
     nextStackOrderRef.current = 1;
     Keyboard.dismiss();
   };
@@ -1343,7 +1483,15 @@ const PostEditorScreen = ({
               </View>
             </View>
           )}
-          <View style={styles.stageColumn}>
+          <View
+            style={[
+              styles.stageColumn,
+              showTextFormatToolbar && {
+                paddingBottom:
+                  formatToolbarHeight +
+                  (Platform.OS === 'android' ? keyboardHeight : 0),
+              },
+            ]}>
           <View
             style={styles.stage}
             onLayout={e => {
@@ -1373,6 +1521,7 @@ const PostEditorScreen = ({
                   key={block.id}
                   block={block}
                   stageWidth={stageLayout.width}
+                  stageHeight={stageLayout.height}
                   selectedColor={selectedColor}
                   zIndex={block.stackOrder ?? idx + 1}
                   isBeingEdited={block.id === editingTextBlockId}
@@ -1424,17 +1573,12 @@ const PostEditorScreen = ({
                         </View>
                       </View>
                       <View
+                        onLayout={e => {
+                          editingFieldLayoutRef.current = e.nativeEvent.layout;
+                        }}
                         style={[
                           styles.editingInputRow,
-                          {
-                            alignSelf:
-                              textAlignMode === 'left'
-                                ? 'flex-start'
-                                : textAlignMode === 'right'
-                                  ? 'flex-end'
-                                  : 'center',
-                            marginBottom: editingInputMarginBottom,
-                          },
+                          {marginBottom: editingInputMarginBottom},
                         ]}>
                         <EditingTextBox
                           key={editingTextBlockId}
@@ -1462,7 +1606,20 @@ const PostEditorScreen = ({
                           autoCorrect
                           autoCapitalize="sentences"
                           returnKeyType="done"
-                          onSubmitEditing={finishEditing}
+                          blurOnSubmit
+                          submitBehavior="blurAndSubmit"
+                          onSubmitEditing={() => {
+                            syncEditingDraftFromInput();
+                            finishEditing();
+                          }}
+                          onEndEditing={() => {
+                            syncEditingDraftFromInput();
+                            // Multiline keyboard "Done" on Android/iOS usually blurs
+                            // without firing onSubmitEditing — commit on blur instead.
+                            if (Platform.OS !== 'web') {
+                              requestAnimationFrame(() => finishEditing());
+                            }
+                          }}
                         />
                       </View>
                     </>
@@ -1484,11 +1641,14 @@ const PostEditorScreen = ({
               }}
               style={[
                 styles.keyboardControls,
+                Platform.OS === 'android' && keyboardHeight > 0
+                  ? {bottom: keyboardHeight}
+                  : null,
                 {
                   paddingBottom:
                     Platform.OS === 'web'
-                      ? Math.max(bottom, 10)
-                      : Math.max(bottom, 8),
+                      ? Math.max(bottom, keyboardHeight > 0 ? 8 : 10)
+                      : formatToolbarSafeBottom,
                 },
               ]}>
               {selectedFormat === 'aa' && (
@@ -1878,6 +2038,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginHorizontal: 22,
     paddingTop: 15,
+    minHeight: 55,
   },
   closeIconContainer: {
     width: 40,
@@ -1943,8 +2104,8 @@ const styles = StyleSheet.create({
   centerTextWrapper: {
     position: 'absolute',
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 10,
+    alignItems: 'stretch',
+    paddingHorizontal: 4,
     borderRadius: 8,
     paddingVertical: 5,
   },
@@ -1964,12 +2125,14 @@ const styles = StyleSheet.create({
   },
   polygonSliderContainer: {
     position: 'absolute',
-    right: -28,
-    top: 10,
+    right: 0,
+    top: 4,
     width: 40,
     height: POLYGON_TRACK_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1000000,
+    elevation: 1000000,
   },
   polygonTrack: {
     width: 32,
@@ -1979,9 +2142,11 @@ const styles = StyleSheet.create({
   },
   editingInputRow: {
     width: '100%',
-    maxWidth: 620,
-    flexDirection: 'row-reverse',
+    paddingLeft: STAGE_TEXT_PAD_LEFT,
+    paddingRight: STAGE_TEXT_PAD_RIGHT,
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'stretch',
   },
   polygonIndicator: {
     width: 28,
@@ -2005,19 +2170,24 @@ const styles = StyleSheet.create({
   },
   editingTextInput: {
     flex: 1,
+    width: '100%',
     minHeight: 90,
-    maxWidth: 560,
     fontSize: 20,
     lineHeight: 20,
     color: '#FFFFFF',
     textAlign: 'center',
     writingDirection: 'rtl',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     borderRadius: 20,
     paddingVertical: 12,
   },
   keyboardControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
+    flexShrink: 0,
     zIndex: 100,
     elevation: 24,
     backgroundColor:

@@ -71,7 +71,7 @@ export function enrichListingForUserProfile(listing) {
       : parseFloat(listing.price || listing.budget || 0) || 0;
   const priceDisplay =
     numericBasePrice > 0
-      ? `₪${numericBasePrice.toLocaleString()}`
+      ? `₪${String(Math.round(numericBasePrice)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
       : listing.price != null && String(listing.price).trim() !== ''
         ? String(listing.price)
         : '';

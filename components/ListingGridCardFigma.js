@@ -246,30 +246,6 @@ const ListingGridCardFigma = ({
             !showPiRating &&
               !showCommercialLogo && {justifyContent: flexStart},
           ]}>
-          {showCommercialLogo ? (
-            <View
-              style={styles.gridCardCommercialLogoWrap}
-              pointerEvents="box-none">
-              <Image
-                source={{uri: commercialLogoUrl}}
-                style={styles.gridCardCommercialLogo}
-                resizeMode="cover"
-                accessibilityLabel="לוגו חברה"
-              />
-            </View>
-          ) : showPiRating ? (
-            <View
-              style={[styles.gridCardPiBadge, piBadgeLtrDirection]}
-              pointerEvents="box-none">
-              <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
-              <Image
-                source={piBadgeImage}
-                style={styles.gridCardPiBadgeImage}
-                resizeMode="cover"
-                accessibilityLabel="דירוג Pi"
-              />
-            </View>
-          ) : null}
           <View style={[styles.gridCardTopRowEnd, gridRtlDirection]}>
             <TouchableOpacity
               onPress={e => {
@@ -310,6 +286,30 @@ const ListingGridCardFigma = ({
               </View>
             )}
           </View>
+          {showCommercialLogo ? (
+            <View
+              style={styles.gridCardCommercialLogoWrap}
+              pointerEvents="box-none">
+              <Image
+                source={{uri: commercialLogoUrl}}
+                style={styles.gridCardCommercialLogo}
+                resizeMode="cover"
+                accessibilityLabel="לוגו חברה"
+              />
+            </View>
+          ) : showPiRating ? (
+            <View
+              style={[styles.gridCardPiBadge, piBadgeLtrDirection]}
+              pointerEvents="box-none">
+              <Image
+                source={piBadgeImage}
+                style={styles.gridCardPiBadgeImage}
+                resizeMode="cover"
+                accessibilityLabel="דירוג Pi"
+              />
+              <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.gridCardAddressRowFigma, gridRtlDirection]}>
@@ -502,13 +502,18 @@ const styles = StyleSheet.create({
     height: '100%',
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
+  // Pi badge layout mirrors the PiAiSearchModal list-card pattern: a flex
+  // row with the number rendered in normal flow and the star image absolutely
+  // positioned next to (not on top of) the number. This avoids the previous
+  // bug where the fixed-size container + `left: 0` image overlay sat directly
+  // on top of the centered text.
   gridCardPiBadge: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 2,
     position: 'relative',
     flexShrink: 0,
-    ...forceLtrStyle,
+    overflow: 'visible',
   },
   gridCardPiText: {
     color: '#FFD275',

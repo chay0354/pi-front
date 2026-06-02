@@ -1,16 +1,29 @@
-import {StyleSheet, View, TextInput, I18nManager} from 'react-native';
+import {useRef} from 'react';
+import {StyleSheet, View, TextInput} from 'react-native';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
+import {useFormScroll} from '../../utils/formKeyboardScroll';
+
 export const TextAreaBox = ({
   title,
   required,
   value,
   setValue,
   placeholder,
+  scrollOnFocus = true,
 }) => {
   const labelSideSpacing = {marginLeft: 12};
+  const wrapRef = useRef(null);
+  const formScroll = useFormScroll();
+
+  const handleFocus = () => {
+    if (scrollOnFocus && formScroll?.scrollToField) {
+      formScroll.scrollToField(wrapRef);
+    }
+  };
+
   return (
-    <View>
+    <View ref={wrapRef} collapsable={false}>
       <Title
         text={title}
         required={required}
@@ -23,8 +36,10 @@ export const TextAreaBox = ({
         placeholderTextColor="rgba(255, 255, 255, 0.5)"
         value={value}
         onChangeText={setValue}
+        onFocus={handleFocus}
         multiline
         textAlign="right"
+        textAlignVertical="top"
       />
     </View>
   );

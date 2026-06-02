@@ -59,18 +59,166 @@ function normalizeNativeFileUri(uri) {
   return `file://${s}`;
 }
 
+/** Avoid alert/console showing "[object Object]" when API or native code returns error objects. */
+export function errorMessageFromUnknown(value, fallback = 'Upload failed') {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+  if (value instanceof Error) {
+    return value.message?.trim() || fallback;
+  }
+  if (typeof value === 'object') {
+    const nested =
+      typeof value.error === 'string'
+        ? value.error
+        : value.error?.message || value.error?.details;
+    const msg =
+      value.message ||
+      nested ||
+      value.details ||
+      value.statusText;
+    if (typeof msg === 'string' && msg.trim()) return msg.trim();
+  }
+  return fallback;
+}
+
+function errorMessageFromApiBody(data, fallback) {
+  if (!data || typeof data !== 'object') return fallback;
+  return errorMessageFromUnknown(
+    data.error ?? data.message ?? data.details,
+    typeof data.details === 'string' && data.details.trim()
+      ? data.details.trim()
+      : fallback,
+  );
+}
+
+function resolveUploadMimeType(file, isVideoFolder, fieldName = 'file') {
+  const rawType = file?.type && String(file.type).trim() ? String(file.type).trim() : '';
+  if (rawType && rawType.includes('/')) return rawType;
+  if (rawType === 'video' || isVideoFolder || String(fieldName).includes('video')) {
+    return 'video/mp4';
+  }
+  if (rawType === 'image') return 'image/jpeg';
+  return 'image/jpeg';
+}
+
+function resolveUploadFileName(file, isVideoFolder) {
+  if (file?.name && String(file.name).trim()) return String(file.name).trim();
+  return isVideoFolder ? `video-${Date.now()}.mp4` : `file-${Date.now()}.jpg`;
+}
+
+/** Large videos bypass Vercel body limits — upload directly to Supabase via signed URL. */
+async function requestUploadSignedUrl(folder, fileName, contentType) {
+  const response = await apiFetch(`${apiBase()}/api/upload/signed-url`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({folder, fileName, contentType}),
+    timeoutMs: 30000,
+  });
+  const responseText = await response.text();
+  let data = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'Invalid response from upload server'
+        : `Upload setup failed (${response.status})`,
+    );
+  }
+  if (!response.ok || !data.signedUrl) {
+    throw new Error(
+      errorMessageFromApiBody(data, 'Failed to prepare video upload'),
+    );
+  }
+  return data;
+}
+
+async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
+  const uri = normalizeNativeFileUri(file?.uri);
+  if (!uri) {
+    throw new Error('No file URI for upload');
+  }
+
+  if (isNativeMobile) {
+    const result = await FileSystem.uploadAsync(signedUrl, uri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        'Content-Type': mimeType,
+      },
+    });
+    if (result.status < 200 || result.status >= 300) {
+      const preview = String(result.body || '').slice(0, 200);
+      throw new Error(
+        preview
+          ? `Video upload failed (${result.status}): ${preview}`
+          : `Video upload failed (${result.status})`,
+      );
+    }
+    return;
+  }
+
+  if (isWeb) {
+    const blob = await fetch(uri).then(r => {
+      if (!r.ok) throw new Error('Could not read video file');
+      return r.blob();
+    });
+    const putRes = await fetch(signedUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: {'Content-Type': mimeType},
+    });
+    if (!putRes.ok) {
+      const preview = (await putRes.text()).slice(0, 200);
+      throw new Error(
+        preview
+          ? `Video upload failed (${putRes.status}): ${preview}`
+          : `Video upload failed (${putRes.status})`,
+      );
+    }
+    return;
+  }
+
+  throw new Error('Video upload is not supported on this platform');
+}
+
+async function uploadFileViaSignedUrl(file, folder = 'general', options = {}) {
+  const isVideoFolder = String(folder || '').includes('video');
+  const mimeType = resolveUploadMimeType(file, isVideoFolder);
+  const fileName = resolveUploadFileName(file, isVideoFolder);
+  const {signedUrl, publicUrl, path} = await requestUploadSignedUrl(
+    folder,
+    fileName,
+    mimeType,
+  );
+  await putLocalFileToSignedUrl(file, signedUrl, mimeType);
+  return {
+    success: true,
+    url: publicUrl,
+    fileName: path,
+  };
+}
+
 /** Native multipart upload — reliable on Android/iOS to Vercel (fetch/XHR FormData often fails). */
 async function uploadNativeMultipart(url, file, fieldName, parameters = {}) {
   const uri = normalizeNativeFileUri(file?.uri);
   if (!uri) {
     throw new Error('No file URI for upload');
   }
+  const rawType = file?.type && String(file.type).trim() ? String(file.type).trim() : '';
   const mimeType =
-    file?.type && String(file.type).trim()
-      ? String(file.type).trim()
-      : fieldName === 'video' || String(fieldName).includes('video')
+    rawType && rawType.includes('/')
+      ? rawType
+      : rawType === 'video'
         ? 'video/mp4'
-        : 'image/jpeg';
+        : rawType === 'image'
+          ? 'image/jpeg'
+          : fieldName === 'video' || String(fieldName).includes('video')
+            ? 'video/mp4'
+            : 'image/jpeg';
 
   const result = await FileSystem.uploadAsync(url, uri, {
     httpMethod: 'POST',
@@ -1440,18 +1588,21 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
   const timeoutMs =
     options.timeoutMs != null ? options.timeoutMs : 120000;
   const isVideoFolder = String(folder || '').includes('video');
+  const isVideoMime =
+    String(file?.type || '').startsWith('video/') ||
+    String(file?.type || '').toLowerCase() === 'video';
   try {
+    if (isVideoFolder || isVideoMime) {
+      return await uploadFileViaSignedUrl(file, folder, options);
+    }
+
     const url = `${apiBase()}/api/upload`;
 
     if (isNativeMobile && file?.uri) {
       const nativeFile = {
         uri: file.uri,
-        type:
-          file.type ||
-          (isVideoFolder ? 'video/mp4' : 'image/jpeg'),
-        name:
-          file.name ||
-          (isVideoFolder ? `video-${Date.now()}.mp4` : 'file.jpg'),
+        type: resolveUploadMimeType(file, isVideoFolder),
+        name: resolveUploadFileName(file, isVideoFolder),
       };
       const response = await uploadNativeMultipart(
         url,
@@ -1462,7 +1613,7 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
       const data = await response.json();
       if (!response.ok) {
         throw new Error(
-          data.error || data.message || 'Failed to upload file',
+          errorMessageFromApiBody(data, 'Failed to upload file'),
         );
       }
       return data;
@@ -1513,14 +1664,20 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
 
     if (!response.ok) {
       throw new Error(
-        data.error || data.message || 'Failed to upload file',
+        errorMessageFromApiBody(data, 'Failed to upload file'),
       );
     }
 
     return data;
   } catch (error) {
-    console.error('Error uploading file:', error);
-    throw error;
+    console.error(
+      'Error uploading file:',
+      errorMessageFromUnknown(error, 'Upload failed'),
+    );
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(errorMessageFromUnknown(error, 'Upload failed'));
   }
 };
 
@@ -2521,7 +2678,10 @@ export const createListing = async listingData => {
     // console.log('API response data:', data);
 
     if (!response.ok) {
-      const errorMsg = data.error || data.details || 'Failed to create listing';
+      const errorMsg = errorMessageFromApiBody(
+        data,
+        'Failed to create listing',
+      );
       console.error('API error:', errorMsg);
       throw new Error(errorMsg);
     }
@@ -2546,7 +2706,10 @@ export const updateListing = async (listingId, listingData) => {
     });
     const data = await response.json();
     if (!response.ok) {
-      const errorMsg = data.error || data.details || 'Failed to update listing';
+      const errorMsg = errorMessageFromApiBody(
+        data,
+        'Failed to update listing',
+      );
       console.error('API error:', errorMsg);
       throw new Error(errorMsg);
     }

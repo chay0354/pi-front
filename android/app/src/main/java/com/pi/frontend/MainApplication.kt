@@ -10,6 +10,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.ReactHost
 import com.facebook.react.config.ReactFeatureFlags
+import com.facebook.react.modules.i18nmanager.I18nUtil
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
@@ -44,6 +45,10 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Always RTL — independent of device system language (Hebrew app layout).
+    val sharedI18nUtilInstance = I18nUtil.getInstance()
+    sharedI18nUtilInstance.allowRTL(applicationContext, true)
+    sharedI18nUtilInstance.forceRTL(applicationContext, true)
     SoLoader.init(this, false)
     if (!BuildConfig.REACT_NATIVE_UNSTABLE_USE_RUNTIME_SCHEDULER_ALWAYS) {
       ReactFeatureFlags.unstable_useRuntimeSchedulerAlways = false

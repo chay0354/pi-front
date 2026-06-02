@@ -1,8 +1,13 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import {formRtlContainerStyle} from '../../utils/rtlLayout';
 
 export const FormContainer = ({children, style}) => {
-  return <View style={[styles.formContainer, style]}>{children}</View>;
+  return (
+    <View style={[styles.formContainer, formRtlContainerStyle, style]}>
+      {children}
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({

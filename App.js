@@ -11,6 +11,11 @@ import {
 } from 'react-native';
 import {forceRtlStyle} from './utils/rtlLayout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import OnboardingFlow from './components/OnboardingOverlay';
+import {
+  hasCompletedOnboarding,
+  markOnboardingCompleted,
+} from './utils/onboardingStorage';
 import {
   AdsForm,
   Home,
@@ -192,6 +197,8 @@ export default function App() {
     loadFontsAsync(deferredFonts).catch(() => {});
     return schedulePreloadAppAssets();
   }, [fontsLoaded]);
+  const [appBootstrapDone, setAppBootstrapDone] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
@@ -285,15 +292,25 @@ export default function App() {
     return `pi_welcome_read_${id || email || 'anon'}`;
   };
 
-  // Load user data and last-opened-chat from AsyncStorage on mount
+  const handleOnboardingComplete = useCallback(async () => {
+    try {
+      await markOnboardingCompleted();
+    } catch (_) {}
+    setShowOnboarding(false);
+  }, []);
+
+  // Load user data, onboarding flag, and last-opened-chat from AsyncStorage on mount
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const savedUser = await AsyncStorage.getItem('pi_current_user');
+        const [savedUser, onboardingDone] = await Promise.all([
+          AsyncStorage.getItem('pi_current_user'),
+          hasCompletedOnboarding(),
+        ]);
+
         if (savedUser) {
           const user = JSON.parse(savedUser);
           setCurrentUser(user);
-          // setCurrentScreen(screenName.userProfile);
           setCurrentScreen(screenName.home);
           const last = await AsyncStorage.getItem(CHAT_LAST_OPENED_KEY);
           if (last) lastOpenedChatAtRef.current = last;
@@ -302,8 +319,13 @@ export default function App() {
         } else {
           setCurrentScreen(screenName.home);
         }
+
+        setShowOnboarding(!onboardingDone);
       } catch (error) {
         setCurrentScreen(screenName.home);
+        setShowOnboarding(true);
+      } finally {
+        setAppBootstrapDone(true);
       }
     };
 
@@ -497,7 +519,7 @@ export default function App() {
     setCurrentScreen(screenName.userProfile);
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !appBootstrapDone) {
     return <AppBootLoading />;
   }
 
@@ -1719,10 +1741,6 @@ export default function App() {
                   setReturnToScreenAfterAuth(null);
                   setCurrentScreen(screenName.settings);
                 }}
-                onSkipToHome={() => {
-                  setReturnToScreenAfterAuth(null);
-                  setCurrentScreen(screenName.home);
-                }}
                 onLoginSuccess={subscription => {
                   setCurrentUser(subscription);
                   if (returnToScreenAfterAuth === 'userProfile') {
@@ -2026,6 +2044,9 @@ export default function App() {
                 localProfileImage={subscriptionData?.localProfileImage}
               />
             )}
+            {showOnboarding ? (
+              <OnboardingFlow onComplete={handleOnboardingComplete} />
+            ) : null}
           </View>
         </SafeAreaProvider>
       </PresenceProvider>

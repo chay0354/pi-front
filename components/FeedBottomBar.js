@@ -288,7 +288,7 @@ const FeedBottomBar = ({
     <View
       style={[
         styles.bottomBar,
-        {paddingBottom: insets.bottom, height: 70 + insets.bottom},
+        {paddingBottom: insets.bottom, height: 60 + insets.bottom},
       ]}>
       <View style={styles.bottomBarRow}>
         {BOTTOM_BAR_ITEMS.map(item => {
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    height: 70,
+    height: 60,
     backgroundColor: '#1E1D27',
     zIndex: 200,
     justifyContent: 'flex-end',
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   bottomBarIconWrapPost: {
     width: 49,

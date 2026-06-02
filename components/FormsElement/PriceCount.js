@@ -2,10 +2,6 @@ import {
   StyleSheet,
   Text,
   View,
-  TouchableOpacity,
-  TextInput,
-  Pressable,
-  I18nManager,
 } from 'react-native';
 import React, {useEffect, useRef, useState} from 'react';
 import {Colors} from '../../constants/styles';
@@ -14,6 +10,7 @@ import {Title} from './Title';
 import {FormContainer} from './FormContainer';
 import {Divider} from './Divider';
 import {RadioWithText} from './RadioWithText';
+import {CounterStepper} from './CounterStepper';
 
 export const PriceCount = ({
   price,
@@ -26,7 +23,6 @@ export const PriceCount = ({
   counterStep = PRICE_COUNTER_STEP_DEFAULT,
 }) => {
   const rowEndAlign = 'flex-start';
-  const sideSpacing = {marginLeft: 6};
   const inputRef = useRef(null);
   const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
@@ -46,41 +42,22 @@ export const PriceCount = ({
   return (
     <FormContainer>
       <Title text={title} required />
-      <View style={styles.priceInput}>
-        <TouchableOpacity
-          style={styles.counterButtonLeft}
-          onPress={() =>
-            setPrice(Math.max(0, Number(price || 0) - counterStep))
-          }>
-          <Text style={styles.counterButtonMinus}>−</Text>
-        </TouchableOpacity>
-        <View style={styles.counterDivider} />
-        <Pressable
-          style={styles.counterValueContainer}
-          onPress={() => inputRef.current?.focus?.()}>
-          <View style={styles.priceValueRow}>
-            <TextInput
-              ref={inputRef}
-              style={[styles.priceValueInput, sideSpacing, {width: inputWidth}]}
-              value={draftPrice}
-              onChangeText={setDraftPrice}
-              onBlur={commitDraftPrice}
-              onSubmitEditing={commitDraftPrice}
-              keyboardType="numeric"
-              returnKeyType="done"
-              textAlign="center"
-              showSoftInputOnFocus
-            />
-            <Text style={styles.priceValue}>₪</Text>
-          </View>
-        </Pressable>
-        <View style={styles.counterDivider} />
-        <TouchableOpacity
-          style={styles.counterButtonRight}
-          onPress={() => setPrice(Number(price || 0) + counterStep)}>
-          <Text style={styles.counterButtonPlus}>+</Text>
-        </TouchableOpacity>
-      </View>
+      <CounterStepper
+        inputRef={inputRef}
+        value={draftPrice}
+        onChangeText={setDraftPrice}
+        onBlur={commitDraftPrice}
+        onSubmitEditing={commitDraftPrice}
+        onIncrement={() => setPrice(Number(price || 0) + counterStep)}
+        onDecrement={() =>
+          setPrice(Math.max(0, Number(price || 0) - counterStep))
+        }
+        suffix="₪"
+        suffixAfter
+        suffixStyle={styles.currencySuffix}
+        inputWidth={inputWidth}
+        style={styles.priceInput}
+      />
       {isPricePerNight && (
         <View>
           <Divider style={{marginVertical: 20}} />
@@ -126,77 +103,11 @@ export const PriceCount = ({
 
 const styles = StyleSheet.create({
   priceInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 52,
-    backgroundColor: '#2B2A39',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#8C85B3',
-    overflow: 'hidden',
+    marginBottom: 0,
   },
-  priceValue: {
+  currencySuffix: {
     color: Colors.yellowIcons,
-    fontSize: 18,
     fontFamily: 'Rubik-Medium',
-  },
-  price: {color: Colors.whiteGeneral},
-  priceValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  priceValueInput: {
-    color: Colors.whiteGeneral,
-    fontSize: 18,
-    fontFamily: 'Rubik-Medium',
-    minWidth: 0,
-    textAlign: 'center',
-    paddingVertical: 0,
-  },
-  counterButtonLeft: {
-    width: 52,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopLeftRadius: 32,
-    borderBottomLeftRadius: 32,
-  },
-  counterButtonRight: {
-    width: 52,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopRightRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  counterButton: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  counterButtonMinus: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: '600',
-  },
-  counterButtonPlus: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  counterDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#8C85B3',
-  },
-  counterValueContainer: {
-    flex: 1,
-    minWidth: 158,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
   },
   hotDealContainer: {
     backgroundColor: Colors.yellowIcons,

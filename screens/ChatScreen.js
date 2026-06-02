@@ -17,6 +17,7 @@ import {
   Linking,
   AppState,
   I18nManager,
+  PanResponder,
 } from 'react-native';
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,7 +52,7 @@ import ExclusiveOfferResponseCard, {
   formatPrice,
 } from '../components/ExclusiveOfferResponseCard';
 import {usePresence} from '../hooks/PresenceContext';
-import {flexEnd, flexStart, forceLtrStyle} from '../utils/rtlLayout';
+import {flexEnd, flexStart, getRangeSliderPercentFromEvent} from '../utils/rtlLayout';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -62,6 +63,23 @@ const GOLD = '#D4AF37';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 const CHAT_BG = '#373548';
+
+const EXCLUSIVE_MONTHS_MIN = 1;
+const EXCLUSIVE_MONTHS_MAX = 10;
+const EXCLUSIVE_SLIDER_IS_RTL_VISUAL = Platform.OS === 'web' || I18nManager.isRTL;
+
+function exclusiveMonthsFromTouchPercent(touchPercent) {
+  const valuePercent = EXCLUSIVE_SLIDER_IS_RTL_VISUAL
+    ? 100 - touchPercent
+    : touchPercent;
+  const raw =
+    EXCLUSIVE_MONTHS_MIN +
+    (valuePercent / 100) * (EXCLUSIVE_MONTHS_MAX - EXCLUSIVE_MONTHS_MIN);
+  return Math.min(
+    EXCLUSIVE_MONTHS_MAX,
+    Math.max(EXCLUSIVE_MONTHS_MIN, Math.round(raw)),
+  );
+}
 const BUBBLE_GOLD = '#d4a84b';
 const BUBBLE_ME = '#2DD4BF';
 const FIGMA_WELCOME_BUBBLE_BG = '#ffbb32';
@@ -323,6 +341,10 @@ const ChatScreen = ({
   const recordingRef = useRef(null);
   const recordStartedAtRef = useRef(0);
   const soundRef = useRef(null);
+  const exclusiveSliderRef = useRef(null);
+  const exclusiveSliderWidthRef = useRef(1);
+  const exclusiveSliderWindowXRef = useRef(0);
+  const exclusiveSliderDraggingRef = useRef(false);
 
   const displayName = isGroupThread
     ? conversation?.name != null && String(conversation.name).trim()
@@ -1940,16 +1962,107 @@ const ChatScreen = ({
     );
   }, [exclusiveListingData, sharedListing]);
 
-  const timelineThumbPercent = useMemo(() => {
+  /**
+   * Exclusivity slider geometry — RTL-visual.
+   *   Numbers row reads 10 → 1 (RTL), so "1" sits on the right and the bar must
+   *   fill from the right edge (start in RTL) up to the thumb.
+   *   Native (Android/iOS): app forces RTL + swapLeftAndRightInRTL, so `left: X%`
+   *     becomes `right: X%` automatically — 0% sits on the right.
+   *   Web: <html dir="rtl"> doesn't flip absolute `left` — use `right` directly.
+   */
+  const timelinePercent = useMemo(() => {
     const n = Number(exclusiveMonths);
     const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
-    return ((10 - clamped) / 9) * 100;
+    return Math.max(0, Math.min(100, ((clamped - 1) / 9) * 100));
   }, [exclusiveMonths]);
-  const timelineActiveWidthPercent = useMemo(() => {
-    const n = Number(exclusiveMonths);
-    const clamped = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
-    return `${Math.max(0, Math.min(100, ((clamped - 1) / 9) * 100))}%`;
-  }, [exclusiveMonths]);
+  const timelineThumbStyle = useMemo(() => {
+    return Platform.OS === 'web'
+      ? {right: `${timelinePercent}%`, marginRight: -11}
+      : {left: `${timelinePercent}%`, marginLeft: -11};
+  }, [timelinePercent]);
+  const timelineActiveStyle = useMemo(() => {
+    const widthStr = `${timelinePercent}%`;
+    return Platform.OS === 'web'
+      ? {right: 0, width: widthStr}
+      : {left: 0, width: widthStr};
+  }, [timelinePercent]);
+
+  const syncExclusiveSliderMeasure = useCallback(() => {
+    const node = exclusiveSliderRef.current;
+    if (!node || typeof node.measureInWindow !== 'function') return;
+    node.measureInWindow((x, _y, width) => {
+      if (width > 0) {
+        exclusiveSliderWindowXRef.current = x;
+        exclusiveSliderWidthRef.current = width;
+      }
+    });
+  }, []);
+
+  const exclusiveMonthsPercentFromEvent = useCallback(nativeEvent => {
+    return getRangeSliderPercentFromEvent(
+      nativeEvent,
+      exclusiveSliderWidthRef.current,
+      exclusiveSliderWindowXRef.current,
+      exclusiveSliderRef,
+    );
+  }, []);
+
+  const refreshExclusiveSliderMeasureThen = useCallback(
+    (nativeEvent, onReady) => {
+      const node = exclusiveSliderRef.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        onReady(exclusiveMonthsPercentFromEvent(nativeEvent));
+        return;
+      }
+      node.measureInWindow((x, _y, width) => {
+        if (width > 0) {
+          exclusiveSliderWindowXRef.current = x;
+          exclusiveSliderWidthRef.current = width;
+        }
+        onReady(exclusiveMonthsPercentFromEvent(nativeEvent));
+      });
+    },
+    [exclusiveMonthsPercentFromEvent],
+  );
+
+  const exclusiveMonthsPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: evt => {
+          exclusiveSliderDraggingRef.current = true;
+          refreshExclusiveSliderMeasureThen(evt.nativeEvent, touchPercent => {
+            setExclusiveMonths(exclusiveMonthsFromTouchPercent(touchPercent));
+          });
+        },
+        onPanResponderMove: evt => {
+          if (!exclusiveSliderDraggingRef.current) return;
+          refreshExclusiveSliderMeasureThen(evt.nativeEvent, touchPercent => {
+            setExclusiveMonths(exclusiveMonthsFromTouchPercent(touchPercent));
+          });
+        },
+        onPanResponderRelease: () => {
+          exclusiveSliderDraggingRef.current = false;
+        },
+        onPanResponderTerminate: () => {
+          exclusiveSliderDraggingRef.current = false;
+        },
+      }),
+    [refreshExclusiveSliderMeasureThen],
+  );
+
+  useEffect(() => {
+    if (!showExclusiveOfferModal) return undefined;
+    const frameId = requestAnimationFrame(() => {
+      syncExclusiveSliderMeasure();
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [showExclusiveOfferModal, syncExclusiveSliderMeasure]);
 
   const exclusiveSenderName = useMemo(() => {
     const name =
@@ -2043,13 +2156,19 @@ const ChatScreen = ({
     };
   }, []);
 
+  // iOS: KeyboardAvoidingView (behavior="padding") below pushes content up.
+  // Web + Android: manually pad the composer by the keyboard height so the
+  //   input rides above the soft keyboard even when adjustResize doesn't
+  //   propagate to the React Native root view.
   const composerBottomInset =
-    keyboardHeight > 0
-      ? keyboardHeight
-      : Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 0);
+    Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 0) +
+    (Platform.OS === 'android' ? keyboardHeight : 0);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         {isGroupThread ? (
           <>
@@ -2121,9 +2240,13 @@ const ChatScreen = ({
                 placeholderImage={DEFAULT_CHAT_AVATAR}
               />
               <View style={styles.headerTitleWrap}>
-                <Text style={styles.headerTitle}>{displayName}</Text>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                  {displayName}
+                </Text>
                 {showPeerOnlineSubtitle ? (
-                  <Text style={styles.headerSubtitle}>מחובר/ת</Text>
+                  <Text style={styles.headerSubtitle} numberOfLines={1}>
+                    מחובר/ת
+                  </Text>
                 ) : null}
               </View>
             </TouchableOpacity>
@@ -2501,29 +2624,19 @@ const ChatScreen = ({
                   </Text>
                 ))}
               </View>
-              <View style={[styles.offerTimeline, styles.offerTimelineLtr]}>
+              <View
+                ref={exclusiveSliderRef}
+                style={styles.offerTimeline}
+                onLayout={syncExclusiveSliderMeasure}
+                {...exclusiveMonthsPanResponder.panHandlers}>
                 <View style={styles.offerTimelineTrack} />
                 <View
-                  style={[
-                    styles.offerTimelineActive,
-                    {width: timelineActiveWidthPercent},
-                  ]}
+                  style={[styles.offerTimelineActive, timelineActiveStyle]}
                 />
                 <View
-                  style={[
-                    styles.offerTimelineThumb,
-                    {left: `${timelineThumbPercent}%`},
-                  ]}
+                  pointerEvents="none"
+                  style={[styles.offerTimelineThumb, timelineThumbStyle]}
                 />
-              </View>
-              <View style={styles.offerScaleActions}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                  <Pressable
-                    key={`pick-${n}`}
-                    style={styles.offerPickHit}
-                    onPress={() => setExclusiveMonths(n)}
-                  />
-                ))}
               </View>
             </View>
 
@@ -2782,7 +2895,7 @@ const ChatScreen = ({
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -2811,14 +2924,20 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 4,
   },
-  /** LTR row so title stays visually left and action icons right (matches design). */
+  /**
+   * Header row — physically LTR-positioned (back-left → avatar → name → icons-right),
+   * even though the Hebrew text inside is RTL.
+   *   Native (Android/iOS): app forces RTL + swapLeftAndRightInRTL, so `row` becomes
+   *     physical row-reverse. Use `row-reverse` here so it ends up physical-row.
+   *   Web: <html dir="rtl"> flips row the same way — `row-reverse` is again physical-row.
+   * Matches Figma node 5-19759.
+   */
   headerDirectRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     flex: 1,
     minWidth: 0,
     gap: 8,
-    ...forceLtrStyle,
   },
   headerBackBtn: {
     justifyContent: 'center',
@@ -2828,38 +2947,35 @@ const styles = StyleSheet.create({
   },
   headerIdentityTap: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
     minWidth: 0,
   },
   headerTitleWrap: {
     justifyContent: 'center',
-    alignItems: flexEnd,
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
-    ...forceLtrStyle,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'left',
+    textAlign: 'right',
     alignSelf: 'stretch',
   },
   headerSubtitle: {
     color: TEXT_LIGHT,
     fontSize: 12,
     marginTop: 2,
-    textAlign: 'left',
+    textAlign: 'right',
     alignSelf: 'stretch',
   },
   headerRight: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
-    marginLeft: 4,
   },
   headerIconBtn: {padding: 6},
   headerInfoIcon: {width: 26, height: 26},
@@ -3379,13 +3495,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   offerTimeline: {
-    height: 24,
+    height: 44,
     justifyContent: 'center',
     position: 'relative',
     marginHorizontal: 4,
-  },
-  offerTimelineLtr: {
-    ...forceLtrStyle,
   },
   offerTimelineTrack: {
     height: 4,
@@ -3394,29 +3507,18 @@ const styles = StyleSheet.create({
   },
   offerTimelineActive: {
     position: 'absolute',
-    right: 0,
     height: 4,
     borderRadius: 1000,
     backgroundColor: '#FFC40A',
   },
   offerTimelineThumb: {
     position: 'absolute',
-    top: 1,
+    top: 11,
     width: 22,
     height: 22,
     borderRadius: 11,
     backgroundColor: '#F9C74F',
-    marginLeft: -11,
   },
-  offerScaleActions: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  offerPickHit: {width: 26, height: 30},
   offerSectionTitle: {
     color: '#D2D0DC',
     fontSize: 18,
@@ -3551,16 +3653,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 24,
   },
+  /**
+   * Message row — direction logic for native RTL (Android/iOS) and web (dir=rtl):
+   *   Peer (incoming) uses row-reverse so under RTL it becomes a visually-LTR row
+   *     (avatar JSX-first lands physically on the LEFT, bubble to its right).
+   *   Me (outgoing) keeps `row` so under RTL it stays a visually-RTL row
+   *     (bubble lands physically on the RIGHT).
+   *   `justifyContent: 'flex-start'` is direction-aware → packs to start of the
+   *     visual axis: LEFT for peer's row-reverse and RIGHT for me's row.
+   * Matches Figma node 5-19756.
+   */
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: flexEnd,
+    justifyContent: 'flex-start',
     gap: 10,
     marginBottom: 12,
   },
   messageRowThem: {flexDirection: 'row-reverse'},
   messageRowWelcome: {gap: 6, alignItems: flexStart},
-  messageRowMe: {justifyContent: flexStart},
+  messageRowMe: {justifyContent: 'flex-start'},
   senderLogoWrap: {marginBottom: 4, width: 32, height: 32},
   senderLogo: {width: 32, height: 32, borderRadius: 16},
   senderLogoPlaceholder: {
@@ -3568,31 +3680,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bubbleWrap: {flex: 1, maxWidth: '85%', alignSelf: flexEnd},
+  /** Bubbles hug their text width up to maxWidth — no `flex: 1` (which would stretch them across the row). */
+  bubbleWrap: {flexShrink: 1, maxWidth: '85%'},
   bubbleWrapThem: {maxWidth: '76%'},
   bubbleWrapWelcome: {
     flex: 0,
     width: 248,
     maxWidth: 248,
     minWidth: 248,
-    alignSelf: flexEnd,
   },
-  bubbleWrapMe: {alignSelf: flexStart},
+  bubbleWrapMe: {},
+  /**
+   * Speech-bubble tail = small (4px) corner facing the sender.
+   *   Native (Android/iOS): under swapLeftAndRightInRTL, `borderTopLeftRadius`
+   *     auto-swaps to physical top-right — so we write the OPPOSITE side here
+   *     and let the swap land it on the physical side we want.
+   *   Web: <html dir="rtl"> does NOT swap literal `borderTopLeftRadius`, so we
+   *     keep the literal physical side.
+   * Peer bubble (sender on physical left) → tail on physical top-LEFT.
+   * My bubble (sender on physical right) → tail on physical top-RIGHT.
+   * Matches Figma node 5-19756.
+   */
   bubble: {
     paddingVertical: 14,
     paddingHorizontal: 16,
     paddingBottom: 28,
     borderRadius: 16,
-    borderTopLeftRadius: 4,
+    ...(Platform.OS === 'web'
+      ? {borderTopLeftRadius: 4}
+      : {borderTopRightRadius: 4}),
   },
   bubbleThem: {backgroundColor: BUBBLE_GOLD, alignSelf: flexEnd},
   bubbleMe: {
     backgroundColor: BUBBLE_ME,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 4,
+    ...(Platform.OS === 'web'
+      ? {borderTopLeftRadius: 16, borderTopRightRadius: 4}
+      : {borderTopRightRadius: 16, borderTopLeftRadius: 4}),
     alignSelf: flexEnd,
   },
-  bubbleText: {color: CHAT_BG, fontSize: 15, textAlign: 'left', lineHeight: 22},
+  bubbleText: {
+    color: CHAT_BG,
+    fontSize: 15,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 22,
+  },
   exclusiveStatusBanner: {
     alignSelf: 'stretch',
     backgroundColor: '#2B2A39',
@@ -3635,7 +3767,7 @@ const styles = StyleSheet.create({
     color: FIGMA_MAIN_DEEP_BLUE,
     fontSize: 17,
     lineHeight: 21,
-    textAlign: 'left',
+    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     writingDirection: 'rtl',
@@ -3643,21 +3775,21 @@ const styles = StyleSheet.create({
   welcomeTimeRow: {
     width: '100%',
     marginTop: 6,
-    alignItems: flexEnd,
+    alignItems: 'flex-start',
   },
   welcomeBubbleTime: {
     color: FIGMA_MAIN_DEEP_BLUE,
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: 0.54,
-    textAlign: 'left',
+    textAlign: 'right',
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
   },
   bubbleSenderLabel: {
     color: 'rgba(55,53,72,0.65)',
     fontSize: 11,
-    textAlign: 'left',
+    textAlign: 'right',
     marginBottom: 4,
     fontFamily: 'Rubik-Regular',
   },
@@ -3694,7 +3826,7 @@ const styles = StyleSheet.create({
   sharedPostPlaceholderBody: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
-    textAlign: 'left',
+    textAlign: 'right',
     writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
     width: '100%',
@@ -3735,7 +3867,7 @@ const styles = StyleSheet.create({
   sharedPostFooterText: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
-    textAlign: 'left',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
   voiceRow: {
@@ -3748,13 +3880,21 @@ const styles = StyleSheet.create({
   voiceRowMe: {alignSelf: flexStart},
   voiceLabel: {color: CHAT_BG, fontSize: 15, fontFamily: 'Rubik-Medium'},
   voiceLabelMe: {color: '#fff'},
+  /**
+   * Timestamp pinned to the bottom-right of the bubble.
+   *   Native (Android/iOS): app forces RTL + swapLeftAndRightInRTL, so `left: 12`
+   *     auto-swaps to physical `right: 12`.
+   *   Web: <html dir="rtl"> does NOT flip literal `left`/`right` for absolute
+   *     positioning — use `right: 12` directly.
+   * Matches Figma node 5-19756.
+   */
   bubbleTime: {
     position: 'absolute',
     bottom: 8,
-    left: 12,
+    ...(Platform.OS === 'web' ? {right: 12} : {left: 12}),
     color: 'rgba(55,53,72,0.7)',
     fontSize: 11,
-    textAlign: 'left',
+    textAlign: 'right',
   },
   inputRow: {
     flexDirection: 'row-reverse',

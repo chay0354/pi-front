@@ -56,6 +56,11 @@ const Home = ({
   const [flipped, setFlipped] = useState(false);
   const flipAnimRef = useRef(null);
   const [aiMounted, setAiMounted] = useState(false);
+  const logoTapCountRef = useRef(0);
+  const logoTapResetTimerRef = useRef(null);
+
+  const LOGO_TAPS_TO_OPEN_AI = 3;
+  const LOGO_TAP_RESET_MS = 700;
 
   const loadStories = useCallback(async () => {
     setStoriesLoading(true);
@@ -87,14 +92,38 @@ const Home = ({
     flipAnimRef.current = Animated.timing(flipProgress, {
       toValue: target,
       duration: 650,
-      useNativeDriver: Platform.OS !== 'web',
+      // Layout-thread animation so perspective + rotateY + backfaceVisibility
+      // render reliably on iOS/Android (native driver skips 3D flip).
+      useNativeDriver: false,
     });
     flipAnimRef.current.start();
   }, [flipProgress]);
 
   const onLogoPress = useCallback(() => {
-    toggleFlip();
+    logoTapCountRef.current += 1;
+    if (logoTapResetTimerRef.current) {
+      clearTimeout(logoTapResetTimerRef.current);
+    }
+    if (logoTapCountRef.current >= LOGO_TAPS_TO_OPEN_AI) {
+      logoTapCountRef.current = 0;
+      logoTapResetTimerRef.current = null;
+      toggleFlip();
+      return;
+    }
+    logoTapResetTimerRef.current = setTimeout(() => {
+      logoTapCountRef.current = 0;
+      logoTapResetTimerRef.current = null;
+    }, LOGO_TAP_RESET_MS);
   }, [toggleFlip]);
+
+  useEffect(
+    () => () => {
+      if (logoTapResetTimerRef.current) {
+        clearTimeout(logoTapResetTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const frontRotate = flipProgress.interpolate({
     inputRange: [0, 1],
@@ -105,12 +134,12 @@ const Home = ({
     outputRange: ['180deg', '360deg'],
   });
   const frontOpacity = flipProgress.interpolate({
-    inputRange: [0, 0.499, 0.5, 1],
-    outputRange: [1, 1, 0, 0],
+    inputRange: [0, 1],
+    outputRange: [1, 0],
   });
   const backOpacity = flipProgress.interpolate({
-    inputRange: [0, 0.499, 0.5, 1],
-    outputRange: [0, 0, 1, 1],
+    inputRange: [0, 1],
+    outputRange: [0, 1],
   });
 
   const handleOpenRing = useCallback(ring => {
@@ -217,8 +246,8 @@ const Home = ({
     />
   ) : null;
 
-  // Horizontal carousel breaks inside 3D transforms on Android and web; opacity-only flip there.
-  const use3dFlip = Platform.OS === 'ios';
+  // 3D card flip on native; web keeps a crossfade (horizontal carousels break in 3D).
+  const use3dFlip = Platform.OS !== 'web';
   const frontTransform = use3dFlip
     ? [{perspective: 1200}, {rotateY: frontRotate}]
     : undefined;
@@ -238,11 +267,12 @@ const Home = ({
             <Animated.View
               pointerEvents={flipped ? 'none' : 'auto'}
               collapsable={false}
-              renderToHardwareTextureAndroid={Platform.OS === 'android'}
+              renderToHardwareTextureAndroid={false}
               style={[
                 styles.flipFace,
+                use3dFlip ? styles.flipFace3d : null,
                 {
-                  opacity: frontOpacity,
+                  opacity: use3dFlip ? 1 : frontOpacity,
                   ...(frontTransform ? {transform: frontTransform} : {}),
                 },
               ]}>
@@ -252,11 +282,12 @@ const Home = ({
               <Animated.View
                 pointerEvents={flipped ? 'auto' : 'none'}
                 collapsable={false}
-                renderToHardwareTextureAndroid={Platform.OS === 'android'}
+                renderToHardwareTextureAndroid={false}
                 style={[
                   styles.flipFace,
+                  use3dFlip ? styles.flipFace3dBack : null,
                   {
-                    opacity: backOpacity,
+                    opacity: use3dFlip ? 1 : backOpacity,
                     ...(backTransform ? {transform: backTransform} : {}),
                   },
                 ]}>
@@ -386,8 +417,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backfaceVisibility: 'hidden',
     overflow: 'hidden',
+  },
+  flipFace3d: {
+    backfaceVisibility: 'hidden',
+  },
+  flipFace3dBack: {
+    backfaceVisibility: 'hidden',
   },
   backContent: {
     flex: 1,

@@ -3,10 +3,37 @@ import {I18nManager, Platform} from 'react-native';
 /**
  * RTL layout helpers (flex/text alignment). Kept separate from index.js to avoid
  * require cycles: screens must not import from the app entry barrel.
+ *
+ * With I18nManager.forceRTL(true): flex-start = physical right, flex-end = physical left.
+ * Text still needs textAlign: 'right' — 'left' stays physical left in RN.
  */
-export const textAlign = 'left';
+export const textAlign = 'right';
 export const flexEnd = 'flex-end';
 export const flexStart = 'flex-start';
+
+/** Section titles / field labels in Hebrew ad forms. */
+export const formHeadingStyle = {
+  alignSelf: 'flex-start',
+  textAlign: 'right',
+  width: '100%',
+};
+
+/** Wrap form cards so headings, labels, and stacks read RTL (web + native). */
+export const formRtlContainerStyle =
+  Platform.OS === 'web'
+    ? {direction: 'rtl', width: '100%'}
+    : {direction: 'rtl', width: '100%'};
+
+/** Required label row: title then star (displays as …נכס* under RTL). */
+export const formLabelRowStyle = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  alignSelf: 'flex-start',
+  flexWrap: 'nowrap',
+  gap: 8,
+  width: '100%',
+  minHeight: 24,
+};
 
 /**
  * Isolate LTR geometry (range sliders, min–max rows, ₪ inputs).

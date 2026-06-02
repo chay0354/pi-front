@@ -16,6 +16,34 @@ function withAndroidIndexDevEntry(config) {
   });
 }
 
+/** Force Hebrew RTL layout on Android regardless of device system language. */
+function withAndroidForceRtl(config) {
+  return withMainApplication(config, async c => {
+    let contents = c.modResults.contents;
+    if (typeof contents !== 'string') return c;
+
+    if (!contents.includes('com.facebook.react.modules.i18nmanager.I18nUtil')) {
+      contents = contents.replace(
+        /import com\.facebook\.react\.ReactHost\n/,
+        'import com.facebook.react.ReactHost\nimport com.facebook.react.modules.i18nmanager.I18nUtil\n',
+      );
+    }
+
+    if (!contents.includes('sharedI18nUtilInstance')) {
+      contents = contents.replace(
+        /super\.onCreate\(\)/,
+        `super.onCreate()
+    val sharedI18nUtilInstance = I18nUtil.getInstance()
+    sharedI18nUtilInstance.allowRTL(applicationContext, true)
+    sharedI18nUtilInstance.forceRTL(applicationContext, true)`,
+      );
+    }
+
+    c.modResults.contents = contents;
+    return c;
+  });
+}
+
 module.exports = {
   expo: {
     name: 'PI Frontend',
@@ -102,6 +130,7 @@ module.exports = {
         },
       ],
       withAndroidIndexDevEntry,
+      withAndroidForceRtl,
     ],
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL || '',

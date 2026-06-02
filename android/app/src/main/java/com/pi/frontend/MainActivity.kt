@@ -3,6 +3,7 @@ package com.pi.frontend
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
@@ -19,6 +20,7 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
     // Draw splash / root under status + navigation bars (no white system UI bands).
     WindowCompat.setDecorFitsSystemWindows(window, false)
     window.statusBarColor = Color.TRANSPARENT
