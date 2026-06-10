@@ -5,9 +5,12 @@ import {I18nManager, Platform} from 'react-native';
  * require cycles: screens must not import from the app entry barrel.
  *
  * With I18nManager.forceRTL(true): flex-start = physical right, flex-end = physical left.
- * Text still needs textAlign: 'right' — 'left' stays physical left in RN.
+ * Hebrew body text: under swapLeftAndRightInRTL, literal textAlign 'right' lands on the
+ * physical left — use hebrewTextAlign (+ writingDirection: 'rtl') for message/copy text.
  */
 export const textAlign = 'right';
+/** Physical right for Hebrew under forceRTL + swapLeftAndRightInRTL on native. */
+export const hebrewTextAlign = Platform.OS === 'web' ? 'right' : 'left';
 export const flexEnd = 'flex-end';
 export const flexStart = 'flex-start';
 
@@ -18,11 +21,14 @@ export const formHeadingStyle = {
   width: '100%',
 };
 
-/** Wrap form cards so headings, labels, and stacks read RTL (web + native). */
-export const formRtlContainerStyle =
-  Platform.OS === 'web'
-    ? {direction: 'rtl', width: '100%'}
-    : {direction: 'rtl', width: '100%'};
+/**
+ * Wrap form cards so headings, labels, and stacks read RTL (web + native).
+ * NOTE: no explicit `width` — these cards use `marginHorizontal`, and a forced
+ * `width: '100%'` would add to (not subtract from) the margins, overflowing the
+ * parent by the margin amount and clipping on the left under RTL. Without a
+ * width the card stretches to fill the parent minus its margins.
+ */
+export const formRtlContainerStyle = {direction: 'rtl'};
 
 /** Required label row: title then star (displays as …נכס* under RTL). */
 export const formLabelRowStyle = {
@@ -44,6 +50,11 @@ export const forceLtrStyle = {direction: 'ltr'};
 /** Force RTL on a container (native). Web relies on I18nManager / document dir. */
 export const forceRtlStyle =
   Platform.OS === 'web' ? {} : {direction: 'rtl'};
+
+/** Bottom safe-area padding for filter sheets / bottom chrome (min 8px). */
+export function getSheetBottomInset(insets, min = 8) {
+  return Math.max(Number(insets?.bottom) || 0, min);
+}
 
 export const RANGE_SLIDER_THUMB_SIZE = 22;
 

@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
+import FilterScreenBackBar from '../components/FilterScreenBackBar';
+import {getSheetBottomInset} from '../utils/rtlLayout';
 
 const BG = '#1a1926';
 const MIN_DONAM = 0.5;
@@ -20,7 +22,7 @@ const STEP = 0.5;
 
 const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, 8);
+  const bottomInset = getSheetBottomInset(insets);
   const [minDonam, setMinDonam] = useState(initialFilter?.minDonam ?? 1);
   const [maxDonam, setMaxDonam] = useState(initialFilter?.maxDonam ?? 2);
   const [minDraft, setMinDraft] = useState(
@@ -102,14 +104,7 @@ const DonamFilterScreen = ({initialFilter, onClose, onSave}) => {
   return (
     <View style={styles.container}>
       <View style={{height: insets.top}} />
-      <View style={styles.topRail}>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={onClose}
-          style={styles.handlePressArea}>
-          <View style={styles.handleBar} />
-        </TouchableOpacity>
-      </View>
+      <FilterScreenBackBar onClose={onClose} />
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -211,19 +206,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 12,
     overflow: 'hidden',
   },
-  topRail: {
-    height: 37,
-    borderBottomWidth: 1,
-    borderBottomColor: '#373548',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handlePressArea: {
-    width: 42,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24},
   footer: {
@@ -232,12 +214,6 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
     borderTopWidth: 1,
     borderTopColor: '#373548',
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: '#464646',
-    borderRadius: 3,
   },
   header: {alignItems: 'center', marginBottom: 28},
   headerIcon: {width: 36, height: 36},

@@ -47,6 +47,7 @@ import {
   formatCompanyApartmentsLabel,
   formatCompanyBuildingsLabel,
   formatCompanyFloorsLabel,
+  formatPriceHe,
 } from '../utils/listingGridCardFigma';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
@@ -456,10 +457,24 @@ const UserProfileScreen = ({
     };
   }, [creatorId]);
 
-  // Fetch reviews for this profile
+  // Fetch reviews for broker / company / professional profiles only
   useEffect(() => {
     if (!creatorId) {
       setReviews([]);
+      return;
+    }
+    const subType = (
+      resolvedCreator?.subscription_type ||
+      user?.subscription_type ||
+      ''
+    ).toLowerCase();
+    const rateable =
+      subType === 'company' ||
+      subType === 'broker' ||
+      subType === 'professional';
+    if (subType && !rateable) {
+      setReviews([]);
+      setReviewsLoading(false);
       return;
     }
     let cancelled = false;
@@ -478,7 +493,7 @@ const UserProfileScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [creatorId]);
+  }, [creatorId, resolvedCreator?.subscription_type, user?.subscription_type]);
 
   const showAlert = (title, message) => {
     if (
@@ -1124,9 +1139,19 @@ const UserProfileScreen = ({
   const viewerLoggedIn = !!(
     currentUser && String(currentUser.email || '').trim()
   );
+  const profileSubscriptionType = (
+    resolvedCreator?.subscription_type ||
+    user?.subscription_type ||
+    ''
+  ).toLowerCase();
+  const isCompany = profileSubscriptionType === 'company';
+  const isBroker = profileSubscriptionType === 'broker';
+  const isProfessional = profileSubscriptionType === 'professional';
+  const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
   const shouldShowFollowPlus =
     !!viewedSubscriptionId &&
     !isOwnProfile &&
+    !isRegularUserAccount &&
     (viewerLoggedIn
       ? !followStatusLoading &&
         !!currentSubscriptionId &&
@@ -1141,6 +1166,7 @@ const UserProfileScreen = ({
       }
       return;
     }
+    if (isRegularUserAccount) return;
     if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest)
       return;
     setSendingFollowRequest(true);
@@ -1193,15 +1219,7 @@ const UserProfileScreen = ({
         lastAd?.location,
         profile.address,
       );
-  const profileSubscriptionType = (
-    resolvedCreator?.subscription_type ||
-    user?.subscription_type ||
-    ''
-  ).toLowerCase();
-  const isCompany = profileSubscriptionType === 'company';
-  const isBroker = profileSubscriptionType === 'broker';
-  const isProfessional = profileSubscriptionType === 'professional';
-  const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
+  const showProfileRatingFeatures = !isRegularUserAccount;
   const isRegularUserAdView =
     isRegularUserAccount && isListingFromFeed && !openedFromPost;
   /** BnB ad from feed (category 5, not a post) — dedicated Figma 5:413003 layout only for this case */
@@ -1254,8 +1272,16 @@ const UserProfileScreen = ({
   const fromCompanyProjects = Boolean(
     isListingFromFeed && openedFromCompaniesDirectory,
   );
+  /** Company ad from TikTok or פרויקטים נבחרים — fixed back / share / like top bar (not posts). */
+  const showCompanyFeedHeroTop = Boolean(
+    isCompany &&
+    isListingFromFeed &&
+    lastAd &&
+    !openedFromPost &&
+    (fromCompanyProjects || user?._fromTikTokPost),
+  );
   const companyListingId =
-    fromCompanyProjects && user?.id != null ? String(user.id) : null;
+    showCompanyFeedHeroTop && user?.id != null ? String(user.id) : null;
   const [companyHeroFavorited, setCompanyHeroFavorited] = useState(false);
   const companyHeroLikePendingRef = useRef(false);
   useEffect(() => {
@@ -1586,7 +1612,7 @@ const UserProfileScreen = ({
       : reviews;
 
   const renderPiRating = () => {
-    if (isRegularUserAdView) return null;
+    if (!showProfileRatingFeatures || isRegularUserAdView) return null;
     return (
       <View style={styles.lastAdPiBadge}>
         <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
@@ -1601,19 +1627,17 @@ const UserProfileScreen = ({
   };
 
   /** Pinned top nav for any open-from–TikTok-feed / listing: inner hero + scroll back used to move away while scrolling. */
-  const showFixedCompanyHero = Boolean(
-    isListingFromFeed && fromCompanyProjects && lastAd,
-  );
+  const showFixedCompanyHero = showCompanyFeedHeroTop;
   const showFixedProHero = Boolean(
     isListingFromFeed &&
     lastAd &&
     isProfessional &&
     !showTikTokProfessionalHeader &&
-    !fromCompanyProjects,
+    !showCompanyFeedHeroTop,
   );
   const showFixedBackOnly = Boolean(
     isListingFromFeed &&
-    !fromCompanyProjects &&
+    !showCompanyFeedHeroTop &&
     (!isProfessional || showTikTokProfessionalHeader) &&
     !showFixedProHero,
   );
@@ -1632,7 +1656,7 @@ const UserProfileScreen = ({
         ]}
         showsVerticalScrollIndicator={false}>
         {(!isProfessional || showTikTokProfessionalHeader) &&
-          !fromCompanyProjects &&
+          !showCompanyFeedHeroTop &&
           !useFixedListingTopNav && (
             <TouchableOpacity
               onPress={onClose}
@@ -1647,7 +1671,7 @@ const UserProfileScreen = ({
           )}
 
         {(!isProfessional || showTikTokProfessionalHeader) &&
-          !fromCompanyProjects && (
+          !showCompanyFeedHeroTop && (
             <View style={styles.profileBlock}>
               <View style={styles.avatarWrap}>
                 <ProfileAvatar
@@ -1724,7 +1748,7 @@ const UserProfileScreen = ({
           )}
 
         {(!isProfessional || showTikTokProfessionalHeader) &&
-          !fromCompanyProjects && (
+          !showCompanyFeedHeroTop && (
             <View style={styles.actionRow}>
               <TouchableOpacity
                 onPress={handleCallPress}
@@ -1966,7 +1990,11 @@ const UserProfileScreen = ({
                       </View>
                       {!isProfessional && (
                         <Text style={styles.lastAdPrice}>
-                          {isCompany ? 'אביב המקור' : lastAd.price || '₪5,000'}
+                          {isCompany
+                            ? String(
+                                lastAd?.project_name || lastAd?.projectName || '',
+                              ).trim() || formatPriceHe(lastAd)
+                            : lastAd.price || '₪5,000'}
                         </Text>
                       )}
                       {(() => {
@@ -2403,13 +2431,13 @@ const UserProfileScreen = ({
         )}
 
         {/* Broker block + My Properties – same scroll as whole screen */}
-        {!isRegularUserAdView &&
+        {showProfileRatingFeatures &&
           !openedFromPost &&
           !isProfessional &&
           !isDedicatedListingAdProfile && (
             <View style={styles.brokerCardOverlayLine} />
           )}
-        {!isRegularUserAdView && !isDedicatedListingAdProfile && (
+        {showProfileRatingFeatures && !isDedicatedListingAdProfile && (
           <View style={styles.brokerCardBottom}>
             {!isCompany || showCompanyPostSpecialties ? (
               <>
@@ -2725,8 +2753,8 @@ const UserProfileScreen = ({
           <View style={styles.contactDetailsDivider} />
         )}
 
-        {/* Rating & Reviews – כמות כוכבי פאי / ביקורות (לא מציגים דירוג עצמי בפרופיל שלך) */}
-        {!isRegularUserAdView && showListingContactAndReviews ? (
+        {/* Rating & Reviews – brokers / companies / professionals only */}
+        {showProfileRatingFeatures && showListingContactAndReviews ? (
           <View style={styles.reviewsSection}>
             {!isOwnProfile ? (
               <>
@@ -2854,7 +2882,7 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
               {(isCompany || isBroker || isProfessional) &&
-                !user?._fromTikTokPost && (
+                (!user?._fromTikTokPost || isCompany) && (
                   <>
                     <View style={styles.profilePiChatWrap}>
                       <TouchableOpacity

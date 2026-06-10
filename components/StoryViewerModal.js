@@ -8,20 +8,33 @@ import {
   StyleSheet,
   Pressable,
   Platform,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {ProfileAvatar} from './index';
+import {
+  ProfileAvatar,
+  PROFILE_RING_COLORS,
+  PROFILE_RING_LOCATIONS,
+} from './index';
 
 const STORY_DURATION_MS = 12000;
-const STORY_ACCENT_COLORS = ['#FFE073', '#FFBA30'];
 
 /**
  * Full-screen story viewer: tap advances slide; progress segments at top.
  */
-const StoryViewerModal = ({visible, ring, onClose}) => {
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+const StoryViewerModal = ({
+  visible,
+  ring,
+  onClose,
+  onAdvanceToNextUser,
+  onOpenProfile,
+}) => {
   const insets = useSafeAreaInsets();
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -31,6 +44,8 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   const startRef = useRef(0);
   const rafRef = useRef(null);
   const videoRef = useRef(null);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const prevRingIdRef = useRef(null);
 
   const slides = ring?.slides || [];
   const total = slides.length;
@@ -42,12 +57,31 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
       setSlideIndex(0);
       setProgress(0);
       setMediaReady(false);
+      prevRingIdRef.current = null;
+      slideAnim.setValue(0);
       return;
     }
     setSlideIndex(0);
     setProgress(0);
     setMediaReady(false);
-  }, [visible, ring?.subscription_id, total]);
+
+    const ringId = ring?.subscription_id;
+    if (
+      prevRingIdRef.current != null &&
+      ringId != null &&
+      prevRingIdRef.current !== ringId
+    ) {
+      slideAnim.setValue(SCREEN_WIDTH);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 280,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      slideAnim.setValue(0);
+    }
+    prevRingIdRef.current = ringId ?? null;
+  }, [visible, ring?.subscription_id, total, slideAnim]);
 
   useEffect(() => {
     setMediaReady(false);
@@ -63,12 +97,16 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   const goNext = useCallback(() => {
     setSlideIndex(i => {
       if (i + 1 >= total) {
-        onClose?.();
+        if (onAdvanceToNextUser) {
+          onAdvanceToNextUser();
+        } else {
+          onClose?.();
+        }
         return i;
       }
       return i + 1;
     });
-  }, [total, onClose]);
+  }, [total, onClose, onAdvanceToNextUser]);
 
   useEffect(() => {
     if (!visible || !ring || !total) return;
@@ -97,9 +135,14 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
   }, [visible, slideIndex, total, goNext, clearTimers, ring]);
 
   const onTapContent = useCallback(() => {
-    if (currentIsVideo) return;
     goNext();
-  }, [goNext, currentIsVideo]);
+  }, [goNext]);
+
+  const onPressProfile = useCallback(() => {
+    if (!ring) return;
+    clearTimers();
+    onOpenProfile?.(ring);
+  }, [ring, onOpenProfile, clearTimers]);
 
   if (!ring || total === 0) return null;
 
@@ -116,44 +159,46 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}>
       <View style={styles.root}>
-        {/* Full-bleed media: video uses native controls (not wrapped in Pressable). Images: tap advances. */}
-        <View style={styles.mediaTap}>
-          {uri && currentIsVideo ? (
-            <Video
-              ref={videoRef}
-              source={{uri}}
-              style={[
-                styles.mediaFullScreen,
-                !mediaReady && styles.mediaUntilReady,
-              ]}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isMuted={isMuted}
-              useNativeControls={false}
-              isLooping
-              onLoad={() => setMediaReady(true)}
-              onReadyForDisplay={() => setMediaReady(true)}
-            />
-          ) : (
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={onTapContent}>
-              {uri ? (
-                <Image
-                  source={{uri}}
-                  style={[
-                    styles.mediaFullScreen,
-                    !mediaReady && styles.mediaUntilReady,
-                  ]}
-                  resizeMode="cover"
-                  onLoadEnd={() => setMediaReady(true)}
-                />
-              ) : (
-                <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
-                  <Text style={styles.placeholderText}>אין מדיה</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-        </View>
+        {/* Tap anywhere to advance slide; last slide advances to next user (RTL strip order). */}
+        <Animated.View
+          style={[
+            styles.mediaTap,
+            {transform: [{translateX: slideAnim}]},
+          ]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={onTapContent}>
+            {uri && currentIsVideo ? (
+              <Video
+                ref={videoRef}
+                source={{uri}}
+                style={[
+                  styles.mediaFullScreen,
+                  !mediaReady && styles.mediaUntilReady,
+                ]}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isMuted={isMuted}
+                useNativeControls={false}
+                isLooping
+                onLoad={() => setMediaReady(true)}
+                onReadyForDisplay={() => setMediaReady(true)}
+              />
+            ) : uri ? (
+              <Image
+                source={{uri}}
+                style={[
+                  styles.mediaFullScreen,
+                  !mediaReady && styles.mediaUntilReady,
+                ]}
+                resizeMode="cover"
+                onLoadEnd={() => setMediaReady(true)}
+              />
+            ) : (
+              <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
+                <Text style={styles.placeholderText}>אין מדיה</Text>
+              </View>
+            )}
+          </Pressable>
+        </Animated.View>
 
         {/* Progress + header on top (Figma node 98:92) */}
         <LinearGradient
@@ -175,8 +220,8 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
               return (
                 <View key={s.id || i} style={styles.progressTrack}>
                   <LinearGradient
-                    colors={STORY_ACCENT_COLORS}
-                    locations={[0.1113, 0.8662]}
+                    colors={PROFILE_RING_COLORS}
+                    locations={PROFILE_RING_LOCATIONS}
                     start={{x: 0, y: 0}}
                     end={{x: 1, y: 0}}
                     style={[
@@ -191,18 +236,21 @@ const StoryViewerModal = ({visible, ring, onClose}) => {
           </View>
 
           <View style={styles.topBar}>
-            <View style={styles.userRow}>
+            <TouchableOpacity
+              style={styles.userRow}
+              onPress={onPressProfile}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`פרופיל של ${ring.display_name || 'משתמש'}`}>
               <ProfileAvatar
                 uri={ring.profile_image_url}
                 name={ring.display_name}
                 size={52}
-                ringColors={STORY_ACCENT_COLORS}
-                ringLocations={[0, 1]}
               />
               <Text style={styles.userName} numberOfLines={1}>
                 {ring.display_name || 'משתמש'}
               </Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.actionsRow}>
               <TouchableOpacity
                 onPress={() => setIsMuted(m => !m)}

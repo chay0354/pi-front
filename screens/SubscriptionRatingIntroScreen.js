@@ -83,10 +83,6 @@ const SubscriptionRatingIntroScreen = ({
               <Text style={styles.infoMain}>
                 הקפידו לשמור על דירוג גבוה,{'\n'}הוא קובע את אמינות העסק שלכם.
               </Text>
-              <Text style={styles.infoSmall}>
-                דירוג גבוה = יותר אמינות, יותר כוכבים{'\n'}
-                דירוג נמוך= פחות אמינות, פחות כוכבים
-              </Text>
             </View>
           </View>
 
@@ -290,15 +286,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 18,
     lineHeight: 22,
-    fontFamily: 'Rubik-Regular',
-    maxWidth: 322,
-  },
-  infoSmall: {
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.54,
     fontFamily: 'Rubik-Regular',
     maxWidth: 322,
   },

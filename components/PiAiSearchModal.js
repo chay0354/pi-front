@@ -20,13 +20,17 @@ import {
   getReviews,
   likeListing,
   unlikeListing,
+  piAiSearchListings,
 } from '../utils/api';
 import {
   loadTikTokLikedState,
   persistLikedListingIds,
 } from '../utils/tikTokLikedStorage';
 import {ContextHook} from '../hooks/ContextHook';
-import {rankListingsByQuery} from '../utils/piAiMatchListings';
+import {
+  rankListingsByQuery,
+  buildListingAiSummary,
+} from '../utils/piAiMatchListings';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import ListingGridCardFigma from './ListingGridCardFigma';
 import {
@@ -287,14 +291,40 @@ const PiAiSearchModal = ({
         }
       }
 
-      const rankedResult = rankListingsByQuery(q, listings, {topN: 20});
-      if (!rankedResult.ranked.length) {
+      // Gemini ranks the catalog against the query; the local keyword ranking
+      // is only a fallback when the AI service is unavailable (offline/quota).
+      let rows = null;
+      let aiSaidNoMatch = false;
+      const ai = await piAiSearchListings(
+        q,
+        listings.map(buildListingAiSummary),
+      );
+      if (ai.success) {
+        const byId = new Map(
+          listings
+            .filter(l => l?.id != null)
+            .map(l => [String(l.id), l]),
+        );
+        const matched = (ai.ids || [])
+          .map(id => byId.get(String(id)))
+          .filter(Boolean);
+        if (matched.length) {
+          rows = matched;
+        } else {
+          aiSaidNoMatch = true;
+        }
+      }
+      if (rows == null && !aiSaidNoMatch) {
+        const rankedResult = rankListingsByQuery(q, listings, {topN: 20});
+        rows = rankedResult.ranked.map(r => r.listing);
+      }
+
+      if (!rows || rows.length === 0) {
         setResults([]);
         setEmptyMessage(
           `חיפשתי ב-${listings.length} מודעות ולא מצאתי התאמה ברורה. נסה לפרט יותר — שם עיר, טווח מחיר, או מספר חדרים.`,
         );
       } else {
-        const rows = rankedResult.ranked.map(r => r.listing);
         setResults(rows);
         if (uid) {
           syncLikesFromListings(rows, uid);

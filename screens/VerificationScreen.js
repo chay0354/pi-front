@@ -260,9 +260,13 @@ const VerificationScreen = ({
         ) || DEFAULT_MONTHLY_LISTING_QUOTA;
       setMonthlyQuota(quota);
       setPromoApplied(true);
+      const bonusMonths = Number(result?.bonusMonths) || 0;
+      const totalMonths = Number(result?.totalMonths) || 3 + bonusMonths;
       Alert.alert(
         'קופון הופעל',
-        `מכסת המודעות החודשית שלך: ${quota} (במקום ${DEFAULT_MONTHLY_LISTING_QUOTA})`,
+        bonusMonths > 0
+          ? `המנוי שלך הוארך ב-${bonusMonths} חודשים נוספים — סה"כ ${totalMonths} חודשי שימוש`
+          : 'הקופון הופעל בהצלחה',
       );
     } catch (error) {
       Alert.alert('שגיאה', error.message || 'קוד הקופון אינו תקף');
@@ -540,29 +544,19 @@ const VerificationScreen = ({
               <Text style={styles.promoTitle}>קוד קופון (אופציונלי)</Text>
             </View>
             <Text style={styles.promoSubtitle}>
-              מגדיל את מכסת המודעות החודשית · ברירת מחדל{' '}
-              {DEFAULT_MONTHLY_LISTING_QUOTA}
+              כל מנוי חדש כולל 3 חודשי שימוש · קופון מאריך את המנוי ב-3, 6 או
+              12 חודשים נוספים
             </Text>
 
-            <View style={styles.quotaPill}>
-              <Text style={styles.quotaPillLabel}>מכסה חודשית</Text>
-              <Text style={styles.quotaPillValue}>{monthlyQuota}</Text>
-              {promoApplied ? (
-                <View style={styles.promoAppliedBadge}>
-                  <MaterialCommunityIcons
-                    name="check"
-                    size={14}
-                    color="#15e3ff"
-                  />
-                  <Text style={styles.promoAppliedBadgeText}>קופון פעיל</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {!activeSubscriptionId ? (
-              <Text style={styles.promoWaitHint}>
-                שלחו קוד אימות כדי להפעיל קופון (נשמר לאחר שמירת הטופס)
-              </Text>
+            {promoApplied ? (
+              <View style={styles.promoAppliedBadge}>
+                <MaterialCommunityIcons
+                  name="check"
+                  size={14}
+                  color="#15e3ff"
+                />
+                <Text style={styles.promoAppliedBadgeText}>קופון פעיל</Text>
+              </View>
             ) : null}
 
             <View
@@ -835,44 +829,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
   },
-  quotaPill: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 1000,
-    borderWidth: 1,
-    borderColor: 'rgba(255,196,10,0.45)',
-    backgroundColor: 'rgba(255,196,10,0.08)',
-  },
-  quotaPillLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 14,
-    fontFamily: 'Rubik-Regular',
-  },
-  quotaPillValue: {
-    color: '#ffc40a',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-  },
   promoAppliedBadge: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
-    marginRight: 4,
   },
   promoAppliedBadgeText: {
     color: '#15e3ff',
     fontSize: 13,
-    fontFamily: 'Rubik-Regular',
-  },
-  promoWaitHint: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: 'left',
     fontFamily: 'Rubik-Regular',
   },
   promoApplyButton: {

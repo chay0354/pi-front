@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 $sdk = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 if (-not (Test-Path $sdk)) {
-  Write-Error "Android SDK not found at $sdk — install Android Studio and SDK first."
+  Write-Error "Android SDK not found at $sdk - install Android Studio and SDK first."
 }
 $env:ANDROID_HOME = $sdk
 $env:PATH = "$(Join-Path $sdk 'platform-tools');$(Join-Path $sdk 'emulator');$env:PATH"
@@ -22,5 +22,5 @@ if ($deviceLines.Count -lt 1) {
 
 Set-Location (Join-Path $PSScriptRoot '..')
 Write-Host "ANDROID_HOME=$sdk"
-Write-Host 'Running expo run:android (Metro must use default port 8081 — see metro.config.js)...'
+Write-Host 'Running expo run:android (Metro must use default port 8081 - see metro.config.js)...'
 npx expo run:android

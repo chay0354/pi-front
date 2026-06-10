@@ -116,13 +116,29 @@ export const buildCardStats = listing => {
   ];
 };
 
+/** Numeric price from API rows or TikTok feed rows (`rawPrice`, formatted `₪1,234`). */
+const parseListingPriceNumber = listing => {
+  const candidates = [
+    listing?.rawPrice,
+    listing?.price,
+    listing?.price_per_night,
+    listing?.pricePerNight,
+    listing?.budget,
+  ];
+  for (const v of candidates) {
+    if (v == null || v === '') continue;
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    const s = String(v).trim();
+    if (!s) continue;
+    const cleaned = s.replace(/[₪\s,]/g, '');
+    const n = Number(cleaned);
+    if (Number.isFinite(n) && !Number.isNaN(n)) return n;
+  }
+  return NaN;
+};
+
 export const formatPriceHe = listing => {
-  const n =
-    listing?.price != null && listing.price !== ''
-      ? Number(listing.price)
-      : listing?.budget != null && listing.budget !== ''
-        ? Number(listing.budget)
-        : NaN;
+  const n = parseListingPriceNumber(listing);
   if (Number.isNaN(n) || !Number.isFinite(n)) return 'מחיר לא צוין';
   return `₪${Math.round(n).toLocaleString('he-IL')}`;
 };
@@ -240,13 +256,26 @@ export const subscriptionTypeFromListing = listing => {
   return '';
 };
 
+/** Pi badge / profile rating: company, broker, professional only — never regular `user`. */
+export const isRateableSubscriptionType = type => {
+  const t = String(type || '')
+    .toLowerCase()
+    .trim();
+  return t === 'company' || t === 'broker' || t === 'professional';
+};
+
+/** Follow + is only for B2B accounts — not regular `user` subscribers. */
+export const isFollowableSubscriptionType = isRateableSubscriptionType;
+
+export const isFollowableListing = listing =>
+  isFollowableSubscriptionType(subscriptionTypeFromListing(listing));
+
 /** Pi badge: only company / broker / professional — never regular `user`. */
 export const shouldShowListingPiRating = listing => {
   const t = subscriptionTypeFromListing(listing);
-  if (!t) return false;
-  if (t === 'user') return false;
+  if (!isRateableSubscriptionType(t)) return false;
   if (shouldShowCommercialLogoBadge(listing)) return false;
-  return t === 'company' || t === 'broker' || t === 'professional';
+  return true;
 };
 
 export const isCommercialCategoryListing = listing =>

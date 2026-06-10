@@ -45,6 +45,7 @@ const Home = ({
   onOpenSelectedProjects,
   onOpenProfessionalsDirectory,
   onOpenUserProfile,
+  onOpenStoryProfile,
 }) => {
   const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
@@ -153,6 +154,34 @@ const Home = ({
     setViewerRing(null);
     loadStories();
   }, [loadStories]);
+
+  const handleOpenStoryProfile = useCallback(
+    ring => {
+      if (!ring?.subscription_id) return;
+      setViewerVisible(false);
+      setViewerRing(null);
+      onOpenStoryProfile?.(ring);
+    },
+    [onOpenStoryProfile],
+  );
+
+  /** Next ring in strip order (right → left on the home row). */
+  const handleAdvanceToNextUser = useCallback(() => {
+    if (!viewerRing) {
+      handleCloseViewer();
+      return;
+    }
+    const currentIndex = storyRings.findIndex(
+      r => String(r.subscription_id) === String(viewerRing.subscription_id),
+    );
+    for (let i = currentIndex + 1; i < storyRings.length; i++) {
+      if (storyRings[i]?.slides?.length) {
+        setViewerRing(storyRings[i]);
+        return;
+      }
+    }
+    handleCloseViewer();
+  }, [viewerRing, storyRings, handleCloseViewer]);
 
   const handleCategorySelect = useCallback(
     category => {
@@ -300,6 +329,8 @@ const Home = ({
             visible={viewerVisible}
             ring={viewerRing}
             onClose={handleCloseViewer}
+            onAdvanceToNextUser={handleAdvanceToNextUser}
+            onOpenProfile={handleOpenStoryProfile}
           />
         </View>
       </View>

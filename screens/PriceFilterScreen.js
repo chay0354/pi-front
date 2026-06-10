@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
+import FilterScreenBackBar from '../components/FilterScreenBackBar';
 import {CalendarModal} from '../components/FormsElement/CalendarModal';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {flexEnd, getRangeSliderPercentFromEvent} from '../utils/rtlLayout';
@@ -311,14 +312,7 @@ const PriceFilterScreen = ({
   return (
     <View style={styles.container}>
       <View style={{height: insets.top}} />
-      <View style={styles.topRail}>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={onClose}
-          style={styles.handlePressArea}>
-          <View style={styles.handle} />
-        </TouchableOpacity>
-      </View>
+      <FilterScreenBackBar onClose={onClose} />
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -529,25 +523,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
-  },
-  topRail: {
-    height: 37,
-    borderBottomWidth: 1,
-    borderBottomColor: DIVIDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handlePressArea: {
-    width: 42,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#464646',
   },
   scroll: {flex: 1},
   scrollContent: {

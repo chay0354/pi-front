@@ -1,4 +1,4 @@
-import React, {useCallback, useContext, useEffect, useState} from 'react';
+import React, {useCallback, useContext, useEffect, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -10,17 +10,21 @@ import {
   Platform,
   Modal,
   Pressable,
-  I18nManager,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Colors} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getListings, unlikeListing} from '../utils/api';
 import FeedBottomBar from '../components/FeedBottomBar';
 import {flexStart} from '../utils/rtlLayout';
+import {
+  loadTikTokLikedState,
+  persistLikedListingIds,
+} from '../utils/tikTokLikedStorage';
 
 /** Figma palette for מסך מועדפים (Favorites screen). */
 const BG = '#1E1D27';
@@ -106,6 +110,150 @@ const listingAddress = item => {
   return locBase || 'מיקום לא זמין';
 };
 
+const SWIPE_REVEAL_WIDTH = 96;
+const SWIPE_COMMIT_X = 68;
+const SWIPE_FLING_VX = 0.45;
+
+/** Swipe the row left to reveal remove; commit past threshold or fling to unlike. */
+const FavoriteSwipeRow = ({children, onRemove, disabled, removing}) => {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const dragStartX = useRef(0);
+  const rowWidthRef = useRef(320);
+  const removingRef = useRef(removing);
+  removingRef.current = removing;
+
+  const snapOpen = useCallback(() => {
+    Animated.spring(translateX, {
+      toValue: -SWIPE_REVEAL_WIDTH,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 80,
+    }).start();
+  }, [translateX]);
+
+  const snapClosed = useCallback(() => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 90,
+    }).start();
+  }, [translateX]);
+
+  const animateRemove = useCallback(() => {
+    const offScreen = -(rowWidthRef.current || 360);
+    Animated.timing(translateX, {
+      toValue: offScreen,
+      duration: 240,
+      useNativeDriver: true,
+    }).start(({finished}) => {
+      if (finished) onRemove?.();
+    });
+  }, [translateX, onRemove]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        !removingRef.current &&
+        !disabled &&
+        Math.abs(g.dx) > Math.abs(g.dy) * 1.2 &&
+        Math.abs(g.dx) > 6,
+      onPanResponderGrant: () => {
+        translateX.stopAnimation(v => {
+          dragStartX.current = v;
+        });
+      },
+      onPanResponderMove: (_, g) => {
+        const next = Math.max(
+          -SWIPE_REVEAL_WIDTH * 1.35,
+          Math.min(0, dragStartX.current + g.dx),
+        );
+        translateX.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        const x = Math.max(
+          -SWIPE_REVEAL_WIDTH * 1.35,
+          Math.min(0, dragStartX.current + g.dx),
+        );
+        if (x <= -SWIPE_COMMIT_X || g.vx < -SWIPE_FLING_VX) {
+          animateRemove();
+          return;
+        }
+        if (x <= -SWIPE_REVEAL_WIDTH * 0.35) {
+          snapOpen();
+          return;
+        }
+        snapClosed();
+      },
+      onPanResponderTerminate: () => {
+        snapClosed();
+      },
+    }),
+  ).current;
+
+  const actionOpacity = translateX.interpolate({
+    inputRange: [-SWIPE_REVEAL_WIDTH, -24, 0],
+    outputRange: [1, 0.45, 0],
+    extrapolate: 'clamp',
+  });
+
+  const actionScale = translateX.interpolate({
+    inputRange: [-SWIPE_REVEAL_WIDTH, 0],
+    outputRange: [1, 0.82],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View
+      style={styles.swipeRowOuter}
+      onLayout={e => {
+        const w = e?.nativeEvent?.layout?.width;
+        if (w > 0) rowWidthRef.current = w;
+      }}>
+      <Animated.View
+        style={[
+          styles.swipeActionPanel,
+          {opacity: actionOpacity, transform: [{scale: actionScale}]},
+        ]}
+        pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.swipeActionTap}
+          activeOpacity={0.88}
+          disabled={disabled || removing}
+          onPress={() => {
+            if (disabled || removing) return;
+            animateRemove();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="הסר מהמועדפים">
+          <LinearGradient
+            colors={['#FEE787', '#BD9947', '#9C6522']}
+            locations={[0.0456, 0.5076, 0.8831]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}
+            style={styles.swipeActionGradient}>
+            <MaterialCommunityIcons
+              name="heart-off-outline"
+              size={26}
+              color="#1E1D27"
+            />
+            <Text style={styles.swipeActionText}>הסר</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.swipeRowForeground,
+          {transform: [{translateX}]},
+          removing && styles.swipeRowRemoving,
+        ]}
+        {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+};
+
 /** מסך מועדפים – matches Figma 8:95135. Shows only ads (no feed posts). */
 const FavoritesScreen = ({
   onClose,
@@ -180,10 +328,15 @@ const FavoritesScreen = ({
 
   const handleUnlike = async listingId => {
     if (!userId || !listingId || removingId) return;
+    const key = String(listingId);
     setRemovingId(listingId);
     try {
-      await unlikeListing(listingId, userId);
-      setListings(prev => prev.filter(l => l.id !== listingId));
+      await unlikeListing(key, userId);
+      const likedState = await loadTikTokLikedState(userId);
+      const nextLiked = new Set(likedState.likedListingIds);
+      nextLiked.delete(key);
+      await persistLikedListingIds(userId, nextLiked);
+      setListings(prev => prev.filter(l => String(l.id) !== key));
     } catch (e) {
       console.warn('Unlike failed', e);
     } finally {
@@ -198,71 +351,78 @@ const FavoritesScreen = ({
       item.main_image_url ||
       (Array.isArray(item.image_urls) && item.image_urls[0]) ||
       null;
+    const isRemoving = removingId === item.id;
     return (
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.card}
-        onPress={() => onOpenListing?.(item)}>
-        <View style={styles.row}>
-          <View style={styles.imageWrap}>
-            {uri ? (
-              <Image source={{uri}} style={styles.thumb} resizeMode="cover" />
-            ) : (
-              <View style={[styles.thumb, styles.thumbPlaceholder]}>
-                <MaterialCommunityIcons
-                  name="image-outline"
-                  size={36}
-                  color="rgba(255,255,255,0.35)"
+      <FavoriteSwipeRow
+        disabled={isRemoving}
+        removing={isRemoving}
+        onRemove={() => handleUnlike(item.id)}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.card}
+          onPress={() => onOpenListing?.(item)}>
+          <View style={styles.row}>
+            <View style={styles.imageWrap}>
+              {uri ? (
+                <Image source={{uri}} style={styles.thumb} resizeMode="cover" />
+              ) : (
+                <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                  <MaterialCommunityIcons
+                    name="image-outline"
+                    size={36}
+                    color="rgba(255,255,255,0.35)"
+                  />
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.heartBtn}
+                onPress={e => {
+                  e?.stopPropagation?.();
+                  setConfirmUnlikeListing(item);
+                }}
+                hitSlop={10}
+                disabled={isRemoving}>
+                <View style={styles.heartCircle}>
+                  {isRemoving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <MaterialCommunityIcons name="heart" size={22} color="#fff" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.title} numberOfLines={1}>
+                {String(item?.subscription_type || '').toLowerCase() ===
+                'company'
+                  ? item?.project_name && String(item.project_name).trim()
+                    ? String(item.project_name).trim()
+                    : listingTitle(item)
+                  : formatPrice(item)}
+              </Text>
+              <View style={styles.addrRow}>
+                <Text style={styles.address} numberOfLines={1}>
+                  {listingAddress(item)}
+                </Text>
+                <Image
+                  source={require('../assets/liked-ads/location.png')}
+                  style={styles.locationIcon}
+                  resizeMode="contain"
                 />
               </View>
-            )}
-            <TouchableOpacity
-              style={styles.heartBtn}
-              onPress={e => {
-                e?.stopPropagation?.();
-                setConfirmUnlikeListing(item);
-              }}
-              hitSlop={10}
-              disabled={removingId === item.id}>
-              <View style={styles.heartCircle}>
-                {removingId === item.id ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialCommunityIcons name="heart" size={22} color="#fff" />
-                )}
-              </View>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.textCol}>
-            <Text style={styles.title} numberOfLines={1}>
-              {String(item?.subscription_type || '').toLowerCase() === 'company'
-                ? item?.project_name && String(item.project_name).trim()
-                  ? String(item.project_name).trim()
-                  : listingTitle(item)
-                : formatPrice(item)}
-            </Text>
-            <View style={styles.addrRow}>
-              <Text style={styles.address} numberOfLines={1}>
-                {listingAddress(item)}
-              </Text>
-              <Image
-                source={require('../assets/liked-ads/location.png')}
-                style={styles.locationIcon}
-                resizeMode="contain"
-              />
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.ctaBtn}
+                onPress={e => {
+                  e?.stopPropagation?.();
+                  onOpenListing?.(item);
+                }}>
+                <Text style={styles.ctaText}>צפה במודעה</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.ctaBtn}
-              onPress={e => {
-                e?.stopPropagation?.();
-                onOpenListing?.(item);
-              }}>
-              <Text style={styles.ctaText}>צפה במודעה</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </FavoriteSwipeRow>
     );
   };
 
@@ -359,13 +519,25 @@ const FavoritesScreen = ({
             <Text style={styles.msgSub}>לחץ על הלב בפיד כדי לשמור מודעות</Text>
           </View>
         ) : (
-          <FlatList
-            data={listings}
-            keyExtractor={item => String(item.id)}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
+          <>
+            <View style={styles.swipeHintRow}>
+              <MaterialCommunityIcons
+                name="gesture-swipe-left"
+                size={18}
+                color="rgba(255,196,10,0.85)"
+              />
+              <Text style={styles.swipeHintText}>
+                החלק שמאלה להסרה מהמועדפים
+              </Text>
+            </View>
+            <FlatList
+              data={listings}
+              keyExtractor={item => String(item.id)}
+              renderItem={renderItem}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          </>
         )}
       </View>
 
@@ -482,6 +654,82 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 100,
   },
+  swipeHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  swipeHintText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  swipeRowOuter: {
+    width: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#3a2430',
+  },
+  swipeActionPanel: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SWIPE_REVEAL_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeActionTap: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeActionGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+      },
+      android: {elevation: 4},
+      default: {},
+    }),
+  },
+  swipeActionText: {
+    color: '#1E1D27',
+    fontSize: 12,
+    lineHeight: 14,
+    fontFamily: 'Rubik-Medium',
+  },
+  swipeRowForeground: {
+    width: '100%',
+    backgroundColor: CARD_BG,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {width: -2, height: 0},
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+      },
+      android: {elevation: 2},
+      default: {},
+    }),
+  },
+  swipeRowRemoving: {
+    opacity: 0.72,
+  },
   card: {
     backgroundColor: CARD_BG,
     borderTopWidth: 1,
@@ -492,20 +740,21 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     gap: 16,
     minHeight: 105,
   },
   imageWrap: {
     width: 105,
+    height: 105,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
-    alignSelf: 'stretch',
+    alignSelf: 'center',
   },
   thumb: {
-    width: '100%',
-    height: '100%',
+    width: 105,
+    height: 105,
     borderRadius: 12,
   },
   thumbPlaceholder: {

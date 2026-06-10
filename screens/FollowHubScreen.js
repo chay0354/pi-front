@@ -16,6 +16,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
+import {isFollowableSubscriptionType} from '../utils/listingGridCardFigma';
 
 import {
   getFollowHubRows,
@@ -183,6 +184,7 @@ const FollowHubScreen = ({
   const handleFollow = useCallback(
     async row => {
       if (!viewerId || !row?.id || row?.is_self) return;
+      if (!isFollowableSubscriptionType(row?.subscription_type)) return;
       setActioningId(row.id);
       try {
         await sendFollowRequest(viewerId, row.id);
@@ -311,6 +313,7 @@ const FollowHubScreen = ({
 
   const renderActionButton = row => {
     const busy = actioningId === row?.id;
+    const canFollowRow = isFollowableSubscriptionType(row?.subscription_type);
     if (activeTab === TAB_REQUESTS && isOwnProfile) {
       return (
         <View style={styles.rowActionCluster}>
@@ -403,6 +406,9 @@ const FollowHubScreen = ({
           </TouchableOpacity>
         );
       }
+      if (!canFollowRow) {
+        return <View style={styles.rowActionPlaceholder} />;
+      }
       return (
         <GoldPillButton
           onPress={() => handleFollow(row)}
@@ -449,6 +455,9 @@ const FollowHubScreen = ({
           </Text>
         </View>
       );
+    }
+    if (!canFollowRow) {
+      return <View style={styles.rowActionPlaceholder} />;
     }
     return (
       <GoldPillButton

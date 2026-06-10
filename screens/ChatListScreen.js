@@ -35,7 +35,8 @@ import {
 } from '../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
-import {flexEnd, flexStart} from '../utils/rtlLayout';
+import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
+import ProfileAvatar from '../components/ProfileAvatar';
 
 /** Main chats list panel — matches Figma node 8:3115 */
 const CHAT_LIST_PANEL_BG = '#2B2A39';
@@ -240,7 +241,7 @@ function normalizeChatListAvatarUri(value) {
   }
 }
 
-const CHAT_LIST_AVATAR_PX = 58;
+const CHAT_LIST_AVATAR_PX = 56;
 const CHAT_LIST_AVATAR_PLACEHOLDER = require('../assets/image-copy-10.png');
 
 /**
@@ -256,8 +257,6 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
     resolvedUri && useProxyStream
       ? `${proxyBase}/api/chat/avatar-url?src=${encodeURIComponent(resolvedUri)}`
       : resolvedUri;
-  const src = sourceUri ? {uri: sourceUri} : CHAT_LIST_AVATAR_PLACEHOLDER;
-
   useEffect(() => {
     setResolvedUri(trimmed);
     setLookupTried(false);
@@ -339,26 +338,12 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
   }, [debugKey, resolvedUri, sourceUri, userRef, lookupTried, useProxyStream]);
 
   return (
-    <View style={styles.avatarRing}>
-      <View style={styles.avatarImageWrap}>
-        <Image
-          source={src}
-          style={styles.avatarImage}
-          resizeMode="cover"
-          onLoad={() =>
-            logProfilePic(
-              `ChatListRowAvatar.load.${String(debugKey || 'row')}`,
-              {
-                row: debugKey || null,
-                uri: trimmed || null,
-                ok: true,
-              },
-            )
-          }
-          onError={e => handleImageError(e)}
-        />
-      </View>
-    </View>
+    <ProfileAvatar
+      uri={sourceUri}
+      size={CHAT_LIST_AVATAR_PX}
+      placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
+      onImageError={handleImageError}
+    />
   );
 }
 
@@ -896,6 +881,7 @@ const ChatListScreen = ({
       (exStatus === 'pending' ||
         exStatus === 'accepted' ||
         exStatus === 'rejected');
+    const showGroup = !isPi && isGroup;
     const showListing =
       !isPi && !isGroup && !!conv.listingId && !showExclusiveRow;
     const showCategory =
@@ -923,6 +909,13 @@ const ChatListScreen = ({
               numberOfLines={1}
               ellipsizeMode="tail">
               {conv.listingCategoryLabel}
+            </Text>
+          </View>
+        ) : null}
+        {showGroup ? (
+          <View style={styles.badgeGrey}>
+            <Text style={styles.badgeGreyText} numberOfLines={1}>
+              קבוצה
             </Text>
           </View>
         ) : null}
@@ -1789,7 +1782,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 20,
     letterSpacing: 0.2,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     fontFamily: 'Rubik-Regular',
     writingDirection: 'rtl',
   },
@@ -1900,7 +1893,8 @@ const styles = StyleSheet.create({
   messagePreview: {
     color: '#fff',
     fontSize: 18,
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     lineHeight: 22,
     width: '100%',
     fontFamily: 'Rubik-Regular',
@@ -1910,28 +1904,6 @@ const styles = StyleSheet.create({
     width: 100,
     flexShrink: 0,
     marginTop: 12,
-  },
-  avatarRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    padding: 3,
-    overflow: 'hidden',
-    backgroundColor: GOLD,
-  },
-  avatarImageWrap: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#2B2A39',
-    padding: 1,
-    overflow: 'hidden',
-    zIndex: 0,
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 999,
   },
   senderName: {
     color: '#F7F3E6',
@@ -2068,7 +2040,7 @@ const styles = StyleSheet.create({
     paddingLeft: 46,
     color: '#FFFFFF',
     fontSize: 20,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     fontFamily: 'Rubik-Regular',
     writingDirection: 'rtl',
   },

@@ -46,12 +46,12 @@ function withAndroidForceRtl(config) {
 
 module.exports = {
   expo: {
-    name: 'PI Frontend',
+    name: 'pi 2701',
     slug: 'pi-frontend',
     version: '1.0.0',
     scheme: 'pifrontend',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: './assets/app-icon/icon.png',
     userInterfaceStyle: 'light',
     splash: {
       image: './assets/SplashScreen.png',
@@ -85,12 +85,12 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 7,
+      versionCode: 13,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
-        foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#ffffff',
+        foregroundImage: './assets/app-icon/adaptive-foreground.png',
+        backgroundColor: '#FFFFFF',
       },
       permissions: [
         'CAMERA',

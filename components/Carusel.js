@@ -5,7 +5,6 @@ import React, {
   useCallback,
   useMemo,
   memo,
-  startTransition,
 } from 'react';
 import {
   View,
@@ -17,15 +16,36 @@ import {
   Platform,
   Text,
 } from 'react-native';
+import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
 import {userCategories} from '../utils/constant';
+
+const TICK_SOUND = require('../assets/sounds/carousel-tick.wav');
+/** Min gap between ticks so a hard fling rattles instead of stuttering. */
+const TICK_MIN_GAP_MS = 45;
+const TICK_VOLUME = 0.85;
+/** Pool so rapid ticks don't cancel each other on one Sound instance. */
+const TICK_POOL_SIZE = 4;
 
 /** Fixed slot + transform scales match prior 104×142 / 174×212 layout without per-frame width/height relayout (Android). */
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
 const CATEGORY_SIDE_SCALE_X = 104 / CATEGORY_SLOT_W;
 const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
-/** Three copies of the list so we can jump silently in the middle block (infinite loop). */
-const LOOP_COPIES = 3;
+/**
+ * Copies of the category list — scroll silently re-centers into the middle
+ * block (infinite loop). Repositioning can't happen mid-fling (scrollTo kills
+ * the momentum), so there must be enough runway for the hardest fling to
+ * decay naturally before reaching a physical edge.
+ */
+const LOOP_COPIES = 7;
+/** Light hysteresis during fling (drag uses none for live tracking). */
+const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
+/** Near stop, freeze lit card until momentum ends. */
+const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
+/** Skip end snap when already this close (avoids scrollTo feedback loops). */
+const SNAP_POSITION_EPSILON = 3;
+/** Reposition only when this close to a physical scroll edge. */
+const LOOP_EDGE_BUFFER_ITEMS = 1.5;
 
 function positiveMod(value, modulus) {
   if (modulus <= 0) return 0;
@@ -89,8 +109,91 @@ function nativeCarouselClosestIndex(
   return closestIndex;
 }
 
+function nativeCarouselItemCenterX(index, itemWidth) {
+  return (index + 0.5) * itemWidth;
+}
+
+function closestIndexWithHysteresis(
+  scrollPosition,
+  itemWidth,
+  viewportWidth,
+  totalItems,
+  currentCenterIndex,
+  itemCenterX,
+) {
+  const viewportCenter = scrollPosition + viewportWidth / 2;
+  let closestIndex = 0;
+  let closestDistance = Infinity;
+
+  for (let index = 0; index < totalItems; index++) {
+    const distance = Math.abs(viewportCenter - itemCenterX(index, itemWidth));
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  }
+
+  if (
+    currentCenterIndex == null ||
+    currentCenterIndex < 0 ||
+    currentCenterIndex >= totalItems ||
+    closestIndex === currentCenterIndex
+  ) {
+    return closestIndex;
+  }
+
+  const currentDistance = Math.abs(
+    viewportCenter - itemCenterX(currentCenterIndex, itemWidth),
+  );
+  const hysteresis = itemWidth * CENTER_SWITCH_HYSTERESIS_RATIO;
+  if (closestDistance + hysteresis < currentDistance) {
+    return closestIndex;
+  }
+  return currentCenterIndex;
+}
+
+function nativeClosestIndexWithHysteresis(
+  scrollPosition,
+  itemWidth,
+  viewportWidth,
+  totalItems,
+  currentCenterIndex,
+) {
+  return closestIndexWithHysteresis(
+    scrollPosition,
+    itemWidth,
+    viewportWidth,
+    totalItems,
+    currentCenterIndex,
+    nativeCarouselItemCenterX,
+  );
+}
+
+function webClosestIndexWithHysteresis(
+  scrollPosition,
+  itemWidth,
+  contentWidth,
+  viewportWidth,
+  totalItems,
+  currentCenterIndex,
+) {
+  return closestIndexWithHysteresis(
+    scrollPosition,
+    itemWidth,
+    viewportWidth,
+    totalItems,
+    currentCenterIndex,
+    (index, width) => webCarouselItemCenterX(index, width, contentWidth),
+  );
+}
+
 function nativeCarouselSnapScrollX(virtualCenterIndex, itemWidth) {
   return Math.max(0, (virtualCenterIndex - 1) * itemWidth);
+}
+
+/** Index of the first item in the middle copy of the extended list. */
+function middleCopyStart(listLength) {
+  return Math.floor(LOOP_COPIES / 2) * listLength;
 }
 
 /** Keep scroll position in the middle copy so swiping never hits a hard edge. */
@@ -104,17 +207,11 @@ function normalizeInfiniteCarouselPosition(
   if (n <= 1) {
     return {virtualIndex: Math.max(0, virtualIndex), scrollX};
   }
-  let v = virtualIndex;
-  let x = scrollX;
-  const blockWidth = n * itemWidth;
-  if (v < n) {
-    v += n;
-    x += blockWidth;
-  } else if (v >= 2 * n) {
-    v -= n;
-    x -= blockWidth;
-  }
-  return {virtualIndex: v, scrollX: x};
+  const target = middleCopyStart(n) + positiveMod(virtualIndex, n);
+  return {
+    virtualIndex: target,
+    scrollX: scrollX + (target - virtualIndex) * itemWidth,
+  };
 }
 
 function buildExtendedCarouselList(categories) {
@@ -201,13 +298,20 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
   const hasInitialScrollDone = useRef(false);
   const lastScrollPositionRef = useRef(0);
   const androidScrollNextEmitRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
+  const isSnappingRef = useRef(false);
+  const previousScrollXRef = useRef(0);
+  const lastScrollSampleRef = useRef({x: 0, t: 0});
+  const virtualCenterIndexRef = useRef(0);
   const [carouselWidth, setCarouselWidth] = useState(0);
   const listLength = list.length;
   const infiniteLoop = listLength > 1;
   const initialLogicalIndex = Math.min(2, Math.max(0, listLength - 1));
   const initialVirtualIndex = infiniteLoop
-    ? listLength + initialLogicalIndex
+    ? middleCopyStart(listLength) + initialLogicalIndex
     : initialLogicalIndex;
+  virtualCenterIndexRef.current = initialVirtualIndex;
   const [virtualCenterIndex, setVirtualCenterIndex] =
     useState(initialVirtualIndex);
   const onCategorySelectRef = useRef(onCategorySelect);
@@ -216,6 +320,100 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
   const emitCategorySelect = useCallback(id => {
     onCategorySelectRef.current?.(id);
   }, []);
+
+  // Picker-wheel tick: plays when a new category passes center during user
+  // scrolling. Silent re-centering (loop jumps) keeps the same logical
+  // category, so it never ticks.
+  const tickPoolRef = useRef([]);
+  const tickPoolCursorRef = useRef(0);
+  const lastTickAtRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return undefined;
+    }
+    let mounted = true;
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+        const pool = await Promise.all(
+          Array.from({length: TICK_POOL_SIZE}, async () => {
+            const {sound} = await Audio.Sound.createAsync(TICK_SOUND, {
+              volume: TICK_VOLUME,
+              shouldPlay: false,
+            });
+            return sound;
+          }),
+        );
+        if (mounted) {
+          tickPoolRef.current = pool;
+        } else {
+          await Promise.all(pool.map(s => s.unloadAsync().catch(() => {})));
+        }
+      } catch {
+        /* tick is optional UX polish */
+      }
+    })();
+    return () => {
+      mounted = false;
+      const pool = tickPoolRef.current;
+      tickPoolRef.current = [];
+      Promise.all(pool.map(s => s.unloadAsync().catch(() => {}))).catch(
+        () => {},
+      );
+    };
+  }, []);
+
+  const playTick = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
+      return;
+    }
+    lastTickAtRef.current = now;
+    const pool = tickPoolRef.current;
+    if (!pool.length) {
+      return;
+    }
+    const sound = pool[tickPoolCursorRef.current % pool.length];
+    tickPoolCursorRef.current += 1;
+    (async () => {
+      try {
+        const status = await sound.getStatusAsync();
+        if (!status.isLoaded) {
+          return;
+        }
+        if (status.isPlaying) {
+          await sound.stopAsync();
+        }
+        await sound.setPositionAsync(0);
+        await sound.playAsync();
+      } catch {
+        /* ignore overlapping tick races */
+      }
+    })();
+  }, []);
+
+  /** Tick only when the logical (mod listLength) category actually changes. */
+  const tickIfLogicalChange = useCallback(
+    (prevVirtualIndex, nextVirtualIndex) => {
+      if (
+        listLength > 1 &&
+        positiveMod(nextVirtualIndex, listLength) !==
+          positiveMod(prevVirtualIndex, listLength)
+      ) {
+        playTick();
+      }
+    },
+    [listLength, playTick],
+  );
 
   const categoryIdsKey = list.map(c => c.id).join(',');
   const extendedList = useMemo(
@@ -231,13 +429,21 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
 
   const jumpToScrollX = useCallback((scrollX, animated = false) => {
     if (!scrollViewRef.current) return;
+    isProgrammaticScrollRef.current = true;
     scrollViewRef.current.scrollTo({x: scrollX, animated});
     lastScrollPositionRef.current = scrollX;
+    previousScrollXRef.current = scrollX;
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
   }, []);
 
   const runSnapToCenter = useCallback(
     scrollPosition => {
-      if (viewportWidth <= 0 || totalItems === 0) return;
+      if (viewportWidth <= 0 || totalItems === 0 || isSnappingRef.current) {
+        return;
+      }
+      isSnappingRef.current = true;
 
       let closestVirtualIndex;
       let snapScrollX;
@@ -275,20 +481,24 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
           )
         : {virtualIndex: closestVirtualIndex, scrollX: snapScrollX};
 
+      tickIfLogicalChange(
+        virtualCenterIndexRef.current,
+        normalized.virtualIndex,
+      );
+      virtualCenterIndexRef.current = normalized.virtualIndex;
       setVirtualCenterIndex(normalized.virtualIndex);
 
-      const isLoopJump =
-        infiniteLoop && normalized.scrollX !== snapScrollX;
       const targetScrollX = normalized.scrollX;
       if (
         scrollViewRef.current &&
-        Math.abs(scrollPosition - targetScrollX) > 1
+        Math.abs(scrollPosition - targetScrollX) > SNAP_POSITION_EPSILON
       ) {
-        jumpToScrollX(
-          targetScrollX,
-          !isLoopJump && Platform.OS !== 'android',
-        );
+        jumpToScrollX(targetScrollX, false);
       }
+
+      requestAnimationFrame(() => {
+        isSnappingRef.current = false;
+      });
     },
     [
       viewportWidth,
@@ -298,67 +508,216 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
       listLength,
       infiniteLoop,
       jumpToScrollX,
+      tickIfLogicalChange,
     ],
+  );
+
+  const applyVirtualCenter = useCallback(
+    nextIndex => {
+      const prevIndex = virtualCenterIndexRef.current;
+      if (nextIndex === prevIndex) {
+        return;
+      }
+      virtualCenterIndexRef.current = nextIndex;
+      setVirtualCenterIndex(nextIndex);
+      tickIfLogicalChange(prevIndex, nextIndex);
+    },
+    [tickIfLogicalChange],
+  );
+
+  const closestVirtualIndexForScroll = useCallback(
+    (scrollPosition, useHysteresis = true) => {
+      const currentCenter = virtualCenterIndexRef.current;
+      if (Platform.OS === 'web') {
+        if (!useHysteresis) {
+          return webCarouselClosestIndex(
+            scrollPosition,
+            itemWidth,
+            contentWidth,
+            viewportWidth,
+            totalItems,
+          );
+        }
+        return webClosestIndexWithHysteresis(
+          scrollPosition,
+          itemWidth,
+          contentWidth,
+          viewportWidth,
+          totalItems,
+          currentCenter,
+        );
+      }
+      if (!useHysteresis) {
+        return nativeCarouselClosestIndex(
+          scrollPosition,
+          itemWidth,
+          viewportWidth,
+          totalItems,
+        );
+      }
+      return nativeClosestIndexWithHysteresis(
+        scrollPosition,
+        itemWidth,
+        viewportWidth,
+        totalItems,
+        currentCenter,
+      );
+    },
+    [viewportWidth, itemWidth, contentWidth, totalItems],
+  );
+
+  const scrollVelocityPxPerMs = useCallback(scrollPosition => {
+    const now =
+      typeof globalThis.performance !== 'undefined' &&
+      typeof globalThis.performance.now === 'function'
+        ? globalThis.performance.now()
+        : Date.now();
+    const prev = lastScrollSampleRef.current;
+    const elapsed = now - prev.t;
+    if (elapsed <= 0) {
+      return 0;
+    }
+    return Math.abs(scrollPosition - prev.x) / elapsed;
+  }, []);
+
+  const repositionInfiniteLoopIfNeeded = useCallback(
+    scrollPosition => {
+      if (!infiniteLoop || listLength <= 1 || !scrollViewRef.current) {
+        return false;
+      }
+
+      const maxScroll = Math.max(0, contentWidth - viewportWidth);
+      const edgeBuffer = itemWidth * LOOP_EDGE_BUFFER_ITEMS;
+      const atPhysicalEdge =
+        scrollPosition <= edgeBuffer ||
+        scrollPosition >= maxScroll - edgeBuffer;
+      if (!atPhysicalEdge) {
+        return false;
+      }
+
+      const closestVirtualIndex = nativeCarouselClosestIndex(
+        scrollPosition,
+        itemWidth,
+        viewportWidth,
+        totalItems,
+      );
+      const logicalIndex = positiveMod(closestVirtualIndex, listLength);
+      const middleVirtualIndex = middleCopyStart(listLength) + logicalIndex;
+      const nextScrollX = nativeCarouselSnapScrollX(
+        middleVirtualIndex,
+        itemWidth,
+      );
+
+      if (Math.abs(nextScrollX - scrollPosition) <= SNAP_POSITION_EPSILON) {
+        return false;
+      }
+
+      isProgrammaticScrollRef.current = true;
+      scrollViewRef.current.scrollTo({x: nextScrollX, animated: false});
+      lastScrollPositionRef.current = nextScrollX;
+      previousScrollXRef.current = nextScrollX;
+      virtualCenterIndexRef.current = middleVirtualIndex;
+      setVirtualCenterIndex(middleVirtualIndex);
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
+      return true;
+    },
+    [
+      infiniteLoop,
+      listLength,
+      itemWidth,
+      contentWidth,
+      viewportWidth,
+      totalItems,
+    ],
+  );
+
+  const updateLitCenterDuringScroll = useCallback(
+    (scrollPosition, velocity) => {
+      if (isDraggingRef.current) {
+        applyVirtualCenter(
+          closestVirtualIndexForScroll(scrollPosition, false),
+        );
+        return;
+      }
+
+      if (velocity < MOMENTUM_COAST_FREEZE_VELOCITY) {
+        return;
+      }
+
+      applyVirtualCenter(
+        closestVirtualIndexForScroll(scrollPosition, true),
+      );
+    },
+    [applyVirtualCenter, closestVirtualIndexForScroll],
   );
 
   const handleScroll = useCallback(
     event => {
       const scrollPosition = event.nativeEvent.contentOffset.x;
+      const velocity = scrollVelocityPxPerMs(scrollPosition);
+      const now =
+        typeof globalThis.performance !== 'undefined' &&
+        typeof globalThis.performance.now === 'function'
+          ? globalThis.performance.now()
+          : Date.now();
+      previousScrollXRef.current = scrollPosition;
+      lastScrollSampleRef.current = {x: scrollPosition, t: now};
       lastScrollPositionRef.current = scrollPosition;
 
+      if (
+        isProgrammaticScrollRef.current ||
+        isSnappingRef.current
+      ) {
+        return;
+      }
+
+      updateLitCenterDuringScroll(scrollPosition, velocity);
+
+      if (!isDraggingRef.current) {
+        return;
+      }
+
       if (Platform.OS === 'android') {
-        const now =
-          typeof globalThis.performance !== 'undefined' &&
-          typeof globalThis.performance.now === 'function'
-            ? globalThis.performance.now()
-            : Date.now();
         if (now < androidScrollNextEmitRef.current) {
           return;
         }
-        androidScrollNextEmitRef.current = now + 120;
+        androidScrollNextEmitRef.current = now + 48;
       }
 
-      const closestVirtualIndex =
-        Platform.OS === 'web'
-          ? webCarouselClosestIndex(
-              scrollPosition,
-              itemWidth,
-              contentWidth,
-              viewportWidth,
-              totalItems,
-            )
-          : nativeCarouselClosestIndex(
-              scrollPosition,
-              itemWidth,
-              viewportWidth,
-              totalItems,
-            );
-
-      const applyVirtualCenter = nextIndex => {
-        setVirtualCenterIndex(prev => (nextIndex === prev ? prev : nextIndex));
-      };
-
-      if (Platform.OS === 'android') {
-        startTransition(() => applyVirtualCenter(closestVirtualIndex));
-      } else {
-        applyVirtualCenter(closestVirtualIndex);
-      }
+      repositionInfiniteLoopIfNeeded(scrollPosition);
     },
-    [viewportWidth, itemWidth, contentWidth, totalItems],
+    [
+      updateLitCenterDuringScroll,
+      repositionInfiniteLoopIfNeeded,
+      scrollVelocityPxPerMs,
+    ],
   );
 
   const handleScrollBeginDrag = useCallback(() => {
+    isDraggingRef.current = true;
     androidScrollNextEmitRef.current = 0;
+    previousScrollXRef.current = lastScrollPositionRef.current;
+    lastScrollSampleRef.current = {x: lastScrollPositionRef.current, t: 0};
   }, []);
 
   const handleScrollEndDrag = () => {
-    if (Platform.OS === 'android' || Platform.OS === 'web') {
+    isDraggingRef.current = false;
+    if (Platform.OS === 'web') {
       runSnapToCenter(lastScrollPositionRef.current);
     }
   };
 
   const handleMomentumScrollEnd = event => {
-    const scrollPosition = event.nativeEvent.contentOffset.x;
+    if (isProgrammaticScrollRef.current || isSnappingRef.current) {
+      return;
+    }
+    isDraggingRef.current = false;
+    let scrollPosition = event.nativeEvent.contentOffset.x;
+    if (repositionInfiniteLoopIfNeeded(scrollPosition)) {
+      scrollPosition = lastScrollPositionRef.current;
+    }
     runSnapToCenter(scrollPosition);
   };
 
@@ -377,10 +736,19 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
               viewportWidth,
             )
           : nativeCarouselSnapScrollX(clamped, itemWidth);
+      tickIfLogicalChange(virtualCenterIndexRef.current, clamped);
+      virtualCenterIndexRef.current = clamped;
       setVirtualCenterIndex(clamped);
       jumpToScrollX(scrollX, animated);
     },
-    [viewportWidth, itemWidth, contentWidth, totalItems, jumpToScrollX],
+    [
+      viewportWidth,
+      itemWidth,
+      contentWidth,
+      totalItems,
+      jumpToScrollX,
+      tickIfLogicalChange,
+    ],
   );
 
   const scrollToIndex = useCallback(
@@ -390,7 +758,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         return;
       }
       const clamped = Math.max(0, Math.min(logicalIndex, listLength - 1));
-      scrollToVirtualIndex(listLength + clamped, animated);
+      scrollToVirtualIndex(middleCopyStart(listLength) + clamped, animated);
     },
     [infiniteLoop, listLength, scrollToVirtualIndex],
   );
@@ -403,7 +771,6 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
     [scrollToIndex, emitCategorySelect],
   );
 
-  const snapInterval = itemWidth;
   const initialScrollX =
     viewportWidth > 0
       ? Platform.OS === 'web'
@@ -422,6 +789,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         return;
       }
       jumpToScrollX(initialScrollX, animated);
+      virtualCenterIndexRef.current = initialVirtualIndex;
       setVirtualCenterIndex(initialVirtualIndex);
       hasInitialScrollDone.current = true;
     },
@@ -443,6 +811,7 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
 
   useEffect(() => {
     hasInitialScrollDone.current = false;
+    virtualCenterIndexRef.current = initialVirtualIndex;
     setVirtualCenterIndex(initialVirtualIndex);
   }, [categoryIdsKey, initialVirtualIndex]);
 
@@ -488,23 +857,17 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
+        decelerationRate="normal"
         bounces={false}
         pagingEnabled={false}
         onScroll={handleScroll}
         onScrollBeginDrag={handleScrollBeginDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
-        scrollEventThrottle={Platform.OS === 'android' ? 128 : 16}
+        scrollEventThrottle={16}
         nestedScrollEnabled
         removeClippedSubviews={false}
-        {...(Platform.OS === 'web'
-          ? {style: styles.webCarouselScroll}
-          : {
-              snapToInterval: snapInterval,
-              snapToAlignment: 'start',
-              disableIntervalMomentum: true,
-            })}
+        {...(Platform.OS === 'web' ? {style: styles.webCarouselScroll} : {})}
         {...(Platform.OS === 'android' ? {overScrollMode: 'never'} : {})}>
         {extendedList.map((item, virtualIndex) => (
           <CarouselCategoryItem

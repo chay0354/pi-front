@@ -441,38 +441,70 @@ export default function App() {
     lastScreenRef.current = currentScreen;
   }, [currentScreen, resetFeedFilters]);
 
-  const openUserProfileFromFollowHubRow = useCallback(async row => {
-    if (!row?.id || row.is_self) return;
-    const sid = String(row.id).trim();
-    if (!sid) return;
-    setProfileReturnScreen(screenName.home);
-    try {
-      const res = await getListings({
-        status: 'published',
-        subscription_id: sid,
-      });
-      const list = Array.isArray(res?.listings) ? res.listings : [];
-      const top = pickTopViewedListingForProfile(list);
-      if (top) {
-        const merged = mergeHubRowIntoListingPayload(row, top);
-        const enriched = enrichListingForUserProfile(merged);
-        setProfileUser({...enriched, _fromTikTokPost: true});
-      } else {
-        setProfileUser({
-          subscription_id: sid,
-          owner_id: sid,
-          creator_name: row.name,
-          name: row.name,
-          creator_email: null,
-          creator_profile_image_url: row.image_url || null,
-          profile_picture_url: row.image_url || null,
+  const openUserProfileForSubscription = useCallback(
+    async (sid, meta = {}, returnScreen = screenName.home) => {
+      const subscriptionId = String(sid || '').trim();
+      if (!subscriptionId) return;
+      const row = {
+        id: subscriptionId,
+        name: meta.name || meta.display_name || '',
+        image_url: meta.image_url || meta.profile_image_url || null,
+      };
+      setProfileReturnScreen(returnScreen);
+      try {
+        const res = await getListings({
+          status: 'published',
+          subscription_id: subscriptionId,
         });
+        const list = Array.isArray(res?.listings) ? res.listings : [];
+        const top = pickTopViewedListingForProfile(list);
+        if (top) {
+          const merged = mergeHubRowIntoListingPayload(row, top);
+          const enriched = enrichListingForUserProfile(merged);
+          setProfileUser({...enriched, _fromTikTokPost: true});
+        } else {
+          setProfileUser({
+            subscription_id: subscriptionId,
+            owner_id: subscriptionId,
+            creator_name: row.name,
+            name: row.name,
+            creator_email: null,
+            creator_profile_image_url: row.image_url || null,
+            profile_picture_url: row.image_url || null,
+            profileImageUrl: row.image_url || null,
+            _fromTikTokPost: true,
+          });
+        }
+        setCurrentScreen(screenName.userProfile);
+      } catch (e) {
+        Alert.alert('', e?.message || 'שגיאה בטעינת הפרופיל');
       }
-      setCurrentScreen(screenName.userProfile);
-    } catch (e) {
-      Alert.alert('', e?.message || 'שגיאה בטעינת הפרופיל');
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const openUserProfileFromFollowHubRow = useCallback(
+    async row => {
+      if (!row?.id || row.is_self) return;
+      await openUserProfileForSubscription(row.id, row, screenName.home);
+    },
+    [openUserProfileForSubscription],
+  );
+
+  const openUserProfileFromStoryRing = useCallback(
+    async ring => {
+      if (!ring?.subscription_id) return;
+      await openUserProfileForSubscription(
+        ring.subscription_id,
+        {
+          display_name: ring.display_name,
+          profile_image_url: ring.profile_image_url,
+        },
+        screenName.home,
+      );
+    },
+    [openUserProfileForSubscription],
+  );
 
   const openCompanyReportFromProfile = useCallback(() => {
     const u = profileUser;
@@ -582,6 +614,7 @@ export default function App() {
                   setProfileUser(listing);
                   setCurrentScreen(screenName.userProfile);
                 }}
+                onOpenStoryProfile={openUserProfileFromStoryRing}
               />
             )}
             {currentScreen === screenName.tikTokFeed && (

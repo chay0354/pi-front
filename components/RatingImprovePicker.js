@@ -1,19 +1,26 @@
-import React, {useCallback} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {View, Pressable, StyleSheet, Text, Platform} from 'react-native';
 import {SvgXml} from '../utils/svgXml';
 import {FIGMA_RATING_STARS} from '../assets/improve/figmaRatingStarSvgs';
 
 /**
- * 1:1 with Figma node 8:78507 — five discrete star/rating options (1…5).
- * Tile: #2B2A39, 12px radius, 10px padding. Star art via SvgXml (native-safe).
+ * Figma node 8:78507 — five discrete star/rating options (1…5).
+ * Scales down on narrow containers so the row stays on screen.
  */
-const STAR_SIZE = 34.892;
-const STAR_SIZE_5 = 50.892;
-const STAR5_OFFSET = (STAR_SIZE - STAR_SIZE_5) / 2;
-const TILE_PAD = 10;
-const RADIUS = 12;
-const GAP = 24;
+const BASE_STAR_SIZE = 34.892;
+const BASE_STAR_SIZE_5 = 50.892;
+const BASE_TILE_PAD = 10;
+const BASE_RADIUS = 12;
+const BASE_GAP = 24;
+const BASE_NUM_SIZE = 20;
 const NUM_COLOR = '#1E1D27';
+
+const BASE_TILE_WIDTH = BASE_STAR_SIZE + BASE_TILE_PAD * 2;
+const BASE_ROW_WIDTH = BASE_TILE_WIDTH * 5 + BASE_GAP * 4;
+
+function scaleDim(value, scale) {
+  return Math.max(1, Math.round(value * scale * 1000) / 1000);
+}
 
 /**
  * @param {number} value 0 = no selection, 1…5 = selected
@@ -21,6 +28,31 @@ const NUM_COLOR = '#1E1D27';
  */
 const RatingImprovePicker = ({value = 0, onChange, style}) => {
   const v = value >= 0 && value <= 5 ? value : 0;
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const scale = useMemo(() => {
+    if (containerWidth <= 0) return 1;
+    return Math.min(1, containerWidth / BASE_ROW_WIDTH);
+  }, [containerWidth]);
+
+  const dims = useMemo(() => {
+    const starSize = scaleDim(BASE_STAR_SIZE, scale);
+    const starSize5 = scaleDim(BASE_STAR_SIZE_5, scale);
+    const tilePad = scaleDim(BASE_TILE_PAD, scale);
+    const gap = scaleDim(BASE_GAP, scale);
+    const radius = scaleDim(BASE_RADIUS, scale);
+    const numSize = scaleDim(BASE_NUM_SIZE, scale);
+    const star5Offset = (starSize - starSize5) / 2;
+    return {
+      starSize,
+      starSize5,
+      tilePad,
+      gap,
+      radius,
+      numSize,
+      star5Offset,
+    };
+  }, [scale]);
 
   const onPick = useCallback(
     n => {
@@ -29,9 +61,19 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
     [onChange],
   );
 
+  const onWrapLayout = useCallback(event => {
+    const w = event?.nativeEvent?.layout?.width;
+    if (w > 0) setContainerWidth(w);
+  }, []);
+
   return (
-    <View style={[styles.wrap, style]}>
-      <View style={styles.row} accessible={false}>
+    <View
+      style={[styles.wrap, style]}
+      onLayout={onWrapLayout}
+      collapsable={false}>
+      <View
+        style={[styles.row, {gap: dims.gap, maxWidth: BASE_ROW_WIDTH * scale}]}
+        accessible={false}>
         {[1, 2, 3, 4, 5].map(n => {
           const selected = v === n;
           const isFifth = n === 5;
@@ -42,6 +84,10 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
               onPress={() => onPick(n)}
               style={({pressed}) => [
                 styles.tile,
+                {
+                  padding: dims.tilePad,
+                  borderRadius: dims.radius,
+                },
                 isFifth && styles.tileFifth,
                 selected && styles.tileSelected,
                 pressed && styles.tilePressed,
@@ -55,25 +101,48 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
                     : `בחר דירוג ${n} מתוך 5`
               }>
               <View
-                style={[styles.starInner, isFifth && styles.starInnerFifthArt]}>
+                style={[
+                  styles.starInner,
+                  {
+                    width: dims.starSize,
+                    height: dims.starSize,
+                  },
+                  isFifth && styles.starInnerFifthArt,
+                ]}>
                 {isFifth ? (
-                  <View style={styles.star5Layer} pointerEvents="none">
+                  <View
+                    style={[
+                      styles.star5Layer,
+                      {
+                        left: dims.star5Offset,
+                        top: dims.star5Offset,
+                        width: dims.starSize5,
+                        height: dims.starSize5,
+                      },
+                    ]}
+                    pointerEvents="none">
                     <SvgXml
                       xml={starXml}
-                      width={STAR_SIZE_5}
-                      height={STAR_SIZE_5}
+                      width={dims.starSize5}
+                      height={dims.starSize5}
                     />
                   </View>
                 ) : (
                   <SvgXml
                     xml={starXml}
-                    width={STAR_SIZE}
-                    height={STAR_SIZE}
+                    width={dims.starSize}
+                    height={dims.starSize}
                     style={styles.starSvg}
                   />
                 )}
                 <View style={styles.starNumberWrap} pointerEvents="none">
-                  <Text style={styles.starNumber}>{String(n)}</Text>
+                  <Text
+                    style={[
+                      styles.starNumber,
+                      {fontSize: dims.numSize, lineHeight: dims.numSize},
+                    ]}>
+                    {String(n)}
+                  </Text>
                 </View>
               </View>
             </Pressable>
@@ -88,7 +157,7 @@ const styles = StyleSheet.create({
   wrap: {
     width: '100%',
     alignSelf: 'stretch',
-    overflow: 'visible',
+    overflow: 'hidden',
   },
   row: {
     width: '100%',
@@ -96,14 +165,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexWrap: 'nowrap',
-    gap: GAP,
-    overflow: 'visible',
+    alignSelf: 'center',
+    overflow: 'hidden',
     direction: 'ltr',
   },
   tile: {
     backgroundColor: '#2B2A39',
-    padding: TILE_PAD,
-    borderRadius: RADIUS,
     borderWidth: 0,
   },
   tileFifth: {
@@ -118,8 +185,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   starInner: {
-    width: STAR_SIZE,
-    height: STAR_SIZE,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -129,10 +194,6 @@ const styles = StyleSheet.create({
   },
   star5Layer: {
     position: 'absolute',
-    left: STAR5_OFFSET,
-    top: STAR5_OFFSET,
-    width: STAR_SIZE_5,
-    height: STAR_SIZE_5,
     zIndex: 0,
     ...Platform.select({web: {userSelect: 'none'}, default: {}}),
   },
@@ -149,8 +210,6 @@ const styles = StyleSheet.create({
   },
   starNumber: {
     color: NUM_COLOR,
-    fontSize: 20,
-    lineHeight: 20,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     letterSpacing: 0.2,

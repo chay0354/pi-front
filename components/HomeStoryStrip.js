@@ -4,15 +4,16 @@ import {
   FlatList,
   TouchableOpacity,
   Text,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import ProfileAvatar, {
+  PROFILE_RING_COLORS,
+} from './ProfileAvatar';
 
-const AVATAR = 66;
-const OUTER = 78;
-const ITEM_SPACING = 17;
+const OUTER = 68;
+const ITEM_SPACING = 15;
 
 const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
   const onPress = useCallback(() => onRingPress(ring), [onRingPress, ring]);
@@ -23,20 +24,11 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
       onPress={onPress}
       activeOpacity={0.85}
       accessibilityLabel={`סטוריז של ${ring.display_name || 'משתמש'}`}>
-      <View style={styles.storyRingOuter}>
-        {ring.profile_image_url ? (
-          <View style={styles.avatarClip}>
-            <Image
-              source={{uri: ring.profile_image_url}}
-              style={styles.avatarImage}
-              resizeMode="cover"
-              fadeDuration={0}
-            />
-          </View>
-        ) : (
-          <View style={[styles.avatarClip, styles.avatarPlaceholder]} />
-        )}
-      </View>
+      <ProfileAvatar
+        uri={ring.profile_image_url}
+        name={ring.display_name}
+        size={OUTER}
+      />
       <Text style={styles.label} numberOfLines={1}>
         {ring.display_name || 'משתמש'}
       </Text>
@@ -45,7 +37,7 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
 });
 
 /**
- * Story rings (yellow border): profile video, story slides, and video posts; tap opens viewer.
+ * Story rings: same gold gradient ring as ProfileAvatar; tap opens viewer.
  */
 const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
   const renderItem = useCallback(
@@ -58,7 +50,7 @@ const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
   if (loading && rings.length === 0) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator color="#FFC40A" />
+        <ActivityIndicator color={PROFILE_RING_COLORS[1]} />
       </View>
     );
   }
@@ -94,38 +86,11 @@ const styles = StyleSheet.create({
   item: {
     width: OUTER,
     alignItems: 'center',
-    gap: 8,
-  },
-  storyRingOuter: {
-    width: OUTER,
-    height: OUTER,
-    borderRadius: OUTER / 2,
-    borderWidth: 3,
-    borderColor: '#FFC40A',
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarClip: {
-    width: AVATAR,
-    height: AVATAR,
-    borderRadius: AVATAR / 2,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  avatarImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: AVATAR,
-    height: AVATAR,
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#3d3c48',
+    gap: 6,
   },
   label: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
     width: OUTER + 8,
     fontFamily: 'Rubik-Regular',

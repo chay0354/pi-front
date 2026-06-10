@@ -71,6 +71,38 @@ export function buildListingSearchText(listing) {
 }
 
 /**
+ * Compact whitelisted fields sent to the Pi AI (Gemini) search endpoint.
+ * Keeps the payload/prompt small: only fields useful for matching, clipped.
+ * @param {Record<string, unknown>} listing
+ * @returns {Record<string, string>}
+ */
+export function buildListingAiSummary(listing) {
+  const out = {id: listing.id};
+  const set = (key, value, max) => {
+    if (value == null || value === '') return;
+    const s = String(value).trim();
+    if (s) out[key] = s.length > max ? s.slice(0, max) : s;
+  };
+  set('purpose', listing.purpose, 30);
+  set('category', listing.category, 10);
+  set('property_type', listing.property_type, 40);
+  set('apartment_type', listing.apartment_type, 40);
+  set(
+    'address',
+    listing.address || listing.search_address || listing.land_address,
+    120,
+  );
+  set('project_name', listing.project_name, 80);
+  set('price', listing.price, 20);
+  set('budget', listing.budget, 20);
+  set('rooms', listing.rooms, 10);
+  set('area', listing.area, 12);
+  set('floor', listing.floor, 10);
+  set('description', listing.description, 240);
+  return out;
+}
+
+/**
  * @param {string} q
  * @returns {string[]}
  */

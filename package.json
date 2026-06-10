@@ -8,6 +8,7 @@
     "android": "expo run:android",
     "android:device": "expo run:android",
     "android:emu": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-emu.ps1",
+    "android:emu:he": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-hebrew-emulator.ps1",
     "android:device": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-android-device.ps1",
     "android:api": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-emulator-api.ps1",
     "test:emu-registration": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/simulate-emulator-registration.ps1",

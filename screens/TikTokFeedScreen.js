@@ -2,6 +2,7 @@ import React, {
   useRef,
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
 } from 'react';
@@ -22,7 +23,7 @@ import {
   useWindowDimensions,
   InteractionManager,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   loadTikTokLikedState,
@@ -36,6 +37,18 @@ import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
 import FeedBottomBar from '../components/FeedBottomBar';
+import ListingGridCardFigma from '../components/ListingGridCardFigma';
+import {
+  FEED_BOTTOM_BAR_CONTENT_HEIGHT,
+  FEED_IMAGE_INDICATOR_TOP_GAP,
+  FEED_OVERLAY_ABOVE_BAR_GAP,
+  feedBottomBarHeight,
+} from '../utils/feedLayout';
+import CreateAdSheet, {
+  CreateAdSheetDivider,
+  CreateAdSheetRow,
+  CREATE_SHEET_POST_ICON,
+} from '../components/CreateAdSheet';
 import {SvgXml} from '../utils/svgXml';
 import {getCachedSvgXml} from '../utils/svgIconCache';
 import {Colors} from '../constants/styles';
@@ -68,7 +81,12 @@ import {
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
-import {flexEnd, flexStart, forceLtrStyle} from '../utils/rtlLayout';
+import {
+  flexEnd,
+  flexStart,
+  forceLtrStyle,
+  hebrewTextAlign,
+} from '../utils/rtlLayout';
 
 import {
   formatCompanyApartmentsLabel,
@@ -76,10 +94,13 @@ import {
   formatCompanyFloorsLabel,
   displayPiRatingFromReviews,
   brokerPiRatingFromListing,
+  shouldShowListingPiRating,
+  isFollowableListing,
 } from '../utils/listingGridCardFigma';
 import {
   categoryImages,
   companySheetAdListingCategoryIds,
+  getCreateSheetListingIcon,
   regularUserAdListingCategoryIds,
   subscriptionTypes,
 } from '../utils/constant';
@@ -839,21 +860,8 @@ const COMMERCIAL_SIDEBAR_FILTERS = [
 ];
 
 // שותפים (category 3): dedicated sidebar — icons from assets/partners-filters
-// פוסטים + נותני שירות first (stacked, tight gap) so they sit together under the profile.
+// פוסטים + נותני שירות last (stacked, tight gap) so they sit together at the bottom.
 const PARTNERS_SIDEBAR_FILTERS = [
-  {
-    id: 'partners_posts',
-    label: 'פוסטים',
-    feed_post: true,
-    icon: require('../assets/partners-filters/posts.png'),
-  },
-  {
-    id: 'partners_professional',
-    label: 'נותני שירות',
-    subscription_type: 'professional',
-    feed_post: true,
-    icon: require('../assets/partners-filters/profetional.png'),
-  },
   {
     id: 'partners_enter',
     label: 'מחפש להיכנס',
@@ -872,7 +880,24 @@ const PARTNERS_SIDEBAR_FILTERS = [
     search_purpose: 'partner',
     icon: require('../assets/partners-filters/looking-for-patner.png'),
   },
+  {
+    id: 'partners_posts',
+    label: 'פוסטים',
+    feed_post: true,
+    icon: require('../assets/partners-filters/posts.png'),
+  },
+  {
+    id: 'partners_professional',
+    label: 'נותני שירות',
+    subscription_type: 'professional',
+    feed_post: true,
+    icon: require('../assets/partners-filters/profetional.png'),
+  },
 ];
+/** שותפים chips are taller (2-line labels) and the פוסטים/נותני שירות pair uses a tighter gap. */
+const PARTNERS_SIDEBAR_CHIP_HEIGHT = 68;
+const PARTNERS_SIDEBAR_STACK_GAP = 20;
+const PARTNERS_SIDEBAR_TIGHT_PAIR_GAP = 6;
 
 // BnB (category 5): אופי האירוח + פוסטים — exact Figma icons (node 25:189715)
 const BNB_SIDEBAR_FILTERS = [
@@ -928,6 +953,13 @@ const BNB_SIDEBAR_FILTERS = [
 
 /** BnB TikTok: cap sidebar / overlay chip text so it truncates with "…" instead of overflowing. */
 const BNB_TIKTOK_LABEL_MAX_CHARS = 25;
+/** Keep bottom-left overlay copy clear of the right sidebar (heart / מכירה row unchanged). */
+const FEED_SIDEBAR_ZONE_PX = 88;
+const FEED_OVERLAY_LEFT_PX = 20;
+const FEED_OVERLAY_TEXT_MAX_WIDTH = Math.min(
+  366,
+  Dimensions.get('window').width - FEED_OVERLAY_LEFT_PX - FEED_SIDEBAR_ZONE_PX,
+);
 
 function truncateTikTokLabel(text, maxLen = BNB_TIKTOK_LABEL_MAX_CHARS) {
   const s = String(text ?? '').trim();
@@ -1134,21 +1166,58 @@ function buildListingsFetchCacheKey(category, sidebarFilter, topBarFilter, userI
 const FEED_IMAGE_PROPS =
   Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
 
+/** Auto-advance interval for multi-photo ad slideshows in the TikTok feed. */
+const SLIDESHOW_AUTO_ADVANCE_MS = 900;
+
+function isFeedPostVideo(video) {
+  if (!video) return false;
+  const type = String(
+    video.propertyType ||
+      video.propertyTypeRaw ||
+      video.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  return (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    video.feed_post === true ||
+    video.isTextOnlyPost === true ||
+    video.isPostEntry === true
+  );
+}
+
 const ImageSwiper = ({
   images,
   screenHeight,
   video,
   displayOption = 'slideshow',
-  indicatorTop = TOP_BAR_HEIGHT + 8,
+  isActivePage = true,
+  pauseAutoAdvance = false,
 }) => {
   const {width: winWidth} = useWindowDimensions();
   const pageWidth = Math.min(Math.max(1, winWidth), FEED_PAGE_MAX_WIDTH);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [erroredKeys, setErroredKeys] = useState(() => new Set());
   const scrollViewRef = useRef(null);
+  const loopSnapRef = useRef(false);
+  const autoSlideshow =
+    isActivePage &&
+    !pauseAutoAdvance &&
+    displayOption === 'slideshow' &&
+    images.length > 1 &&
+    !isFeedPostVideo(video);
+  // Extra clone of slide 0 at the end so last → first loops with a forward swipe.
+  const useLoopClone = autoSlideshow;
+  const slideshowSlides =
+    useLoopClone && images.length > 1
+      ? [...images, images[0]]
+      : images;
 
   useEffect(() => {
     setCurrentImageIndex(0);
+    loopSnapRef.current = false;
     setErroredKeys(new Set());
     if (scrollViewRef.current && displayOption === 'slideshow') {
       scrollViewRef.current.scrollTo({x: 0, animated: false});
@@ -1156,13 +1225,45 @@ const ImageSwiper = ({
   }, [images, displayOption, pageWidth]);
 
   useEffect(() => {
+    if (!autoSlideshow) return undefined;
+    const id = setInterval(() => {
+      setCurrentImageIndex(prev => {
+        if (prev >= images.length) return prev;
+        return prev + 1;
+      });
+    }, SLIDESHOW_AUTO_ADVANCE_MS);
+    return () => clearInterval(id);
+  }, [autoSlideshow, images.length]);
+
+  useEffect(() => {
     if (scrollViewRef.current && displayOption === 'slideshow') {
+      const snapWithoutAnim = loopSnapRef.current;
+      if (snapWithoutAnim) loopSnapRef.current = false;
       scrollViewRef.current.scrollTo({
         x: currentImageIndex * pageWidth,
-        animated: true,
+        animated: autoSlideshow && !snapWithoutAnim,
       });
     }
-  }, [currentImageIndex, displayOption, pageWidth]);
+  }, [currentImageIndex, displayOption, pageWidth, autoSlideshow]);
+
+  // After animating onto the cloned first slide, snap back to real slide 0.
+  // Also recovers when the index is past the last real slide (e.g. the
+  // slideshow was paused at the edge and the clone slide was removed), so the
+  // loop always continues instead of stalling.
+  useEffect(() => {
+    if (images.length < 2 || currentImageIndex < images.length) {
+      return undefined;
+    }
+    const snapTimer = setTimeout(
+      () => {
+        loopSnapRef.current = true;
+        scrollViewRef.current?.scrollTo({x: 0, animated: false});
+        setCurrentImageIndex(0);
+      },
+      useLoopClone ? 320 : 0,
+    );
+    return () => clearTimeout(snapTimer);
+  }, [useLoopClone, currentImageIndex, images.length]);
 
   const handleScroll = event => {
     if (displayOption === 'slideshow') {
@@ -1172,6 +1273,23 @@ const ImageSwiper = ({
       if (newIndex !== currentImageIndex) {
         setCurrentImageIndex(newIndex);
       }
+    }
+  };
+
+  const handleSlideshowScrollEnd = event => {
+    if (!useLoopClone) {
+      handleScroll(event);
+      return;
+    }
+    const idx = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
+    if (idx >= images.length) {
+      loopSnapRef.current = true;
+      scrollViewRef.current?.scrollTo({x: 0, animated: false});
+      setCurrentImageIndex(0);
+      return;
+    }
+    if (idx !== currentImageIndex) {
+      setCurrentImageIndex(idx);
     }
   };
 
@@ -1269,8 +1387,7 @@ const ImageSwiper = ({
     );
   }
 
-  // Slideshow view - swipe horizontally between images
-  // For single images, ensure they're centered and fully visible
+  // Slideshow view — multi-photo ads auto-advance; single image stays centered.
   const isSingleImage = images.length === 1;
 
   return (
@@ -1292,19 +1409,23 @@ const ImageSwiper = ({
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={handleScroll}
+        onScroll={autoSlideshow ? undefined : handleScroll}
+        onMomentumScrollEnd={
+          autoSlideshow ? handleSlideshowScrollEnd : undefined
+        }
         scrollEventThrottle={16}
         style={[styles.imageSwiper, forceLtrStyle]}
-        scrollEnabled={!isSingleImage} // Disable scrolling for single image
+        scrollEnabled={!isSingleImage && !autoSlideshow}
+        pointerEvents={autoSlideshow ? 'box-none' : 'auto'}
       >
-        {images.map((image, index) => {
+        {slideshowSlides.map((image, index) => {
           const uri = resolveImageUri(image);
           const slideKey = `slide-${index}`;
           const useFallback = !uri || erroredKeys.has(slideKey);
           const imageSource = useFallback ? fallbackCategoryImage : {uri};
           return (
             <View
-              key={index}
+              key={`${slideKey}-${uri || 'empty'}`}
               style={[
                 styles.swiperImageContainer,
                 {width: pageWidth},
@@ -1325,22 +1446,57 @@ const ImageSwiper = ({
           );
         })}
       </ScrollView>
-      {images.length > 1 && (
-        <View style={[styles.imageIndicator, {top: indicatorTop}]}>
+      {images.length > 1 ? (
+        <View
+          style={[
+            styles.imageIndicator,
+            {top: FEED_IMAGE_INDICATOR_TOP_GAP},
+          ]}>
           {images.map((_, index) => (
             <View
               key={index}
               style={[
                 styles.indicatorDot,
-                index === currentImageIndex && styles.indicatorDotActive,
+                index === currentImageIndex % images.length &&
+                  styles.indicatorDotActive,
               ]}
             />
           ))}
         </View>
-      )}
+      ) : null}
     </View>
   );
 };
+
+/** Title + subtitle for the listing row in the TikTok “צור מודעה” bottom sheet. */
+function getListingSheetCopy(selectedCategory) {
+  const cat = parseInt(String(selectedCategory ?? '').trim(), 10);
+  if (cat === 10) {
+    return {
+      title: 'פרויקט',
+      subtitle: 'פרסם נכס למכירה או השכרה',
+    };
+  }
+  if (cat === 3) {
+    return {
+      title: 'פרסם מודעה',
+      subtitle: 'צור מודעה כדי להיכנס, להכניס או למצוא שותף',
+    };
+  }
+  if (cat === 7) {
+    return {title: 'קרקע', subtitle: 'פרסם קרקע למכירה או השכרה'};
+  }
+  if (cat === 8) {
+    return {
+      title: 'נכס מסחרי',
+      subtitle: 'פרסם נכס מסחרי למכירה או השכרה',
+    };
+  }
+  if (cat === 4 || cat === 6 || cat === 12) {
+    return {title: 'נכס', subtitle: 'פרסם נכס למכירה או השכרה'};
+  }
+  return {title: 'משרד', subtitle: 'פרסם משרד למכירה או השכרה'};
+}
 
 /**
  * TikTokFeedScreen Component
@@ -1376,8 +1532,11 @@ const TikTokFeedScreen = ({
   onUserSearchBackToDefaultFeed = null,
 }) => {
   const insets = useSafeAreaInsets();
+  /** Actual container frame (full screen edge-to-edge); reliable on Android unlike Dimensions. */
+  const safeAreaFrame = useSafeAreaFrame();
   const topBarHeight = TOP_BAR_HEIGHT + insets.top;
-  const bottomBarHeight = BOTTOM_BAR_HEIGHT + insets.bottom;
+  /** Stable from first render (insets known immediately) — matches FeedBottomBar height exactly. */
+  const bottomBarHeight = feedBottomBarHeight(insets.bottom);
   const feedListRef = useRef(null);
   const listingsFetchCacheRef = useRef(new Map());
   const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
@@ -1395,6 +1554,8 @@ const TikTokFeedScreen = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarPanActiveRef = useRef(false);
   const sidebarPanDidDragRef = useRef(false);
+  /** Pause feed photo auto-slideshow while the sidebar intro/drag runs. */
+  const [sidebarSlideshowPaused, setSidebarSlideshowPaused] = useState(false);
   /** True while finger is on profile / follow + — blocks sidebar pan from stealing the tap. */
   const sidebarBlockPanRef = useRef(false);
   const sidebarFeedScrollLockedRef = useRef(false);
@@ -1403,9 +1564,18 @@ const TikTokFeedScreen = ({
   const flushSidebarPendingTapRef = useRef(() => {});
   const SIDEBAR_INTRO_MAX_DOWN_FALLBACK = 420;
   /** Final / stage 3: profile + this many top filter chips visible. */
-  const SIDEBAR_TOP_VISIBLE_FILTER_COUNT = 2;
+  const SIDEBAR_TOP_VISIBLE_FILTER_COUNT = 4;
   const SIDEBAR_PROFILE_INTRO_NUDGE_UP = 16;
   const SIDEBAR_FILTER_HEIGHT_FALLBACK = 64;
+  /**
+   * Fixed sidebar geometry (must mirror the StyleSheet values below). These let
+   * the intro animation run deterministically — same on every device, ready on
+   * first render with no async layout measurement.
+   */
+  const SIDEBAR_PROFILE_WRAP_HEIGHT = 70; // styles.sidebarProfileWrap.height
+  const SIDEBAR_PROFILE_TO_FILTERS_GAP = 20; // styles.sidebarProfileWrap.marginBottom
+  const SIDEBAR_FILTER_CHIP_HEIGHT = 56; // styles.sidebarFilterBtn.minHeight
+  const SIDEBAR_FILTER_GAP = 20; // styles.sidebarFiltersStack.gap
   const sidebarDragY = useRef(new Animated.Value(0)).current;
   const sidebarDragOffset = useRef(0); // keep in sync for pan responder
   const [sidebarViewportHeight, setSidebarViewportHeight] = useState(0);
@@ -1447,6 +1617,8 @@ const TikTokFeedScreen = ({
   /** Recent user searches loaded from the DB for the "אחרונים" list when no query is entered. */
   const [recentSearches, setRecentSearches] = useState([]);
   const [userRatingByProfileId, setUserRatingByProfileId] = useState({});
+  /** List filter: `subscription_id` -> Pi display (same as Pi AI grid cards). */
+  const [listPiDisplayBySubId, setListPiDisplayBySubId] = useState({});
   /** `targetId` -> true when viewer and target follow each other (for user-search row gold). */
   /** Avoid duplicate getReviews for the same profile id in one session. */
   const userRatingPreloadedIdsRef = useRef(new Set());
@@ -1494,8 +1666,17 @@ const TikTokFeedScreen = ({
 
   const screenHeight = dimensions.height;
   const screenWidth = dimensions.width;
-  const feedPageHeight = Math.max(1, screenHeight);
-
+  /** Use the safe-area frame height (true container height) so the page bottom aligns to the bar. */
+  const containerHeight =
+    safeAreaFrame.height > 0 ? safeAreaFrame.height : screenHeight;
+  const feedPageHeight = Math.max(
+    1,
+    containerHeight - topBarHeight - bottomBarHeight,
+  );
+  /** Chrome sits above the bottom edge of the feed band (already above the bottom bar). */
+  const feedChromeBottom = FEED_OVERLAY_ABOVE_BAR_GAP;
+  /** Sidebar intro clip — same band as chrome (page minus bottom bar reserve). */
+  const sidebarClipHeight = Math.max(1, feedPageHeight - feedChromeBottom);
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
@@ -1566,103 +1747,96 @@ const TikTokFeedScreen = ({
     Math.max(0, sidebarFilterCount - 1),
   );
   const topTwoFilterLayout = sidebarFilterLayouts[topTwoFilterIndex];
-  /** Hold before intro: only the profile avatar is visible in the clip. */
-  const sidebarIntroProfileOnlyDown = useMemo(() => {
-    if (sidebarViewportHeight <= 0) {
-      return SIDEBAR_INTRO_MAX_DOWN_FALLBACK;
-    }
-    if (Number.isFinite(firstFilterTop) && firstFilterTop > 0) {
-      return Math.max(0, sidebarViewportHeight - firstFilterTop);
-    }
-    return Math.max(0, sidebarViewportHeight - sidebarProfileHeight);
-  }, [sidebarViewportHeight, sidebarProfileHeight, firstFilterTop]);
-  const sidebarIntroProfileOnlyHold = useMemo(
-    () =>
-      Math.max(0, sidebarIntroProfileOnlyDown - SIDEBAR_PROFILE_INTRO_NUDGE_UP),
-    [sidebarIntroProfileOnlyDown],
-  );
   /**
-   * Stage 2: anchor the LAST filter chip flush with the viewport bottom (no
-   * gap below it, profile floats in mid-viewport above the chips).
-   *
-   * translateY here is positive-down, matching the other two intro stages:
-   * `T = viewportHeight - lastBottom` pushes the content down just enough so
-   * that the last chip's bottom edge sits on the viewport bottom. If the
-   * content is taller than the viewport we cannot translate negatively
-   * (clamped at 0), so we top-align and accept that the last chip will be
-   * partially clipped — better than the previous behaviour which over-shifted
-   * downwards and hid even more of the bottom chip.
+   * Deterministic sidebar geometry (in px). These mirror the fixed style values
+   * (`sidebarProfileWrap`, `sidebarFiltersStack`, `sidebarFilterBtn`) so the
+   * intro animation is byte-for-byte identical on every device and is ready on
+   * the very first render — no waiting for async `onLayout` measurements.
    */
-  const sidebarIntroAllIconsDown = useMemo(() => {
-    if (sidebarViewportHeight <= 0) {
-      return 0;
-    }
-    let lastBottom = 0;
-    if (
-      lastFilterLayout &&
-      Number.isFinite(lastFilterLayout.y) &&
-      Number.isFinite(lastFilterLayout.height)
-    ) {
-      lastBottom = lastFilterLayout.y + lastFilterLayout.height;
-    } else {
-      const safeFilterHeight =
-        sidebarFilterHeight > 0
-          ? sidebarFilterHeight
-          : SIDEBAR_FILTER_HEIGHT_FALLBACK;
-      lastBottom =
-        sidebarProfileHeight + sidebarFilterCount * safeFilterHeight;
-    }
-    return Math.max(0, sidebarViewportHeight - lastBottom);
-  }, [
-    sidebarViewportHeight,
-    sidebarProfileHeight,
-    sidebarFilterCount,
-    sidebarFilterHeight,
-    lastFilterLayout,
-  ]);
-  /** Stage 3 / resting: profile + top two chips — clip everything below 2nd filter. */
-  const sidebarIntroTopTwoOnlyDown = useMemo(() => {
-    if (sidebarViewportHeight <= 0 || sidebarFilterCount === 0) {
-      return 0;
-    }
-    if (
-      topTwoFilterLayout &&
-      Number.isFinite(topTwoFilterLayout.y) &&
-      Number.isFinite(topTwoFilterLayout.height)
-    ) {
-      const topTwoBottom = topTwoFilterLayout.y + topTwoFilterLayout.height;
-      return Math.max(0, sidebarViewportHeight - topTwoBottom);
-    }
-    const safeFilterHeight =
-      sidebarFilterHeight > 0
-        ? sidebarFilterHeight
-        : SIDEBAR_FILTER_HEIGHT_FALLBACK;
-    const visibleFilterCount = Math.min(
-      SIDEBAR_TOP_VISIBLE_FILTER_COUNT,
-      sidebarFilterCount,
-    );
-    const estimatedTopTwoBottom =
-      sidebarProfileHeight + visibleFilterCount * safeFilterHeight;
-    return Math.max(0, sidebarViewportHeight - estimatedTopTwoBottom);
-  }, [
-    sidebarViewportHeight,
-    sidebarFilterCount,
-    sidebarFilterHeight,
-    sidebarProfileHeight,
-    topTwoFilterLayout,
-  ]);
-  const sidebarDragMaxDown = Math.max(
-    sidebarIntroProfileOnlyDown,
-    sidebarIntroAllIconsDown,
-    sidebarIntroTopTwoOnlyDown,
+  const sidebarFilterBottom = useCallback(
+    index => {
+      const profileBlock =
+        SIDEBAR_PROFILE_WRAP_HEIGHT + SIDEBAR_PROFILE_TO_FILTERS_GAP;
+      if (isPartnersCategory) {
+        const layout = sidebarFilterLayouts[index];
+        if (
+          layout &&
+          Number.isFinite(layout.y) &&
+          Number.isFinite(layout.height)
+        ) {
+          return profileBlock + layout.y + layout.height;
+        }
+        let top = profileBlock;
+        for (let i = 0; i < index; i++) {
+          top += PARTNERS_SIDEBAR_CHIP_HEIGHT;
+          top +=
+            PARTNERS_SIDEBAR_FILTERS[i]?.id === 'partners_posts'
+              ? PARTNERS_SIDEBAR_TIGHT_PAIR_GAP
+              : PARTNERS_SIDEBAR_STACK_GAP;
+        }
+        return top + PARTNERS_SIDEBAR_CHIP_HEIGHT;
+      }
+      const filterTop =
+        profileBlock + index * (SIDEBAR_FILTER_CHIP_HEIGHT + SIDEBAR_FILTER_GAP);
+      return filterTop + SIDEBAR_FILTER_CHIP_HEIGHT;
+    },
+    [isPartnersCategory, sidebarFilterLayouts],
   );
-  const isSidebarProfileHoldReady =
-    sidebarViewportHeight > 0 && sidebarProfileHeight > 0;
+
+  // translateY is positive = content pushed DOWN inside the clip (content is
+  // top-aligned, so a larger value reveals what is higher up in the stack).
+
+  /** Stage 1 / hold: only the profile avatar shows; filters pushed below the clip. */
+  const sidebarIntroProfileOnlyDown = useMemo(
+    () => Math.max(0, sidebarClipHeight - SIDEBAR_PROFILE_WRAP_HEIGHT),
+    [sidebarClipHeight],
+  );
+  const sidebarIntroProfileOnlyHold = sidebarIntroProfileOnlyDown;
+
+  /** Stage 2: scroll up so the LAST filter chip sits flush at the clip bottom (all chips shown). */
+  const sidebarIntroAllIconsDown = useMemo(() => {
+    if (sidebarFilterCount === 0) return sidebarIntroProfileOnlyDown;
+    return sidebarClipHeight - sidebarFilterBottom(sidebarFilterCount - 1);
+  }, [
+    sidebarClipHeight,
+    sidebarFilterCount,
+    sidebarFilterBottom,
+    sidebarIntroProfileOnlyDown,
+  ]);
+
+  /** Stage 3 / resting: profile + top N chips; last visible chip flush at the clip bottom. */
+  const sidebarIntroTopTwoOnlyDown = useMemo(() => {
+    if (sidebarFilterCount === 0) return sidebarIntroProfileOnlyDown;
+    const idx =
+      Math.min(SIDEBAR_TOP_VISIBLE_FILTER_COUNT, sidebarFilterCount) - 1;
+    return sidebarClipHeight - sidebarFilterBottom(idx);
+  }, [
+    sidebarClipHeight,
+    sidebarFilterCount,
+    sidebarFilterBottom,
+    sidebarIntroProfileOnlyDown,
+  ]);
+
+  const sidebarDragMaxDown = sidebarIntroProfileOnlyDown;
+  const sidebarDragMaxUp = Math.min(0, sidebarIntroAllIconsDown);
+  const isSidebarProfileHoldReady = sidebarClipHeight > 0;
+  const partnersSidebarLayoutsReady = useMemo(() => {
+    if (!isPartnersCategory || sidebarFilterCount === 0) return true;
+    for (let i = 0; i < sidebarFilterCount; i++) {
+      const layout = sidebarFilterLayouts[i];
+      if (
+        !layout ||
+        !Number.isFinite(layout.y) ||
+        !Number.isFinite(layout.height) ||
+        layout.height <= 0
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }, [isPartnersCategory, sidebarFilterCount, sidebarFilterLayouts]);
   const isSidebarIntroAnimReady =
-    isSidebarProfileHoldReady &&
-    (sidebarFilterCount === 0 || Boolean(lastFilterLayout)) &&
-    (sidebarFilterCount < SIDEBAR_TOP_VISIBLE_FILTER_COUNT ||
-      Boolean(topTwoFilterLayout));
+    isSidebarProfileHoldReady && partnersSidebarLayoutsReady;
 
   const closeSheetAndOpenListing = opts => {
     setShowBottomSheet(false);
@@ -1752,11 +1926,12 @@ const TikTokFeedScreen = ({
   }, []);
 
   // Auto-scroll sidebar intro once when TikTok feed opens:
-  // Hold profile-only → all icons (last flush bottom) → profile + top 2 chips.
-  const SIDEBAR_INTRO_START_DELAY_MS = 900;
+  // Hold profile-only → all icons (last flush bottom) → profile + top 4 chips.
+  const SIDEBAR_INTRO_START_DELAY_MS = 1100;
   const sidebarIntroDone = useRef(false);
   const sidebarIntroHoldApplied = useRef(false);
   const sidebarIntroAnimStarted = useRef(false);
+  const sidebarIntroCategoryRef = useRef(categoryId);
   const sidebarIntroTargetsRef = useRef({
     profileHold: 0,
     allIcons: 0,
@@ -1764,16 +1939,38 @@ const TikTokFeedScreen = ({
   });
   const [sidebarIntroVisible, setSidebarIntroVisible] = useState(false);
   const [sidebarIntroFinished, setSidebarIntroFinished] = useState(false);
-  /** Intro uses JS driver so layout updates do not cancel native-driven animations. */
-  const sidebarAnimUseNativeDriver = false;
+  /**
+   * Intro uses the NATIVE driver so the scroll stays smooth even while the JS
+   * thread is busy on open (fetching listings, decoding images). Geometry is
+   * deterministic, so layout updates never need to interrupt this animation.
+   * Native + web are unsupported, so fall back to the JS driver on web.
+   */
+  const sidebarAnimUseNativeDriver = Platform.OS !== 'web';
 
   sidebarIntroTargetsRef.current = {
     profileHold: sidebarIntroProfileOnlyHold,
     allIcons: sidebarIntroAllIconsDown,
     topTwo: sidebarIntroTopTwoOnlyDown,
   };
+  const sidebarIntroFinishedRef = useRef(false);
+  sidebarIntroFinishedRef.current = sidebarIntroFinished;
 
-  useEffect(() => {
+  /**
+   * Snap a dragged sidebar back to its resting position. Called synchronously
+   * when the feed index changes so the newly-active page's animated sidebar
+   * matches the resting transform of static (non-active) pages — no jump.
+   */
+  const resetSidebarDragToResting = useCallback(() => {
+    if (!sidebarIntroFinishedRef.current) return;
+    const restingY = sidebarIntroTargetsRef.current.topTwo;
+    sidebarDragY.stopAnimation();
+    sidebarDragY.setValue(restingY);
+    sidebarDragOffset.current = restingY;
+  }, [sidebarDragY]);
+
+  // Layout effect (runs before paint) so the sidebar is already parked at the
+  // profile-only position on the first frame — no "loading" flash on open.
+  useLayoutEffect(() => {
     if (selectedTopBarFilter === 'list') {
       sidebarIntroDone.current = false;
       sidebarIntroHoldApplied.current = false;
@@ -1782,22 +1979,38 @@ const TikTokFeedScreen = ({
       setSidebarIntroFinished(false);
       return;
     }
+    if (sidebarIntroCategoryRef.current !== categoryId) {
+      sidebarIntroCategoryRef.current = categoryId;
+      sidebarIntroDone.current = false;
+      sidebarIntroHoldApplied.current = false;
+      sidebarIntroAnimStarted.current = false;
+      setSidebarIntroFinished(false);
+      setSidebarIntroVisible(false);
+    }
     if (sidebarIntroDone.current) {
+      sidebarDragY.setValue(sidebarIntroTopTwoOnlyDown);
+      sidebarDragOffset.current = sidebarIntroTopTwoOnlyDown;
       setSidebarIntroVisible(true);
       setSidebarIntroFinished(true);
       return;
     }
     if (!isSidebarProfileHoldReady || sidebarIntroHoldApplied.current) return;
     sidebarIntroHoldApplied.current = true;
-    sidebarDragY.setValue(sidebarIntroProfileOnlyHold);
-    sidebarDragOffset.current = sidebarIntroProfileOnlyHold;
+    sidebarDragY.setValue(sidebarIntroProfileOnlyDown);
+    sidebarDragOffset.current = sidebarIntroProfileOnlyDown;
     setSidebarIntroVisible(true);
   }, [
     selectedTopBarFilter,
     sidebarDragY,
-    sidebarIntroProfileOnlyHold,
+    sidebarIntroProfileOnlyDown,
+    sidebarIntroTopTwoOnlyDown,
     isSidebarProfileHoldReady,
+    categoryId,
   ]);
+
+  useEffect(() => {
+    setSidebarFilterLayouts({});
+  }, [categoryId, sidebarFilterCount]);
 
   useEffect(() => {
     if (selectedTopBarFilter === 'list') return;
@@ -1818,34 +2031,31 @@ const TikTokFeedScreen = ({
     const timer = setTimeout(() => {
       if (cancelled) return;
 
-      const measuredAllIcons = sidebarIntroTargetsRef.current.allIcons;
-      const measuredTopTwo = sidebarIntroTargetsRef.current.topTwo;
-      const measuredProfileHold = sidebarIntroTargetsRef.current.profileHold;
+      // Deterministic targets (ordered): profileOnly > topTwo > allIcons.
+      const yProfileOnly = sidebarIntroTargetsRef.current.profileHold;
+      const yAllIcons = sidebarIntroTargetsRef.current.allIcons;
+      const yTopTwo = sidebarIntroTargetsRef.current.topTwo;
 
-      // Higher translateY = scrolled down more. profileY > topTwoY > allIconsY.
-      const allIconsY = Math.max(0, measuredAllIcons);
-      const topTwoY = Math.max(0, measuredTopTwo);
-      const profileY = Math.max(0, measuredProfileHold);
+      sidebarDragY.setValue(yProfileOnly);
+      sidebarDragOffset.current = yProfileOnly;
 
-      sidebarDragY.setValue(profileY);
-      sidebarDragOffset.current = profileY;
-
+      // 1) Profile only → 2) scroll up (reveal all filters through the last) → 3) scroll down (profile + 4 filters).
       Animated.sequence([
         Animated.timing(sidebarDragY, {
-          toValue: allIconsY,
+          toValue: yAllIcons,
           duration: scrollDuration,
           useNativeDriver: sidebarAnimUseNativeDriver,
         }),
         Animated.delay(waitBetweenParts),
         Animated.timing(sidebarDragY, {
-          toValue: topTwoY,
+          toValue: yTopTwo,
           duration: scrollDuration,
           useNativeDriver: sidebarAnimUseNativeDriver,
         }),
       ]).start(({finished}) => {
         if (cancelled || !finished) return;
         sidebarIntroDone.current = true;
-        sidebarDragOffset.current = topTwoY;
+        sidebarDragOffset.current = yTopTwo;
         setSidebarIntroFinished(true);
       });
     }, SIDEBAR_INTRO_START_DELAY_MS);
@@ -1861,6 +2071,19 @@ const TikTokFeedScreen = ({
     sidebarAnimUseNativeDriver,
     isSidebarIntroAnimReady,
     sidebarIntroVisible,
+  ]);
+
+  /** Keep resting sidebar scroll aligned when viewport height changes (e.g. bottom bar resize). */
+  useEffect(() => {
+    if (selectedTopBarFilter === 'list' || !sidebarIntroFinished) return;
+    const restingY = sidebarIntroTopTwoOnlyDown;
+    sidebarDragY.setValue(restingY);
+    sidebarDragOffset.current = restingY;
+  }, [
+    selectedTopBarFilter,
+    sidebarIntroFinished,
+    sidebarIntroTopTwoOnlyDown,
+    sidebarDragY,
   ]);
 
   // Fetch listings from database (all users can see all published listings)
@@ -2471,6 +2694,7 @@ const TikTokFeedScreen = ({
                   ...new Set(
                     displayListings
                       .slice(0, 24)
+                      .filter(isFollowableListing)
                       .map(resolveListingFollowTargetId)
                       .filter(id => id && id !== viewerSubIdForPrefetch),
                   ),
@@ -3742,6 +3966,61 @@ const TikTokFeedScreen = ({
     ? uploadedVideos
     : [...uploadedVideos, ...(includeMockWhenNoCategory ? allMockVideos : [])];
 
+  const listModeListings = useMemo(
+    () => videos.filter(l => !isFeedPost(l)),
+    [videos],
+  );
+
+  useEffect(() => {
+    if (selectedTopBarFilter !== 'list') {
+      return;
+    }
+    if (!listModeListings.length) {
+      setListPiDisplayBySubId({});
+      return;
+    }
+    const subs = [
+      ...new Set(
+        listModeListings
+          .map(l => l?.subscription_id)
+          .filter(s => s != null && String(s).trim() !== ''),
+      ),
+    ];
+    if (subs.length === 0) {
+      setListPiDisplayBySubId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const parts = await Promise.all(
+        subs.map(async subId => {
+          const idKey = String(subId);
+          const listing =
+            listModeListings.find(
+              l =>
+                l?.subscription_id != null &&
+                String(l.subscription_id) === idKey,
+            ) || {subscription_id: subId};
+          try {
+            const {reviews} = await getReviews(idKey);
+            const v = displayPiRatingFromReviews(
+              Array.isArray(reviews) ? reviews : [],
+              listing,
+            );
+            return [idKey, v];
+          } catch {
+            return [idKey, brokerPiRatingFromListing(listing)];
+          }
+        }),
+      );
+      if (cancelled) return;
+      setListPiDisplayBySubId(Object.fromEntries(parts));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTopBarFilter, listModeListings]);
+
   // Record a view when user lands on a DB listing (once per listing per session)
   useEffect(() => {
     const item = videos[currentIndex];
@@ -3784,8 +4063,9 @@ const TikTokFeedScreen = ({
       if (nextIndex === currentIndexRef.current) return;
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
+      resetSidebarDragToResting();
     },
-    [feedPageHeight, videos.length],
+    [feedPageHeight, videos.length, resetSidebarDragToResting],
   );
 
   const scrollToIndex = useCallback(
@@ -3794,10 +4074,13 @@ const TikTokFeedScreen = ({
       if (!feedListRef.current || videos.length === 0) return;
       const targetY = clamped * feedPageHeight;
       feedListRef.current.scrollToOffset({offset: targetY, animated});
+      if (clamped !== currentIndexRef.current) {
+        resetSidebarDragToResting();
+      }
       currentIndexRef.current = clamped;
       setCurrentIndex(clamped);
     },
-    [videos.length, feedPageHeight],
+    [videos.length, feedPageHeight, resetSidebarDragToResting],
   );
 
   const handleNext = useCallback(() => {
@@ -3832,6 +4115,7 @@ const TikTokFeedScreen = ({
       scrollToIndex(videos.length - 1, false);
     }
   }, [videos.length, scrollToIndex]);
+
 
   const onFeedScroll = useCallback(
     event => {
@@ -3940,7 +4224,7 @@ const TikTokFeedScreen = ({
   // Max down equals the intro/profile-only stage.
   const SIDEBAR_DRAG_MAX_DOWN = sidebarDragMaxDown;
   // When all icons are visible (top), don't allow scrolling up past that
-  const SIDEBAR_DRAG_MAX_UP = 0;
+  const SIDEBAR_DRAG_MAX_UP = sidebarDragMaxUp;
 
   const lockFeedScrollForSidebar = useCallback(() => {
     if (videos.length === 0 || sidebarFeedScrollLockedRef.current) return;
@@ -3950,6 +4234,7 @@ const TikTokFeedScreen = ({
 
   const unlockFeedScrollForSidebar = useCallback(() => {
     sidebarPanActiveRef.current = false;
+    setSidebarSlideshowPaused(false);
     if (!sidebarFeedScrollLockedRef.current) {
       sidebarPanDidDragRef.current = false;
       return;
@@ -4005,6 +4290,7 @@ const TikTokFeedScreen = ({
         onPanResponderGrant: () => {
           sidebarPanActiveRef.current = true;
           sidebarPanDidDragRef.current = false;
+          setSidebarSlideshowPaused(true);
           lockFeedScrollForSidebar();
           sidebarDragY.stopAnimation(value => {
             const base = Number.isFinite(value)
@@ -4046,6 +4332,7 @@ const TikTokFeedScreen = ({
     [
       sidebarDragY,
       SIDEBAR_DRAG_MAX_DOWN,
+      SIDEBAR_DRAG_MAX_UP,
       lockFeedScrollForSidebar,
       unlockFeedScrollForSidebar,
     ],
@@ -4067,6 +4354,7 @@ const TikTokFeedScreen = ({
   const shouldShowFollowPlusForVideo = useCallback(
     video => {
       if (!video) return false;
+      if (!isFollowableListing(video)) return false;
       const targetSubId = resolveListingFollowTargetId(video);
       const targetEmail = video?.creator_email
         ? String(video.creator_email).trim().toLowerCase()
@@ -4182,6 +4470,7 @@ const TikTokFeedScreen = ({
     async video => {
       if (sidebarSendingFollow) return;
       if (!video) return;
+      if (!isFollowableListing(video)) return;
       if (!currentUser || !String(currentUser?.email || '').trim()) {
         if (typeof onOpenUserRegistration === 'function') {
           onOpenUserRegistration();
@@ -4705,6 +4994,7 @@ const TikTokFeedScreen = ({
       if (userRatingPreloadedIdsRef.current.has(profileId)) continue;
       userRatingPreloadedIdsRef.current.add(profileId);
       const listing = listingByTargetId[profileId] || {};
+      if (!shouldShowListingPiRating(listing)) continue;
       try {
         const res = await getReviews(profileId);
         const rows = Array.isArray(res?.reviews) ? res.reviews : [];
@@ -4726,8 +5016,14 @@ const TikTokFeedScreen = ({
         item?.listing?.owner_id ||
         null;
       if (!tid || typeof tid !== 'string' || tid.trim() === '') return;
+      const listing =
+        item?.listing ||
+        (item?.recentSubscriptionType
+          ? {subscription_type: item.recentSubscriptionType}
+          : null);
+      if (listing && !shouldShowListingPiRating(listing)) return;
       if (!byId.has(tid)) {
-        byId.set(tid, item?.listing || {pi_value: undefined});
+        byId.set(tid, item?.listing || {subscription_type: item.recentSubscriptionType});
       }
     });
     const targets = [...byId.keys()];
@@ -4780,23 +5076,25 @@ const TikTokFeedScreen = ({
     if (!Array.isArray(recentSearches) || recentSearches.length === 0) {
       return;
     }
-    const targets = [
-      ...new Set(
-        recentSearches
-          .map(r =>
+    const listingBy = Object.fromEntries(
+      recentSearches
+        .map(r => {
+          const id =
             r?.target_subscription_id != null
               ? String(r.target_subscription_id).trim()
-              : '',
-          )
-          .filter(s => s !== ''),
-      ),
-    ];
+              : '';
+          if (!id) return null;
+          return [
+            id,
+            {subscription_type: r.subscription_type, pi_value: undefined},
+          ];
+        })
+        .filter(Boolean),
+    );
+    const targets = Object.keys(listingBy);
     if (targets.length === 0) {
       return;
     }
-    const listingBy = Object.fromEntries(
-      targets.map(id => [id, {pi_value: undefined}]),
-    );
     void preloadUserRatingsForTargets(targets, listingBy);
   }, [showUserSearchPanel, recentSearches]);
 
@@ -4909,7 +5207,7 @@ const TikTokFeedScreen = ({
             <ProfileAvatar uri={pageProfileUrl} size={60} />
           </TouchableOpacity>
         )}
-        {isActivePage && shouldShowFollowPlusForVideo(video) ? (
+        {shouldShowFollowPlusForVideo(video) ? (
           <TouchableOpacity
             style={styles.sidebarFollowBadge}
             onPressIn={() => {
@@ -4926,6 +5224,7 @@ const TikTokFeedScreen = ({
           </TouchableOpacity>
         ) : null}
       </View>
+      <View style={styles.sidebarFiltersStack}>
       {sidebarFiltersForFeed.map((filter, filterIndex) => {
         const isSelected = selectedSidebarFilter === filter.id;
         const labelText = String(filter.label || '');
@@ -5010,8 +5309,6 @@ const TikTokFeedScreen = ({
               style={[
                 styles.sidebarFilterBtn,
                 partnersTightStack && styles.sidebarFilterBtnPartnersTight,
-                filterIndex === sidebarFiltersForFeed.length - 1 &&
-                  styles.sidebarFilterBtnLast,
               ]}
               onTouchStart={() =>
                 markSidebarPendingTap({type: 'filter', id: filter.id})
@@ -5027,8 +5324,6 @@ const TikTokFeedScreen = ({
             style={[
               styles.sidebarFilterBtn,
               partnersTightStack && styles.sidebarFilterBtnPartnersTight,
-              filterIndex === sidebarFiltersForFeed.length - 1 &&
-                styles.sidebarFilterBtnLast,
             ]}
             onPress={() => {
               setSelectedSidebarFilter(prev =>
@@ -5041,6 +5336,7 @@ const TikTokFeedScreen = ({
           </TouchableOpacity>
         );
       })}
+      </View>
     </>
   );
 
@@ -5049,7 +5345,7 @@ const TikTokFeedScreen = ({
     const pageProfileUrl = getUserProfileImageUrl(video);
     const staticSidebarY = sidebarIntroFinished
       ? sidebarIntroTopTwoOnlyDown
-      : sidebarIntroProfileOnlyHold;
+      : sidebarIntroProfileOnlyDown;
     if (isActivePage) {
       activeSidebarVideoRef.current = video;
     }
@@ -5058,9 +5354,8 @@ const TikTokFeedScreen = ({
       <View
         style={[
           styles.feedPageSidebar,
-          {bottom: BOTTOM_BAR_HEIGHT},
           styles.feedPageSidebarDrag,
-          sidebarCollapsed && isActivePage && {top: 360},
+          {bottom: feedChromeBottom},
         ]}
         pointerEvents={isActivePage ? 'auto' : 'none'}
         onTouchStart={isActivePage ? lockFeedScrollForSidebar : undefined}
@@ -5069,6 +5364,7 @@ const TikTokFeedScreen = ({
         <View
           style={[
             styles.sidebarImageWrap,
+            isActivePage && {height: sidebarClipHeight, flex: 0},
             sidebarCollapsed && isActivePage && styles.sidebarImageWrapCollapsed,
             isActivePage && !sidebarIntroVisible && styles.sidebarIntroHidden,
           ]}
@@ -5076,7 +5372,7 @@ const TikTokFeedScreen = ({
             isActivePage
               ? event => {
                   const h = event?.nativeEvent?.layout?.height;
-                  if (h > 0) setSidebarViewportHeight(h);
+                  if (h > 0) setSidebarViewportHeight(Math.round(h));
                 }
               : undefined
           }>
@@ -5107,7 +5403,7 @@ const TikTokFeedScreen = ({
     const o = getVideoOverlayMeta(video);
     return (
       <View
-        style={[styles.feedPageActions, {bottom: BOTTOM_BAR_HEIGHT}]}
+        style={[styles.feedPageActions, {bottom: feedChromeBottom}]}
         pointerEvents="box-none">
         {o.isCompanyLandListing ? (
           <View style={styles.brokerOverlayInfo} pointerEvents="box-none">
@@ -5128,7 +5424,11 @@ const TikTokFeedScreen = ({
                 <Text style={styles.brokerPurposeText}>{o.brokerPurposeText}</Text>
               </View>
             </View>
-            <Text style={styles.brokerPriceText} numberOfLines={1} pointerEvents="none">
+            <Text
+              style={styles.brokerPriceText}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              pointerEvents="none">
               {o.brokerPriceText}
             </Text>
             <View style={styles.brokerLocationRow} pointerEvents="box-none">
@@ -5141,6 +5441,7 @@ const TikTokFeedScreen = ({
               <Text
                 style={styles.brokerLocationText}
                 numberOfLines={2}
+                ellipsizeMode="tail"
                 pointerEvents="none">
                 {o.companyLandLocationText}
               </Text>
@@ -5171,6 +5472,7 @@ const TikTokFeedScreen = ({
               <Text
                 style={styles.companyAddressText}
                 numberOfLines={2}
+                ellipsizeMode="tail"
                 pointerEvents="none">
                 {o.companyPrimaryAddress}
                 {o.companySecondaryAddress ? `,\n${o.companySecondaryAddress}` : ''}
@@ -5295,7 +5597,11 @@ const TikTokFeedScreen = ({
               </View>
             </View>
             <View style={styles.bnbPriceRow} pointerEvents="box-none">
-              <Text style={styles.bnbPriceMainText} numberOfLines={1} pointerEvents="none">
+              <Text
+                style={styles.bnbPriceMainText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                pointerEvents="none">
                 {o.brokerPriceText}
               </Text>
               <View style={styles.bnbPriceDivider} pointerEvents="none" />
@@ -5321,6 +5627,7 @@ const TikTokFeedScreen = ({
               <Text
                 style={styles.brokerLocationText}
                 numberOfLines={1}
+                ellipsizeMode="tail"
                 pointerEvents="none">
                 {o.brokerLocationText}
               </Text>
@@ -5350,6 +5657,7 @@ const TikTokFeedScreen = ({
                 <Text
                   style={styles.partnersNameText}
                   numberOfLines={1}
+                  ellipsizeMode="tail"
                   pointerEvents="none">
                   {o.partnersDisplayName}
                 </Text>
@@ -5375,7 +5683,11 @@ const TikTokFeedScreen = ({
                 <Text style={styles.brokerPurposeText}>{o.brokerPurposeText}</Text>
               </View>
             </View>
-            <Text style={styles.brokerPriceText} numberOfLines={1} pointerEvents="none">
+            <Text
+              style={styles.brokerPriceText}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              pointerEvents="none">
               {o.brokerPriceText}
             </Text>
             <View style={styles.brokerLocationRow} pointerEvents="box-none">
@@ -5388,6 +5700,7 @@ const TikTokFeedScreen = ({
               <Text
                 style={styles.brokerLocationText}
                 numberOfLines={1}
+                ellipsizeMode="tail"
                 pointerEvents="none">
                 {o.brokerLocationText}
               </Text>
@@ -5426,7 +5739,11 @@ const TikTokFeedScreen = ({
             {!isPostVideo(video) &&
               (video?.category === 3 ? (
                 <View style={styles.locationContainer} pointerEvents="box-none">
-                  <Text style={styles.locationText} pointerEvents="none">
+                  <Text
+                    style={styles.locationText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    pointerEvents="none">
                     {video?.preferredApartmentType
                       ? `${video.preferredApartmentType}`
                       : ''}
@@ -5438,7 +5755,11 @@ const TikTokFeedScreen = ({
                 </View>
               ) : (
                 <View style={styles.locationContainer} pointerEvents="box-none">
-                  <Text style={styles.locationText} pointerEvents="none">
+                  <Text
+                    style={styles.locationText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    pointerEvents="none">
                     {video?.location || 'תל אביב, רוטשילד 54'}
                   </Text>
                   <Image
@@ -5562,7 +5883,10 @@ const TikTokFeedScreen = ({
               screenHeight={feedPageHeight}
               video={video}
               displayOption={displayMode}
-              indicatorTop={topBarHeight + 36}
+              isActivePage={isActiveFeedPage}
+              pauseAutoAdvance={
+                !sidebarIntroFinished || sidebarSlideshowPaused
+              }
             />
             {isPostWithOverlay ? (
               <View style={styles.postOverlayLtr} pointerEvents="none">
@@ -5900,12 +6224,26 @@ const TikTokFeedScreen = ({
                               </Text>
                               <View style={styles.userSearchMetaRow}>
                                 {(() => {
+                                  const searchListing =
+                                    item.listing ||
+                                    (item.recentSubscriptionType
+                                      ? {
+                                          subscription_type:
+                                            item.recentSubscriptionType,
+                                        }
+                                      : null);
+                                  const showSearchRating =
+                                    shouldShowListingPiRating(searchListing);
                                   const n = Number(
                                     effectiveTargetId
                                       ? userRatingByProfileId[effectiveTargetId]
                                       : NaN,
                                   );
-                                  if (!Number.isFinite(n) || n < 1) {
+                                  if (
+                                    !showSearchRating ||
+                                    !Number.isFinite(n) ||
+                                    n < 1
+                                  ) {
                                     return item.subtitle ? (
                                       <Text
                                         style={styles.userSearchMetaText}
@@ -6014,245 +6352,48 @@ const TikTokFeedScreen = ({
             style={styles.listScrollView}
             contentContainerStyle={[
               styles.listScrollContent,
-              feedIsEmpty && styles.listScrollContentEmpty,
+              styles.listScrollContentGrid,
+              listModeListings.length === 0 &&
+                !loadingListings &&
+                styles.listScrollContentEmpty,
             ]}
             showsVerticalScrollIndicator={false}
             scrollEventThrottle={16}>
-            {feedIsEmpty ? (
+            {loadingListings && listModeListings.length === 0 ? (
+              <View style={styles.listResultsLoadingWrap}>
+                <ActivityIndicator color={Colors.blue100} size="large" />
+              </View>
+            ) : listModeListings.length === 0 ? (
               <View style={styles.listEmptyInner}>
                 {renderEmptyCategoryBody()}
               </View>
             ) : (
-              videos
-                .filter(l => !isFeedPost(l))
-                .map((listing, index) => {
-                  const isCompanyListing =
-                    String(listing?.subscription_type || '').toLowerCase() ===
-                    'company';
-                  const isCompanyLandListing =
-                    isCompanyListing &&
-                    (Number(listing?.category) === 7 || isLandCategory);
-                  const gd =
-                    listing?.general_details &&
-                    typeof listing.general_details === 'object'
-                      ? listing.general_details
-                      : null;
-                  const companyBuildingCount =
-                    listing?.companyBuildingCount != null
-                      ? Number(listing.companyBuildingCount)
-                      : gd?.building_count != null
-                        ? Number(gd.building_count)
-                        : null;
-                  const companyFloorCount =
-                    listing?.companyFloorCount != null
-                      ? Number(listing.companyFloorCount)
-                      : gd?.floor_count != null
-                        ? Number(gd.floor_count)
-                        : null;
-                  const companyApartmentCount =
-                    listing?.companyApartmentCount != null
-                      ? Number(listing.companyApartmentCount)
-                      : gd?.apartment_count != null
-                        ? Number(gd.apartment_count)
-                        : null;
-                  // Build a clean images array for the swipeable carousel. Prefer `images` from the transformed listing;
-                  // fallback to single `image` field if that's all we have.
-                  const cardImages =
-                    Array.isArray(listing.images) && listing.images.length > 0
-                      ? listing.images
-                      : listing.image
-                        ? [
-                            typeof listing.image === 'number'
-                              ? listing.image
-                              : {uri: listing.image},
-                          ]
-                        : [];
-                  const listCardProfileUrl = getUserProfileImageUrl(listing);
-                  return (
-                    <TouchableOpacity
-                      key={listing.id}
-                      style={styles.listCard}
-                      onPress={() => {
-                        // Open the creator's profile with this listing highlighted
-                        if (typeof onOpenUserProfile === 'function') {
-                          onOpenUserProfile(listing);
-                        } else {
-                          setSelectedTopBarFilter(DEFAULT_TOP_BAR_FILTER);
-                          AsyncStorage.setItem(
-                            TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                            DEFAULT_TOP_BAR_FILTER,
-                          ).catch(() => {});
-                          setCurrentIndex(index);
-                        }
-                      }}
-                      activeOpacity={0.9}>
-                      <TouchableOpacity
-                        activeOpacity={0.95}
-                        onPress={e => {
-                          e?.stopPropagation?.();
-                          if (typeof onOpenUserProfile === 'function') {
-                            onOpenUserProfile(listing);
-                          }
-                        }}
-                        style={styles.listCardImageWrap}>
-                        <ListCardImages
-                          images={cardImages}
-                          width={Math.min(Dimensions.get('window').width, 414)}
-                          height={252}
-                        />
-                        <TouchableOpacity
-                          style={styles.listCardProfileBtn}
-                          onPress={e => {
-                            e?.stopPropagation?.();
-                            onOpenUserProfile?.(listing);
-                          }}
-                          activeOpacity={0.8}>
-                          <ProfileAvatar
-                            uri={listCardProfileUrl}
-                            name={listing.creator_name || 'משתמש'}
-                            size={60}
-                          />
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                      <View style={styles.listCardBody}>
-                        <View style={styles.listCardPurposeRow}>
-                          <TouchableOpacity
-                            onPress={() => toggleLiked(listing)}
-                            hitSlop={12}
-                            style={styles.listCardHeart}>
-                            {isItemLiked(listing) ? (
-                              <MaterialCommunityIcons
-                                name="heart"
-                                size={26}
-                                color="#FFC40A"
-                              />
-                            ) : (
-                              <Image
-                                source={require('../assets/liked-ads/like.png')}
-                                style={styles.listCardHeartIcon}
-                                resizeMode="contain"
-                              />
-                            )}
-                          </TouchableOpacity>
-                          {isCompanyLandListing ? (
-                            <View style={styles.listCardPurposeBadge}>
-                              <Text style={styles.listCardPurposeBadgeText}>
-                                {listing.purpose || 'למכירה'}
-                              </Text>
-                            </View>
-                          ) : isCompanyListing ? (
-                            listing.saleAtPresale ? (
-                              <Image
-                                source={require('../assets/pre-sale.png')}
-                                style={styles.listCardPreSaleBadge}
-                                resizeMode="contain"
-                              />
-                            ) : null
-                          ) : (
-                            <View style={styles.listCardPurposeBadge}>
-                              <Text style={styles.listCardPurposeBadgeText}>
-                                {listing.purpose || 'להשכרה'}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        {isCompanyLandListing ? (
-                          <>
-                            <Text
-                              style={styles.listCardLandPrice}
-                              numberOfLines={1}>
-                              {listing.price || '₪0'}
-                            </Text>
-                            <View style={styles.listCardLocationRow}>
-                              <Image
-                                source={require('../assets/liked-ads/location.png')}
-                                style={styles.listCardLocationIcon}
-                                resizeMode="contain"
-                              />
-                              <Text
-                                style={styles.listCardLocationText}
-                                numberOfLines={2}>
-                                {listing.location ||
-                                  listing.land_address ||
-                                  listing.address ||
-                                  'מיקום לא זמין'}
-                              </Text>
-                            </View>
-                          </>
-                        ) : (
-                          <Text
-                            style={styles.listCardAddress}
-                            numberOfLines={2}>
-                            {listing.address ||
-                              listing.location ||
-                              'תל אביב, שד׳ חן 90'}
-                          </Text>
-                        )}
-                        {isCompanyListing && !isCompanyLandListing ? (
-                          <View style={styles.listCardStatsRow}>
-                            <View style={styles.listCardStatItem}>
-                              <Text style={styles.listCardStatText}>
-                                {formatCompanyBuildingsLabel(
-                                  companyBuildingCount != null
-                                    ? companyBuildingCount
-                                    : 0,
-                                )}
-                              </Text>
-                              <Image
-                                source={require('../assets/building_icon.png')}
-                                style={styles.listCardStatIcon}
-                                resizeMode="contain"
-                              />
-                            </View>
-                            <View style={styles.listCardStatItem}>
-                              <Text style={styles.listCardStatText}>
-                                {formatCompanyFloorsLabel(
-                                  companyFloorCount != null
-                                    ? companyFloorCount
-                                    : 0,
-                                )}
-                              </Text>
-                              <Image
-                                source={require('../assets/floor_icon.png')}
-                                style={styles.listCardStatIcon}
-                                resizeMode="contain"
-                              />
-                            </View>
-                            <View style={styles.listCardStatItem}>
-                              <Text style={styles.listCardStatText}>
-                                {formatCompanyApartmentsLabel(
-                                  companyApartmentCount != null
-                                    ? companyApartmentCount
-                                    : 0,
-                                )}
-                              </Text>
-                              <Image
-                                source={require('../assets/apartment_icon.png')}
-                                style={styles.listCardStatIcon}
-                                resizeMode="contain"
-                              />
-                            </View>
-                          </View>
-                        ) : !isCompanyListing ? (
-                          <View style={styles.listCardLocationRow}>
-                            <Image
-                              source={require('../assets/liked-ads/location.png')}
-                              style={styles.listCardLocationIcon}
-                              resizeMode="contain"
-                            />
-                            <Text
-                              style={styles.listCardLocationText}
-                              numberOfLines={1}>
-                              {listing.location ||
-                                listing.address ||
-                                'תל אביב, רוטשילד 54'}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
+              listModeListings.map(listing => {
+                const subKey =
+                  listing?.subscription_id != null
+                    ? String(listing.subscription_id).trim()
+                    : '';
+                const displayPi =
+                  subKey !== '' && listPiDisplayBySubId[subKey] !== undefined
+                    ? listPiDisplayBySubId[subKey]
+                    : brokerPiRatingFromListing(listing);
+                const rowLiked =
+                  Boolean(currentUser?.id) && isItemLiked(listing);
+                return (
+                  <ListingGridCardFigma
+                    key={listing.id}
+                    listing={listing}
+                    onPress={() => {
+                      if (typeof onOpenUserProfile === 'function') {
+                        onOpenUserProfile(listing);
+                      }
+                    }}
+                    liked={rowLiked}
+                    onToggleLike={() => toggleLiked(listing)}
+                    displayPi={displayPi}
+                  />
+                );
+              })
             )}
           </ScrollView>
         </View>
@@ -6305,41 +6446,47 @@ const TikTokFeedScreen = ({
               {renderEmptyCategoryBody()}
             </View>
           ) : (
-            <FlatList
-              ref={feedListRef}
-              data={videos}
-              extraData={feedListExtraData}
-              keyExtractor={feedKeyExtractor}
-              renderItem={renderFeedItem}
-              getItemLayout={getFeedItemLayout}
-              showsVerticalScrollIndicator={false}
+            <View
               style={[
-                styles.scrollView,
-                styles.feedScrollView,
-                {height: feedPageHeight},
-                Platform.OS === 'web' && styles.feedScrollViewWeb,
-              ]}
-              scrollEventThrottle={16}
-              onScroll={onFeedScroll}
-              onMomentumScrollEnd={handleFeedScrollSettled}
-              onScrollEndDrag={handleFeedScrollSettled}
-              scrollEnabled={!feedIsEmpty}
-              pagingEnabled
-              snapToInterval={feedPageHeight}
-              snapToAlignment="start"
-              decelerationRate="fast"
-              disableIntervalMomentum
-              directionalLockEnabled
-              nestedScrollEnabled
-              bounces={Platform.OS === 'ios'}
-              overScrollMode="never"
-              keyboardShouldPersistTaps="handled"
-              initialNumToRender={FEED_PRELOAD_BELOW_COUNT + 1}
-              maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
-              windowSize={FEED_FLATLIST_WINDOW_SIZE}
-              removeClippedSubviews={Platform.OS === 'android'}
-              updateCellsBatchingPeriod={50}
-            />
+                styles.feedViewport,
+                {top: topBarHeight, bottom: bottomBarHeight},
+              ]}>
+              <FlatList
+                ref={feedListRef}
+                data={videos}
+                extraData={feedListExtraData}
+                keyExtractor={feedKeyExtractor}
+                renderItem={renderFeedItem}
+                getItemLayout={getFeedItemLayout}
+                showsVerticalScrollIndicator={false}
+                style={[
+                  styles.scrollView,
+                  styles.feedScrollView,
+                  {height: feedPageHeight},
+                  Platform.OS === 'web' && styles.feedScrollViewWeb,
+                ]}
+                scrollEventThrottle={16}
+                onScroll={onFeedScroll}
+                onMomentumScrollEnd={handleFeedScrollSettled}
+                onScrollEndDrag={handleFeedScrollSettled}
+                scrollEnabled={!feedIsEmpty}
+                pagingEnabled
+                snapToInterval={feedPageHeight}
+                snapToAlignment="start"
+                decelerationRate="fast"
+                disableIntervalMomentum
+                directionalLockEnabled
+                nestedScrollEnabled
+                bounces={Platform.OS === 'ios'}
+                overScrollMode="never"
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={FEED_PRELOAD_BELOW_COUNT + 1}
+                maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
+                windowSize={FEED_FLATLIST_WINDOW_SIZE}
+                removeClippedSubviews={Platform.OS === 'android'}
+                updateCellsBatchingPeriod={50}
+              />
+            </View>
           )}
         </>
       )}
@@ -6365,171 +6512,55 @@ const TikTokFeedScreen = ({
       {showBottomSheet && (
         <Animated.View
           style={[
-            styles.bottomSheet,
+            styles.bottomSheetHost,
             {transform: [{translateY: bottomSheetTranslateY}]},
           ]}>
-          <View
-            style={styles.bottomSheetHandleWrap}
-            {...bottomSheetPanResponder.panHandlers}>
-            <View style={styles.bottomSheetHandle} />
-          </View>
-          {showListingPublishInTikTokSheet &&
-            (selectedCategory === 5 || selectedCategory === '5' ? (
-              <>
-                <TouchableOpacity
-                  style={styles.bottomSheetOption}
-                  onPress={() =>
-                    closeSheetAndOpenListing({bnbHostType: 'private'})
-                  }
-                  activeOpacity={0.85}>
-                  <Text style={styles.bottomSheetArrow}>‹</Text>
-                  <View style={styles.bottomSheetOptionContent}>
-                    <View style={styles.bottomSheetTextContainer}>
-                      <Text style={styles.bottomSheetTitle}>פרסם כפרטי</Text>
-                      <Text style={styles.bottomSheetSubtitle}>
-                        פרסם חדר או אתר נופש פרטי
-                      </Text>
-                    </View>
-                    <Image
-                      source={require('../assets/ad-uplaud/bnb-private.png')}
-                      style={styles.bottomSheetIcon}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.bottomSheetDivider} />
-                <TouchableOpacity
-                  style={styles.bottomSheetOption}
-                  onPress={() =>
-                    closeSheetAndOpenListing({bnbHostType: 'business'})
-                  }
-                  activeOpacity={0.85}>
-                  <Text style={styles.bottomSheetArrow}>‹</Text>
-                  <View style={styles.bottomSheetOptionContent}>
-                    <View style={styles.bottomSheetTextContainer}>
-                      <Text style={styles.bottomSheetTitle}>פרסם כעסק</Text>
-                      <Text style={styles.bottomSheetSubtitle}>
-                        פרסם חדר או אתר נופש עסקי
-                      </Text>
-                    </View>
-                    <Image
-                      source={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                      style={styles.bottomSheetIcon}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity
-                style={styles.bottomSheetOption}
-                onPress={() => closeSheetAndOpenListing()}
-                activeOpacity={0.85}>
-                <Text style={styles.bottomSheetArrow}>‹</Text>
-                <View style={styles.bottomSheetOptionContent}>
-                  <View style={styles.bottomSheetTextContainer}>
-                    {selectedCategory === 10 || selectedCategory === '10' ? (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>פרויקט</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          פרסם נכס למכירה או השכרה
-                        </Text>
-                      </>
-                    ) : selectedCategory === 3 || selectedCategory === '3' ? (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>פרסם מודעה</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          צור מודעה כדי להיכנס, להכניס או למצוא שותף
-                        </Text>
-                      </>
-                    ) : selectedCategory === 7 || selectedCategory === '7' ? (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>קרקע</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          פרסם קרקע למכירה או השכרה
-                        </Text>
-                      </>
-                    ) : selectedCategory === 8 || selectedCategory === '8' ? (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>נכס מסחרי</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          פרסם נכס מסחרי למכירה או השכרה
-                        </Text>
-                      </>
-                    ) : selectedCategory === 4 ||
-                      selectedCategory === '4' ||
-                      selectedCategory === 6 ||
-                      selectedCategory === '6' ||
-                      selectedCategory === 12 ||
-                      selectedCategory === '12' ? (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>נכס</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          פרסם נכס למכירה או השכרה
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.bottomSheetTitle}>משרד</Text>
-                        <Text style={styles.bottomSheetSubtitle}>
-                          פרסם משרד למכירה או השכרה
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                  <Image
-                    source={
-                      selectedCategory === 10 || selectedCategory === '10'
-                        ? require('../assets/ad-uplaud/appartments.png')
-                        : selectedCategory === 3 || selectedCategory === '3'
-                          ? require('../assets/image22221.png')
-                          : selectedCategory === 7 || selectedCategory === '7'
-                            ? require('../assets/categories/image-copy.png')
-                            : selectedCategory === 8 || selectedCategory === '8'
-                              ? require('../assets/categories/image.png')
-                              : selectedCategory === 4 ||
-                                  selectedCategory === '4' ||
-                                  selectedCategory === 6 ||
-                                  selectedCategory === '6' ||
-                                  selectedCategory === 12 ||
-                                  selectedCategory === '12'
-                                ? require('../assets/categories/exclusive-post-icon.png')
-                                : require('../assets/post-office-icon.png')
+          <CreateAdSheet
+            handlePanHandlers={bottomSheetPanResponder.panHandlers}
+            bottomInset={insets.bottom}>
+            {showListingPublishInTikTokSheet &&
+              (selectedCategory === 5 || selectedCategory === '5' ? (
+                <>
+                  <CreateAdSheetRow
+                    title="פרסם כפרטי"
+                    subtitle="פרסם חדר או אתר נופש פרטי"
+                    iconSource={require('../assets/ad-uplaud/bnb-private.png')}
+                    onPress={() =>
+                      closeSheetAndOpenListing({bnbHostType: 'private'})
                     }
-                    style={styles.bottomSheetIcon}
-                    resizeMode="contain"
                   />
-                </View>
-              </TouchableOpacity>
-            ))}
-
-          {showListingPublishInTikTokSheet ? (
-            <View style={styles.bottomSheetDivider} />
-          ) : null}
-
-          <TouchableOpacity
-            style={styles.bottomSheetOption}
-            onPress={() => {
-              setShowBottomSheet(false);
-              if (onOpenPostEditor) {
-                onOpenPostEditor(selectedCategory);
-              }
-            }}>
-            <Text style={styles.bottomSheetArrow}>‹</Text>
-            <View style={styles.bottomSheetOptionContent}>
-              <View style={styles.bottomSheetTextContainer}>
-                <Text style={styles.bottomSheetTitle}>פוסט</Text>
-                <Text style={styles.bottomSheetSubtitle}>
-                  שתף מידע או עדכון עם הקהילה
-                </Text>
-              </View>
-              <Image
-                source={require('../assets/ad-uplaud/posts.png')}
-                style={styles.bottomSheetIcon}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
+                  <CreateAdSheetDivider />
+                  <CreateAdSheetRow
+                    title="פרסם כעסק"
+                    subtitle="פרסם חדר או אתר נופש עסקי"
+                    iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                    onPress={() =>
+                      closeSheetAndOpenListing({bnbHostType: 'business'})
+                    }
+                  />
+                </>
+              ) : (
+                <CreateAdSheetRow
+                  title={getListingSheetCopy(selectedCategory).title}
+                  subtitle={getListingSheetCopy(selectedCategory).subtitle}
+                  iconSource={getCreateSheetListingIcon(
+                    selectedCategory,
+                    currentUser?.subscription_type,
+                  )}
+                  onPress={() => closeSheetAndOpenListing()}
+                />
+              ))}
+            {showListingPublishInTikTokSheet ? <CreateAdSheetDivider /> : null}
+            <CreateAdSheetRow
+              title="פוסט"
+              subtitle="שתף מידע או עדכון עם הקהילה"
+              iconSource={CREATE_SHEET_POST_ICON}
+              onPress={() => {
+                setShowBottomSheet(false);
+                onOpenPostEditor?.(selectedCategory);
+              }}
+            />
+          </CreateAdSheet>
         </Animated.View>
       )}
 
@@ -6816,11 +6847,6 @@ const TikTokFeedScreen = ({
 
 /** Absolute header (back, filters, search). Keep linked offsets (`userSearchPanel`, list `marginTop`) in sync. */
 const TOP_BAR_HEIGHT = 52;
-/** Matches `FeedBottomBar` height — list view scroll area ends above this. */
-const BOTTOM_BAR_HEIGHT = 60;
-/** Right action column; preserves ~35px gap under the bar (was 115 when the bar was 80px). */
-const SIDEBAR_TOP = 35 + TOP_BAR_HEIGHT;
-
 const TOP_BAR_SEARCH_ASSET = require('../assets/tiktok/search.png');
 
 /** react-native-web deprecates split `textShadow*` props — use one CSS value on web. */
@@ -7146,12 +7172,12 @@ const styles = StyleSheet.create({
     top: TOP_BAR_HEIGHT,
     left: 0,
     right: 0,
-    bottom: BOTTOM_BAR_HEIGHT,
+    bottom: FEED_BOTTOM_BAR_CONTENT_HEIGHT,
     zIndex: 1,
     maxWidth: 414,
     width: '100%',
     alignSelf: 'center',
-    backgroundColor: '#0d1117',
+    backgroundColor: '#1a1926',
     overflow: 'hidden',
   },
   listScrollView: {
@@ -7159,13 +7185,29 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     minHeight: 0,
-    backgroundColor: '#0d1117',
+    backgroundColor: '#1a1926',
   },
   listScrollContent: {
-    paddingBottom: 20,
-    paddingHorizontal: 8,
-    paddingTop: 16,
-    backgroundColor: '#0d1117',
+    paddingBottom: 16,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    backgroundColor: '#1a1926',
+    gap: 12,
+  },
+  listScrollContentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+    columnGap: 0,
+    overflow: 'visible',
+  },
+  listResultsLoadingWrap: {
+    flex: 1,
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
   },
   listScrollContentEmpty: {
     flexGrow: 1,
@@ -7183,7 +7225,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: TOP_BAR_HEIGHT,
-    bottom: BOTTOM_BAR_HEIGHT,
+    bottom: FEED_BOTTOM_BAR_CONTENT_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 30,
@@ -7377,6 +7419,17 @@ const styles = StyleSheet.create({
     margin: 0,
     padding: 0,
   },
+  feedViewport: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    maxWidth: 414,
+    width: '100%',
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  /** Sidebar + listing overlay — anchored from screen bottom (bar height + gap). */
   feedScrollView: {
     flexGrow: 0,
   },
@@ -7419,9 +7472,10 @@ const styles = StyleSheet.create({
   feedPageSidebar: {
     position: 'absolute',
     right: 10,
-    top: SIDEBAR_TOP,
+    top: 0,
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     zIndex: 20,
   },
   feedPageSidebarDrag: Platform.select({
@@ -7432,9 +7486,12 @@ const styles = StyleSheet.create({
   }),
   feedPageActions: {
     position: 'absolute',
-    left: 20,
+    left: FEED_OVERLAY_LEFT_PX,
+    bottom: 0,
     flexDirection: 'column',
-    alignItems: flexStart,
+    alignItems: 'stretch',
+    width: FEED_OVERLAY_TEXT_MAX_WIDTH,
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     zIndex: 20,
   },
   textPostCardGradient: {
@@ -7473,7 +7530,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     maxWidth: Dimensions.get('window').width,
-    maxHeight: Dimensions.get('window').height,
   },
   overlay: {
     position: 'absolute',
@@ -7633,7 +7689,6 @@ const styles = StyleSheet.create({
   sidebar: {
     position: 'absolute',
     right: 10,
-    top: SIDEBAR_TOP,
     bottom: 80,
     flexDirection: 'column',
     alignItems: 'center',
@@ -7678,27 +7733,29 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
   },
+  sidebarFiltersStack: {
+    alignItems: 'center',
+    width: '100%',
+    gap: 20,
+  },
   sidebarFilterBtn: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     width: 60,
     minWidth: 60,
+    minHeight: 56,
     paddingVertical: 0,
     paddingHorizontal: 0,
-    marginBottom: 20,
+    gap: 4,
   },
-  sidebarFilterBtnLast: {
-    marginBottom: 0,
-  },
-  /** שותפים only: smaller gap between “פוסטים” and “נותני שירות” (stacked pair). */
+  /** שותפים only: tighter pair — reduces effective gap vs stack `gap: 20`. */
   sidebarFilterBtnPartnersTight: {
-    marginBottom: 6,
+    marginBottom: -14,
   },
   sidebarFilterIcon: {
     width: 32,
     height: 32,
-    marginBottom: 4,
   },
   sidebarFilterLabel: {
     color: '#fff',
@@ -7790,11 +7847,13 @@ const styles = StyleSheet.create({
   },
   propertyInfo: {
     alignItems: flexStart,
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
   },
   companyOverlayInfo: {
     alignItems: flexStart,
-    width: 366,
-    maxWidth: '96%',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
   },
   companyTopRow: {
     flexDirection: 'row',
@@ -7832,14 +7891,17 @@ const styles = StyleSheet.create({
   },
   companyAddressWrap: {
     marginBottom: 10,
-    // width: '100%',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
   },
   companyAddressText: {
     color: '#F7F3E6',
     fontSize: 24,
     fontFamily: 'Rubik-SemiBold',
     lineHeight: 31,
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    width: '100%',
   },
   companyStatsRow: {
     flexDirection: 'row',
@@ -7864,19 +7926,22 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   brokerOverlayInfo: {
-    // width: 334,
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     alignItems: flexStart,
   },
   partnersOverlayInfo: {
-    width: 334,
-    maxWidth: '96%',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     alignItems: flexStart,
   },
+  /** Shrink-wrapped like brokerTopRow so the heart hugs the physical right (RTL) instead of being pushed far left. */
   partnersTopRow: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     justifyContent: flexStart,
     gap: 14,
+    maxWidth: '100%',
   },
   /** Purpose pill + name stacked; aligned to the right (under מחפש להכניס), not full-width left. */
   partnersMetaColumn: {
@@ -7884,7 +7949,7 @@ const styles = StyleSheet.create({
     alignItems: flexStart,
     gap: 10,
     flexShrink: 1,
-    maxWidth: 280,
+    minWidth: 0,
   },
   partnersPurposePill: {
     backgroundColor: '#FFFFFF',
@@ -7907,9 +7972,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'right',
-    alignSelf: flexStart,
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
     maxWidth: '100%',
+    minWidth: 0,
   },
   brokerTopRow: {
     flexDirection: 'row-reverse',
@@ -7947,8 +8015,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     marginBottom: 5,
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
@@ -7957,6 +8027,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: flexStart,
     width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     gap: 3,
   },
   brokerLocationText: {
@@ -7964,7 +8035,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 32,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    flex: 1,
+    minWidth: 0,
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   brokerLocationIcon: {
@@ -8039,7 +8113,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Rubik-Medium',
     letterSpacing: 0.5447,
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   bnbPricePerNightLabels: {
     alignItems: flexStart,
@@ -8057,8 +8132,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 31,
     fontFamily: 'Rubik-SemiBold',
-    textAlign: 'left',
-    maxWidth: 165,
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH - 120,
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   postActionsInfo: {
@@ -8409,6 +8487,8 @@ const styles = StyleSheet.create({
   locationContainer: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
   },
   locationIcon: {
     width: 18,
@@ -8419,6 +8499,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '500',
+    flex: 1,
+    minWidth: 0,
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   viewsLikesRow: {
@@ -8434,6 +8518,16 @@ const styles = StyleSheet.create({
   viewsLikesDot: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
+  },
+  bottomSheetHost: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    width: '100%',
+    maxWidth: 414,
+    alignSelf: 'center',
+    zIndex: 300,
   },
   bottomSheet: {
     position: 'absolute',
@@ -8550,7 +8644,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 15,
+    elevation: 15,
   },
   indicatorDot: {
     width: 8,

@@ -24,7 +24,8 @@ const H_PAD = 20;
 const GAP = 12;
 const COLS = 3;
 const CELL_W = (SCREEN_WIDTH - H_PAD * 2 - GAP * (COLS - 1)) / COLS;
-const LOGO_DIAMETER = CELL_W;
+/** Logo circles slightly smaller than the cell width so the grid breathes. */
+const LOGO_DIAMETER = CELL_W * 0.86;
 const SEARCH_ACCENT = 'rgba(140, 133, 179, 1)';
 const SEARCH_BORDER = SEARCH_ACCENT;
 const SEARCH_ICON_MUTED = SEARCH_ACCENT;
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoLetter: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.85)',
   },

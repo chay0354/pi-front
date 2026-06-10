@@ -28,8 +28,10 @@ import Svg, {
  */
 const RING_RATIO = 3.5 / 82; // gold band thickness
 const GAP_RATIO = 2 / 82; // transparent space between ring and photo
-const DEFAULT_RING_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
-const DEFAULT_RING_LOCATIONS = [0.0456, 0.5076, 0.8831];
+export const PROFILE_RING_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
+export const PROFILE_RING_LOCATIONS = [0.0456, 0.5076, 0.8831];
+const DEFAULT_RING_COLORS = PROFILE_RING_COLORS;
+const DEFAULT_RING_LOCATIONS = PROFILE_RING_LOCATIONS;
 
 let gradientIdCounter = 0;
 const nextGradientId = () =>
@@ -48,6 +50,7 @@ export const ProfileAvatar = ({
   placeholderLabel,
   placeholderImage,
   fallbackResizeMode = 'contain',
+  onImageError,
 }) => {
   const [primaryFailed, setPrimaryFailed] = useState(false);
   const [fallbackFailed, setFallbackFailed] = useState(false);
@@ -80,6 +83,7 @@ export const ProfileAvatar = ({
       style={[styles.image, imageStyle]}
       resizeMode={displayResizeMode}
       onError={() => {
+        onImageError?.();
         if (showPrimary) setPrimaryFailed(true);
         else if (showFallback) setFallbackFailed(true);
       }}

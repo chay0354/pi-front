@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import FilterSaveButton from '../components/FilterSaveButton';
+import FilterScreenBackBar from '../components/FilterScreenBackBar';
 import AmenityQuantityPill from '../components/AmenityQuantityPill';
-import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
+import {flexStart, forceLtrStyle, getSheetBottomInset} from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
 const DIVIDER = '#373548';
@@ -50,7 +51,7 @@ const RoomsFilterScreen = ({
   const [freeParking, setFreeParking] = useState(
     initialFilter?.freeParking ?? false,
   );
-  const bottomInset = Math.max(insets.bottom, 8);
+  const bottomInset = getSheetBottomInset(insets);
 
   const handleSave = () => {
     if (onSave) {
@@ -186,14 +187,7 @@ const RoomsFilterScreen = ({
   return (
     <View style={styles.container}>
       <View style={{height: insets.top}} />
-      <View style={styles.topRail}>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={onClose}
-          style={styles.handlePressArea}>
-          <View style={styles.handle} />
-        </TouchableOpacity>
-      </View>
+      <FilterScreenBackBar onClose={onClose} />
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -316,25 +310,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
-  },
-  topRail: {
-    height: 37,
-    borderBottomWidth: 1,
-    borderBottomColor: DIVIDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handlePressArea: {
-    width: 42,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#464646',
   },
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 24, paddingTop: 24},

@@ -84,7 +84,13 @@ const SubscriptionFormScreen = ({
     'שמאות',
   ];
 
-  const specializations = ['חוזים וקרקעות', 'קבוצות רכישה', 'נדל"ן', 'השקעות'];
+  const specializations = [
+    'חוזים וקרקעות',
+    'קבוצות רכישה',
+    'נדל"ן',
+    'השקעות',
+    'מלווה משקיעים',
+  ];
 
   // Activity regions for broker subscription
   const activityRegions = [

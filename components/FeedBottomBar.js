@@ -10,6 +10,24 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 const ACTIVE_FILTER_COLOR = '#FFC40A';
+import {FEED_BOTTOM_BAR_CONTENT_HEIGHT} from '../utils/feedLayout';
+
+export {
+  FEED_BOTTOM_BAR_CONTENT_HEIGHT,
+  FEED_OVERLAY_ABOVE_BAR_GAP,
+  feedBottomBarHeight,
+  feedChromeScreenBottom,
+  feedImageIndicatorTop,
+} from '../utils/feedLayout';
+/** Extra #1E1D27 above icons so the bar reads taller (Figma top breathing room). */
+const BOTTOM_BAR_TOP_PADDING = 12;
+/** Figma `spacing/xs3` under the icon row. */
+const BOTTOM_BAR_ROW_PADDING_BOTTOM = 6;
+/** Figma `spacing/s2` between icon and label. */
+const BOTTOM_BAR_ICON_LABEL_GAP = 10;
+/** Nudge filter slots down / center publish up within the bar row. */
+const BOTTOM_BAR_FILTER_NUDGE_DOWN = 4;
+const BOTTOM_BAR_POST_NUDGE_UP = 4;
 /** Bottom-bar filter icons (סוג, מטר, land …) — use a single-color / alpha template so `tintColor` matches מחיר/עיר. */
 const FIGMA_TYPE_ICON = require('../assets/tiktok/kind-new.png');
 
@@ -195,6 +213,8 @@ const FeedBottomBar = ({
   onOpenPreferencesFilter,
   onOpenPriceFilter,
   onOpenEditPublishAdWithCategory,
+  /** Reports rendered bar height so feed chrome can align on every device. */
+  onLayoutHeight,
 }) => {
   const insets = useSafeAreaInsets();
   const categoryNum = useMemo(() => {
@@ -286,9 +306,21 @@ const FeedBottomBar = ({
 
   return (
     <View
+      onLayout={
+        onLayoutHeight
+          ? e => {
+              const h = e?.nativeEvent?.layout?.height;
+              if (h > 0) onLayoutHeight(h);
+            }
+          : undefined
+      }
       style={[
         styles.bottomBar,
-        {paddingBottom: insets.bottom, height: 60 + insets.bottom},
+        {
+          paddingTop: BOTTOM_BAR_TOP_PADDING,
+          paddingBottom: insets.bottom,
+          height: FEED_BOTTOM_BAR_CONTENT_HEIGHT + insets.bottom,
+        },
       ]}>
       <View style={styles.bottomBarRow}>
         {BOTTOM_BAR_ITEMS.map(item => {
@@ -297,7 +329,7 @@ const FeedBottomBar = ({
             return (
               <TouchableOpacity
                 key={item.id}
-                style={styles.bottomBarItem}
+                style={[styles.bottomBarItem, styles.bottomBarItemFilter]}
                 onPress={() => onOpenPriceFilter?.()}
                 activeOpacity={0.8}>
                 <View style={styles.bottomBarIconWrap}>
@@ -353,7 +385,7 @@ const FeedBottomBar = ({
             return (
               <TouchableOpacity
                 key={item.id}
-                style={styles.bottomBarItem}
+                style={[styles.bottomBarItem, styles.bottomBarItemFilter]}
                 onPress={() => onOpenCityFilter?.()}
                 activeOpacity={0.8}>
                 <View style={styles.bottomBarIconWrap}>
@@ -440,7 +472,7 @@ const FeedBottomBar = ({
           return (
             <TouchableOpacity
               key={item.id}
-              style={styles.bottomBarItem}
+              style={[styles.bottomBarItem, styles.bottomBarItemFilter]}
               onPress={onPress}
               activeOpacity={0.8}>
               <View style={styles.bottomBarIconWrap}>
@@ -482,7 +514,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    height: 60,
     backgroundColor: '#1E1D27',
     zIndex: 200,
     justifyContent: 'flex-end',
@@ -495,7 +526,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 414,
     paddingHorizontal: 24,
-    paddingBottom: 0,
+    paddingBottom: BOTTOM_BAR_ROW_PADDING_BOTTOM,
   },
   bottomBarItem: {
     width: 54,
@@ -505,17 +536,20 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
+  bottomBarItemFilter: {
+    marginTop: BOTTOM_BAR_FILTER_NUDGE_DOWN,
+  },
   bottomBarItemPost: {
     width: 57,
     minWidth: 57,
-    marginTop: 0,
+    transform: [{translateY: -BOTTOM_BAR_POST_NUDGE_UP}],
   },
   bottomBarIconWrap: {
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: BOTTOM_BAR_ICON_LABEL_GAP,
   },
   bottomBarIconWrapPost: {
     width: 49,

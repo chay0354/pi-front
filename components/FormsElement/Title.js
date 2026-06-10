@@ -9,7 +9,8 @@ export const Title = ({
   textStyle = {},
   starStyle,
 }) => {
-  const {marginBottom, ...titleTextStyle} = textStyle || {};
+  const flatTextStyle = StyleSheet.flatten(textStyle) || {};
+  const {marginBottom, ...titleTextStyle} = flatTextStyle;
   return (
     <View
       style={[

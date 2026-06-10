@@ -1096,6 +1096,30 @@ export const askSmartInfo = async (topic, topicLabel, address) => {
 };
 
 /**
+ * Pi AI search: Gemini ranks published listings against a free-text Hebrew query.
+ * @param {string} query - Free-text query (usually Hebrew)
+ * @param {Array<Record<string, unknown>>} listingSummaries - Compact summaries (see buildListingAiSummary)
+ * @returns {Promise<{ success: boolean, ids?: Array<string>, error?: string }>}
+ */
+export const piAiSearchListings = async (query, listingSummaries) => {
+  try {
+    const response = await apiFetch(`${apiBase()}/api/ai/pi-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, listings: listingSummaries }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      return { success: false, error: data?.error || `HTTP ${response.status}` };
+    }
+    return { success: true, ids: Array.isArray(data.ids) ? data.ids : [] };
+  } catch (error) {
+    console.warn('piAiSearchListings error:', error?.message);
+    return { success: false, error: error?.message };
+  }
+};
+
+/**
  * Get reviews for a profile (target subscription).
  * @param {string} targetSubscriptionId - Subscription ID of the profile being viewed
  * @returns {Promise<{ success: boolean, reviews: Array }>}

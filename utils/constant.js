@@ -60,6 +60,56 @@ export const companySheetAdListingCategoryIds = new Set([
   2, 4, 6, 7, 8, 10, 12,
 ]);
 
+/** Default residential/global strip icon (חדש מקבלן for non–regular-user accounts). */
+export const RESIDENTIAL_LISTING_SHEET_ICON = require('../assets/upload-ad/1.png');
+/** House icon — brokers (residential strip) and regular users (partners + listed categories). */
+export const BROKER_RESIDENTIAL_LISTING_SHEET_ICON = require('../assets/upload-ad/broker/house.png');
+/** Office icon for משרדים (category 2) in the create sheet — all user types. */
+export const BROKER_OFFICE_LISTING_SHEET_ICON = require('../assets/upload-ad/broker/office.png');
+
+const BROKER_RESIDENTIAL_LISTING_SHEET_CATEGORY_IDS = new Set([1, 4, 6, 10, 12]);
+/** Regular users: שותפים, גלובל, מגזר דתי, דירות, יוקרה. */
+const REGULAR_USER_HOUSE_LISTING_SHEET_CATEGORY_IDS = new Set([3, 4, 6, 10, 12]);
+
+/** Icon for the top create-sheet row (listing/ad), not the פוסט row. */
+export function getCreateSheetListingIcon(
+  selectedCategory,
+  subscriptionType = null,
+) {
+  const id = parseInt(String(selectedCategory ?? '').trim(), 10);
+  const sub = String(subscriptionType ?? '').toLowerCase();
+  const isBroker = sub === subscriptionTypes.broker;
+  const isRegularUser = sub === subscriptionTypes.user;
+
+  if (id === 2) {
+    return BROKER_OFFICE_LISTING_SHEET_ICON;
+  }
+
+  if (isBroker) {
+    if (BROKER_RESIDENTIAL_LISTING_SHEET_CATEGORY_IDS.has(id)) {
+      return BROKER_RESIDENTIAL_LISTING_SHEET_ICON;
+    }
+  }
+
+  if (isRegularUser && REGULAR_USER_HOUSE_LISTING_SHEET_CATEGORY_IDS.has(id)) {
+    return BROKER_RESIDENTIAL_LISTING_SHEET_ICON;
+  }
+
+  if (BROKER_RESIDENTIAL_LISTING_SHEET_CATEGORY_IDS.has(id)) {
+    return RESIDENTIAL_LISTING_SHEET_ICON;
+  }
+  if (id === 3) {
+    return require('../assets/image22221.png');
+  }
+  if (id === 7) {
+    return require('../assets/categories/image-copy.png');
+  }
+  if (id === 8) {
+    return require('../assets/categories/image.png');
+  }
+  return require('../assets/post-office-icon.png');
+}
+
 /**
  * "דלג על אימות מייל (בדיקה)" — backend POST /api/subscription/verify-skip-test.
  */

@@ -56,7 +56,6 @@ const REASONS_PROFESSIONAL = [
 ];
 
 const REASONS_BROKER = [
-  {key: 'fictitious_listing', label: 'המודעה פיקטיבית'},
   {key: 'listing_error', label: 'מצאתי טעות במודעה'},
   {key: 'listing_not_current', label: 'המודעה אינה אקטואלית'},
   {key: 'wrong_phone_in_listing', label: 'מספר הטלפון במודעה שגוי'},

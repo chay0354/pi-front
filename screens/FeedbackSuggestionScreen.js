@@ -281,9 +281,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  /** Single bar image (improve/0..5); matches profile review picker. */
+  /** Scales to card width; picker shrinks stars when space is tight. */
   ratingPicker: {
-    width: 270,
+    width: '100%',
     maxWidth: '100%',
     alignSelf: 'center',
     marginBottom: 24,

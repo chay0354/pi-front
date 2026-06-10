@@ -378,7 +378,13 @@ const ProfessionalsDirectoryScreen = ({
   }, [professionals]);
 
   const expertiseOptions = useMemo(() => {
-    const preferred = ['נדל״ן', 'קבוצות רכישה', 'חוזים וקרקעות', 'השקעות'];
+    const preferred = [
+      'נדל״ן',
+      'קבוצות רכישה',
+      'חוזים וקרקעות',
+      'השקעות',
+      'מלווה משקיעים',
+    ];
     const seen = new Set();
     const out = [];
     preferred.forEach(tag => {
@@ -430,6 +436,14 @@ const ProfessionalsDirectoryScreen = ({
     setAppliedExpertiseFilters([]);
   };
 
+  const hasAppliedSearchFilters = useMemo(
+    () =>
+      String(appliedLocation || '').trim().length > 0 ||
+      appliedTypeFilters.length > 0 ||
+      appliedExpertiseFilters.length > 0,
+    [appliedLocation, appliedTypeFilters, appliedExpertiseFilters],
+  );
+
   return (
     <View style={styles.safe}>
       <View style={[styles.topNav, {paddingTop: insets.top}]}>
@@ -468,12 +482,25 @@ const ProfessionalsDirectoryScreen = ({
           <TouchableOpacity
             onPress={openSearchSettings}
             activeOpacity={0.85}
-            style={styles.searchFilterBtn}>
+            style={styles.searchFilterBtn}
+            accessibilityLabel={
+              hasAppliedSearchFilters
+                ? 'סינון פעיל — פתח הגדרות חיפוש'
+                : 'פתח הגדרות חיפוש'
+            }>
             <MaterialCommunityIcons
               name="tune-vertical"
               size={22}
               color="#FFFFFF"
             />
+            {hasAppliedSearchFilters ? (
+              <View
+                style={styles.searchFilterAppliedDot}
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
+            ) : null}
           </TouchableOpacity>
         </View>
 
@@ -762,6 +789,17 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  /** Figma 10:23125 — cyan dot on filter icon when settings filters are applied. */
+  searchFilterAppliedDot: {
+    position: 'absolute',
+    top: 1,
+    right: 0,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#34F3E0',
   },
   searchInputGroup: {
     flex: 1,

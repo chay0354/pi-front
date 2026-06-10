@@ -12,6 +12,8 @@ import {
   Modal,
   Pressable,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -21,9 +23,15 @@ import {
   brokerSheetAdListingCategoryIds,
   categoriesEditProfile,
   companySheetAdListingCategoryIds,
+  getCreateSheetListingIcon,
   regularUserAdListingCategoryIds,
   subscriptionTypes,
 } from '../utils/constant';
+import CreateAdSheet, {
+  CreateAdSheetDivider,
+  CreateAdSheetRow,
+  CREATE_SHEET_POST_ICON,
+} from '../components/CreateAdSheet';
 import {getListings, getBoostQuota, boostListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
@@ -33,6 +41,7 @@ const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 const BG = '#1a1926';
 const CARD_BG = '#2B2A39';
 const BORDER_GOLD = '#D4AF37';
+const FROZEN_ACTION_BLUE = '#4DA3FF';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 // Detect feed-post rows so this screen shows only real ads (not free-form posts).
@@ -164,22 +173,63 @@ const EditPublishAdScreen = ({
   const [frozenListingIds, setFrozenListingIds] = useState([]);
   const [boostConfirmListing, setBoostConfirmListing] = useState(null);
   const [boostQuota, setBoostQuota] = useState({
-    quota: 2,
+    quota: 1,
     used: 0,
-    remaining: 2,
+    remaining: 1,
   });
   const [boostSubmitting, setBoostSubmitting] = useState(false);
   /** Local overrides so the UI reflects a successful boost before re-fetch. */
   const [boostedOverrides, setBoostedOverrides] = useState({});
   const categoryScrollRef = useRef(null);
   const didInitialCategoryScrollRef = useRef(false);
+  // Auto-scroll "demo swipe" on entrance: sweeps the strip across so the user
+  // sees every category go by from left → right, then settles at the start.
+  const categoryContentWidthRef = useRef(0);
+  const categoryViewportWidthRef = useRef(0);
+  const categorySweepAnim = useRef(new Animated.Value(0)).current;
+  const didCategorySweepRef = useRef(false);
 
-  const onCategoryScrollContentSizeChange = () => {
-    if (didInitialCategoryScrollRef.current) return;
-    didInitialCategoryScrollRef.current = true;
-    requestAnimationFrame(() => {
+  const runCategorySweep = () => {
+    if (didCategorySweepRef.current) return;
+    const contentW = categoryContentWidthRef.current;
+    const viewportW = categoryViewportWidthRef.current;
+    const maxScroll = Math.max(0, contentW - viewportW);
+    // Need both measurements and something to scroll before we animate.
+    if (maxScroll <= 4 || viewportW <= 0) return;
+    didCategorySweepRef.current = true;
+
+    const id = categorySweepAnim.addListener(({value}) => {
+      categoryScrollRef.current?.scrollTo({x: value, animated: false});
+    });
+
+    // Start at the near edge, then glide across so every category passes
+    // left → right (RTL scroll inverts x, so we sweep 0 → maxScroll).
+    categorySweepAnim.setValue(0);
+    categoryScrollRef.current?.scrollTo({x: 0, animated: false});
+    Animated.timing(categorySweepAnim, {
+      toValue: maxScroll,
+      duration: 1600,
+      delay: 350,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start(() => {
+      categorySweepAnim.removeListener(id);
+      // Rest where the strip normally sits after load.
       categoryScrollRef.current?.scrollToEnd({animated: false});
     });
+  };
+
+  const onCategoryScrollContentSizeChange = width => {
+    categoryContentWidthRef.current = width || 0;
+    if (!didInitialCategoryScrollRef.current) {
+      didInitialCategoryScrollRef.current = true;
+    }
+    runCategorySweep();
+  };
+
+  const onCategoryScrollLayout = e => {
+    categoryViewportWidthRef.current = e.nativeEvent.layout.width || 0;
+    runCategorySweep();
   };
 
   // Sync selected tab with feed category; carousel lists every category for all user types.
@@ -374,7 +424,7 @@ const EditPublishAdScreen = ({
   };
 
   const getExposureAsset = exposure => {
-    if (exposure === 'high') return require('../assets/exposure-high.png');
+    if (exposure === 'high') return require('../assets/edit/high.png');
     if (exposure === 'medium') return require('../assets/exposure-medium.png');
     return require('../assets/exposure-low.png');
   };
@@ -430,9 +480,9 @@ const EditPublishAdScreen = ({
       .then(res => {
         if (cancelled) return;
         setBoostQuota({
-          quota: Number(res?.quota ?? 2),
+          quota: Number(res?.quota ?? 1),
           used: Number(res?.used ?? 0),
-          remaining: Number(res?.remaining ?? 2),
+          remaining: Number(res?.remaining ?? 1),
         });
       })
       .catch(err => {
@@ -489,6 +539,18 @@ const EditPublishAdScreen = ({
     }
   };
 
+  const canBoostThisMonth = boostQuota.remaining > 0;
+
+  const openBoostConfirm = listing => {
+    if (!canBoostThisMonth) {
+      if (typeof alert !== 'undefined') {
+        alert('הגעת למכסת ההקפצות החודשית (הקפצה אחת בחודש).');
+      }
+      return;
+    }
+    setBoostConfirmListing(listing);
+  };
+
   const isFrozen = listing => {
     const id = listing?.id ?? listing?.ad_number;
     if (id == null) return false;
@@ -519,7 +581,10 @@ const EditPublishAdScreen = ({
           <View style={styles.adCardListLeft}>
             <Image
               source={getExposureAsset(exposure)}
-              style={styles.exposureImage}
+              style={[
+                styles.exposureImage,
+                exposure === 'high' && styles.exposureImageHigh,
+              ]}
               resizeMode="contain"
             />
             <View style={{flex: 1}}>
@@ -568,8 +633,12 @@ const EditPublishAdScreen = ({
           </View>
           <View style={[styles.actionRow, {marginTop: 16}]}>
             <TouchableOpacity
-              style={[styles.actionBtn]}
-              onPress={() => setBoostConfirmListing(listing)}
+              style={[
+                styles.actionBtn,
+                !canBoostThisMonth && styles.actionBtnDisabled,
+              ]}
+              onPress={() => openBoostConfirm(listing)}
+              disabled={!canBoostThisMonth}
               activeOpacity={0.8}>
               <Image
                 source={require('../assets/arrow_up.png')}
@@ -578,10 +647,7 @@ const EditPublishAdScreen = ({
               />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                isFrozen(listing) && styles.actionBtnFrozen,
-              ]}
+              style={styles.actionBtn}
               onPress={() =>
                 isFrozen(listing)
                   ? setUnfreezeConfirmListing(listing)
@@ -590,11 +656,20 @@ const EditPublishAdScreen = ({
               activeOpacity={0.8}>
               <Image
                 source={require('../assets/freeze.png')}
-                style={styles.actionBtnImage}
+                style={[
+                  styles.actionBtnImage,
+                  isFrozen(listing) && styles.actionBtnFrozenIcon,
+                ]}
                 resizeMode="contain"
               />
               {isFrozen(listing) ? (
-                <Text style={styles.actionBtnTextList}>הוקפאה</Text>
+                <Text
+                  style={[
+                    styles.actionBtnTextList,
+                    styles.actionBtnFrozenText,
+                  ]}>
+                  הוקפאה
+                </Text>
               ) : null}
             </TouchableOpacity>
             <TouchableOpacity
@@ -705,7 +780,10 @@ const EditPublishAdScreen = ({
             }}>
             <Image
               source={getExposureAsset(exposure)}
-              style={styles.exposureImage}
+              style={[
+                styles.exposureImage,
+                exposure === 'high' && styles.exposureImageHigh,
+              ]}
               resizeMode="contain"
             />
             <View style={{flex: 1}}>
@@ -748,8 +826,12 @@ const EditPublishAdScreen = ({
 
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setBoostConfirmListing(listing)}
+              style={[
+                styles.actionBtn,
+                !canBoostThisMonth && styles.actionBtnDisabled,
+              ]}
+              onPress={() => openBoostConfirm(listing)}
+              disabled={!canBoostThisMonth}
               activeOpacity={0.8}>
               <Text style={styles.actionBtnText}>הקפצה</Text>
               <Image
@@ -759,22 +841,26 @@ const EditPublishAdScreen = ({
               />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                isFrozen(listing) && styles.actionBtnFrozen,
-              ]}
+              style={styles.actionBtn}
               onPress={() =>
                 isFrozen(listing)
                   ? setUnfreezeConfirmListing(listing)
                   : setFreezeConfirmListing(listing)
               }
               activeOpacity={0.8}>
-              <Text style={styles.actionBtnText}>
+              <Text
+                style={[
+                  styles.actionBtnText,
+                  isFrozen(listing) && styles.actionBtnFrozenText,
+                ]}>
                 {isFrozen(listing) ? 'הוקפאה' : 'הקפאה'}
               </Text>
               <Image
                 source={require('../assets/freeze.png')}
-                style={styles.actionBtnImage}
+                style={[
+                  styles.actionBtnImage,
+                  isFrozen(listing) && styles.actionBtnFrozenIcon,
+                ]}
                 resizeMode="contain"
               />
             </TouchableOpacity>
@@ -859,6 +945,7 @@ const EditPublishAdScreen = ({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryScrollContent}
             style={styles.categoryScroll}
+            onLayout={onCategoryScrollLayout}
             onContentSizeChange={onCategoryScrollContentSizeChange}>
             {publishCategoriesStrip.map(cat => {
               const selected = selectedCategoryId === cat.id;
@@ -975,133 +1062,78 @@ const EditPublishAdScreen = ({
         )}
       </ScrollView>
 
-      <Modal
-        visible={showCreateSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCreateSheet(false)}>
-        <Pressable
-          style={styles.createSheetOverlay}
-          onPress={() => setShowCreateSheet(false)}>
+      {/*
+        Rendered inline (not in a Modal) so it lives in the main activity window,
+        which draws edge-to-edge under the Android nav bar. A transparent Modal
+        gets its own window that stops at the nav bar (RN 0.73 has no
+        navigationBarTranslucent), leaving the strip behind the nav buttons
+        see-through. Inline + bottom:0 lets the gray sheet fill behind them.
+      */}
+      {showCreateSheet && (
+        <View style={styles.createSheetRoot}>
+          <Pressable
+            style={styles.createSheetOverlay}
+            onPress={() => setShowCreateSheet(false)}
+          />
           <View
-            style={styles.createSheet}
+            style={styles.createSheetSheetWrap}
             onStartShouldSetResponder={() => true}>
-            {showListingCreateInSheet &&
-              (isBnbCategory ? (
-                <>
-                  <TouchableOpacity
-                    style={styles.createSheetOption}
-                    onPress={() => openCreateListing({bnbHostType: 'private'})}
-                    activeOpacity={0.85}>
-                    <Text style={styles.createSheetArrow}>‹</Text>
-                    <View style={styles.createSheetOptionContent}>
-                      <View style={styles.createSheetTextContainer}>
-                        <Text style={styles.createSheetTitle}>פרסם כפרטי</Text>
-                        <Text style={styles.createSheetSubtitle}>
-                          פרסם חדר או אתר נופש פרטי
-                        </Text>
-                      </View>
-                      <Image
-                        source={require('../assets/ad-uplaud/bnb-private.png')}
-                        style={styles.createSheetIcon}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  </TouchableOpacity>
-                  <View style={styles.createSheetDivider} />
-                  <TouchableOpacity
-                    style={styles.createSheetOption}
-                    onPress={() => openCreateListing({bnbHostType: 'business'})}
-                    activeOpacity={0.85}>
-                    <Text style={styles.createSheetArrow}>‹</Text>
-                    <View style={styles.createSheetOptionContent}>
-                      <View style={styles.createSheetTextContainer}>
-                        <Text style={styles.createSheetTitle}>פרסם כעסק</Text>
-                        <Text style={styles.createSheetSubtitle}>
-                          פרסם חדר או אתר נופש עסקי
-                        </Text>
-                      </View>
-                      <Image
-                        source={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                        style={styles.createSheetIcon}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.createSheetOption}
-                  onPress={() => openCreateListing()}
-                  activeOpacity={0.85}>
-                  <Text style={styles.createSheetArrow}>‹</Text>
-                  <View style={styles.createSheetOptionContent}>
-                    <View style={styles.createSheetTextContainer}>
-                      <Text style={styles.createSheetTitle}>
-                        {isOfficesListingCategory ? 'משרד' : 'פרסם מודעה'}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.createSheetSubtitle,
-                          isPartnersCategory &&
-                            styles.createSheetSubtitleSecondary,
-                        ]}>
-                        {isPartnersCategory
-                          ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
-                          : isOfficesListingCategory
-                            ? 'פרסם משרד למכירה או השכרה'
-                            : 'צור מודעה חדשה בקטגוריה שנבחרה'}
-                      </Text>
-                    </View>
-                    <Image
-                      source={
-                        isPartnersCategory
-                          ? require('../assets/image22221.png')
-                          : require('../assets/post-office-icon.png')
-                      }
-                      style={[
-                        styles.createSheetIcon,
-                        isPartnersCategory && styles.createSheetIconPartners,
-                      ]}
-                      resizeMode="contain"
+            <CreateAdSheet bottomInset={insets.bottom}>
+              {showListingCreateInSheet &&
+                (isBnbCategory ? (
+                  <>
+                    <CreateAdSheetRow
+                      title="פרסם כפרטי"
+                      subtitle="פרסם חדר או אתר נופש פרטי"
+                      iconSource={require('../assets/ad-uplaud/bnb-private.png')}
+                      onPress={() => openCreateListing({bnbHostType: 'private'})}
                     />
-                  </View>
-                </TouchableOpacity>
-              ))}
-            {showListingCreateInSheet ? (
-              <View style={styles.createSheetDivider} />
-            ) : null}
-            <TouchableOpacity
-              style={styles.createSheetOption}
-              onPress={openCreatePost}
-              activeOpacity={0.85}>
-              <Text style={styles.createSheetArrow}>‹</Text>
-              <View style={styles.createSheetOptionContent}>
-                <View style={styles.createSheetTextContainer}>
-                  <Text style={styles.createSheetTitle}>פוסט</Text>
-                  <Text
-                    style={[
-                      styles.createSheetSubtitle,
-                      isPartnersCategory && styles.createSheetSubtitleSecondary,
-                    ]}>
-                    {isPartnersCategory
-                      ? 'שתף פוסט חופשי למציאת שותף או דירה'
-                      : 'שתף מידע או עדכון עם הקהילה'}
-                  </Text>
-                </View>
-                <Image
-                  source={require('../assets/ad-uplaud/posts.png')}
-                  style={[
-                    styles.createSheetIcon,
-                    isPartnersCategory && styles.createSheetIconPartners,
-                  ]}
-                  resizeMode="contain"
-                />
-              </View>
-            </TouchableOpacity>
+                    <CreateAdSheetDivider />
+                    <CreateAdSheetRow
+                      title="פרסם כעסק"
+                      subtitle="פרסם חדר או אתר נופש עסקי"
+                      iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                      onPress={() => openCreateListing({bnbHostType: 'business'})}
+                    />
+                  </>
+                ) : (
+                  <CreateAdSheetRow
+                    title={
+                      isOfficesListingCategory
+                        ? 'משרד'
+                        : isPartnersCategory
+                          ? 'פרסם מודעה'
+                          : 'נכס'
+                    }
+                    subtitle={
+                      isPartnersCategory
+                        ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
+                        : isOfficesListingCategory
+                          ? 'פרסם משרד למכירה או השכרה'
+                          : 'פרסם נכס למכירה או השכרה'
+                    }
+                    iconSource={getCreateSheetListingIcon(
+                      selectedListingCategoryId,
+                      currentUser?.subscription_type,
+                    )}
+                    onPress={() => openCreateListing()}
+                  />
+                ))}
+              {showListingCreateInSheet ? <CreateAdSheetDivider /> : null}
+              <CreateAdSheetRow
+                title="פוסט"
+                subtitle={
+                  isPartnersCategory
+                    ? 'שתף פוסט חופשי למציאת שותף או דירה'
+                    : 'שתף מידע או עדכון עם הקהילה'
+                }
+                iconSource={CREATE_SHEET_POST_ICON}
+                onPress={openCreatePost}
+              />
+            </CreateAdSheet>
           </View>
-        </Pressable>
-      </Modal>
+        </View>
+      )}
 
       <Modal
         visible={removeConfirmListing != null}
@@ -1223,8 +1255,9 @@ const EditPublishAdScreen = ({
             <Text style={styles.removeModalTitle}>להקפיץ את המודעה?</Text>
             <Text style={styles.removeModalMessage}>
               המודעה תקבל חשיפה גבוהה למשך 24 שעות.{'\n'}
-              נותרו לך {boostQuota.remaining} הקפצות מתוך {boostQuota.quota}{' '}
-              החודש.
+              {boostQuota.remaining > 0
+                ? `נותרה לך הקפצה אחת החודש (מתוך ${boostQuota.quota}).`
+                : 'אין הקפצות נותרות החודש.'}
             </Text>
             <View style={styles.removeModalButtons}>
               <TouchableOpacity
@@ -1544,6 +1577,7 @@ const styles = StyleSheet.create({
   },
   statTextList: {fontSize: 14},
   exposureImage: {width: 45, height: 101},
+  exposureImageHigh: {width: 56, height: 126},
   actionRow: {
     flexDirection: 'row-reverse',
     marginTop: 22,
@@ -1560,7 +1594,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
   },
-  actionBtnFrozen: {opacity: 0.85},
+  actionBtnDisabled: {opacity: 0.45},
+  actionBtnFrozenIcon: {tintColor: FROZEN_ACTION_BLUE},
+  actionBtnFrozenText: {color: FROZEN_ACTION_BLUE},
   actionBtnTextList: {color: TEXT_LIGHT, fontSize: 12},
   actionBtnText: {color: '#fff', fontSize: 16, fontFamily: 'Rubik-Regular'},
   listSeparator: {height: 16},
@@ -1634,73 +1670,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
-  createSheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  // Inline create-sheet overlay (no Modal) so it draws under the Android nav bar.
+  createSheetRoot: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
+    zIndex: 1000,
+    elevation: 1000,
   },
-  createSheet: {
-    backgroundColor: '#2B2A39',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 28,
+  createSheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  createSheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  createSheetArrow: {
-    color: '#fff',
-    fontSize: 28,
-    lineHeight: 28,
-    marginRight: 8,
-  },
-  createSheetOptionContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  createSheetTextContainer: {
-    alignItems: flexStart,
-    flex: 1,
-    marginRight: 12,
-  },
-  createSheetTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontFamily: 'Rubik-Medium',
-    textAlign: 'left',
-  },
-  createSheetSubtitle: {
-    color: '#FFFFFF',
-    opacity: 0.85,
-    fontSize: 14,
-    fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
-    marginTop: 4,
-  },
-  createSheetIcon: {
-    width: 60,
-    height: 60,
-  },
-  createSheetIconPartners: {
-    width: 40,
-    height: 40,
-  },
-  createSheetSubtitleSecondary: {
-    color: '#D2D0DC',
-    opacity: 1,
-    lineHeight: 16,
-    letterSpacing: 0.54,
-  },
-  createSheetDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+  createSheetSheetWrap: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
 });
 

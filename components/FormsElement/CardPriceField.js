@@ -1,6 +1,11 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {PRICE_COUNTER_STEP_DEFAULT} from '../../utils/priceInput';
+import {
+  PRICE_COUNTER_STEP_DEFAULT,
+  formatPriceInputDisplay,
+  formatPriceInputDraft,
+  parsePriceInputNumber,
+} from '../../utils/priceInput';
 import {Colors} from '../../constants/styles';
 import {CounterStepper} from './CounterStepper';
 
@@ -13,26 +18,30 @@ export const CardPriceField = ({
   const safeSetPrice = typeof setPrice === 'function' ? setPrice : () => {};
   const step = counterStep;
   const inputRef = useRef(null);
-  const [draftPrice, setDraftPrice] = useState(String(Number(price || 0)));
+  const [draftPrice, setDraftPrice] = useState(() =>
+    formatPriceInputDisplay(price),
+  );
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
 
   useEffect(() => {
-    setDraftPrice(String(Number(price || 0)));
+    setDraftPrice(formatPriceInputDisplay(price));
   }, [price]);
 
+  const handleDraftChange = text => {
+    setDraftPrice(formatPriceInputDraft(text));
+  };
+
   const commitDraftPrice = () => {
-    const digitsOnly = String(draftPrice || '').replace(/[^\d]/g, '');
-    const parsed = Number.parseInt(digitsOnly || '0', 10);
-    const nextPrice = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+    const nextPrice = parsePriceInputNumber(draftPrice);
     safeSetPrice(nextPrice);
-    setDraftPrice(String(nextPrice));
+    setDraftPrice(formatPriceInputDisplay(nextPrice));
   };
 
   return (
     <CounterStepper
       inputRef={inputRef}
       value={draftPrice}
-      onChangeText={setDraftPrice}
+      onChangeText={handleDraftChange}
       onBlur={commitDraftPrice}
       onSubmitEditing={commitDraftPrice}
       onIncrement={() => safeSetPrice((price || 0) + step)}

@@ -14,10 +14,12 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Dimensions,
   Linking,
   AppState,
   I18nManager,
   PanResponder,
+  Animated,
 } from 'react-native';
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
@@ -48,11 +50,17 @@ import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
+import ChatVoiceMessageBubble from '../components/ChatVoiceMessageBubble';
 import ExclusiveOfferResponseCard, {
   formatPrice,
 } from '../components/ExclusiveOfferResponseCard';
 import {usePresence} from '../hooks/PresenceContext';
-import {flexEnd, flexStart, getRangeSliderPercentFromEvent} from '../utils/rtlLayout';
+import {
+  flexEnd,
+  flexStart,
+  getRangeSliderPercentFromEvent,
+  hebrewTextAlign,
+} from '../utils/rtlLayout';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -80,6 +88,19 @@ function exclusiveMonthsFromTouchPercent(touchPercent) {
     Math.max(EXCLUSIVE_MONTHS_MIN, Math.round(raw)),
   );
 }
+
+/** WhatsApp-style hold-to-record: slide finger left to cancel, up to lock. */
+const VOICE_CANCEL_SLIDE_PX = 80;
+const VOICE_LOCK_SLIDE_PX = 48;
+const VOICE_MIN_RECORD_MS = 450;
+
+function formatVoiceDuration(totalSec) {
+  const s = Math.max(0, Number(totalSec) || 0);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
 const BUBBLE_GOLD = '#d4a84b';
 const BUBBLE_ME = '#2DD4BF';
 const FIGMA_WELCOME_BUBBLE_BG = '#ffbb32';
@@ -308,7 +329,13 @@ const ChatScreen = ({
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
   const [senderAvatarFailed, setSenderAvatarFailed] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [voiceLocked, setVoiceLocked] = useState(false);
+  const [recordingDurationSec, setRecordingDurationSec] = useState(0);
+  const [voiceCancelArmed, setVoiceCancelArmed] = useState(false);
+  const [voiceLockHint, setVoiceLockHint] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
+  const [voiceMetaById, setVoiceMetaById] = useState({});
+  const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
@@ -340,7 +367,17 @@ const ChatScreen = ({
   const scrollRef = useRef(null);
   const recordingRef = useRef(null);
   const recordStartedAtRef = useRef(0);
+  const voiceLockedRef = useRef(false);
+  const voiceCancelArmedRef = useRef(false);
+  const voicePulseAnim = useRef(new Animated.Value(1)).current;
+  // Recording-composer entrance (0 hidden → 1 shown) and finger-follow slide.
+  const voiceEnterAnim = useRef(new Animated.Value(0)).current;
+  const voiceSlideX = useRef(new Animated.Value(0)).current;
   const soundRef = useRef(null);
+  const startVoiceRecordingRef = useRef(async () => {});
+  const cancelVoiceRecordingRef = useRef(async () => {});
+  const stopVoiceRecordingAndSendRef = useRef(async () => {});
+  const canRecordVoiceRef = useRef(false);
   const exclusiveSliderRef = useRef(null);
   const exclusiveSliderWidthRef = useRef(1);
   const exclusiveSliderWindowXRef = useRef(0);
@@ -1090,6 +1127,12 @@ const ChatScreen = ({
     if (isWelcome && onPiWelcomeOpened) onPiWelcomeOpened();
   }, [isWelcome, onPiWelcomeOpened]);
 
+  // Configure audio output once up-front so the first play press doesn't pay
+  // the setAudioModeAsync round-trip latency.
+  useEffect(() => {
+    Audio.setAudioModeAsync({playsInSilentModeIOS: true}).catch(() => {});
+  }, []);
+
   useEffect(() => {
     return () => {
       if (soundRef.current) {
@@ -1101,6 +1144,8 @@ const ChatScreen = ({
         rec.stopAndUnloadAsync().catch(() => {});
         recordingRef.current = null;
       }
+      voiceLockedRef.current = false;
+      voiceCancelArmedRef.current = false;
     };
   }, []);
 
@@ -1223,41 +1268,14 @@ const ChatScreen = ({
     }
   };
 
-  const handleSendPhoto = async () => {
-    if (!myEmail || sending || isRecording) return;
-    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+  const sendPickedChatImage = async result => {
+    if (result.canceled || !result.assets?.[0]) return;
+    const a = result.assets[0];
+    const uri = a.uri;
+    const mime = a.mimeType || 'image/jpeg';
+    const name = a.fileName || `photo-${Date.now()}.jpg`;
+    setSending(true);
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (lib.status !== 'granted') {
-        Alert.alert('', 'נדרשת גישה לתמונות');
-        return;
-      }
-      let result;
-      if (Platform.OS === 'web') {
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.85,
-        });
-      } else {
-        const cam = await ImagePicker.requestCameraPermissionsAsync();
-        if (cam.status === 'granted') {
-          result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.85,
-          });
-        } else {
-          result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.85,
-          });
-        }
-      }
-      if (result.canceled || !result.assets?.[0]) return;
-      const a = result.assets[0];
-      const uri = a.uri;
-      const mime = a.mimeType || 'image/jpeg';
-      const name = a.fileName || `photo-${Date.now()}.jpg`;
-      setSending(true);
       const up = await uploadChatMedia({uri, type: mime, name});
       let res;
       if (isGroupThread && groupConversationId) {
@@ -1292,14 +1310,96 @@ const ChatScreen = ({
         ]);
         if (onMessageSent) onMessageSent();
       }
-    } catch (e) {
-      Alert.alert('', e?.message || 'העלאת התמונה נכשלה');
     } finally {
       setSending(false);
     }
   };
 
-  const startVoiceRecording = async () => {
+  const handlePickFromGallery = async () => {
+    if (!myEmail || sending || isRecording) return;
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    try {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (lib.status !== 'granted') {
+        Alert.alert('', 'נדרשת גישה לתמונות');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      });
+      await sendPickedChatImage(result);
+    } catch (e) {
+      Alert.alert('', e?.message || 'העלאת התמונה נכשלה');
+      setSending(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (!myEmail || sending || isRecording) return;
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    try {
+      if (Platform.OS === 'web') {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (lib.status !== 'granted') {
+          Alert.alert('', 'נדרשת גישה למצלמה');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.85,
+        });
+        await sendPickedChatImage(result);
+        return;
+      }
+      const cam = await ImagePicker.requestCameraPermissionsAsync();
+      if (cam.status !== 'granted') {
+        Alert.alert('', 'נדרשת גישה למצלמה');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      });
+      await sendPickedChatImage(result);
+    } catch (e) {
+      Alert.alert('', e?.message || 'העלאת התמונה נכשלה');
+      setSending(false);
+    }
+  };
+
+  const resetVoiceComposerState = useCallback(() => {
+    setIsRecording(false);
+    setVoiceLocked(false);
+    setRecordingDurationSec(0);
+    setVoiceCancelArmed(false);
+    setVoiceLockHint(false);
+    voiceLockedRef.current = false;
+    voiceCancelArmedRef.current = false;
+  }, []);
+
+  const cancelVoiceRecording = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    resetVoiceComposerState();
+    if (!rec) return;
+    try {
+      await rec.stopAndUnloadAsync();
+    } catch {
+      /* ignore */
+    }
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [resetVoiceComposerState]);
+
+  const startVoiceRecording = useCallback(async () => {
     if (Platform.OS === 'web') return;
     if (!myEmail || sending || isWelcome) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
@@ -1319,19 +1419,33 @@ const ChatScreen = ({
       );
       recordingRef.current = recording;
       recordStartedAtRef.current = Date.now();
+      voiceLockedRef.current = false;
+      voiceCancelArmedRef.current = false;
+      setVoiceLocked(false);
+      setVoiceCancelArmed(false);
+      setVoiceLockHint(false);
+      setRecordingDurationSec(0);
       setIsRecording(true);
     } catch (e) {
       recordingRef.current = null;
-      setIsRecording(false);
+      resetVoiceComposerState();
       Alert.alert('', e?.message || 'הקלטה נכשלה');
     }
-  };
+  }, [
+    groupConversationId,
+    isDirectPeer,
+    isGroupThread,
+    isWelcome,
+    myEmail,
+    resetVoiceComposerState,
+    sending,
+  ]);
 
-  const stopVoiceRecordingAndSend = async () => {
+  const stopVoiceRecordingAndSend = useCallback(async () => {
     if (Platform.OS === 'web') return;
     const rec = recordingRef.current;
     recordingRef.current = null;
-    setIsRecording(false);
+    resetVoiceComposerState();
     if (!rec) return;
     const elapsed = Date.now() - recordStartedAtRef.current;
     try {
@@ -1339,7 +1453,15 @@ const ChatScreen = ({
     } catch {
       return;
     }
-    if (elapsed < 450) return;
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+    } catch {
+      /* ignore */
+    }
+    if (elapsed < VOICE_MIN_RECORD_MS) return;
     const uri = rec.getURI();
     if (!uri || !myEmail) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
@@ -1377,15 +1499,24 @@ const ChatScreen = ({
       }
       if (res.message) {
         const nm = normalizeChatMessage(res.message);
+        const newId = nm.id || Date.now();
         setMessages(prev => [
           ...prev,
           {
             ...nm,
-            id: nm.id || Date.now(),
+            id: newId,
             mediaType: nm.mediaType || 'audio',
             mediaUrl: nm.mediaUrl || up.url,
           },
         ]);
+        setVoiceMetaById(prev => ({
+          ...prev,
+          [String(newId)]: {
+            durationMs: elapsed,
+            positionMs: 0,
+            progress: 0,
+          },
+        }));
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
@@ -1393,12 +1524,193 @@ const ChatScreen = ({
     } finally {
       setSending(false);
     }
-  };
+  }, [
+    groupConversationId,
+    isDirectPeer,
+    isGroupThread,
+    messages.length,
+    myEmail,
+    onMessageSent,
+    otherUserEmail,
+    resetVoiceComposerState,
+  ]);
+
+  startVoiceRecordingRef.current = startVoiceRecording;
+  cancelVoiceRecordingRef.current = cancelVoiceRecording;
+  stopVoiceRecordingAndSendRef.current = stopVoiceRecordingAndSend;
+
+  const voiceMicPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () =>
+        Platform.OS !== 'web' &&
+        canRecordVoiceRef.current &&
+        !voiceLockedRef.current,
+      onMoveShouldSetPanResponder: () =>
+        Platform.OS !== 'web' &&
+        Boolean(recordingRef.current) &&
+        !voiceLockedRef.current,
+      onPanResponderGrant: () => {
+        startVoiceRecordingRef.current?.();
+      },
+      onPanResponderMove: (_, gesture) => {
+        if (!recordingRef.current || voiceLockedRef.current) return;
+        // Let the timer/hint visually follow the finger (clamped, left-only).
+        const followX = Math.max(-140, Math.min(0, gesture.dx));
+        voiceSlideX.setValue(followX);
+        const armed = gesture.dx < -VOICE_CANCEL_SLIDE_PX;
+        voiceCancelArmedRef.current = armed;
+        setVoiceCancelArmed(armed);
+        setVoiceLockHint(
+          gesture.dy < -20 && gesture.dy > -VOICE_LOCK_SLIDE_PX,
+        );
+        if (gesture.dy < -VOICE_LOCK_SLIDE_PX) {
+          setVoiceLockHint(false);
+          voiceLockedRef.current = true;
+          setVoiceLocked(true);
+          Animated.spring(voiceSlideX, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 7,
+            tension: 80,
+          }).start();
+        }
+      },
+      onPanResponderRelease: () => {
+        if (!recordingRef.current) return;
+        Animated.spring(voiceSlideX, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 7,
+          tension: 80,
+        }).start();
+        if (voiceLockedRef.current) return;
+        if (voiceCancelArmedRef.current) {
+          cancelVoiceRecordingRef.current?.();
+        } else {
+          stopVoiceRecordingAndSendRef.current?.();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(voiceSlideX, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 7,
+          tension: 80,
+        }).start();
+        if (!recordingRef.current || voiceLockedRef.current) return;
+        cancelVoiceRecordingRef.current?.();
+      },
+    }),
+  ).current;
+
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingDurationSec(0);
+      voicePulseAnim.setValue(1);
+      voiceSlideX.setValue(0);
+      Animated.timing(voiceEnterAnim, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }).start();
+      return undefined;
+    }
+    voiceSlideX.setValue(0);
+    Animated.spring(voiceEnterAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 90,
+    }).start();
+    const tick = () => {
+      const elapsed = Date.now() - recordStartedAtRef.current;
+      setRecordingDurationSec(Math.floor(elapsed / 1000));
+    };
+    tick();
+    const id = setInterval(tick, 200);
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(voicePulseAnim, {
+          toValue: 0.35,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+        Animated.timing(voicePulseAnim, {
+          toValue: 1,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => {
+      clearInterval(id);
+      pulse.stop();
+    };
+  }, [isRecording, voicePulseAnim, voiceEnterAnim, voiceSlideX]);
+
+  const openChatImageFullScreen = useCallback(url => {
+    const u = url != null ? String(url).trim() : '';
+    if (!u) return;
+    setFullScreenImageUrl(u);
+  }, []);
+
+  const handleVoiceDurationKnown = useCallback((messageId, durationMs) => {
+    const id = String(messageId);
+    const ms = Math.max(0, Number(durationMs) || 0);
+    if (!id || ms <= 0) return;
+    setVoiceMetaById(prev => {
+      const existing = prev[id];
+      if (existing?.durationMs > 0) return prev;
+      return {
+        ...prev,
+        [id]: {
+          durationMs: ms,
+          positionMs: existing?.positionMs || 0,
+          progress: existing?.progress || 0,
+        },
+      };
+    });
+  }, []);
+
+  // Store the real position/progress for a message. Used on pause and finish.
+  // The continuous "fill" animation lives inside the bubble (time-based), so we
+  // avoid updating state on every playback tick (that re-rendered the whole list
+  // and caused the stutter).
+  const setVoiceProgress = useCallback((messageId, {positionMs, durationMs, progress}) => {
+    const id = String(messageId);
+    if (!id) return;
+    setVoiceMetaById(prev => {
+      const dur = Math.max(0, Number(durationMs) || prev[id]?.durationMs || 0);
+      const pos = Math.max(0, Number(positionMs) || 0);
+      const prog =
+        typeof progress === 'number'
+          ? Math.max(0, Math.min(1, progress))
+          : dur > 0
+            ? Math.min(1, pos / dur)
+            : 0;
+      return {
+        ...prev,
+        [id]: {durationMs: dur, positionMs: pos, progress: prog},
+      };
+    });
+  }, []);
 
   const toggleVoicePlayback = async (messageId, url) => {
     if (!url) return;
+    const id = String(messageId);
     try {
-      if (playingMessageId === messageId && soundRef.current) {
+      if (playingMessageId === id && soundRef.current) {
+        const st = await soundRef.current.getStatusAsync();
+        if (st.isLoaded && st.isPlaying) {
+          await soundRef.current.pauseAsync();
+          setPlayingMessageId(null);
+          setVoiceProgress(id, {
+            positionMs: st.positionMillis || 0,
+            durationMs: st.durationMillis || 0,
+          });
+          return;
+        }
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
         soundRef.current = null;
@@ -1410,18 +1722,51 @@ const ChatScreen = ({
         soundRef.current = null;
         setPlayingMessageId(null);
       }
-      await Audio.setAudioModeAsync({playsInSilentModeIOS: true});
-      const {sound} = await Audio.Sound.createAsync({uri: url});
-      soundRef.current = sound;
-      setPlayingMessageId(messageId);
-      sound.setOnPlaybackStatusUpdate(st => {
-        if (st.isLoaded && st.didJustFinish) {
-          setPlayingMessageId(null);
-          sound.unloadAsync().catch(() => {});
-          if (soundRef.current === sound) soundRef.current = null;
+      // Flip the button to "playing" immediately so the press feels instant
+      // (the audio file still has to load, but the UI no longer feels frozen).
+      setPlayingMessageId(id);
+      const resumeMs = voiceMetaById[id]?.positionMs || 0;
+      const onStatus = st => {
+        if (!st.isLoaded) return;
+        // Make the duration known to the bubble (drives the smooth fill timing).
+        if (st.durationMillis > 0) {
+          setVoiceMetaById(prev => {
+            if (prev[id]?.durationMs === st.durationMillis) return prev;
+            return {
+              ...prev,
+              [id]: {
+                durationMs: st.durationMillis,
+                positionMs: prev[id]?.positionMs || 0,
+                progress: prev[id]?.progress || 0,
+              },
+            };
+          });
         }
-      });
-      await sound.playAsync();
+        if (st.didJustFinish) {
+          setPlayingMessageId(current => (current === id ? null : current));
+          setVoiceProgress(id, {
+            positionMs: 0,
+            durationMs: st.durationMillis || 0,
+            progress: 0,
+          });
+          if (soundRef.current) {
+            soundRef.current.unloadAsync().catch(() => {});
+            soundRef.current = null;
+          }
+        }
+      };
+      // shouldPlay:true → starts as soon as it's loaded, skipping a second
+      // round-trip via playAsync().
+      const {sound} = await Audio.Sound.createAsync(
+        {uri: url},
+        {
+          shouldPlay: true,
+          positionMillis: resumeMs > 0 ? resumeMs : 0,
+          progressUpdateIntervalMillis: 250,
+        },
+        onStatus,
+      );
+      soundRef.current = sound;
     } catch (e) {
       setPlayingMessageId(null);
       Alert.alert('', e?.message || 'לא ניתן להשמיע');
@@ -1556,7 +1901,7 @@ const ChatScreen = ({
               !m.isMe && styles.messageRowThem,
               m.isMe && styles.messageRowMe,
             ]}>
-            {!m.isMe && (
+            {!m.isMe && !hasAudio && (
               <View style={styles.senderLogoWrap}>
                 {isGroupThread ? (
                   peerPic ? (
@@ -1592,6 +1937,7 @@ const ChatScreen = ({
                 style={[
                   styles.bubble,
                   m.isMe ? styles.bubbleMe : styles.bubbleThem,
+                  hasAudio && !bodyTrim && styles.bubbleVoiceOnly,
                 ]}>
                 {showSharedPostCard ? (
                   (() => {
@@ -1646,19 +1992,21 @@ const ChatScreen = ({
                       bodyTrim,
                     );
                     return (
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        onPress={() => {
-                          if (typeof onOpenPost === 'function') {
-                            onOpenPost({
-                              id: msg.listingId,
-                              mediaUrl: resolvedMediaUrl,
-                              body: m.body,
-                            });
-                          }
-                        }}
-                        style={styles.sharedPostCard}>
-                        <View style={styles.sharedPostImageWrap}>
+                      <View style={styles.sharedPostCard}>
+                        <TouchableOpacity
+                          activeOpacity={0.9}
+                          onPress={() => {
+                            if (resolvedMediaUrl) {
+                              openChatImageFullScreen(resolvedMediaUrl);
+                            } else if (typeof onOpenPost === 'function') {
+                              onOpenPost({
+                                id: msg.listingId,
+                                mediaUrl: resolvedMediaUrl,
+                                body: m.body,
+                              });
+                            }
+                          }}
+                          style={styles.sharedPostImageWrap}>
                           {resolvedMediaUrl ? (
                             <Image
                               source={{uri: resolvedMediaUrl}}
@@ -1695,8 +2043,19 @@ const ChatScreen = ({
                             />
                             <Text style={styles.sharedPostBadgeText}>פוסט</Text>
                           </View>
-                        </View>
-                        <View style={styles.sharedPostFooter}>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            if (typeof onOpenPost === 'function') {
+                              onOpenPost({
+                                id: msg.listingId,
+                                mediaUrl: resolvedMediaUrl,
+                                body: m.body,
+                              });
+                            }
+                          }}
+                          style={styles.sharedPostFooter}>
                           <MaterialCommunityIcons
                             name="chevron-left"
                             size={18}
@@ -1711,35 +2070,42 @@ const ChatScreen = ({
                               ? previewLines
                               : 'צפייה בפוסט'}
                           </Text>
-                        </View>
-                      </TouchableOpacity>
+                        </TouchableOpacity>
+                      </View>
                     );
                   })()
                 ) : msg.mediaType === 'image' && msg.mediaUrl ? (
-                  <Image
-                    source={{uri: msg.mediaUrl}}
-                    style={styles.bubbleImage}
-                    resizeMode="cover"
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => openChatImageFullScreen(msg.mediaUrl)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="פתח תמונה במסך מלא">
+                    <Image
+                      source={{uri: msg.mediaUrl}}
+                      style={styles.bubbleImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 ) : null}
                 {msg.mediaType === 'audio' && msg.mediaUrl ? (
-                  <TouchableOpacity
-                    style={[styles.voiceRow, m.isMe && styles.voiceRowMe]}
-                    onPress={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
-                    activeOpacity={0.7}>
-                    <MaterialCommunityIcons
-                      name={playingMessageId === m.id ? 'pause' : 'play'}
-                      size={22}
-                      color={m.isMe ? '#fff' : CHAT_BG}
-                    />
-                    <Text
-                      style={[
-                        styles.voiceLabel,
-                        m.isMe && styles.voiceLabelMe,
-                      ]}>
-                      הודעה קולית
-                    </Text>
-                  </TouchableOpacity>
+                  <ChatVoiceMessageBubble
+                    messageId={m.id}
+                    mediaUrl={msg.mediaUrl}
+                    isMe={m.isMe}
+                    createdAt={m.createdAt}
+                    avatarUri={
+                      !m.isMe
+                        ? isGroupThread
+                          ? peerPic
+                          : profileAvatarUrl
+                        : null
+                    }
+                    isPlaying={playingMessageId === String(m.id)}
+                    progress={voiceMetaById[String(m.id)]?.progress || 0}
+                    durationMs={voiceMetaById[String(m.id)]?.durationMs || 0}
+                    onTogglePlay={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
+                    onDurationKnown={handleVoiceDurationKnown}
+                  />
                 ) : null}
                 {isGroupThread && !m.isMe && m.senderId ? (
                   <Text style={styles.bubbleSenderLabel} numberOfLines={1}>
@@ -1752,14 +2118,16 @@ const ChatScreen = ({
                 !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) ? (
                   <Text style={styles.bubbleText}>{bodyTrim}</Text>
                 ) : null}
-                <Text style={styles.bubbleTime}>
-                  {m.createdAt
-                    ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : ''}
-                </Text>
+                {!(hasAudio && !bodyTrim) ? (
+                  <Text style={styles.bubbleTime}>
+                    {m.createdAt
+                      ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : ''}
+                  </Text>
+                ) : null}
               </View>
             </View>
           </View>
@@ -1890,6 +2258,13 @@ const ChatScreen = ({
     !composerBlockedExclusive &&
     (inputText || '').trim().length > 0 &&
     (isWelcome || isDirectPeer || (isGroupThread && groupConversationId));
+  const canSendChatMedia =
+    composerActive && !isWelcome && !sending && !isRecording;
+
+  useEffect(() => {
+    canRecordVoiceRef.current =
+      composerActive && !isWelcome && !sending && Platform.OS !== 'web';
+  }, [composerActive, isWelcome, sending]);
 
   const offerLocationText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
@@ -2436,97 +2811,240 @@ const ChatScreen = ({
                 }
               : {paddingBottom: composerBottomInset},
           ]}>
-          <View style={styles.inputRow}>
-          <TouchableOpacity
-            style={styles.inputBarIconBtn}
-            activeOpacity={0.7}
-            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
-            <MaterialCommunityIcons name="plus" size={22} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.inputPillWrap}>
-            <TextInput
-              style={styles.inputPill}
-              placeholder="כתוב הודעה"
-              placeholderTextColor={INPUT_PLACEHOLDER}
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-              maxLength={2000}
-              editable={composerActive}
-              writingDirection="rtl"
-              {...(Platform.OS === 'web'
-                ? {id: 'pi-chat-composer-textarea'}
-                : {})}
-            />
-          </View>
-          <TouchableOpacity
+          <View
             style={[
-              styles.inputBarIconBtn,
-              (!composerActive || isWelcome || sending || isRecording) &&
-                styles.inputBarIconDisabled,
-            ]}
-            activeOpacity={0.7}
-            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-            onPress={
-              composerActive && !isWelcome && !sending && !isRecording
-                ? handleSendPhoto
-                : undefined
-            }
-            disabled={!composerActive || isWelcome || sending || isRecording}>
-            <Image
-              source={require('../assets/pi-chat/chat-camera.png')}
-              style={styles.inputBarAssetIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          {sending ? (
-            <View
-              style={styles.inputBarIconBtn}
-              accessibilityState={{busy: true}}>
-              <ActivityIndicator size="small" color="#fff" />
-            </View>
-          ) : canSubmitMessage ? (
-            <TouchableOpacity
-              style={styles.inputBarIconBtn}
-              activeOpacity={0.7}
-              hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-              onPress={handleSend}>
-              <MaterialCommunityIcons name="send" size={22} color="#fff" />
-            </TouchableOpacity>
-          ) : (
-            <Pressable
-              style={styles.inputBarIconBtn}
-              hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-              disabled={!composerActive || isWelcome}
-              onPress={
-                Platform.OS === 'web'
-                  ? () => {
-                      if (!composerActive || isWelcome) return;
-                      Alert.alert('', 'הקלטת קול זמינה באפליקציה לנייד');
-                    }
-                  : undefined
-              }
-              onPressIn={
-                Platform.OS !== 'web' && composerActive && !isWelcome
-                  ? startVoiceRecording
-                  : undefined
-              }
-              onPressOut={
-                Platform.OS !== 'web' && composerActive && !isWelcome
-                  ? stopVoiceRecordingAndSend
-                  : undefined
-              }>
-              <Image
-                source={require('../assets/pi-chat/mic.png')}
+              styles.inputRow,
+              isRecording && styles.inputRowVoiceMode,
+            ]}>
+            {isRecording && !voiceLocked ? (
+              <View
+                style={styles.voiceModeBackdrop}
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants">
+                <View style={styles.voiceMicSpacer}>
+                  {voiceLockHint ? (
+                    <View style={styles.voiceLockHintBadge}>
+                      <MaterialCommunityIcons
+                        name="lock-outline"
+                        size={16}
+                        color="#fff"
+                      />
+                    </View>
+                  ) : null}
+                </View>
+                <Animated.View
+                  style={[
+                    styles.voiceRecordingMain,
+                    {
+                      opacity: voiceEnterAnim,
+                      transform: [
+                        {translateX: voiceSlideX},
+                        {
+                          translateY: voiceEnterAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [10, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}>
+                  <View style={styles.voiceComposerCenter}>
+                    <Animated.View
+                      style={[
+                        styles.voiceRecordingDot,
+                        voiceCancelArmed && styles.voiceRecordingDotCancel,
+                        {opacity: voicePulseAnim},
+                      ]}
+                    />
+                    <Text style={styles.voiceTimerText}>
+                      {formatVoiceDuration(recordingDurationSec)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.voiceCancelZone,
+                      voiceCancelArmed && styles.voiceCancelZoneArmed,
+                    ]}>
+                    <View style={styles.voiceCancelChevrons}>
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={24}
+                        color={
+                          voiceCancelArmed
+                            ? '#FF3B30'
+                            : 'rgba(255,255,255,0.55)'
+                        }
+                      />
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={24}
+                        color={
+                          voiceCancelArmed
+                            ? '#FF3B30'
+                            : 'rgba(255,255,255,0.35)'
+                        }
+                        style={styles.voiceCancelChevronTight}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.voiceCancelHintText,
+                        voiceCancelArmed && styles.voiceCancelHintTextArmed,
+                      ]}>
+                      החלק לביטול
+                    </Text>
+                  </View>
+                </Animated.View>
+                <View style={styles.voiceBackdropSpacer} />
+              </View>
+            ) : null}
+            {isRecording && voiceLocked ? (
+              <>
+                <TouchableOpacity
+                  style={styles.voiceLockedTrashBtn}
+                  onPress={cancelVoiceRecording}
+                  activeOpacity={0.75}
+                  hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                  accessibilityRole="button"
+                  accessibilityLabel="מחק הקלטה">
+                  <MaterialCommunityIcons
+                    name="trash-can-outline"
+                    size={24}
+                    color="#FF3B30"
+                  />
+                </TouchableOpacity>
+                <View style={styles.voiceComposerCenter}>
+                  <Animated.View
+                    style={[styles.voiceRecordingDot, {opacity: voicePulseAnim}]}
+                  />
+                  <Text style={styles.voiceTimerText}>
+                    {formatVoiceDuration(recordingDurationSec)}
+                  </Text>
+                </View>
+              </>
+            ) : null}
+            {!isRecording ? (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.inputBarIconBtn,
+                    !canSendChatMedia && styles.inputBarIconDisabled,
+                  ]}
+                  activeOpacity={0.7}
+                  hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                  onPress={canSendChatMedia ? handlePickFromGallery : undefined}
+                  disabled={!canSendChatMedia}
+                  accessibilityRole="button"
+                  accessibilityLabel="בחר תמונה מהגלריה">
+                  <MaterialCommunityIcons name="plus" size={22} color="#fff" />
+                </TouchableOpacity>
+                <View style={styles.inputPillWrap}>
+                  <TextInput
+                    style={styles.inputPill}
+                    placeholder="כתוב הודעה"
+                    placeholderTextColor={INPUT_PLACEHOLDER}
+                    value={inputText}
+                    onChangeText={setInputText}
+                    multiline
+                    maxLength={2000}
+                    editable={composerActive}
+                    writingDirection="rtl"
+                    {...(Platform.OS === 'web'
+                      ? {id: 'pi-chat-composer-textarea'}
+                      : {})}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.inputBarIconBtn,
+                    !canSendChatMedia && styles.inputBarIconDisabled,
+                  ]}
+                  activeOpacity={0.7}
+                  hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                  onPress={canSendChatMedia ? handleTakePhoto : undefined}
+                  disabled={!canSendChatMedia}
+                  accessibilityRole="button"
+                  accessibilityLabel="צלם תמונה">
+                  <Image
+                    source={require('../assets/pi-chat/chat-camera.png')}
+                    style={styles.inputBarAssetIcon}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </>
+            ) : null}
+            {sending ? (
+              <View
+                style={styles.inputBarIconBtn}
+                accessibilityState={{busy: true}}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            ) : isRecording && voiceLocked ? (
+              <TouchableOpacity
+                style={styles.voiceLockedSendBtn}
+                onPress={stopVoiceRecordingAndSend}
+                activeOpacity={0.85}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                accessibilityRole="button"
+                accessibilityLabel="שלח הודעה קולית">
+                <MaterialCommunityIcons name="send" size={22} color="#fff" />
+              </TouchableOpacity>
+            ) : canSubmitMessage ? (
+              <TouchableOpacity
+                style={styles.inputBarIconBtn}
+                activeOpacity={0.7}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                onPress={handleSend}>
+                <MaterialCommunityIcons name="send" size={22} color="#fff" />
+              </TouchableOpacity>
+            ) : Platform.OS === 'web' ? (
+              <Pressable
+                style={styles.inputBarIconBtn}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                disabled={!composerActive || isWelcome}
+                accessibilityRole="button"
+                accessibilityLabel="הקלט הודעה קולית"
+                onPress={() => {
+                  if (!composerActive || isWelcome) return;
+                  Alert.alert('', 'הקלטת קול זמינה באפליקציה לנייד');
+                }}>
+                <Image
+                  source={require('../assets/pi-chat/mic.png')}
+                  style={[
+                    styles.inputBarAssetIcon,
+                    (!composerActive || isWelcome) && {opacity: 0.45},
+                  ]}
+                  resizeMode="contain"
+                />
+              </Pressable>
+            ) : (
+              <View
                 style={[
-                  styles.inputBarAssetIcon,
-                  isRecording && {tintColor: '#ff6b6b'},
-                  (!composerActive || isWelcome) && {opacity: 0.45},
+                  styles.voiceMicPanBtn,
+                  (!composerActive || isWelcome) && styles.inputBarIconDisabled,
                 ]}
-                resizeMode="contain"
-              />
-            </Pressable>
-          )}
+                {...(composerActive && !isWelcome
+                  ? voiceMicPanResponder.panHandlers
+                  : {})}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isRecording ? 'מקליט הודעה קולית' : 'הקלט הודעה קולית'
+                }>
+                {isRecording && !voiceLocked ? (
+                  <View style={styles.voiceRecordingCircle} />
+                ) : (
+                  <Image
+                    source={require('../assets/pi-chat/mic.png')}
+                    style={[
+                      styles.inputBarAssetIcon,
+                      (!composerActive || isWelcome) && {opacity: 0.45},
+                    ]}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -2888,12 +3406,34 @@ const ChatScreen = ({
               onChangeText={setGroupDescDraft}
               multiline
               maxLength={2000}
-              textAlign={'right'}
+              textAlign={hebrewTextAlign}
               writingDirection="rtl"
               {...(Platform.OS === 'web' ? {id: 'pi-group-desc-input'} : {})}
             />
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={!!fullScreenImageUrl}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setFullScreenImageUrl(null)}>
+        <View style={styles.fullScreenImageRoot}>
+          <TouchableOpacity
+            style={[styles.fullScreenImageCloseBtn, {top: insets.top + 10}]}
+            onPress={() => setFullScreenImageUrl(null)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="סגור">
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <Image
+            source={{uri: fullScreenImageUrl || ''}}
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -2961,14 +3501,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   headerSubtitle: {
     color: TEXT_LIGHT,
     fontSize: 12,
     marginTop: 2,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   headerRight: {
@@ -3228,7 +3770,7 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 46,
     paddingVertical: 8,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     flex: 1,
     writingDirection: 'rtl',
   },
@@ -3669,6 +4211,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     gap: 10,
     marginBottom: 12,
+    width: '100%',
+    maxWidth: '100%',
   },
   messageRowThem: {flexDirection: 'row-reverse'},
   messageRowWelcome: {gap: 6, alignItems: flexStart},
@@ -3681,8 +4225,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   /** Bubbles hug their text width up to maxWidth — no `flex: 1` (which would stretch them across the row). */
-  bubbleWrap: {flexShrink: 1, maxWidth: '85%'},
-  bubbleWrapThem: {maxWidth: '76%'},
+  bubbleWrap: {flexShrink: 1, flexGrow: 0, maxWidth: '85%', minWidth: 0},
+  bubbleWrapThem: {maxWidth: '76%', alignSelf: flexStart},
   bubbleWrapWelcome: {
     flex: 0,
     width: 248,
@@ -3706,22 +4250,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 28,
     borderRadius: 16,
+    maxWidth: '100%',
     ...(Platform.OS === 'web'
       ? {borderTopLeftRadius: 4}
       : {borderTopRightRadius: 4}),
   },
-  bubbleThem: {backgroundColor: BUBBLE_GOLD, alignSelf: flexEnd},
+  bubbleThem: {backgroundColor: BUBBLE_GOLD, alignSelf: flexStart},
   bubbleMe: {
     backgroundColor: BUBBLE_ME,
     ...(Platform.OS === 'web'
       ? {borderTopLeftRadius: 16, borderTopRightRadius: 4}
       : {borderTopRightRadius: 16, borderTopLeftRadius: 4}),
-    alignSelf: flexEnd,
+    alignSelf: flexStart,
+  },
+  bubbleVoiceOnly: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
   },
   bubbleText: {
     color: CHAT_BG,
     fontSize: 15,
-    textAlign: 'right',
+    flexShrink: 1,
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     lineHeight: 22,
   },
@@ -3767,7 +4318,7 @@ const styles = StyleSheet.create({
     color: FIGMA_MAIN_DEEP_BLUE,
     fontSize: 17,
     lineHeight: 21,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
     writingDirection: 'rtl',
@@ -3782,14 +4333,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: 0.54,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
     fontWeight: '400',
   },
   bubbleSenderLabel: {
     color: 'rgba(55,53,72,0.65)',
     fontSize: 11,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     marginBottom: 4,
     fontFamily: 'Rubik-Regular',
   },
@@ -3799,6 +4352,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  fullScreenImageRoot: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImageCloseBtn: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullScreenImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
   },
   sharedPostCard: {
     width: 236,
@@ -3826,7 +4400,7 @@ const styles = StyleSheet.create({
   sharedPostPlaceholderBody: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
     width: '100%',
@@ -3867,19 +4441,9 @@ const styles = StyleSheet.create({
   sharedPostFooterText: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
   },
-  voiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 6,
-    alignSelf: flexStart,
-  },
-  voiceRowMe: {alignSelf: flexStart},
-  voiceLabel: {color: CHAT_BG, fontSize: 15, fontFamily: 'Rubik-Medium'},
-  voiceLabelMe: {color: '#fff'},
   /**
    * Timestamp pinned to the bottom-right of the bubble.
    *   Native (Android/iOS): app forces RTL + swapLeftAndRightInRTL, so `left: 12`
@@ -3905,6 +4469,121 @@ const styles = StyleSheet.create({
     backgroundColor: CHAT_CHROME_BG,
     gap: 8,
     flexShrink: 0,
+    position: 'relative',
+    minHeight: 56,
+  },
+  inputRowVoiceMode: {
+    minHeight: 56,
+  },
+  voiceModeBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: CHAT_CHROME_BG,
+    gap: 8,
+  },
+  voiceRecordingMain: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  voiceBackdropSpacer: {
+    flex: 1,
+    minWidth: 0,
+  },
+  voiceCancelZone: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: flexStart,
+    gap: 6,
+    flexShrink: 1,
+    opacity: 0.92,
+  },
+  voiceCancelZoneArmed: {
+    opacity: 1,
+  },
+  voiceCancelChevrons: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  voiceCancelChevronTight: {
+    marginRight: -12,
+  },
+  voiceCancelHintText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  voiceCancelHintTextArmed: {
+    color: '#FF3B30',
+    fontFamily: 'Rubik-Medium',
+  },
+  voiceComposerCenter: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minWidth: 72,
+  },
+  voiceRecordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
+  },
+  voiceRecordingDotCancel: {
+    backgroundColor: '#FF3B30',
+  },
+  voiceTimerText: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+    fontVariant: ['tabular-nums'],
+    minWidth: 44,
+    textAlign: 'center',
+  },
+  voiceMicSpacer: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 44,
+  },
+  voiceLockHintBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceMicPanBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    overflow: 'visible',
+  },
+  voiceLockedTrashBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  voiceLockedSendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#25D366',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   /** Matches input pill single-line height (32 outer) */
   inputBarIconBtn: {
@@ -3914,6 +4593,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inputBarIconDisabled: {opacity: 0.45},
+  voiceRecordingCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,59,48,0.18)',
+    borderWidth: 2,
+    borderColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   inputBarAssetIcon: {width: 22, height: 22},
   inputPillWrap: {
     flex: 1,
@@ -3941,7 +4630,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     lineHeight: 18,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     backgroundColor: 'transparent',
     ...(Platform.OS === 'ios' && {

@@ -13,10 +13,12 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import FilterSaveButton from '../components/FilterSaveButton';
+import FilterScreenBackBar from '../components/FilterScreenBackBar';
 import {
   flexStart,
   forceLtrStyle,
   getRangeSliderPercentFromEvent,
+  getSheetBottomInset,
   rangeSliderFillStyle,
   rangeSliderThumbStyle,
 } from '../utils/rtlLayout';
@@ -37,7 +39,7 @@ const MAX_AGE = 100;
 
 const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, 8);
+  const bottomInset = getSheetBottomInset(insets);
   const [gender, setGender] = useState(initialFilter?.gender ?? 'female');
   const [ageMin, setAgeMin] = useState(initialFilter?.ageMin ?? 20);
   const [ageMax, setAgeMax] = useState(initialFilter?.ageMax ?? 40);
@@ -243,12 +245,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   return (
     <View style={styles.container}>
       <View style={{height: insets.top}} />
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={onClose}
-        style={styles.topRail}>
-        <View style={styles.handleBar} />
-      </TouchableOpacity>
+      <FilterScreenBackBar onClose={onClose} />
 
       <ScrollView
         style={styles.scroll}
@@ -370,19 +367,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
-  },
-  topRail: {
-    height: 37,
-    borderBottomWidth: 1,
-    borderBottomColor: DIVIDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: '#464646',
-    borderRadius: 3,
   },
   scroll: {flex: 1},
   scrollContent: {

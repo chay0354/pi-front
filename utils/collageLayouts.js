@@ -7,7 +7,7 @@
  *   2 — two columns (equal width)
  *   3 — hero top, two tiles bottom
  *   4 — 2×2 grid
- *   5 — 2 tiles left column, 3 tiles right column
+ *   5 — 2 tiles right column, 3 tiles left column (RTL-mirrored)
  *
  * Coordinates are absolute within the viewport (same convention as TikTokFeedScreen ImageSwiper).
  *
@@ -112,5 +112,8 @@ export function getCollageCellLayouts(imageCount, screenWidth, screenHeight) {
       break;
   }
 
-  return layouts;
+  return layouts.map(cell => ({
+    ...cell,
+    left: screenWidth - cell.left - cell.width,
+  }));
 }
