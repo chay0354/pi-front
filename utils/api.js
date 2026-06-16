@@ -1726,6 +1726,7 @@ export const getListings = async (options = {}) => {
       hospitality_nature: hospitalityNature,
       land_in_mortgage: landInMortgage,
       permit: permit,
+      plan_approval: planApproval,
     } = options;
     const params = new URLSearchParams({status});
     if (category) {
@@ -1764,6 +1765,9 @@ export const getListings = async (options = {}) => {
     }
     if (permit != null && String(permit).trim() !== '') {
       params.append('permit', String(permit).trim());
+    }
+    if (planApproval != null && String(planApproval).trim() !== '') {
+      params.append('plan_approval', String(planApproval).trim());
     }
 
     const url = `${apiBase()}/api/listings?${params.toString()}`;

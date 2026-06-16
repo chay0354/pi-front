@@ -18,6 +18,7 @@ import {getListings, likeListing, unlikeListing} from '../utils/api';
 import {ContextHook} from '../hooks/ContextHook';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
 import {brokerPiRatingFromListing} from '../utils/listingGridCardFigma';
+import {flexEnd} from '../utils/rtlLayout';
 
 const GOLD = '#ffc40a';
 
@@ -222,7 +223,7 @@ const UserListingsScreen = ({creatorId, displayName = '', onClose, onOpenListing
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.mainDeepBlue},
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -234,9 +235,10 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: flexEnd,
   },
   title: {
+    flex: 1,
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Rubik-Regular',

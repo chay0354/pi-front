@@ -522,6 +522,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     zIndex: 1,
+    // Vertically center the number on the star (was sitting slightly low).
+    transform: [{translateY: -4}],
     ...forceLtrStyle,
   },
   gridCardPiBadgeImage: {

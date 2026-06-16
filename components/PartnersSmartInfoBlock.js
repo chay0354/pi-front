@@ -41,7 +41,7 @@ const SMART_BUTTONS = [
   {label: 'מוסדות', key: 'institutions'},
   {label: 'בתי ספר', key: 'schools'},
   {label: 'החיים בשכונה', key: 'neighborhood'},
-  {label: 'מטרדים', key: 'pests'},
+  {label: 'מטרדים', key: 'nuisances'},
   {label: 'מרכזי קניות', key: 'shopping'},
 ];
 
@@ -54,7 +54,7 @@ export default function PartnersSmartInfoBlock({adAddress = ''}) {
     <View style={[styles.block, {width: CONTENT_W}]}>
       <Image source={logoPiAi} style={styles.logo} resizeMode="contain" />
       <Text style={styles.intro}>
-        קבל מידע חכם על סביבת הנכס בלחיצת כפתור
+        קבלו מידע חכם על סביבת הנכס בלחיצת כפתור
       </Text>
       <View style={styles.grid}>
         {SMART_BUTTONS.map((item, index) => (

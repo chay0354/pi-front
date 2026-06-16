@@ -154,7 +154,7 @@ const screenName = {
 const INITIAL_FEED_FILTERS = {
   price: null, // null | { minPrice, maxPrice }
   rooms: null, // null | { area, rooms, floor, parking, balcony, elevator, mamad }
-  city: null, // null | { purpose, city, street, distanceKm, immediateEntry }
+  city: null, // null | { purpose, city, street, distanceKm, regions, immediateEntry }
   apartmentType: null, // null | string | string[] (multi-select: OR)
   type: null, // null | string (global category "סוג" type id)
   meter: null, // null | number (מסחר category: min sq meters)
@@ -166,13 +166,18 @@ const INITIAL_FEED_FILTERS = {
 /** Drop city filter when nothing is set (נקה + שמור); same idea as empty apartmentType. */
 function normalizeCityFeedFilter(f) {
   if (f == null) return null;
+  const country = String(f.country || '').trim();
   const city = String(f.city || '').trim();
   const street = String(f.street || '').trim();
-  const hasLoc = city !== '' || street !== '';
+  const hasLoc = country !== '' || city !== '' || street !== '';
+  const regions = Array.isArray(f.regions)
+    ? f.regions.map(r => String(r || '').trim()).filter(Boolean)
+    : [];
+  const hasRegions = regions.length > 0;
   const imm = f.immediateEntry === true;
   const p = f.purpose;
   const hasPurpose = p === 'rent' || p === 'sale';
-  if (!hasLoc && !imm && !hasPurpose) return null;
+  if (!hasLoc && !imm && !hasPurpose && !hasRegions) return null;
   return f;
 }
 
@@ -231,6 +236,10 @@ export default function App() {
   const [piWelcomeRead, setPiWelcomeRead] = useState(false); // Until user opens Pi welcome once, count it as 1 unread
   const lastOpenedChatAtRef = useRef(null); // ISO timestamp; unread = messages after this
   const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
+  /** After profile post-grid tap: scroll TikTok feed to this listing id, then clear. */
+  const [tikTokFocusListingId, setTikTokFocusListingId] = useState(null);
+  /** Where TikTok back button returns (home vs profile). */
+  const [tikTokReturnScreen, setTikTokReturnScreen] = useState(screenName.home);
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
   const [profileReturnScreen, setProfileReturnScreen] = useState(
     screenName.tikTokFeed,
@@ -249,6 +258,9 @@ export default function App() {
   const [tikTokUserSearchOpenTrigger, setTikTokUserSearchOpenTrigger] =
     useState(0);
   const [companyProjectsContext, setCompanyProjectsContext] = useState(null);
+  /** Where CompanyProjectsScreen back returns (selectedProjects vs userProfile). */
+  const [companyProjectsReturnScreen, setCompanyProjectsReturnScreen] =
+    useState(screenName.selectedProjects);
   /** Payload when opening דווח על חברה from UserProfileScreen (company only). */
   const [companyReportPayload, setCompanyReportPayload] = useState(null);
   /** Figma: 15:10070 company / 10:35338 professional — after report submit. */
@@ -506,42 +518,54 @@ export default function App() {
     [openUserProfileForSubscription],
   );
 
-  const openCompanyReportFromProfile = useCallback(() => {
-    const u = profileUser;
-    const sid = u?.subscription_id || u?.owner_id;
-    if (!sid) {
-      Alert.alert('', 'לא ניתן לשלוח דיווח');
-      return;
-    }
-    const st = String(u?.subscription_type || '').toLowerCase();
-    const isCompany = st === 'company';
-    const isBroker = st === 'broker';
-    const isProfessional = st === 'professional';
-    if (!isCompany && !isProfessional && !isBroker) {
-      Alert.alert('', 'דיווח זה אינו זמין');
-      return;
-    }
-    const displayName = String(
-      u?.creator_name ||
-        u?.business_name ||
-        u?.name ||
-        u?.display_name ||
-        u?.agent_name ||
-        '',
-    ).trim();
-    setCompanyReportPayload({
-      reportedSubscriptionId: String(sid),
-      reportedListingId: u?.id != null ? String(u.id) : null,
-      companyDisplayName: displayName,
-      reportSubjectType: isCompany
-        ? 'company'
-        : isBroker
-          ? 'broker'
-          : 'professional',
-    });
-    setShowCompanyReportSuccess(false);
-    setCurrentScreen(screenName.companyReport);
-  }, [profileUser]);
+  const openCompanyReportFromProfile = useCallback(
+    (forcedSubjectType = null) => {
+      const u = profileUser;
+      const sid = u?.subscription_id || u?.owner_id;
+      if (!sid) {
+        Alert.alert('', 'לא ניתן לשלוח דיווח');
+        return;
+      }
+      const st = String(u?.subscription_type || '').toLowerCase();
+      const isCompany = st === 'company';
+      const isBroker = st === 'broker';
+      const isProfessional = st === 'professional';
+      // BnB ad profiles open the dedicated drawer for any host account type.
+      if (
+        forcedSubjectType !== 'bnb' &&
+        !isCompany &&
+        !isProfessional &&
+        !isBroker
+      ) {
+        Alert.alert('', 'דיווח זה אינו זמין');
+        return;
+      }
+      const displayName = String(
+        u?.creator_name ||
+          u?.business_name ||
+          u?.name ||
+          u?.display_name ||
+          u?.agent_name ||
+          '',
+      ).trim();
+      setCompanyReportPayload({
+        reportedSubscriptionId: String(sid),
+        reportedListingId: u?.id != null ? String(u.id) : null,
+        companyDisplayName: displayName,
+        reportSubjectType:
+          forcedSubjectType === 'bnb'
+            ? 'bnb'
+            : isCompany
+              ? 'company'
+              : isBroker
+                ? 'broker'
+                : 'professional',
+      });
+      setShowCompanyReportSuccess(false);
+      setCurrentScreen(screenName.companyReport);
+    },
+    [profileUser],
+  );
 
   const openProfileReviewsFromProfile = useCallback(list => {
     setProfileReviewsList(Array.isArray(list) ? list : []);
@@ -587,6 +611,7 @@ export default function App() {
             )}
             {currentScreen === screenName.home && (
               <Home
+                carouselCategoryId={selectedCategory}
                 onOpenSelectedProjects={() =>
                   setCurrentScreen(screenName.selectedProjects)
                 }
@@ -601,6 +626,8 @@ export default function App() {
                   // the search panel. Home category buttons must always land on default feed (pics), not
                   // search or favorites.
                   setTikTokUserSearchOpenTrigger(0);
+                  setTikTokFocusListingId(null);
+                  setTikTokReturnScreen(screenName.home);
                   try {
                     await AsyncStorage.setItem(
                       TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
@@ -621,11 +648,13 @@ export default function App() {
               <TikTokFeedScreen
                 key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
                 onClose={() => {
-                  setSelectedCategory(null);
                   setBnbPublishHostType(null);
                   resetFeedFilters();
                   setTikTokUserSearchOpenTrigger(0);
-                  setCurrentScreen(screenName.home);
+                  setTikTokFocusListingId(null);
+                  const returnTo = tikTokReturnScreen;
+                  setTikTokReturnScreen(screenName.home);
+                  setCurrentScreen(returnTo);
                 }}
                 onOpenOfficeListing={(category, opts) => {
                   if (category) setSelectedCategory(category);
@@ -770,6 +799,8 @@ export default function App() {
                 onUserSearchBackToDefaultFeed={() =>
                   setTikTokUserSearchOpenTrigger(0)
                 }
+                focusListingId={tikTokFocusListingId}
+                onFocusListingConsumed={() => setTikTokFocusListingId(null)}
               />
             )}
             {currentScreen === screenName.selectedProjects && (
@@ -781,6 +812,7 @@ export default function App() {
                     name: company.name,
                     logo_url: company.logo_url || null,
                   });
+                  setCompanyProjectsReturnScreen(screenName.selectedProjects);
                   setCurrentScreen(screenName.companyProjects);
                 }}
               />
@@ -915,8 +947,10 @@ export default function App() {
                   companyId={companyProjectsContext.id}
                   companyName={companyProjectsContext.name}
                   onClose={() => {
+                    const returnTo = companyProjectsReturnScreen;
                     setCompanyProjectsContext(null);
-                    setCurrentScreen(screenName.selectedProjects);
+                    setCompanyProjectsReturnScreen(screenName.selectedProjects);
+                    setCurrentScreen(returnTo);
                   }}
                   onOpenListing={listing => {
                     setProfileReturnScreen(screenName.companyProjects);
@@ -1019,6 +1053,28 @@ export default function App() {
                 onOpenAllListings={() =>
                   setCurrentScreen(screenName.userListings)
                 }
+                onOpenCompanyProjects={() => {
+                  const sid =
+                    profileUser?.subscription_id || profileUser?.owner_id;
+                  if (!sid) return;
+                  const name =
+                    profileUser?.business_name ||
+                    profileUser?.creator_name ||
+                    profileUser?.name ||
+                    '';
+                  const logo =
+                    profileUser?.company_logo_url ||
+                    profileUser?.creator_profile_image_url ||
+                    profileUser?.profile_picture_url ||
+                    null;
+                  setCompanyProjectsContext({
+                    id: String(sid).trim(),
+                    name,
+                    logo_url: logo,
+                  });
+                  setCompanyProjectsReturnScreen(screenName.userProfile);
+                  setCurrentScreen(screenName.companyProjects);
+                }}
                 onOpenFollowHub={tab => {
                   setFollowHubInitialTab(tab || 'followers');
                   setFollowHubReturnScreen(screenName.userProfile);
@@ -1029,6 +1085,26 @@ export default function App() {
                 unreadChatCount={
                   currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
                 }
+                onOpenPostInFeed={listing => {
+                  if (!listing?.id) return;
+                  const rawCat =
+                    listing.category != null
+                      ? parseInt(String(listing.category), 10)
+                      : NaN;
+                  if (Number.isFinite(rawCat) && rawCat > 0) {
+                    setSelectedCategory(String(rawCat));
+                  }
+                  setTikTokFocusListingId(String(listing.id).trim());
+                  setTikTokUserSearchOpenTrigger(0);
+                  resetFeedFilters();
+                  setTikTokReturnScreen(screenName.userProfile);
+                  setTikTokFeedRefreshKey(k => k + 1);
+                  AsyncStorage.setItem(
+                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                    DEFAULT_TIKTOK_TOP_FILTER,
+                  ).catch(() => {});
+                  setCurrentScreen(screenName.tikTokFeed);
+                }}
               />
             )}
             {currentScreen === screenName.profileReviews &&
@@ -1049,10 +1125,12 @@ export default function App() {
                   reportSubjectType={
                     companyReportPayload.reportSubjectType === 'broker'
                       ? 'broker'
-                      : companyReportPayload.reportSubjectType ===
-                          'professional'
-                        ? 'professional'
-                        : 'company'
+                      : companyReportPayload.reportSubjectType === 'bnb'
+                        ? 'bnb'
+                        : companyReportPayload.reportSubjectType ===
+                            'professional'
+                          ? 'professional'
+                          : 'company'
                   }
                   currentUser={currentUser}
                   onClose={() => {

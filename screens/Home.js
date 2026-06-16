@@ -46,6 +46,7 @@ const Home = ({
   onOpenProfessionalsDirectory,
   onOpenUserProfile,
   onOpenStoryProfile,
+  carouselCategoryId = null,
 }) => {
   const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
@@ -206,9 +207,10 @@ const Home = ({
       <View style={styles.content}>
         <Carusel
           categoriesList={userCategories}
+          initialCategoryId={carouselCategoryId}
           onCategorySelect={handleCategorySelect}
         />
-        <View style={[styles.profileBarHeader, {marginTop: 20}]}>
+        <View style={[styles.profileBarHeader, {marginTop: 8}]}>
           <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           <TouchableOpacity
             onPress={() => onOpenSelectedProjects?.()}
@@ -246,7 +248,13 @@ const Home = ({
           <TouchableOpacity
             onPress={() => onOpenProfessionalsDirectory?.()}
             style={styles.profileBarHeaderButton}>
-            <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
+            <Text
+              style={[
+                styles.profileBarHeaderButtonText,
+                styles.profileBarHeaderButtonTextAlt,
+              ]}>
+              חפשו עוד
+            </Text>
           </TouchableOpacity>
         </View>
         <HomeStoryStrip
@@ -372,7 +380,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 130,
     height: 122,
-    marginTop: -40,
+    marginTop: -48,
     resizeMode: 'contain',
   },
   content: {
@@ -411,7 +419,8 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   profileBar: {
-    paddingVertical: 10,
+    paddingTop: 4,
+    paddingBottom: 10,
   },
   profileBarHeader: {
     flexDirection: 'row',
@@ -427,6 +436,10 @@ const styles = StyleSheet.create({
     color: '#FFC40A',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
+  },
+  /** Second חפשו עוד (בעלי מקצוע) — distinct color from the gold one above. */
+  profileBarHeaderButtonTextAlt: {
+    color: '#D2D0DC',
   },
   profileBarHeaderText: {
     color: 'white',

@@ -921,6 +921,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.16,
     fontFamily: 'Rubik-Medium',
     zIndex: 1,
+    // Vertically center the number on the star (was sitting slightly low).
+    transform: [{translateY: -5}],
   },
   listPiBadgeImage: {
     width: 72,
@@ -1082,6 +1084,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Medium',
     zIndex: 1,
+    // Vertically center the number on the star (was sitting slightly low).
+    transform: [{translateY: -6}],
   },
   cardPiBadgeImage: {
     width: 85,

@@ -135,7 +135,7 @@ const SMART_BUTTONS = [
   {label: 'מוסדות', key: 'institutions'},
   {label: 'בתי ספר', key: 'schools'},
   {label: 'החיים בשכונה', key: 'neighborhood'},
-  {label: 'מטרדים', key: 'pests'},
+  {label: 'מטרדים', key: 'nuisances'},
   {label: 'מרכזי קניות', key: 'shopping'},
 ];
 
@@ -230,11 +230,15 @@ const UserProfileScreen = ({
   onOpenLogin = null,
   onOpenUserRegistration = null,
   onOpenAllListings = null,
+  /** Company profile: open that company's projects grid (same as home → פרויקטים נבחרים → company). */
+  onOpenCompanyProjects = null,
   onOpenFollowHub = null,
   onOpenCompanyReport = null,
   onOpenAllReviews = null,
   /** Same as Settings Pi Chat row: server unread + 1 until Pi welcome message was opened once */
   unreadChatCount = 0,
+  /** Profile post grid (6 tiles): open TikTok feed scrolled to that listing. */
+  onOpenPostInFeed = null,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
@@ -820,6 +824,11 @@ const UserProfileScreen = ({
     if (typeof onCall === 'function') onCall(primaryContactPhone);
   };
   const handleReportPress = () => {
+    // BnB ad profile: dedicated report drawer (Figma 5:413570) for any host type.
+    if (isBnbListingAdProfile && typeof onOpenCompanyReport === 'function') {
+      onOpenCompanyReport('bnb');
+      return;
+    }
     const st = String(
       resolvedCreator?.subscription_type || user?.subscription_type || '',
     ).toLowerCase();
@@ -1018,8 +1027,24 @@ const UserProfileScreen = ({
       if (videoUri) return {uri: videoUri, isVideo: true};
       return null;
     };
-    return uniquePostRows.map(firstImageFor).filter(Boolean);
+    return uniquePostRows
+      .map(item => {
+        const grid = firstImageFor(item);
+        return grid
+          ? {...grid, listingId: item?.id, listing: item}
+          : null;
+      })
+      .filter(Boolean);
   })();
+
+  const handlePostGridPress = useCallback(
+    item => {
+      const listing = item?.listing;
+      if (!listing?.id || !onOpenPostInFeed) return;
+      onOpenPostInFeed(listing);
+    },
+    [onOpenPostInFeed],
+  );
 
   /** >6: show all tiles (page ScrollView scrolls). ≤6: keep 2×3 grid with empty placeholders. */
   const postGridDisplayItems =
@@ -1812,10 +1837,10 @@ const UserProfileScreen = ({
                     if (item.isVideo) {
                       return (
                         <TouchableOpacity
-                          key={`post-grid-v-${item.uri || i}-${i}`}
+                          key={`post-grid-v-${item.listingId || item.uri || i}-${i}`}
                           style={styles.lastAdGridItem}
                           activeOpacity={0.85}
-                          onPress={() => {}}>
+                          onPress={() => handlePostGridPress(item)}>
                           <View
                             style={[
                               styles.lastAdGridImage,
@@ -1832,10 +1857,10 @@ const UserProfileScreen = ({
                     }
                     return (
                       <TouchableOpacity
-                        key={`post-grid-img-${item.uri}-${i}`}
+                        key={`post-grid-img-${item.listingId || item.uri}-${i}`}
                         style={styles.lastAdGridItem}
                         activeOpacity={0.85}
-                        onPress={() => {}}>
+                        onPress={() => handlePostGridPress(item)}>
                         <Image
                           source={{uri: item.uri}}
                           style={styles.lastAdGridImage}
@@ -2381,7 +2406,7 @@ const UserProfileScreen = ({
                 resizeMode="contain"
               />
               <Text style={styles.smartInfoIntro}>
-                קבל מידע חכם על סביבת הנכס בלחיצת כפתור
+                קבלו מידע חכם על סביבת הנכס בלחיצת כפתור
               </Text>
               <View style={styles.smartInfoGrid}>
                 {SMART_BUTTONS.map((item, index) => (
@@ -2530,33 +2555,22 @@ const UserProfileScreen = ({
                   {isCompany ? 'פרוייקטים נבחרים' : 'הנכסים שלי'}
                 </Text>
                 {isCompany ? (
-                  openedFromCompaniesDirectory ? (
-                    <TouchableOpacity
-                      onPress={() =>
-                        typeof onClose === 'function' ? onClose() : undefined
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (
+                        typeof onOpenCompanyProjects === 'function' &&
+                        creatorId
+                      ) {
+                        onOpenCompanyProjects();
                       }
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel="לכל הפרוייקטים שלנו">
-                      <Text style={styles.myPropertiesSeeAllText}>
-                        לכל הפרוייקטים שלנו
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() =>
-                        typeof onOpenAllListings === 'function' && creatorId
-                          ? onOpenAllListings(creatorId)
-                          : undefined
-                      }
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel="לכל הפרוייקטים שלנו">
-                      <Text style={styles.myPropertiesSeeAllText}>
-                        לכל הפרוייקטים שלנו
-                      </Text>
-                    </TouchableOpacity>
-                  )
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="לכל הפרוייקטים שלנו">
+                    <Text style={styles.myPropertiesSeeAllText}>
+                      לכל הפרוייקטים שלנו
+                    </Text>
+                  </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     onPress={() =>
@@ -3910,7 +3924,7 @@ const styles = StyleSheet.create({
   },
   lastAdImageWrapGridMode: {
     width: SCREEN_WIDTH,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.mainDeepBlue,
   },
   lastAdImage: {height: LAST_AD_IMAGE_HEIGHT},
   lastAdGrid: {
@@ -3922,9 +3936,8 @@ const styles = StyleSheet.create({
   lastAdGridItem: {
     width: '33.3333%',
     aspectRatio: 0.78,
-    // Tight gutter: was 4 — smaller gaps between tiles and less inset on left/right of the grid.
-    paddingVertical: 2,
-    paddingHorizontal: 1,
+    // Uniform gutter so vertical and horizontal gaps between tiles match (1px padding -> 2px gap each way).
+    padding: 1,
   },
   lastAdGridPlaceholderCell: {
     alignItems: 'center',
@@ -3964,6 +3977,8 @@ const styles = StyleSheet.create({
     color: '#FFD275',
     fontSize: 18,
     fontFamily: 'Rubik-Medium',
+    // Number sat a little low vs the star — nudge it up to the star's optical center.
+    transform: [{translateY: -6}],
   },
   lastAdDots: {
     position: 'absolute',

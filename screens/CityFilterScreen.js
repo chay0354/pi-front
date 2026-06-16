@@ -33,6 +33,14 @@ const TEXT_CLUE = 'rgba(255,255,255,0.35)';
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
 
+const BNB_REGIONS = [
+  {id: 'north', label: 'צפון'},
+  {id: 'south', label: 'דרום'},
+  {id: 'center', label: 'מרכז'},
+  {id: 'east', label: 'מזרח'},
+  {id: 'west', label: 'מערב'},
+];
+
 function percentToDistanceKm(percent) {
   const steps = DISTANCE_OPTIONS.length - 1;
   const idx = Math.round(
@@ -55,16 +63,26 @@ const CityFilterScreen = ({
   const compact = screenHeight < 760;
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
   const isPartners = selectedCategory === 3 || selectedCategory === '3';
-  // null = do not filter by rent/sale (מחיר/עיר style "no filter" until user picks a purpose)
+  const isGlobal = selectedCategory === 4 || selectedCategory === '4';
+  const isLand = selectedCategory === 7 || selectedCategory === '7';
+  const isNewFromDeveloper = selectedCategory === 1 || selectedCategory === '1';
+  // Default to 'sale' (למכירה) when opened without a prior rent/sale selection.
   const [purpose, setPurpose] = useState(
     initialFilter != null &&
       (initialFilter.purpose === 'rent' || initialFilter.purpose === 'sale')
       ? initialFilter.purpose
-      : null,
+      : 'sale',
   ); // null | 'rent' | 'sale'
+  const [country, setCountry] = useState(initialFilter?.country ?? '');
   const [city, setCity] = useState(initialFilter?.city ?? '');
   const [street, setStreet] = useState(initialFilter?.street ?? '');
   const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
+  const [regions, setRegions] = useState(() => {
+    const initial = initialFilter?.regions;
+    return Array.isArray(initial)
+      ? initial.map(r => String(r || '').trim()).filter(Boolean)
+      : [];
+  });
   const [immediateEntry, setImmediateEntry] = useState(
     initialFilter?.immediateEntry ?? false,
   );
@@ -141,16 +159,26 @@ const CityFilterScreen = ({
     [applyDistanceFromPercent, refreshMeasureThen],
   );
 
-  const hidePurpose = isBnb || isPartners;
+  const hidePurpose = isBnb || isPartners || isGlobal || isNewFromDeveloper;
+
+  const toggleRegion = regionId => {
+    setRegions(prev =>
+      prev.includes(regionId)
+        ? prev.filter(id => id !== regionId)
+        : [...prev, regionId],
+    );
+  };
 
   const handleSave = () => {
     if (onSave) {
       onSave({
         purpose: hidePurpose ? null : purpose,
+        country: isGlobal ? country : null,
         city,
         street,
-        distanceKm,
-        immediateEntry: isBnb ? null : immediateEntry,
+        distanceKm: isGlobal || isBnb ? null : distanceKm,
+        regions: isBnb && regions.length > 0 ? regions : null,
+        immediateEntry: isGlobal || isBnb || isLand ? null : immediateEntry,
       });
     }
     if (onClose) onClose();
@@ -191,28 +219,66 @@ const CityFilterScreen = ({
 
         {!hidePurpose && (
           <>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>עיר</Text>
+            <View style={styles.purposeToggleTrack}>
+              <TouchableOpacity
+                style={styles.purposeSegment}
+                activeOpacity={0.9}
+                onPress={() => setPurpose(purpose === 'sale' ? null : 'sale')}>
+                {purpose === 'sale' && (
+                  <LinearGradient
+                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    locations={[0.0456, 0.5076, 0.8831]}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.purposeSegmentText,
+                    purpose === 'sale' && styles.purposeSegmentTextActive,
+                  ]}>
+                  למכירה
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.purposeSegment}
+                activeOpacity={0.9}
+                onPress={() => setPurpose(purpose === 'rent' ? null : 'rent')}>
+                {purpose === 'rent' && (
+                  <LinearGradient
+                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    locations={[0.0456, 0.5076, 0.8831]}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.purposeSegmentText,
+                    purpose === 'rent' && styles.purposeSegmentTextActive,
+                  ]}>
+                  להשכרה
+                </Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.purposeList}>
-              <TouchableOpacity
-                style={styles.checkRow}
-                onPress={() => setPurpose('rent')}
-                activeOpacity={0.8}>
-                <View style={styles.checkboxImageWrap}>
-                  <CheckCircle checked={purpose === 'rent'} />
-                </View>
-                <Text style={styles.checkLabel}>להשכרה</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.checkRow}
-                onPress={() => setPurpose('sale')}
-                activeOpacity={0.8}>
-                <View style={styles.checkboxImageWrap}>
-                  <CheckCircle checked={purpose === 'sale'} />
-                </View>
-                <Text style={styles.checkLabel}>למכירה</Text>
-              </TouchableOpacity>
+            <View style={styles.divider} />
+          </>
+        )}
+
+        {isGlobal && (
+          <>
+            <View style={styles.fieldWrap}>
+              <Text style={styles.label}>ארץ</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="הזן שם ארץ"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                value={country}
+                onChangeText={setCountry}
+                textAlign="right"
+              />
             </View>
             <View style={styles.divider} />
           </>
@@ -244,7 +310,8 @@ const CityFilterScreen = ({
         </View>
         <View style={styles.divider} />
 
-        <View style={styles.fieldWrap}>
+        {!isGlobal && !isBnb && (
+        <><View style={styles.fieldWrap}>
           <Text style={styles.label}>מרחק ממני (ק"מ)</Text>
           <View
             ref={sliderRef}
@@ -298,9 +365,31 @@ const CityFilterScreen = ({
             </View>
           </View>
         </View>
-        <View style={styles.divider} />
+        <View style={styles.divider} /></>
+        )}
 
-        {!isBnb && (
+        {isBnb && (
+          <>
+            <View style={styles.fieldWrap}>
+              <Text style={styles.label}>אזור</Text>
+              <View style={styles.regionWrap}>
+                {BNB_REGIONS.map(({id, label}) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={styles.checkRow}
+                    onPress={() => toggleRegion(id)}
+                    activeOpacity={0.8}>
+                    <FigmaCheckbox checked={regions.includes(id)} />
+                    <Text style={styles.checkLabel}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.divider} />
+          </>
+        )}
+
+        {!isBnb && !isGlobal && !isLand && (
           <TouchableOpacity
             style={styles.checkRow}
             onPress={() => setImmediateEntry(!immediateEntry)}
@@ -376,6 +465,33 @@ const styles = StyleSheet.create({
   purposeList: {
     alignItems: flexStart,
     marginBottom: 18,
+  },
+  purposeToggleTrack: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: '#1e1d27',
+    borderRadius: 1000,
+    padding: 10,
+    marginBottom: 18,
+  },
+  purposeSegment: {
+    flex: 1,
+    height: 44,
+    borderRadius: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  purposeSegmentText: {
+    fontFamily: 'Rubik-Medium',
+    fontSize: 20,
+    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+  },
+  purposeSegmentTextActive: {
+    color: '#1e1d27',
   },
   fieldWrap: {
     marginBottom: 18,
@@ -474,6 +590,9 @@ const styles = StyleSheet.create({
     justifyContent: flexStart,
     marginBottom: 14,
     gap: 8,
+  },
+  regionWrap: {
+    gap: 14,
   },
   checkboxImageWrap: {
     width: 24,

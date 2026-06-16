@@ -1,6 +1,6 @@
 import React, {useRef, useState, useMemo, useCallback, useEffect} from 'react';
 import {View, Text, StyleSheet, PanResponder, Platform} from 'react-native';
-import {forceLtrStyle, getRangeSliderPercentFromEvent, rangeSliderFillStyle, rangeSliderThumbStyle} from '../../utils/rtlLayout';
+import {forceLtrStyle, getRangeSliderPercentFromEvent, rangeSliderFillLtrVisualStyle, rangeSliderThumbLtrVisualStyle} from '../../utils/rtlLayout';
 
 import {LinearGradient} from 'expo-linear-gradient';
 /** Match PreferencesFilterScreen (Figma drawer — גיל מועדף). */
@@ -309,7 +309,7 @@ export const AgeRangeSlider = ({
             end={{x: 1, y: 0}}
             style={[
               styles.sliderTrackFill,
-              rangeSliderFillStyle(sliderWidth, minPct, maxPct),
+              rangeSliderFillLtrVisualStyle(sliderWidth, minPct, maxPct),
             ]}
           />
         </View>
@@ -320,7 +320,7 @@ export const AgeRangeSlider = ({
           end={{x: 0.5, y: 1}}
           style={[
             styles.sliderThumb,
-            rangeSliderThumbStyle(sliderWidth, minPct),
+            rangeSliderThumbLtrVisualStyle(sliderWidth, minPct),
             {pointerEvents: 'none'},
           ]}
         />
@@ -331,7 +331,7 @@ export const AgeRangeSlider = ({
           end={{x: 0.5, y: 1}}
           style={[
             styles.sliderThumb,
-            rangeSliderThumbStyle(sliderWidth, maxPct),
+            rangeSliderThumbLtrVisualStyle(sliderWidth, maxPct),
             {pointerEvents: 'none'},
           ]}
         />

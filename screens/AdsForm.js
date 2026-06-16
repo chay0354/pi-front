@@ -88,6 +88,7 @@ import {
   PublishValidationModal,
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
+import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
 import {ContextHook} from '../hooks/ContextHook';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
@@ -570,6 +571,7 @@ const AdsForm = ({
   const [checkOutDate, setCheckOutDate] = useState(null);
   /** Pre-sale tag — stored in ads.sale_at_presale (boolean). */
   const [saleAtPresale, setSaleAtPresale] = useState(false);
+  const [sharedSpacesCompany, setSharedSpacesCompany] = useState(false);
 
   // Update category when initialCategory prop changes
   useEffect(() => {
@@ -994,6 +996,18 @@ const AdsForm = ({
         initialListing.sale_at_presale === true ||
           initialListing.sale_at_presale === 'true' ||
           initialListing.sale_at_presale === 't',
+      );
+    }
+    {
+      const gdShared =
+        initialListing.general_details &&
+        typeof initialListing.general_details === 'object'
+          ? initialListing.general_details.shared_spaces_company
+          : undefined;
+      const sharedRaw =
+        initialListing.shared_spaces_company ?? gdShared;
+      setSharedSpacesCompany(
+        sharedRaw === true || sharedRaw === 'true' || sharedRaw === 't',
       );
     }
     const salesImageRaw =
@@ -2018,6 +2032,7 @@ const AdsForm = ({
                   ? generalDetailsForPayload
                   : undefined,
               saleAtPresale: saleAtPresale === true,
+              sharedSpacesCompany: sharedSpacesCompany === true,
               salesImageUrl: uploadedSalesImageUrl || null,
               projectOffers: (() => {
                 const merged = {...projectOffers, ...otherFormValues};
@@ -2562,6 +2577,14 @@ const AdsForm = ({
                     key="saleatpresale"
                     isSelected={saleAtPresale}
                     onToggle={setSaleAtPresale}
+                  />
+                );
+              case 'sharedspacescompany':
+                return (
+                  <SharedSpacesCompany
+                    key="sharedspacescompany"
+                    isSelected={sharedSpacesCompany}
+                    onToggle={setSharedSpacesCompany}
                   />
                 );
               case 'generaldetailswithradio': {

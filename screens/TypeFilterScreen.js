@@ -23,7 +23,7 @@ const MENU_ICON = require('../assets/tiktok/kind-filter.png');
 // סוג (Type) options for global feed – maps to listing.category in applyFeedFilters
 const TYPE_OPTIONS_GLOBAL = [
   {id: 'apartments', label: 'דירות'},
-  {id: 'penthouses', label: 'נטהאוזים'},
+  {id: 'penthouses', label: 'פנטאוזים'},
   {id: 'private_houses', label: 'בתים פרטיים'},
   {id: 'villas', label: 'וילות'},
   {id: 'estates', label: 'אחוזות'},
@@ -36,7 +36,7 @@ const TYPE_OPTIONS_GLOBAL = [
 // מסחר (category 8): סוג נכס – matches property_type from ads form
 const TYPE_OPTIONS_COMMERCE = [
   {id: 'store', label: 'חנות'},
-  {id: 'shopping_center', label: 'מרכז קניות / קומה שלמה'},
+  {id: 'shopping_center', label: 'מרכז קניות'},
   {id: 'industrial_buildings', label: 'מבני תעשייה'},
   {id: 'warehouse', label: 'מחסן'},
   {id: 'commercial_space', label: 'שטח מסחרי'},
@@ -58,7 +58,7 @@ const TYPE_OPTIONS_BNB = [
 const TYPE_OPTIONS_LAND = [
   {id: 'own_private', label: 'קרקע פרטית'},
   {id: 'agri_yes', label: 'קרקע חקלאית'},
-  {id: 'mortgage_yes', label: 'קרקע במושב'},
+  {id: 'mortgage_yes', label: 'קרקע במושע'},
   {id: 'permit_there_is', label: 'קרקע עם היתר'},
   {id: 'plan_there_is', label: 'קרקע עם תב״ע'},
   {id: 'plan_happy', label: 'קרקע עם תב״ע מאושרת'},

@@ -55,6 +55,16 @@ const REASONS_PROFESSIONAL = [
   {key: 'other', label: 'סיבה אחרת'},
 ];
 
+/** Figma 5:413570 — BNB profile report drawer (מגירה -דווח) */
+const REASONS_BNB = [
+  {key: 'fictitious_listing', label: 'המודעה פיקטיבית'},
+  {key: 'listing_error', label: 'מצאתי טעות במודעה'},
+  {key: 'wrong_phone_in_listing', label: 'מספר הטלפון במודעה שגוי'},
+  {key: 'offensive_content', label: 'המודעה בעלת תוכן פוגעני'},
+  {key: 'fraud', label: 'זו הונאה'},
+  {key: 'other', label: 'סיבה אחרת'},
+];
+
 const REASONS_BROKER = [
   {key: 'listing_error', label: 'מצאתי טעות במודעה'},
   {key: 'listing_not_current', label: 'המודעה אינה אקטואלית'},
@@ -78,6 +88,7 @@ const REASONS_BROKER = [
 function reasonsConfigForSubject(reportSubjectType) {
   if (reportSubjectType === 'broker') return REASONS_BROKER;
   if (reportSubjectType === 'professional') return REASONS_PROFESSIONAL;
+  if (reportSubjectType === 'bnb') return REASONS_BNB;
   return REASONS_COMPANY;
 }
 
@@ -145,6 +156,9 @@ const CompanyReportScreen = ({
     if (reportSubjectType === 'broker') {
       return 'דווח על מתווך זה';
     }
+    if (reportSubjectType === 'bnb') {
+      return 'דווח על מודעה זו';
+    }
     if (reportSubjectType === 'professional') {
       const n = String(companyDisplayName || '').trim();
       return n ? `דווח על ${n}` : 'דווח על מתווך זו';
@@ -183,7 +197,9 @@ const CompanyReportScreen = ({
           ? 'broker'
           : reportSubjectType === 'professional'
             ? 'professional'
-            : 'company',
+            : reportSubjectType === 'bnb'
+              ? 'bnb'
+              : 'company',
       reportedSubscriptionId,
       reportedListingId,
       companyDisplayName,
@@ -270,7 +286,7 @@ const CompanyReportScreen = ({
           onChangeText={setReporterPhone}
           placeholder="הזן מספר טלפון"
           placeholderTextColor={PLACEHOLDER}
-          textAlign="rihgt"
+          textAlign="right"
           keyboardType="phone-pad"
         />
 

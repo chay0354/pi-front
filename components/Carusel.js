@@ -288,7 +288,11 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
   );
 });
 
-const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
+const Carusel = ({
+  categoriesList = userCategories,
+  onCategorySelect,
+  initialCategoryId = null,
+}) => {
   const {width: screenWidth} = useWindowDimensions();
   const list =
     categoriesList && categoriesList.length > 0
@@ -307,7 +311,14 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
   const [carouselWidth, setCarouselWidth] = useState(0);
   const listLength = list.length;
   const infiniteLoop = listLength > 1;
-  const initialLogicalIndex = Math.min(2, Math.max(0, listLength - 1));
+  const initialLogicalIndex = useMemo(() => {
+    if (initialCategoryId != null && String(initialCategoryId).trim() !== '') {
+      const target = Number(initialCategoryId);
+      const idx = list.findIndex(c => Number(c.id) === target);
+      if (idx >= 0) return idx;
+    }
+    return Math.min(2, Math.max(0, listLength - 1));
+  }, [list, listLength, initialCategoryId]);
   const initialVirtualIndex = infiniteLoop
     ? middleCopyStart(listLength) + initialLogicalIndex
     : initialLogicalIndex;
@@ -814,6 +825,16 @@ const Carusel = ({categoriesList = userCategories, onCategorySelect}) => {
     virtualCenterIndexRef.current = initialVirtualIndex;
     setVirtualCenterIndex(initialVirtualIndex);
   }, [categoryIdsKey, initialVirtualIndex]);
+
+  useEffect(() => {
+    if (viewportWidth <= 0 || initialCategoryId == null) {
+      return;
+    }
+    const target = Number(initialCategoryId);
+    const idx = list.findIndex(c => Number(c.id) === target);
+    if (idx < 0) return;
+    scrollToIndex(idx, false);
+  }, [initialCategoryId, list, viewportWidth, scrollToIndex]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;

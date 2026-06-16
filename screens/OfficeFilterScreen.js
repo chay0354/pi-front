@@ -20,28 +20,36 @@ const TYPE_MENU_ICON_SVG = `<svg preserveAspectRatio="none" width="100%" height=
 const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
   const insets = useSafeAreaInsets();
   const bottomInset = getSheetBottomInset(insets);
-  const [area, setArea] = useState(initialFilter?.minArea ?? 50);
-  const [rooms, setRooms] = useState(initialFilter?.minRooms ?? 2);
+  const [office, setOffice] = useState(initialFilter?.office ?? false);
   const [wholeFloor, setWholeFloor] = useState(
     initialFilter?.wholeFloor ?? false,
   );
+  const [sharedSpaces, setSharedSpaces] = useState(
+    initialFilter?.sharedSpaces ?? false,
+  );
+  const [area, setArea] = useState(initialFilter?.minArea ?? 50);
+  const [rooms, setRooms] = useState(initialFilter?.minRooms ?? 2);
   const [parking, setParking] = useState(initialFilter?.parking ?? false);
   const [elevator, setElevator] = useState(initialFilter?.elevator ?? false);
   const [mamad, setMamad] = useState(initialFilter?.mamad ?? false);
 
   useEffect(() => {
     if (initialFilter == null) {
+      setOffice(false);
+      setWholeFloor(false);
+      setSharedSpaces(false);
       setArea(50);
       setRooms(2);
-      setWholeFloor(false);
       setParking(false);
       setElevator(false);
       setMamad(false);
       return;
     }
+    setOffice(!!initialFilter.office);
+    setWholeFloor(!!initialFilter.wholeFloor);
+    setSharedSpaces(!!initialFilter.sharedSpaces);
     setArea(initialFilter.minArea ?? 50);
     setRooms(initialFilter.minRooms ?? 2);
-    setWholeFloor(!!initialFilter.wholeFloor);
     setParking(!!initialFilter.parking);
     setElevator(!!initialFilter.elevator);
     setMamad(!!initialFilter.mamad);
@@ -50,9 +58,11 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
   const handleSave = () => {
     if (onSave) {
       onSave({
+        office,
+        wholeFloor,
+        sharedSpaces,
         minArea: area,
         minRooms: rooms,
-        wholeFloor,
         parking,
         elevator,
         mamad,
@@ -172,7 +182,25 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
           <Text style={styles.title}>סוג</Text>
         </View>
 
-        <View style={styles.stepperGroup}>
+        <View style={styles.checkGroup}>
+          <CheckRow
+            label="משרד"
+            checked={office}
+            onToggle={() => setOffice(!office)}
+          />
+          <CheckRow
+            label="קומה שלמה"
+            checked={wholeFloor}
+            onToggle={() => setWholeFloor(!wholeFloor)}
+          />
+          <CheckRow
+            label="חללים משותפים"
+            checked={sharedSpaces}
+            onToggle={() => setSharedSpaces(!sharedSpaces)}
+          />
+        </View>
+
+        <View style={[styles.stepperGroup, styles.stepperGroupSpaced]}>
           <StepperRow
             label="גודל המשרד"
             value={area}
@@ -191,11 +219,6 @@ const OfficeFilterScreen = ({initialFilter, onClose, onSave}) => {
         </View>
 
         <View style={styles.checkGroup}>
-          <CheckRow
-            label="קומה שלמה"
-            checked={wholeFloor}
-            onToggle={() => setWholeFloor(!wholeFloor)}
-          />
           <CheckRow
             label="חניה"
             checked={parking}
@@ -265,6 +288,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 366,
     gap: 24,
+  },
+  stepperGroupSpaced: {
+    marginTop: 24,
   },
   stepperField: {width: '100%'},
   inputLabel: {

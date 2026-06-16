@@ -10,7 +10,7 @@ import {
 import {Divider} from './Divider';
 import {Colors} from '../../constants/styles';
 import {RadioIcon} from './RadioIcon';
-import {flexStart, textAlign} from '../../utils/rtlLayout';
+import {flexStart, hebrewTextAlign} from '../../utils/rtlLayout';
 
 export const RadioWithText = ({
   isNotLastIndex,
@@ -44,12 +44,16 @@ export const RadioWithText = ({
         onLongPress={onLongPress}
         delayLongPress={450}
         activeOpacity={0.7}>
-        <Text style={[styles.radioOptionText, {textAlign}]}>
+        <RadioIcon isSelected={isSelected} useFigmaStyle={useFigmaStyleIcon} />
+        <View style={[styles.radioSpacer, radioSpacerStyle]} />
+        <Text
+          style={[
+            styles.radioOptionText,
+            {textAlign: hebrewTextAlign, writingDirection: 'rtl'},
+          ]}>
           {title}
           {isRequired && <Text style={styles.requiredStar}>*</Text>}
         </Text>
-        <View style={[styles.radioSpacer, radioSpacerStyle]} />
-        <RadioIcon isSelected={isSelected} useFigmaStyle={useFigmaStyleIcon} />
       </TouchableOpacity>
       {children}
       {isNotLastIndex && <Divider style={styleDevider} />}
@@ -68,6 +72,9 @@ const styles = StyleSheet.create({
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
+    flex: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   radioSpacer: {
     width: 8,

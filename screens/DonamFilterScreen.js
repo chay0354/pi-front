@@ -16,7 +16,7 @@ import FilterScreenBackBar from '../components/FilterScreenBackBar';
 import {getSheetBottomInset} from '../utils/rtlLayout';
 
 const BG = '#1a1926';
-const MIN_DONAM = 0.5;
+const MIN_DONAM = 0;
 const MAX_DONAM = 500;
 const STEP = 0.5;
 

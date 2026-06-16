@@ -56,9 +56,11 @@ const BG = '#2B2A39';
 const DIVIDER = '#373548';
 const INPUT_BORDER = '#8C85B3';
 const MAX_PRICE_DEFAULT = 10000000;
+const MAX_PRICE_LAND = 100000000;
 const MAX_PRICE_BNB = 10000;
-/** Non–BnB: slider and taps move in 1,000,000 increments (aligns with מחיר ± in forms). */
-const PRICE_SLIDER_STEP = 1000000;
+/** Non–BnB (except land): slider moves in ₪250,000 increments. Land keeps ₪1M steps on the 100M scale. */
+const PRICE_SLIDER_STEP = 250000;
+const PRICE_SLIDER_STEP_LAND = 1000000;
 const BNB_PRICE_SLIDER_STEP = 100;
 // BnB: default max (₪/night) when no saved filter. Non-BnB uses `MAX_PRICE_DEFAULT` (0–10M+).
 const INITIAL_MAX_PRICE_BNB = 1000;
@@ -71,6 +73,20 @@ const CALENDAR_ICON = require('../assets/calendarIcon.png');
 // builds produce (e.g. "1.234.567") which users read as a malformed decimal.
 const formatPrice = n =>
   `₪${String(Math.round(Math.max(0, Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+
+/** Strip commas/spaces/₪ — manual entry is digits-only; commas are display-only when blurred. */
+const parsePriceDigits = text => {
+  const digits = String(text ?? '').replace(/[^\d]/g, '');
+  if (!digits) return 0;
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatPriceDigits = n =>
+  String(Math.round(Math.max(0, Number(n) || 0))).replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    ',',
+  );
 
 const toIsoDate = value => {
   if (!value) return null;
@@ -95,7 +111,17 @@ const PriceFilterScreen = ({
   const {height: screenHeight} = useWindowDimensions();
   const compact = screenHeight < 760;
   const isBnb = selectedCategory === 5 || selectedCategory === '5';
-  const maxPriceCap = isBnb ? MAX_PRICE_BNB : MAX_PRICE_DEFAULT;
+  const isLand = selectedCategory === 7 || selectedCategory === '7';
+  const maxPriceCap = isBnb
+    ? MAX_PRICE_BNB
+    : isLand
+      ? MAX_PRICE_LAND
+      : MAX_PRICE_DEFAULT;
+  const priceSliderStep = isBnb
+    ? BNB_PRICE_SLIDER_STEP
+    : isLand
+      ? PRICE_SLIDER_STEP_LAND
+      : PRICE_SLIDER_STEP;
 
   const [minPrice, setMinPrice] = useState(
     Math.max(0, Math.min(initialFilter?.minPrice ?? 0, maxPriceCap)),
@@ -148,13 +174,13 @@ const PriceFilterScreen = ({
   const applyPriceFromPercent = useCallback(
     (percent, isMin) => {
       const cap = maxPriceCap;
-      const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
+      const minGap = isBnb ? 1 : priceSliderStep;
       let value = (percent / 100) * cap;
       if (isBnb) {
         value =
           Math.round(value / BNB_PRICE_SLIDER_STEP) * BNB_PRICE_SLIDER_STEP;
       } else {
-        value = Math.round(value / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
+        value = Math.round(value / priceSliderStep) * priceSliderStep;
       }
       value = Math.max(0, Math.min(cap, value));
       const minP = minPriceRef.current;
@@ -165,7 +191,7 @@ const PriceFilterScreen = ({
       }
       setMaxPrice(Math.min(cap, Math.max(value, minP + minGap)));
     },
-    [isBnb, maxPriceCap],
+    [isBnb, maxPriceCap, priceSliderStep],
   );
 
   const syncSliderMeasure = useCallback(() => {
@@ -253,10 +279,77 @@ const PriceFilterScreen = ({
     [refreshMeasureThen, handleSliderPressAtPercent, applyDragPercent],
   );
 
+  const digitsOnly = text => String(text ?? '').replace(/[^\d]/g, '').slice(0, 11);
+
+  const clampMinPrice = useCallback(
+    raw => {
+      const safe = parsePriceDigits(raw);
+      const maxP = maxPriceRef.current;
+      const minGap = isBnb ? 1 : priceSliderStep;
+      // Manual typing: keep exact digits (slider alone snaps to step in applyPriceFromPercent).
+      return Math.max(0, Math.min(safe, Math.max(0, maxP - minGap)));
+    },
+    [isBnb, priceSliderStep],
+  );
+
+  const clampMaxPrice = useCallback(
+    raw => {
+      const safe = parsePriceDigits(raw);
+      const minP = minPriceRef.current;
+      const minGap = isBnb ? 1 : priceSliderStep;
+      return Math.min(maxPriceCap, Math.max(safe, minP + minGap));
+    },
+    [isBnb, maxPriceCap, priceSliderStep],
+  );
+
+  const commitMinDraft = () => {
+    const normalized = digitsOnly(minDraft);
+    if (!normalized) {
+      setMinDraft('');
+      setMinFocused(false);
+      return;
+    }
+    const next = clampMinPrice(minDraft);
+    setMinPrice(next);
+    setMinDraft('');
+    setMinFocused(false);
+  };
+
+  const commitMaxDraft = () => {
+    const normalized = digitsOnly(maxDraft);
+    if (!normalized) {
+      setMaxDraft('');
+      setMaxFocused(false);
+      return;
+    }
+    const next = clampMaxPrice(maxDraft);
+    setMaxPrice(next);
+    setMaxDraft('');
+    setMaxFocused(false);
+  };
+
   const handleSave = () => {
+    const savedMin =
+      minFocused && digitsOnly(minDraft)
+        ? clampMinPrice(minDraft)
+        : minPrice;
+    const savedMax =
+      maxFocused && digitsOnly(maxDraft)
+        ? clampMaxPrice(maxDraft)
+        : maxPrice;
+    if (minFocused) {
+      setMinPrice(savedMin);
+      setMinDraft('');
+      setMinFocused(false);
+    }
+    if (maxFocused) {
+      setMaxPrice(savedMax);
+      setMaxDraft('');
+      setMaxFocused(false);
+    }
     onSave?.({
-      minPrice,
-      maxPrice,
+      minPrice: savedMin,
+      maxPrice: savedMax,
       ...(isBnb
         ? {
             checkInDate,
@@ -272,41 +365,6 @@ const PriceFilterScreen = ({
   const handleClear = () => {
     onSave?.(null);
     onClose?.();
-  };
-
-  const digitsOnly = text =>
-    String(text ?? '')
-      .replace(/[^\d]/g, '')
-      .slice(0, 10);
-
-  const commitMinDraft = () => {
-    const n = minDraft === '' ? 0 : Number(minDraft);
-    const safe = Number.isFinite(n) ? n : 0;
-    const maxP = maxPriceRef.current;
-    const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
-    let next = Math.max(0, Math.min(safe, Math.max(0, maxP - minGap)));
-    if (!isBnb) {
-      next = Math.round(next / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
-      next = Math.max(0, Math.min(next, Math.max(0, maxP - minGap)));
-    }
-    setMinPrice(next);
-    setMinDraft('');
-    setMinFocused(false);
-  };
-
-  const commitMaxDraft = () => {
-    const n = maxDraft === '' ? 0 : Number(maxDraft);
-    const safe = Number.isFinite(n) ? n : 0;
-    const minP = minPriceRef.current;
-    const minGap = isBnb ? 1 : PRICE_SLIDER_STEP;
-    let next = Math.min(maxPriceCap, Math.max(safe, minP + minGap));
-    if (!isBnb) {
-      next = Math.round(next / PRICE_SLIDER_STEP) * PRICE_SLIDER_STEP;
-      next = Math.min(maxPriceCap, Math.max(next, minP + minGap));
-    }
-    setMaxPrice(next);
-    setMaxDraft('');
-    setMaxFocused(false);
   };
 
   return (
@@ -343,9 +401,7 @@ const PriceFilterScreen = ({
                   value={
                     minFocused
                       ? minDraft
-                      : String(
-                          Math.round(Math.max(0, Number(minPrice) || 0)),
-                        ).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                      : formatPriceDigits(minPrice)
                   }
                   onFocus={() => {
                     setMinFocused(true);
@@ -373,9 +429,7 @@ const PriceFilterScreen = ({
                   value={
                     maxFocused
                       ? maxDraft
-                      : String(
-                          Math.round(Math.max(0, Number(maxPrice) || 0)),
-                        ).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                      : formatPriceDigits(maxPrice)
                   }
                   onFocus={() => {
                     setMaxFocused(true);
@@ -394,9 +448,7 @@ const PriceFilterScreen = ({
                   returnKeyType="done"
                 />
                 <Text style={styles.pricePillPrefix}>
-                  {!isBnb && (Number(maxPrice) || 0) === MAX_PRICE_DEFAULT
-                    ? '+'
-                    : ''}
+                  {!isBnb && (Number(maxPrice) || 0) === maxPriceCap ? '+' : ''}
                 </Text>
               </View>
             </View>
@@ -494,11 +546,9 @@ const PriceFilterScreen = ({
           {paddingBottom: bottomInset + 8},
         ]}>
         <FilterSaveButton onPress={handleSave} style={styles.saveBtnWrap} />
-        {!isBnb ? (
-          <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
-            <Text style={styles.clearText}>נקה</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity style={styles.clearWrap} onPress={handleClear}>
+          <Text style={styles.clearText}>נקה</Text>
+        </TouchableOpacity>
       </View>
       {isBnb ? (
         <CalendarModal

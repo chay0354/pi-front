@@ -63,7 +63,7 @@ const RoomsFilterScreen = ({
           parking: parkingEnabled ? parkingValue : null,
           balcony: null,
           elevator: elevator || null,
-          mamad: null,
+          mamad: mamad || null,
           freeParking: freeParking || null,
         });
       } else {
@@ -276,16 +276,12 @@ const RoomsFilterScreen = ({
         />
         <View style={styles.divider} />
 
-        {!isBnb && (
-          <>
-            <CheckRow
-              label='ממ"ד'
-              checked={mamad}
-              onToggle={() => setMamad(!mamad)}
-            />
-            <View style={styles.divider} />
-          </>
-        )}
+        <CheckRow
+          label='ממ"ד'
+          checked={mamad}
+          onToggle={() => setMamad(!mamad)}
+        />
+        <View style={styles.divider} />
       </ScrollView>
 
       <View

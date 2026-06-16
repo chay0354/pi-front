@@ -786,32 +786,39 @@ const LAND_SIDEBAR_FILTERS = [
     label: 'פרטי',
     subscription_type: 'user',
     ads_only: true,
-    svg: officeSidebarSvgs.broker,
+    svg: officeSidebarSvgs.personal,
   },
   {
-    id: 'land_mushaa',
-    label: 'מושב',
-    land_in_mortgage: 'yes',
+    id: 'land_broker',
+    label: 'תיווך',
+    subscription_type: 'broker',
+    ads_only: true,
     svg: officeSidebarSvgs.broker,
   },
   {
     id: 'land_permit',
     label: 'היתר',
     permit: 'there_is',
-    svg: officeSidebarSvgs.broker,
+    svg: officeSidebarSvgs.permit,
+  },
+  {
+    id: 'land_plan',
+    label: 'תב״ע',
+    plan_approval: 'there_is',
+    svg: officeSidebarSvgs.plan,
   },
   {
     id: 'land_posts',
     label: 'פוסטים',
     feed_post: true,
-    svg: officeSidebarSvgs.broker,
+    svg: officeSidebarSvgs.posts,
   },
   {
     id: 'land_service',
     label: 'נותני שירות',
     subscription_type: 'professional',
     feed_post: true,
-    svg: officeSidebarSvgs.broker,
+    svg: officeSidebarSvgs.service,
   },
 ];
 
@@ -1530,6 +1537,9 @@ const TikTokFeedScreen = ({
   userSearchOpenTrigger = 0,
   /** When user presses back to leave the user-search UI, App clears tikTokUserSearchOpenTrigger. */
   onUserSearchBackToDefaultFeed = null,
+  /** Scroll feed to this listing once listings load (e.g. profile post grid). */
+  focusListingId = null,
+  onFocusListingConsumed = null,
 }) => {
   const insets = useSafeAreaInsets();
   /** Actual container frame (full screen edge-to-edge); reliable on Android unlike Dimensions. */
@@ -1818,7 +1828,11 @@ const TikTokFeedScreen = ({
   ]);
 
   const sidebarDragMaxDown = sidebarIntroProfileOnlyDown;
-  const sidebarDragMaxUp = Math.min(0, sidebarIntroAllIconsDown);
+  /** Dragging up stops exactly when the bottom chip is flush at the clip bottom (all icons visible). */
+  const sidebarDragMaxUp = Math.min(
+    sidebarIntroAllIconsDown,
+    sidebarDragMaxDown,
+  );
   const isSidebarProfileHoldReady = sidebarClipHeight > 0;
   const partnersSidebarLayoutsReady = useMemo(() => {
     if (!isPartnersCategory || sidebarFilterCount === 0) return true;
@@ -2211,6 +2225,9 @@ const TikTokFeedScreen = ({
             land_in_mortgage: landFilter.land_in_mortgage,
           }),
           ...(landFilter?.permit && {permit: landFilter.permit}),
+          ...(landFilter?.plan_approval && {
+            plan_approval: landFilter.plan_approval,
+          }),
           ...(landFilter?.feed_post === true && {feed_post: true}),
           ...(commercialFilter?.feed_post === true && {feed_post: true}),
           ...(legacySidebarFilter?.feed_post === true && {feed_post: true}),
@@ -2494,6 +2511,10 @@ const TikTokFeedScreen = ({
                   listing.sale_at_presale === true ||
                   listing.sale_at_presale === 'true' ||
                   listing.sale_at_presale === 't',
+                sharedSpacesCompany:
+                  listing.general_details &&
+                  typeof listing.general_details === 'object' &&
+                  listing.general_details.shared_spaces_company === true,
                 companyBuildingCount:
                   listing.general_details &&
                   typeof listing.general_details === 'object' &&
@@ -3340,7 +3361,7 @@ const TikTokFeedScreen = ({
       const bnbFeed = selectedCategory === 5 || selectedCategory === '5';
       const landFeed = selectedCategory === 7 || selectedCategory === '7';
       // PriceFilterScreen: max at slider cap = “+” (no upper limit) — from min price to +∞, not a hard ceiling.
-      const MAX_PRICE_SALE_CAP = 10000000; // same as PriceFilterScreen MAX_PRICE_DEFAULT
+      const MAX_PRICE_SALE_CAP = landFeed ? 100000000 : 10000000;
       const MAX_PRICE_BNB_NIGHT_CAP = 10000; // same as PriceFilterScreen MAX_PRICE_BNB
       const noUpperPriceCap = bnbFeed
         ? Number(maxPrice) === MAX_PRICE_BNB_NIGHT_CAP
@@ -3537,8 +3558,16 @@ const TikTokFeedScreen = ({
           l => l.rooms != null && Number(l.rooms) >= Number(o.minRooms),
         );
       }
-      if (o.wholeFloor === true) {
-        out = out.filter(l => (l.apartmentTypeId || '') === 'whole_floor');
+      const selectedOfficeTypes = [];
+      if (o.office === true) selectedOfficeTypes.push('office');
+      if (o.wholeFloor === true) selectedOfficeTypes.push('whole_floor');
+      const wantSharedSpaces = o.sharedSpaces === true;
+      if (selectedOfficeTypes.length > 0 || wantSharedSpaces) {
+        out = out.filter(l => {
+          const typeMatch = selectedOfficeTypes.includes(l.apartmentTypeId || '');
+          const sharedMatch = wantSharedSpaces && l.sharedSpacesCompany === true;
+          return typeMatch || sharedMatch;
+        });
       }
       if (o.parking === true) {
         out = out.filter(l => amenityOn(l, ['חניה', 'חנייה']));
@@ -3600,6 +3629,39 @@ const TikTokFeedScreen = ({
             .join(' ');
           // All tokens must appear somewhere in location/title/name text (and API location field).
           return locationTokens.every(token => searchBlob.includes(token));
+        });
+      }
+      const regionIds = Array.isArray(c.regions)
+        ? c.regions.map(r => String(r || '').trim()).filter(Boolean)
+        : [];
+      if (regionIds.length > 0) {
+        const BNB_REGION_LABELS = {
+          north: 'צפון',
+          south: 'דרום',
+          center: 'מרכז',
+          east: 'מזרח',
+          west: 'מערב',
+        };
+        const regionLabels = regionIds
+          .map(id => BNB_REGION_LABELS[id] || id)
+          .filter(Boolean);
+        out = out.filter(l => {
+          const searchBlob = [
+            l.address,
+            l.location,
+            l.search_address,
+            l.land_address,
+            l.name,
+            l.title,
+            l.project_name,
+            l.property_name,
+          ]
+            .map(s => String(s ?? '').toLowerCase())
+            .filter(Boolean)
+            .join(' ');
+          return regionLabels.some(label =>
+            searchBlob.includes(String(label).toLowerCase()),
+          );
         });
       }
     }
@@ -4116,6 +4178,27 @@ const TikTokFeedScreen = ({
     }
   }, [videos.length, scrollToIndex]);
 
+  useEffect(() => {
+    if (!focusListingId || loadingListings) return;
+    const targetId = String(focusListingId).trim();
+    if (!targetId) {
+      onFocusListingConsumed?.();
+      return;
+    }
+    const idx = videos.findIndex(
+      v => String(v?.id ?? '').trim() === targetId,
+    );
+    if (idx >= 0) {
+      scrollToIndex(idx, false);
+    }
+    onFocusListingConsumed?.();
+  }, [
+    focusListingId,
+    loadingListings,
+    videos,
+    scrollToIndex,
+    onFocusListingConsumed,
+  ]);
 
   const onFeedScroll = useCallback(
     event => {

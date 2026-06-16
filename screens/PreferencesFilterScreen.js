@@ -1,4 +1,4 @@
-import React, {useState, useRef, useCallback, useMemo} from 'react';
+import React, {useState, useRef, useCallback, useMemo, useEffect} from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,8 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  Dimensions,
   PanResponder,
+  Platform,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -19,8 +19,8 @@ import {
   forceLtrStyle,
   getRangeSliderPercentFromEvent,
   getSheetBottomInset,
-  rangeSliderFillStyle,
-  rangeSliderThumbStyle,
+  rangeSliderFillLtrVisualStyle,
+  rangeSliderThumbLtrVisualStyle,
 } from '../utils/rtlLayout';
 
 // Figma: node 25:200959 (מגירה - העדפות)
@@ -53,9 +53,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
     initialFilter?.immediateEntry ?? false,
   );
 
-  const [sliderWidth, setSliderWidth] = useState(
-    Dimensions.get('window').width - 48,
-  );
+  const IS_WEB = Platform.OS === 'web';
+  const [sliderWidth, setSliderWidth] = useState(IS_WEB ? 0 : 320);
   const sliderWidthRef = useRef(sliderWidth);
   const sliderWindowXRef = useRef(0);
   const activeThumbRef = useRef(null);
@@ -109,11 +108,38 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         if (width > 0) {
           sliderWindowXRef.current = x;
           sliderWidthRef.current = width;
+          setSliderWidth(width);
         }
         onReady(percentFromNativeEvent(nativeEvent));
       });
     },
     [percentFromNativeEvent],
+  );
+
+  const handlePressAtPercent = useCallback(
+    percent => {
+      const value = MIN_AGE + (percent / 100) * (MAX_AGE - MIN_AGE);
+      const rounded = Math.round(value);
+      const minDist = Math.abs(rounded - ageMinRef.current);
+      const maxDist = Math.abs(rounded - ageMaxRef.current);
+      if (minDist <= maxDist) {
+        activeThumbRef.current = 'min';
+        updateFromPercent(percent, true);
+      } else {
+        activeThumbRef.current = 'max';
+        updateFromPercent(percent, false);
+      }
+    },
+    [updateFromPercent],
+  );
+
+  const applyDragPercent = useCallback(
+    percent => {
+      const thumb = activeThumbRef.current;
+      if (!thumb) return;
+      updateFromPercent(percent, thumb === 'min');
+    },
+    [updateFromPercent],
   );
 
   const panResponder = useMemo(
@@ -126,31 +152,25 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => true,
         onPanResponderGrant: evt => {
-          refreshMeasureThen(evt.nativeEvent, percent => {
-            const minP =
-              ((ageMinRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
-            const maxP =
-              ((ageMaxRef.current - MIN_AGE) / (MAX_AGE - MIN_AGE)) * 100;
-            activeThumbRef.current =
-              Math.abs(percent - minP) < Math.abs(percent - maxP)
-                ? 'min'
-                : 'max';
-            updateFromPercent(percent, activeThumbRef.current === 'min');
-          });
+          refreshMeasureThen(evt.nativeEvent, handlePressAtPercent);
         },
         onPanResponderMove: evt => {
-          const thumb = activeThumbRef.current;
-          if (!thumb) return;
-          refreshMeasureThen(evt.nativeEvent, percent => {
-            updateFromPercent(percent, thumb === 'min');
-          });
+          if (!activeThumbRef.current) return;
+          refreshMeasureThen(evt.nativeEvent, applyDragPercent);
         },
         onPanResponderRelease: () => {
           activeThumbRef.current = null;
         },
       }),
-    [refreshMeasureThen, updateFromPercent],
+    [refreshMeasureThen, handlePressAtPercent, applyDragPercent],
   );
+
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      syncSliderMeasure();
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [syncSliderMeasure]);
 
   const handleSave = () => {
     if (onSave) {
@@ -277,7 +297,14 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         <View
           ref={sliderRef}
           style={styles.sliderContainer}
-          onLayout={syncSliderMeasure}
+          onLayout={e => {
+            const w = e.nativeEvent.layout.width;
+            if (w > 0) {
+              sliderWidthRef.current = w;
+              setSliderWidth(w);
+            }
+            syncSliderMeasure();
+          }}
           {...panResponder.panHandlers}
           collapsable={false}>
           <View style={styles.sliderTrack}>
@@ -288,7 +315,11 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
               end={{x: 1, y: 0}}
               style={[
                 styles.sliderTrackFill,
-                rangeSliderFillStyle(sliderWidth, minPercent, maxPercent),
+                rangeSliderFillLtrVisualStyle(
+                  sliderWidth,
+                  minPercent,
+                  maxPercent,
+                ),
               ]}
             />
           </View>
@@ -299,7 +330,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              rangeSliderThumbStyle(sliderWidth, minPercent),
+              rangeSliderThumbLtrVisualStyle(sliderWidth, minPercent),
               {pointerEvents: 'none'},
             ]}
           />
@@ -310,7 +341,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              rangeSliderThumbStyle(sliderWidth, maxPercent),
+              rangeSliderThumbLtrVisualStyle(sliderWidth, maxPercent),
               {pointerEvents: 'none'},
             ]}
           />
@@ -493,7 +524,7 @@ const styles = StyleSheet.create({
   },
   sliderContainer: {
     width: '100%',
-    height: 22,
+    height: 44,
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 0,
@@ -503,7 +534,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 9,
+    top: '50%',
+    marginTop: -2,
     height: 4,
     backgroundColor: '#FFFFFF',
     borderRadius: 1000,
@@ -519,7 +551,9 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    top: 0,
+    top: '50%',
+    marginTop: -11,
+    zIndex: 2,
   },
   checksWrap: {
     gap: 28,

@@ -142,6 +142,13 @@ export const userCategories = [
     imageRight: require('../assets/category4Right.png'),
   },
   {
+    id: 6,
+    name: 'מגזר דתי',
+    image: require('../assets/category6.png'),
+    imageLeft: require('../assets/category6Left.png'),
+    imageRight: require('../assets/category6Right.png'),
+  },
+  {
     id: 8,
     name: 'מסחר',
     image: require('../assets/category8.png'),
@@ -1661,6 +1668,9 @@ export const companyCategoryForm = {
           titleRequired: true,
           groups: [],
         },
+      },
+      {
+        key: 'sharedspacescompany',
       },
       {
         key: 'generaldetailswithradio',
