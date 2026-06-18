@@ -108,13 +108,17 @@ const PiAiSearchModal = ({
   onClose,
   onOpenUserProfile,
   embedded = false,
+  initialSnapshot = null,
+  onSnapshotChange,
 }) => {
   const insets = useSafeAreaInsets();
   const {currentUser} = useContext(ContextHook);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialSnapshot?.query || '');
   /** Full catalog; used for browse (no filter) and as the pool for search ranking. */
   const [allListings, setAllListings] = useState([]);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState(
+    Array.isArray(initialSnapshot?.results) ? initialSnapshot.results : [],
+  );
   const [emptyMessage, setEmptyMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -122,9 +126,21 @@ const PiAiSearchModal = ({
    * Until the first non-empty search, we show the welcome state (no listing cards),
    * even if the catalog is already loaded in `allListings`.
    */
-  const [hasSearchedWithQuery, setHasSearchedWithQuery] = useState(false);
+  const [hasSearchedWithQuery, setHasSearchedWithQuery] = useState(
+    Boolean(initialSnapshot?.hasSearched),
+  );
   /** Result layout: 2-up grid (default) or compact list rows. */
-  const [resultsLayout, setResultsLayout] = useState('grid');
+  const [resultsLayout, setResultsLayout] = useState(
+    initialSnapshot?.layout === 'list' ? 'list' : 'grid',
+  );
+  /**
+   * True on the first open when we were handed a restored snapshot (returning
+   * from a listing). Used to skip the catalog-load reset that would otherwise
+   * wipe the restored results.
+   */
+  const restoreResultsRef = React.useRef(
+    Array.isArray(initialSnapshot?.results) && initialSnapshot.results.length > 0,
+  );
   /** Same storage key as TikTokFeedScreen — grid heart shows gold when id is in the set. */
   const [likedListingIds, setLikedListingIds] = useState(() => new Set());
   /** `subscription_id` -> same display number as UserProfile (reviews avg or pi_value). */
@@ -167,10 +183,13 @@ const PiAiSearchModal = ({
       return;
     }
     let cancelled = false;
+    const restoring = restoreResultsRef.current;
     (async () => {
       setLoading(true);
       setError('');
-      setHasSearchedWithQuery(false);
+      if (!restoring) {
+        setHasSearchedWithQuery(false);
+      }
       try {
         const uid = currentUser?.id != null ? String(currentUser.id) : null;
         const res = await getListings({
@@ -182,9 +201,14 @@ const PiAiSearchModal = ({
         }
         const listings = res?.listings || [];
         setAllListings(listings);
-        setQuery('');
-        setEmptyMessage(listings.length ? '' : 'אין מודעות שפורסמו כרגע.');
-        setResults([]);
+        if (restoring) {
+          // Keep the restored query/results; just refresh catalog + likes once.
+          restoreResultsRef.current = false;
+        } else {
+          setQuery('');
+          setEmptyMessage(listings.length ? '' : 'אין מודעות שפורסמו כרגע.');
+          setResults([]);
+        }
         if (uid) {
           syncLikesFromListings(listings, uid);
         }
@@ -353,6 +377,14 @@ const PiAiSearchModal = ({
   };
 
   const handleOpenListing = listing => {
+    // Snapshot the current search so returning from the listing restores the
+    // exact query + results list the user was viewing.
+    onSnapshotChange?.({
+      query,
+      results,
+      hasSearched: hasSearchedWithQuery,
+      layout: resultsLayout,
+    });
     onOpenUserProfile?.(listing);
   };
 
@@ -1055,6 +1087,8 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
   },
+  // Matches EditPublishAdScreen list card: full-height image column on the
+  // side, edge-to-edge, clipped by the card's rounded corners (overflow hidden).
   listResultCard: {
     width: '100%',
     minHeight: 108,
@@ -1062,35 +1096,26 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     backgroundColor: CARD_BG,
     borderRadius: 12,
-    overflow: 'visible',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    gap: 10,
+    overflow: 'hidden',
     ...forceRtlStyle,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: {width: 0, height: 2},
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-      },
-      android: {elevation: 3},
-      default: {},
-    }),
   },
-  /** Fills list row height; 88px thumb is vertically centered. */
+  /** Full-height image column (108px wide) like adCardListRight. The card
+   *  height stays content-driven; the image is absolutely filled so it never
+   *  forces its (large) intrinsic height onto the card. */
   listResultThumbCol: {
+    width: 108,
     alignSelf: 'stretch',
-    justifyContent: 'center',
     flexShrink: 0,
+    position: 'relative',
     ...forceRtlStyle,
   },
   listResultThumb: {
-    width: 88,
-    height: 88,
-    borderRadius: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: IMG_PLACEHOLDER_BG,
-    flexShrink: 0,
   },
   listResultThumbPlaceholder: {
     alignItems: 'center',
@@ -1108,6 +1133,8 @@ const styles = StyleSheet.create({
     gap: 4,
     overflow: 'visible',
     alignItems: flexStart,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     ...forceRtlStyle,
   },
   listResultPrice: {
@@ -1262,11 +1289,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   listResultActions: {
-    width: 76,
+    width: 90,
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 2,
+    paddingVertical: 10,
     ...forceRtlStyle,
   },
   listResultPiRow: {

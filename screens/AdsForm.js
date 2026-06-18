@@ -2115,7 +2115,8 @@ const AdsForm = ({
         ? await updateListing(existingListingId, listingData)
         : await createListing(listingData);
 
-      // Mirror תמונה מכירתית as a home story (bottom strip), not a feed post.
+      // Mirror תמונה מכירתית as both a home story (bottom strip) AND a feed
+      // post in the same category as the ad.
       const publisherSubId = resolveSubscriptionId(currentUser);
       const shouldCreateSalesImageStory =
         uploadedSalesImageUrl &&
@@ -2123,26 +2124,46 @@ const AdsForm = ({
         !salesImageStoryAlreadyCreatedRef.current &&
         (hasLocalMediaFile(salesImage) || salesImageCompanionPendingRef.current);
       if (shouldCreateSalesImageStory) {
-        try {
-          if (!publisherSubId) {
-            console.warn(
-              '[AdsForm] Companion sales-image story skipped: no subscription id on currentUser',
-            );
-          } else {
+        if (!publisherSubId) {
+          console.warn(
+            '[AdsForm] Companion sales-image skipped: no subscription id on currentUser',
+          );
+        } else {
+          try {
             await createSalesImageStory({
               imageUrl: uploadedSalesImageUrl,
               subscriptionId: publisherSubId,
             });
-            salesImageCompanionPendingRef.current = false;
-            salesImageStoryAlreadyCreatedRef.current = true;
-            setSalesImage({uri: uploadedSalesImageUrl});
-            setSalesImageUrl(uploadedSalesImageUrl);
+          } catch (mirrorErr) {
+            console.warn(
+              '[AdsForm] Companion sales-image story failed:',
+              errorMessageFromUnknown(mirrorErr, 'Unknown error'),
+            );
           }
-        } catch (mirrorErr) {
-          console.warn(
-            '[AdsForm] Companion sales-image story failed:',
-            errorMessageFromUnknown(mirrorErr, 'Unknown error'),
-          );
+          // Also publish the sales image as a feed post in the ad's category.
+          try {
+            await createListing({
+              category: listingCategory,
+              status: 'published',
+              subscriptionId: publisherSubId,
+              subscriptionType: currentUser?.subscription_type || null,
+              mainImageUrl: uploadedSalesImageUrl,
+              description: description.trim() || 'פוסט',
+              feedPost: true,
+              feed_post: true,
+              propertyType: 'post',
+              price: 0,
+            });
+          } catch (postErr) {
+            console.warn(
+              '[AdsForm] Companion sales-image post failed:',
+              errorMessageFromUnknown(postErr, 'Unknown error'),
+            );
+          }
+          salesImageCompanionPendingRef.current = false;
+          salesImageStoryAlreadyCreatedRef.current = true;
+          setSalesImage({uri: uploadedSalesImageUrl});
+          setSalesImageUrl(uploadedSalesImageUrl);
         }
       }
 

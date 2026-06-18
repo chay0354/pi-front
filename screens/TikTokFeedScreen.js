@@ -1540,6 +1540,8 @@ const TikTokFeedScreen = ({
   /** Scroll feed to this listing once listings load (e.g. profile post grid). */
   focusListingId = null,
   onFocusListingConsumed = null,
+  /** Open a specific post in the feed (e.g. from hashtag search results). */
+  onOpenPostInFeed = null,
 }) => {
   const insets = useSafeAreaInsets();
   /** Actual container frame (full screen edge-to-edge); reliable on Android unlike Dimensions. */
@@ -1619,6 +1621,8 @@ const TikTokFeedScreen = ({
   const [unseenLikedCount, setUnseenLikedCount] = useState(0);
   const [showUserSearchPanel, setShowUserSearchPanel] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  /** When set, shows the explore grid for this tag (after tapping a hashtag result). */
+  const [selectedHashtag, setSelectedHashtag] = useState(null);
   const [failedSearchAvatarKeys, setFailedSearchAvatarKeys] = useState(
     new Set(),
   );
@@ -4178,6 +4182,16 @@ const TikTokFeedScreen = ({
     }
   }, [videos.length, scrollToIndex]);
 
+  const focusScrollTimerRef = useRef(null);
+  useEffect(
+    () => () => {
+      if (focusScrollTimerRef.current) {
+        clearTimeout(focusScrollTimerRef.current);
+        focusScrollTimerRef.current = null;
+      }
+    },
+    [],
+  );
   useEffect(() => {
     if (!focusListingId || loadingListings) return;
     const targetId = String(focusListingId).trim();
@@ -4189,9 +4203,24 @@ const TikTokFeedScreen = ({
       v => String(v?.id ?? '').trim() === targetId,
     );
     if (idx >= 0) {
+      // Found it — scroll to that exact post and stop focusing.
+      if (focusScrollTimerRef.current) {
+        clearTimeout(focusScrollTimerRef.current);
+        focusScrollTimerRef.current = null;
+      }
       scrollToIndex(idx, false);
+      onFocusListingConsumed?.();
+      return;
     }
-    onFocusListingConsumed?.();
+    // Not in the feed yet (listings may still be streaming in after a remount).
+    // Keep the focus id so the next `videos` update retries, and only give up
+    // after a short grace period so a stale id can't hijack later loads.
+    if (!focusScrollTimerRef.current) {
+      focusScrollTimerRef.current = setTimeout(() => {
+        focusScrollTimerRef.current = null;
+        onFocusListingConsumed?.();
+      }, 5000);
+    }
   }, [
     focusListingId,
     loadingListings,
@@ -5026,6 +5055,54 @@ const TikTokFeedScreen = ({
     return items;
   }, [userSearchSourceListings, userSearchQuery, failedSearchAvatarKeys]);
 
+  /** Pull the hashtags array off a listing's general_details (array or JSON string). */
+  const getListingHashtags = listing => {
+    const gd = listing?.general_details;
+    let raw = gd && typeof gd === 'object' ? gd.hashtags : null;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        raw = Array.isArray(parsed) ? parsed : null;
+      } catch (_) {
+        raw = null;
+      }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map(t => String(t || '').trim()).filter(Boolean);
+  };
+
+  /** Distinct hashtags (with post counts) across all loaded listings, filtered by the query. */
+  const hashtagItems = useMemo(() => {
+    const counts = new Map();
+    (userSearchSourceListings || []).forEach(listing => {
+      getListingHashtags(listing).forEach(tag => {
+        const key = tag.toLowerCase();
+        const existing = counts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          counts.set(key, {tag, count: 1});
+        }
+      });
+    });
+    const q = String(userSearchQuery || '')
+      .trim()
+      .replace(/^#+/, '')
+      .toLowerCase();
+    return [...counts.values()]
+      .filter(it => !q || it.tag.toLowerCase().includes(q))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'he'));
+  }, [userSearchSourceListings, userSearchQuery]);
+
+  /** Listings tagged with the currently selected hashtag (explore grid source). */
+  const hashtagPosts = useMemo(() => {
+    if (!selectedHashtag) return [];
+    const tag = String(selectedHashtag).trim().toLowerCase();
+    return (userSearchSourceListings || []).filter(listing =>
+      getListingHashtags(listing).some(t => t.toLowerCase() === tag),
+    );
+  }, [userSearchSourceListings, selectedHashtag]);
+
   const loadRecentUserSearches = async () => {
     const email = currentUser?.email;
     if (!email) return;
@@ -5118,6 +5195,7 @@ const TikTokFeedScreen = ({
     if (!userSearchOpenTrigger) return;
     setFailedSearchAvatarKeys(new Set());
     setUserSearchQuery('');
+    setSelectedHashtag(null);
     setShowUserSearchPanel(true);
     loadAllUsersForSearch();
     preloadUserRatingsForSearch();
@@ -6027,6 +6105,161 @@ const TikTokFeedScreen = ({
     ],
   );
 
+  /** Open a hashtag-result post inside the feed. */
+  const openHashtagPost = listing => {
+    if (!listing?.id) return;
+    setShowUserSearchPanel(false);
+    setUserSearchQuery('');
+    setSelectedHashtag(null);
+    if (typeof onOpenPostInFeed === 'function') {
+      onOpenPostInFeed(listing);
+      return;
+    }
+    // Fallback: try to scroll to it if it's already in the current feed.
+    const idx = videos.findIndex(
+      v => String(v?.id ?? '').trim() === String(listing.id).trim(),
+    );
+    if (idx >= 0) scrollToIndex(idx, false);
+  };
+
+  /** Thumbnail URL for an explore-grid cell. */
+  const hashtagCellImage = listing =>
+    listing?.main_image_url ||
+    listing?.sales_image_url ||
+    listing?.profile_image_url ||
+    (Array.isArray(listing?.additional_image_urls)
+      ? listing.additional_image_urls[0]
+      : null) ||
+    null;
+
+  /** Caption text for an explore card (post text, else its hashtags). */
+  const hashtagCellCaption = listing => {
+    const desc = String(listing?.description || '').trim();
+    if (desc && desc !== 'פוסט' && desc.toLowerCase() !== 'post') return desc;
+    const tags = getListingHashtags(listing);
+    if (tags.length) return tags.map(t => `#${t}`).join(' ');
+    return '';
+  };
+
+  /** Like count for an explore card. */
+  const hashtagCellLikes = listing => {
+    const n = Number(
+      listing?.post_like_count != null
+        ? listing.post_like_count
+        : listing?.like_count,
+    );
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  /** Selected tag's explore grid (Instagram/TikTok style, 2 cards per row). */
+  const renderHashtagExplore = () => (
+    <View style={styles.hashtagExploreWrap}>
+      <View style={styles.hashtagExploreHeader}>
+        <Text style={styles.hashtagExploreTitle} numberOfLines={1}>
+          #{selectedHashtag}
+        </Text>
+        <Text style={styles.hashtagExploreCount}>
+          {hashtagPosts.length} פוסטים
+        </Text>
+      </View>
+
+      {hashtagPosts.length === 0 ? (
+        <View style={styles.userSearchEmptyWrap}>
+          <Text style={styles.userSearchEmptyText}>
+            אין פוסטים עם ההאשטאג הזה
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.exploreGrid}>
+          {hashtagPosts.map(listing => {
+            const img = hashtagCellImage(listing);
+            const isVideo = String(listing?.video_url || '').trim().length > 0;
+            const caption = hashtagCellCaption(listing);
+            const likes = hashtagCellLikes(listing);
+            const authorName = String(listing?.creator_name || '').trim();
+            const authorAvatar =
+              getUserProfileImageUrl(listing) ||
+              listing?.creator_profile_image_url ||
+              listing?.profile_image_url ||
+              null;
+            return (
+              <View key={String(listing.id)} style={styles.exploreCell}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => openHashtagPost(listing)}>
+                  <View style={styles.exploreThumbWrap}>
+                    {img ? (
+                      <Image
+                        source={{uri: img}}
+                        style={styles.exploreThumb}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.exploreThumb,
+                          styles.exploreCellPlaceholder,
+                        ]}>
+                        <MaterialCommunityIcons
+                          name={
+                            isVideo ? 'play-circle-outline' : 'image-outline'
+                          }
+                          size={34}
+                          color="#6C6A7A"
+                        />
+                      </View>
+                    )}
+                    {isVideo && (
+                      <View style={styles.exploreCellVideoBadge}>
+                        <MaterialCommunityIcons
+                          name="play"
+                          size={14}
+                          color="#FFFFFF"
+                        />
+                      </View>
+                    )}
+                  </View>
+
+                  {caption ? (
+                    <Text style={styles.exploreCaption} numberOfLines={2}>
+                      {caption}
+                    </Text>
+                  ) : null}
+
+                  <View style={styles.exploreMetaRow}>
+                    <View style={styles.exploreAuthorWrap}>
+                      <ProfileAvatar
+                        uri={authorAvatar}
+                        name={authorName}
+                        size={22}
+                      />
+                      <Text
+                        style={styles.exploreAuthorName}
+                        numberOfLines={1}>
+                        {authorName || 'משתמש'}
+                      </Text>
+                    </View>
+                    <View style={styles.exploreLikesWrap}>
+                      <Text style={styles.exploreLikesText}>{likes}</Text>
+                      <MaterialCommunityIcons
+                        name="heart-outline"
+                        size={14}
+                        color="#C9C7D6"
+                      />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       {/* Top bar - back, center filters (spacer keeps filters centered) */}
@@ -6040,8 +6273,14 @@ const TikTokFeedScreen = ({
           hitSlop={12}
           onPress={() => {
             if (showUserSearchPanel) {
+              // Viewing a tag's explore grid → step back to the results list first.
+              if (selectedHashtag) {
+                setSelectedHashtag(null);
+                return;
+              }
               setShowUserSearchPanel(false);
               setUserSearchQuery('');
+              setSelectedHashtag(null);
               setFailedSearchAvatarKeys(new Set());
               // Return to the same default feed as a fresh TikTok open: pics, first item, no stale search trigger.
               setSelectedTopBarFilter(DEFAULT_TOP_BAR_FILTER);
@@ -6069,7 +6308,7 @@ const TikTokFeedScreen = ({
               style={styles.userSearchInput}
               value={userSearchQuery}
               onChangeText={setUserSearchQuery}
-              placeholder="הינט לפני הקלדה"
+              placeholder="חיפוש משתמשים או האשטאגים"
               placeholderTextColor="rgba(255,255,255,0.75)"
               textAlign="right"
               writingDirection="rtl"
@@ -6174,6 +6413,7 @@ const TikTokFeedScreen = ({
             onPress={() => {
               if (!ensureSignedInOrRegister()) return;
               setFailedSearchAvatarKeys(new Set());
+              setSelectedHashtag(null);
               setShowUserSearchPanel(true);
               loadAllUsersForSearch();
               preloadUserRatingsForSearch();
@@ -6186,7 +6426,9 @@ const TikTokFeedScreen = ({
 
       {showUserSearchPanel && (
         <View style={[styles.userSearchPanel, {top: topBarHeight}]}>
-          {(() => {
+          {selectedHashtag
+            ? renderHashtagExplore()
+            : (() => {
             const hasQuery = String(userSearchQuery || '').trim().length > 0;
             const visibleSearchResults = userSearchItems.filter(
               it => !hiddenSearchKeys.has(it.key),
@@ -6195,26 +6437,44 @@ const TikTokFeedScreen = ({
               r => !hiddenSearchKeys.has(`recent:${r.target_subscription_id}`),
             );
             const showRecent = !hasQuery;
+            // Auto-detect like TikTok: `#...` → hashtags only; otherwise a unified
+            // list with matching hashtags first, then matching users.
+            const queryRaw = String(userSearchQuery || '').trim();
+            const hashtagOnly = queryRaw.startsWith('#');
+            const hashtagResultItems = hashtagItems.map(h => ({
+              type: 'hashtag',
+              key: `tag:${h.tag}`,
+              tag: h.tag,
+              count: h.count,
+            }));
+            const userResultItems = visibleSearchResults.map(u => ({
+              ...u,
+              type: 'user',
+            }));
+            const recentItems = visibleRecent.map(r => ({
+              type: 'user',
+              key: `recent:${r.target_subscription_id}`,
+              name: r.name,
+              subtitle:
+                r.subscription_type === 'broker'
+                  ? 'תיווך'
+                  : r.subscription_type === 'company'
+                    ? 'חברה'
+                    : r.subscription_type === 'professional'
+                      ? 'בעל מקצוע'
+                      : '',
+              avatar: r.profileImageUrl || null,
+              ratingTargetId: r.target_subscription_id,
+              listing: null,
+              recentTargetId: r.target_subscription_id,
+              recentEmail: r.email || null,
+              recentSubscriptionType: r.subscription_type || null,
+            }));
             const currentList = showRecent
-              ? visibleRecent.map(r => ({
-                  key: `recent:${r.target_subscription_id}`,
-                  name: r.name,
-                  subtitle:
-                    r.subscription_type === 'broker'
-                      ? 'תיווך'
-                      : r.subscription_type === 'company'
-                        ? 'חברה'
-                        : r.subscription_type === 'professional'
-                          ? 'בעל מקצוע'
-                          : '',
-                  avatar: r.profileImageUrl || null,
-                  ratingTargetId: r.target_subscription_id,
-                  listing: null,
-                  recentTargetId: r.target_subscription_id,
-                  recentEmail: r.email || null,
-                  recentSubscriptionType: r.subscription_type || null,
-                }))
-              : visibleSearchResults;
+              ? recentItems
+              : hashtagOnly
+                ? hashtagResultItems
+                : [...hashtagResultItems, ...userResultItems];
             return (
               <>
                 <View style={styles.userSearchSectionHeader}>
@@ -6246,6 +6506,34 @@ const TikTokFeedScreen = ({
                     </View>
                   ) : (
                     currentList.map(item => {
+                      if (item.type === 'hashtag') {
+                        return (
+                          <TouchableOpacity
+                            key={item.key}
+                            activeOpacity={0.8}
+                            style={styles.hashtagRow}
+                            onPress={() => setSelectedHashtag(item.tag)}>
+                            <View style={styles.hashtagRowIcon}>
+                              <Text style={styles.hashtagRowIconText}>#</Text>
+                            </View>
+                            <View style={styles.hashtagRowTextWrap}>
+                              <Text
+                                style={styles.hashtagRowTitle}
+                                numberOfLines={1}>
+                                #{item.tag}
+                              </Text>
+                              <Text style={styles.hashtagRowCount}>
+                                {item.count} פוסטים
+                              </Text>
+                            </View>
+                            <MaterialCommunityIcons
+                              name="chevron-left"
+                              size={24}
+                              color="#8C8A99"
+                            />
+                          </TouchableOpacity>
+                        );
+                      }
                       const effectiveTargetId =
                         item.ratingTargetId ||
                         (item.listing
@@ -7073,6 +7361,154 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#2B2A39',
     zIndex: 190,
+  },
+  // Force-RTL app: plain `row` lays children right → left (icon on the right,
+  // chevron on the left), matching the user-search rows.
+  hashtagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    height: 74,
+    borderBottomWidth: 1,
+    borderBottomColor: '#373548',
+  },
+  hashtagRowIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#3A3850',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hashtagRowIconText: {
+    color: '#FFC40A',
+    fontSize: 26,
+    fontFamily: 'Rubik-Bold',
+  },
+  hashtagRowTextWrap: {
+    flex: 1,
+    // Under forceRTL, flex-start = physical right, so the tag + count hug the
+    // right edge next to the # icon (textAlign:'right' alone lands on the
+    // physical left because of swapLeftAndRightInRTL on native).
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  hashtagRowTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  hashtagRowCount: {
+    color: '#9A98A8',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  hashtagExploreWrap: {
+    flex: 1,
+  },
+  hashtagExploreHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 12,
+    // flex-start = physical right under forceRTL (see hashtagRowTextWrap).
+    alignItems: 'flex-start',
+  },
+  hashtagExploreTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontFamily: 'Rubik-Bold',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  hashtagExploreCount: {
+    color: '#9A98A8',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  exploreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 6,
+    paddingBottom: 40,
+  },
+  exploreCell: {
+    width: '50%',
+    padding: 6,
+  },
+  exploreThumbWrap: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1E1D27',
+  },
+  exploreThumb: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1E1D27',
+  },
+  exploreCellPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exploreCellVideoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exploreCaption: {
+    color: '#EDECF2',
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Regular',
+    // hebrewTextAlign renders physical right under forceRTL swap on native.
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    marginTop: 8,
+  },
+  exploreMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  exploreAuthorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  exploreAuthorName: {
+    flex: 1,
+    color: '#B9B7C7',
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  exploreLikesWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginLeft: 6,
+  },
+  exploreLikesText: {
+    color: '#C9C7D6',
+    fontSize: 12,
+    fontFamily: 'Rubik-Medium',
   },
   userSearchSectionHeader: {
     flexDirection: 'row-reverse',
