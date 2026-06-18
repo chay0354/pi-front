@@ -651,6 +651,9 @@ const PostEditorScreen = ({
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
+  const [hashtags, setHashtags] = useState([]);
+  const [showHashtagModal, setShowHashtagModal] = useState(false);
+  const [hashtagInput, setHashtagInput] = useState('');
   const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
@@ -795,6 +798,7 @@ const PostEditorScreen = ({
           feed_post: true,
           propertyType: 'post',
           price: 0,
+          hashtags,
         });
       }
 
@@ -1111,6 +1115,24 @@ const PostEditorScreen = ({
     });
   };
 
+  const addHashtagFromInput = () => {
+    const raw = String(hashtagInput || '')
+      .replace(/^#+/, '')
+      .trim();
+    if (!raw) return;
+    setHashtags(prev => {
+      const cleaned = raw.replace(/\s+/g, '').slice(0, 50);
+      if (!cleaned || prev.includes(cleaned)) return prev;
+      if (prev.length >= 30) return prev;
+      return [...prev, cleaned];
+    });
+    setHashtagInput('');
+  };
+
+  const removeHashtag = tag => {
+    setHashtags(prev => prev.filter(t => t !== tag));
+  };
+
   const applyBackgroundImage = uri => {
     if (!uri) return;
     setBackgroundVideoAsset(null);
@@ -1310,6 +1332,9 @@ const PostEditorScreen = ({
     setTextModeOverlayText('');
     setTextContent('');
     setTextAlignMode('center');
+    setHashtags([]);
+    setHashtagInput('');
+    setShowHashtagModal(false);
     nextStackOrderRef.current = 1;
     Keyboard.dismiss();
   };
@@ -1467,6 +1492,20 @@ const PostEditorScreen = ({
                   style={styles.closeIconContainer}
                   onPress={addTextBlock}>
                   <Text style={styles.AaStyleBtnText}>Aa</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.hashtagBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="האשטאגים"
+                  onPress={() => setShowHashtagModal(true)}>
+                  <Text style={styles.hashtagBtnSymbol}>#</Text>
+                  {hashtags.length > 0 && (
+                    <View style={styles.hashtagBadge}>
+                      <Text style={styles.hashtagBadgeText}>
+                        {hashtags.length}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
                 {editingTextBlockId && (
                   <TouchableOpacity
@@ -1952,6 +1991,85 @@ const PostEditorScreen = ({
           </View>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showHashtagModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent={Platform.OS === 'android'}
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setShowHashtagModal(false)}>
+        <Pressable
+          style={styles.hashtagBackdrop}
+          onPress={() => {
+            Keyboard.dismiss();
+            setShowHashtagModal(false);
+          }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.hashtagAvoid}>
+            <View
+              style={styles.hashtagCard}
+              onStartShouldSetResponder={() => true}>
+              <Text style={styles.hashtagTitle}>האשטאגים</Text>
+              <Text style={styles.hashtagSubtitle}>
+                הוסף האשטאגים לפוסט כדי שיהיה קל יותר למצוא אותו
+              </Text>
+
+              <View style={styles.hashtagInputRow}>
+                <TextInput
+                  style={styles.hashtagInput}
+                  value={hashtagInput}
+                  onChangeText={setHashtagInput}
+                  placeholder="הקלד האשטאג..."
+                  placeholderTextColor="#999999"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={addHashtagFromInput}
+                  blurOnSubmit={false}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.hashtagAddBtn,
+                    !hashtagInput.trim() && styles.hashtagAddBtnDisabled,
+                  ]}
+                  disabled={!hashtagInput.trim()}
+                  onPress={addHashtagFromInput}>
+                  <Text style={styles.hashtagAddBtnText}>הוסף</Text>
+                </TouchableOpacity>
+              </View>
+
+              {hashtags.length > 0 ? (
+                <View style={styles.hashtagChipsWrap}>
+                  {hashtags.map(tag => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={styles.hashtagChip}
+                      activeOpacity={0.7}
+                      onPress={() => removeHashtag(tag)}>
+                      <Text style={styles.hashtagChipText}>#{tag}</Text>
+                      <Text style={styles.hashtagChipRemove}>×</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.hashtagEmpty}>אין האשטאגים עדיין</Text>
+              )}
+
+              <TouchableOpacity
+                style={styles.hashtagDoneBtn}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setShowHashtagModal(false);
+                }}>
+                <Text style={styles.hashtagDoneBtnText}>סיום</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -2415,6 +2533,154 @@ const styles = StyleSheet.create({
     width: 29,
     height: 29,
     borderRadius: 14.5,
+  },
+  hashtagBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: '#00000066',
+  },
+  hashtagBtnSymbol: {
+    color: '#fff',
+    fontSize: 22,
+    fontFamily: 'Rubik-Medium',
+    lineHeight: 26,
+  },
+  hashtagBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: '#FF3250',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hashtagBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'Rubik-Bold',
+  },
+  hashtagBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    // Shift the popup a bit above center.
+    paddingBottom: 160,
+  },
+  hashtagAvoid: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  hashtagCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    writingDirection: 'rtl',
+  },
+  hashtagTitle: {
+    fontSize: 19,
+    fontFamily: 'Rubik-Bold',
+    color: '#1E1D27',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  hashtagSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    color: '#777777',
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  hashtagInputRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hashtagInput: {
+    flex: 1,
+    height: 46,
+    borderWidth: 1,
+    borderColor: '#E2E2E8',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    color: '#1E1D27',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    backgroundColor: '#FAFAFB',
+  },
+  hashtagAddBtn: {
+    height: 46,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: '#1E1D27',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hashtagAddBtnDisabled: {
+    opacity: 0.4,
+  },
+  hashtagAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Rubik-Medium',
+  },
+  hashtagChipsWrap: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+  },
+  hashtagChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#EEF1FB',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  hashtagChipText: {
+    color: '#2D7DF0',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+    writingDirection: 'rtl',
+  },
+  hashtagChipRemove: {
+    color: '#2D7DF0',
+    fontSize: 18,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Bold',
+  },
+  hashtagEmpty: {
+    marginTop: 16,
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    color: '#AAAAAA',
+    textAlign: 'center',
+  },
+  hashtagDoneBtn: {
+    marginTop: 22,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#1E1D27',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hashtagDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
   },
   mediaSheetBackdrop: {
     flex: 1,

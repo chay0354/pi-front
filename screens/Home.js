@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import React, {useCallback, useEffect, useRef, useState, memo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
@@ -47,19 +48,35 @@ const Home = ({
   onOpenUserProfile,
   onOpenStoryProfile,
   carouselCategoryId = null,
+  reopenAi = false,
+  aiSnapshot = null,
+  onAiReopenConsumed,
+  onAiSnapshotChange,
 }) => {
   const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
   const [viewerRing, setViewerRing] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
-  const flipProgress = useRef(new Animated.Value(0)).current;
-  const flippedRef = useRef(false);
-  const [flipped, setFlipped] = useState(false);
+  // Start already flipped to the Pi AI back face when returning from a listing
+  // that was opened out of the Pi AI results.
+  const flipProgress = useRef(new Animated.Value(reopenAi ? 1 : 0)).current;
+  const flippedRef = useRef(reopenAi);
+  const [flipped, setFlipped] = useState(reopenAi);
   const flipAnimRef = useRef(null);
-  const [aiMounted, setAiMounted] = useState(false);
+  const [aiMounted, setAiMounted] = useState(reopenAi);
+  // Project feature card starts muted (matches Figma node 7:40660).
+  const [projectMuted, setProjectMuted] = useState(true);
   const logoTapCountRef = useRef(0);
   const logoTapResetTimerRef = useRef(null);
+
+  // Consume the one-shot reopen flag once we've restored the flipped state.
+  useEffect(() => {
+    if (reopenAi) {
+      onAiReopenConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const LOGO_TAPS_TO_OPEN_AI = 3;
   const LOGO_TAP_RESET_MS = 700;
@@ -231,6 +248,19 @@ const Home = ({
               style={styles.videoLogo}
               resizeMode="contain"
             />
+            <TouchableOpacity
+              style={styles.muteBtn}
+              activeOpacity={0.8}
+              onPress={() => setProjectMuted(m => !m)}
+              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+              accessibilityRole="button"
+              accessibilityLabel={projectMuted ? 'בטל השתקה' : 'השתק'}>
+              <MaterialCommunityIcons
+                name={projectMuted ? 'volume-mute' : 'volume-high'}
+                size={24}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
           </View>
           <Image
             source={require('../assets/popular.png')}
@@ -268,10 +298,11 @@ const Home = ({
 
   const handleAiOpenProfile = useCallback(
     listing => {
-      toggleFlip();
+      // Keep the AI search flipped open in the background so that closing the
+      // listing returns to the results list (App restores it on home remount).
       onOpenUserProfile?.(listing);
     },
-    [toggleFlip, onOpenUserProfile],
+    [onOpenUserProfile],
   );
 
   const backFace = aiMounted ? (
@@ -280,6 +311,8 @@ const Home = ({
       visible={flipped}
       onClose={toggleFlip}
       onOpenUserProfile={handleAiOpenProfile}
+      initialSnapshot={aiSnapshot}
+      onSnapshotChange={onAiSnapshotChange}
     />
   ) : null;
 
@@ -409,6 +442,17 @@ const styles = StyleSheet.create({
     width: 45,
     height: 45,
     resizeMode: 'contain',
+  },
+  // Mute toggle bottom-left of the feature card (Figma node I7:40660;391:18915).
+  // Under forceRTL the left/right props are swapped, so `right` = physical left.
+  muteBtn: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   popularLogo: {
     position: 'absolute',

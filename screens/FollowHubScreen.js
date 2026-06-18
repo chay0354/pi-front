@@ -31,6 +31,7 @@ import {
 const TAB_REQUESTS = 'requests';
 const TAB_FOLLOWERS = 'followers';
 const TAB_FOLLOWING = 'following';
+const TAB_LIKES = 'likes';
 
 /** Same art as TikTokFeedScreen user-search rating row. */
 const RATING_STAR_ONE_TO_FOUR = require('../assets/tiktok/1-4hurt.png');
@@ -103,6 +104,7 @@ const FollowHubScreen = ({
     const base = [
       {id: TAB_FOLLOWERS, label: 'עוקבים'},
       {id: TAB_FOLLOWING, label: 'עוקב'},
+      {id: TAB_LIKES, label: 'לייקים'},
     ];
     return isOwnProfile ? [{id: TAB_REQUESTS, label: 'הצעות'}, ...base] : base;
   }, [isOwnProfile]);
@@ -314,6 +316,10 @@ const FollowHubScreen = ({
   const renderActionButton = row => {
     const busy = actioningId === row?.id;
     const canFollowRow = isFollowableSubscriptionType(row?.subscription_type);
+    // Likes tab: just list everyone who liked — no follow/unfollow action.
+    if (activeTab === TAB_LIKES) {
+      return <View style={styles.rowActionPlaceholder} />;
+    }
     if (activeTab === TAB_REQUESTS && isOwnProfile) {
       return (
         <View style={styles.rowActionCluster}>
@@ -479,6 +485,7 @@ const FollowHubScreen = ({
   const labelWithCount = tabId => {
     if (tabId === TAB_REQUESTS) return `הצעות ${counts.pending_requests}`;
     if (tabId === TAB_FOLLOWERS) return `עוקבים ${counts.followers}`;
+    if (tabId === TAB_LIKES) return `לייקים ${counts.likes}`;
     return `עוקב ${counts.following}`;
   };
 
@@ -511,6 +518,7 @@ const FollowHubScreen = ({
                 onPress={() => setActiveTab(tab.id)}
                 style={styles.tabTouch}>
                 <Text
+                  numberOfLines={1}
                   style={[styles.tabText, selected && styles.tabTextSelected]}>
                   {labelWithCount(tab.id)}
                 </Text>
@@ -705,17 +713,19 @@ const styles = StyleSheet.create({
   tabsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 24,
+    gap: 8,
   },
   tabTouch: {
-    width: 104,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'flex-end',
     minHeight: 27,
   },
   tabText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
   tabTextSelected: {
@@ -723,14 +733,16 @@ const styles = StyleSheet.create({
   },
   tabLine: {
     marginTop: 10,
-    width: 80,
+    width: '80%',
+    maxWidth: 80,
     height: 2,
     borderRadius: 24,
     backgroundColor: '#FFC40A',
   },
   tabLinePlaceholder: {
     marginTop: 10,
-    width: 80,
+    width: '80%',
+    maxWidth: 80,
     height: 2,
     opacity: 0,
   },

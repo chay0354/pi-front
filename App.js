@@ -15,6 +15,8 @@ import OnboardingFlow from './components/OnboardingOverlay';
 import {
   hasCompletedOnboarding,
   markOnboardingCompleted,
+  hasAcceptedTerms,
+  markTermsAccepted,
 } from './utils/onboardingStorage';
 import {
   AdsForm,
@@ -204,6 +206,8 @@ export default function App() {
   }, [fontsLoaded]);
   const [appBootstrapDone, setAppBootstrapDone] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  /** After onboarding: must accept terms before using the app. */
+  const [showTermsGate, setShowTermsGate] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
@@ -268,6 +272,10 @@ export default function App() {
     useState(false);
   /** Reviews passed from UserProfileScreen when opening Figma full reviews page. */
   const [profileReviewsList, setProfileReviewsList] = useState(null);
+  /** One-shot: reopen the Pi AI search (home flip back face) when next showing home. */
+  const [piAiReopen, setPiAiReopen] = useState(false);
+  /** Snapshot of the Pi AI search (query/results/layout) so returning restores the list. */
+  const [piAiSnapshot, setPiAiSnapshot] = useState(null);
   const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null);
   // 'userProfile' | 'home' | 'settings' | 'tikTokFeed' | 'favorites' | null
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
@@ -311,15 +319,30 @@ export default function App() {
       await markOnboardingCompleted();
     } catch (_) {}
     setShowOnboarding(false);
+    // After onboarding, gate the app behind terms acceptance (unless already accepted).
+    try {
+      const accepted = await hasAcceptedTerms();
+      setShowTermsGate(!accepted);
+    } catch (_) {
+      setShowTermsGate(true);
+    }
+  }, []);
+
+  const handleTermsAccepted = useCallback(async () => {
+    try {
+      await markTermsAccepted();
+    } catch (_) {}
+    setShowTermsGate(false);
   }, []);
 
   // Load user data, onboarding flag, and last-opened-chat from AsyncStorage on mount
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const [savedUser, onboardingDone] = await Promise.all([
+        const [savedUser, onboardingDone, termsAccepted] = await Promise.all([
           AsyncStorage.getItem('pi_current_user'),
           hasCompletedOnboarding(),
+          hasAcceptedTerms(),
         ]);
 
         if (savedUser) {
@@ -335,6 +358,8 @@ export default function App() {
         }
 
         setShowOnboarding(!onboardingDone);
+        // Onboarding already done previously but terms not yet accepted → show the gate.
+        setShowTermsGate(onboardingDone && !termsAccepted);
       } catch (error) {
         setCurrentScreen(screenName.home);
         setShowOnboarding(true);
@@ -429,29 +454,11 @@ export default function App() {
     saveUser();
   }, [currentUser]);
 
-  // Leaving TikTok and coming back should start with clean filters.
+  // Selected bottom filters persist across leaving/returning TikTok — just
+  // track the previous screen (no longer reset on re-entry).
   useEffect(() => {
-    const prevScreen = lastScreenRef.current;
-    const filterScreens = new Set([
-      screenName.cityFilter,
-      screenName.apartmentTypeFilter,
-      screenName.roomsFilter,
-      screenName.priceFilter,
-      screenName.typeFilter,
-      screenName.meterFilter,
-      screenName.donamFilter,
-      screenName.preferencesFilter,
-      screenName.officeFilter,
-    ]);
-    if (
-      currentScreen === screenName.tikTokFeed &&
-      prevScreen !== screenName.tikTokFeed &&
-      !filterScreens.has(prevScreen)
-    ) {
-      resetFeedFilters();
-    }
     lastScreenRef.current = currentScreen;
-  }, [currentScreen, resetFeedFilters]);
+  }, [currentScreen]);
 
   const openUserProfileForSubscription = useCallback(
     async (sid, meta = {}, returnScreen = screenName.home) => {
@@ -637,11 +644,18 @@ export default function App() {
                   setCurrentScreen(screenName.tikTokFeed);
                 }}
                 onOpenUserProfile={listing => {
+                  // Opened from Pi AI results — remember to reopen the search
+                  // (and restore its results) when we come back to home.
                   setProfileReturnScreen(screenName.home);
+                  setPiAiReopen(true);
                   setProfileUser(listing);
                   setCurrentScreen(screenName.userProfile);
                 }}
                 onOpenStoryProfile={openUserProfileFromStoryRing}
+                reopenAi={piAiReopen}
+                aiSnapshot={piAiReopen ? piAiSnapshot : null}
+                onAiReopenConsumed={() => setPiAiReopen(false)}
+                onAiSnapshotChange={setPiAiSnapshot}
               />
             )}
             {currentScreen === screenName.tikTokFeed && (
@@ -649,7 +663,8 @@ export default function App() {
                 key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
                 onClose={() => {
                   setBnbPublishHostType(null);
-                  resetFeedFilters();
+                  // Keep the selected bottom filters so they persist when the
+                  // user leaves TikTok and comes back.
                   setTikTokUserSearchOpenTrigger(0);
                   setTikTokFocusListingId(null);
                   const returnTo = tikTokReturnScreen;
@@ -801,6 +816,25 @@ export default function App() {
                 }
                 focusListingId={tikTokFocusListingId}
                 onFocusListingConsumed={() => setTikTokFocusListingId(null)}
+                onOpenPostInFeed={listing => {
+                  if (!listing?.id) return;
+                  const rawCat =
+                    listing.category != null
+                      ? parseInt(String(listing.category), 10)
+                      : NaN;
+                  if (Number.isFinite(rawCat) && rawCat > 0) {
+                    setSelectedCategory(String(rawCat));
+                  }
+                  setTikTokFocusListingId(String(listing.id).trim());
+                  setTikTokUserSearchOpenTrigger(0);
+                  resetFeedFilters();
+                  setTikTokFeedRefreshKey(k => k + 1);
+                  AsyncStorage.setItem(
+                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                    DEFAULT_TIKTOK_TOP_FILTER,
+                  ).catch(() => {});
+                  setCurrentScreen(screenName.tikTokFeed);
+                }}
               />
             )}
             {currentScreen === screenName.selectedProjects && (
@@ -2174,6 +2208,14 @@ export default function App() {
             {showOnboarding ? (
               <OnboardingFlow onComplete={handleOnboardingComplete} />
             ) : null}
+            {!showOnboarding && showTermsGate ? (
+              <View style={styles.termsGateOverlay}>
+                <TermsOfUseScreen
+                  mode="accept"
+                  onAccept={handleTermsAccepted}
+                />
+              </View>
+            ) : null}
           </View>
         </SafeAreaProvider>
       </PresenceProvider>
@@ -2185,5 +2227,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1e1d27',
+  },
+  termsGateOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    backgroundColor: '#ffffff',
   },
 });
