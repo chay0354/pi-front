@@ -15,36 +15,25 @@ import {
   useWindowDimensions,
   Platform,
   Text,
+  Animated,
 } from 'react-native';
 import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
 import {userCategories} from '../utils/constant';
 
 const TICK_SOUND = require('../assets/sounds/carousel-tick.wav');
-/** Min gap between ticks so a hard fling rattles instead of stuttering. */
 const TICK_MIN_GAP_MS = 45;
 const TICK_VOLUME = 0.85;
-/** Pool so rapid ticks don't cancel each other on one Sound instance. */
 const TICK_POOL_SIZE = 4;
 
-/** Fixed slot + transform scales match prior 104×142 / 174×212 layout without per-frame width/height relayout (Android). */
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
 const CATEGORY_SIDE_SCALE_X = 104 / CATEGORY_SLOT_W;
 const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
-/**
- * Copies of the category list — scroll silently re-centers into the middle
- * block (infinite loop). Repositioning can't happen mid-fling (scrollTo kills
- * the momentum), so there must be enough runway for the hardest fling to
- * decay naturally before reaching a physical edge.
- */
+
 const LOOP_COPIES = 7;
-/** Light hysteresis during fling (drag uses none for live tracking). */
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
-/** Near stop, freeze lit card until momentum ends. */
 const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
-/** Skip end snap when already this close (avoids scrollTo feedback loops). */
 const SNAP_POSITION_EPSILON = 3;
-/** Reposition only when this close to a physical scroll edge. */
 const LOOP_EDGE_BUFFER_ITEMS = 1.5;
 
 function positiveMod(value, modulus) {
@@ -52,7 +41,6 @@ function positiveMod(value, modulus) {
   return ((value % modulus) + modulus) % modulus;
 }
 
-/** Web: `flexDirection: row-reverse` inverts item X positions vs scroll offset math. */
 function webCarouselItemCenterX(index, itemWidth, contentWidth) {
   return contentWidth - (index + 0.5) * itemWidth;
 }
@@ -63,7 +51,11 @@ function webCarouselSnapScrollX(
   contentWidth,
   viewportWidth,
 ) {
-  const itemCenter = webCarouselItemCenterX(centerIndex, itemWidth, contentWidth);
+  const itemCenter = webCarouselItemCenterX(
+    centerIndex,
+    itemWidth,
+    contentWidth,
+  );
   const maxScroll = Math.max(0, contentWidth - viewportWidth);
   return Math.max(0, Math.min(itemCenter - viewportWidth / 2, maxScroll));
 }
@@ -124,7 +116,6 @@ function closestIndexWithHysteresis(
   const viewportCenter = scrollPosition + viewportWidth / 2;
   let closestIndex = 0;
   let closestDistance = Infinity;
-
   for (let index = 0; index < totalItems; index++) {
     const distance = Math.abs(viewportCenter - itemCenterX(index, itemWidth));
     if (distance < closestDistance) {
@@ -132,7 +123,6 @@ function closestIndexWithHysteresis(
       closestIndex = index;
     }
   }
-
   if (
     currentCenterIndex == null ||
     currentCenterIndex < 0 ||
@@ -141,7 +131,6 @@ function closestIndexWithHysteresis(
   ) {
     return closestIndex;
   }
-
   const currentDistance = Math.abs(
     viewportCenter - itemCenterX(currentCenterIndex, itemWidth),
   );
@@ -191,12 +180,10 @@ function nativeCarouselSnapScrollX(virtualCenterIndex, itemWidth) {
   return Math.max(0, (virtualCenterIndex - 1) * itemWidth);
 }
 
-/** Index of the first item in the middle copy of the extended list. */
 function middleCopyStart(listLength) {
   return Math.floor(LOOP_COPIES / 2) * listLength;
 }
 
-/** Keep scroll position in the middle copy so swiping never hits a hard edge. */
 function normalizeInfiniteCarouselPosition(
   virtualIndex,
   scrollX,
@@ -222,10 +209,7 @@ function buildExtendedCarouselList(categories) {
   const out = [];
   for (let copy = 0; copy < LOOP_COPIES; copy++) {
     categories.forEach((item, i) => {
-      out.push({
-        ...item,
-        _carouselKey: `${copy}-${item.id}-${i}`,
-      });
+      out.push({...item, _carouselKey: `${copy}-${item.id}-${i}`});
     });
   }
   return out;
@@ -238,17 +222,67 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
   virtualCenterIndex,
   onCategorySelect,
   scrollToVirtualIndex,
+  scrollAnim,
+  viewportWidth,
 }) {
   const isCenter = virtualIndex === virtualCenterIndex;
-  const isLeft = virtualIndex === virtualCenterIndex - 1;
-  const isRight = virtualIndex === virtualCenterIndex + 1;
-  const isFaded = !isCenter && !isLeft && !isRight;
 
-  const source = isCenter
-    ? item.image
-    : virtualIndex < virtualCenterIndex
-      ? item.imageLeft
-      : item.imageRight;
+  // All animation — including which image is visible — is driven by scrollAnim
+  // on the native thread. No JS state is used for image selection, so there is
+  // no flash when an item crosses the center point mid-scroll.
+  const {wrapperStyle, centerOpacity, leftOpacity, rightOpacity} = useMemo(() => {
+    const itemCenter = (virtualIndex + 0.5) * itemWidth;
+    const staticOffset = itemCenter - viewportWidth / 2;
+    // offset > 0: item is to the right of viewport center; < 0: to the left
+    const offset = Animated.subtract(staticOffset, scrollAnim);
+    const iW = itemWidth;
+    const scale = offset.interpolate({
+      inputRange: [-2 * iW, -iW, 0, iW, 2 * iW],
+      outputRange: [CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X, 1, CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X],
+      extrapolate: 'clamp',
+    });
+
+    const translateY = offset.interpolate({
+      inputRange: [-iW, 0, iW],
+      outputRange: [0, -15, 0],
+      extrapolate: 'clamp',
+    });
+
+    const overallOpacity = offset.interpolate({
+      inputRange: [-2 * iW, -1.5 * iW, -iW, 0, iW, 1.5 * iW, 2 * iW],
+      outputRange: [0.2, 0.2, 1, 1, 1, 0.2, 0.2],
+      extrapolate: 'clamp',
+    });
+
+    // Image crossfade — driven entirely on the native thread.
+    // Center image becomes fully opaque at ±0.5*iW (slot boundary) so even
+    // during fast flings the correct image is visible before the item settles.
+    // The transition spans 0.5*iW → 0.7*iW on each side to stay smooth.
+    const centerOp = offset.interpolate({
+      inputRange: [-0.7 * iW, -0.5 * iW, 0, 0.5 * iW, 0.7 * iW],
+      outputRange: [0, 1, 1, 1, 0],
+      extrapolate: 'clamp',
+    });
+
+    const leftOp = offset.interpolate({
+      inputRange: [-2 * iW, -0.7 * iW, -0.5 * iW, 0],
+      outputRange: [1, 1, 0, 0],
+      extrapolate: 'clamp',
+    });
+
+    const rightOp = offset.interpolate({
+      inputRange: [0, 0.5 * iW, 0.7 * iW, 2 * iW],
+      outputRange: [0, 0, 1, 1],
+      extrapolate: 'clamp',
+    });
+
+    return {
+      wrapperStyle: {transform: [{scale}, {translateY}], opacity: overallOpacity},
+      centerOpacity: centerOp,
+      leftOpacity: leftOp,
+      rightOpacity: rightOp,
+    };
+  }, [virtualIndex, itemWidth, viewportWidth, scrollAnim]);
 
   const onPress = useCallback(() => {
     if (!isCenter) {
@@ -256,17 +290,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
       return;
     }
     onCategorySelect?.(item.id);
-  }, [
-    isCenter,
-    virtualIndex,
-    onCategorySelect,
-    scrollToVirtualIndex,
-    item.id,
-  ]);
-
-  const imageTransform = isCenter
-    ? [{translateY: -15}]
-    : [{scaleX: CATEGORY_SIDE_SCALE_X}, {scaleY: CATEGORY_SIDE_SCALE_Y}];
+  }, [isCenter, virtualIndex, onCategorySelect, scrollToVirtualIndex, item.id]);
 
   return (
     <TouchableOpacity
@@ -274,16 +298,29 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
       onPress={onPress}
       activeOpacity={0.7}
       delayPressIn={0}>
-      <Image
-        source={source}
-        resizeMode="contain"
-        fadeDuration={0}
-        style={[
-          styles.tikImageBase,
-          isFaded && styles.fadedImage,
-          {transform: imageTransform},
-        ]}
-      />
+      <Animated.View style={[styles.imageSlot, wrapperStyle]}>
+        {/* imageRight: shown when this slot is to the right of center */}
+        <Animated.Image
+          source={item.imageRight}
+          resizeMode="contain"
+          fadeDuration={0}
+          style={[styles.tikImageBase, {opacity: rightOpacity}]}
+        />
+        {/* imageLeft: shown when this slot is to the left of center */}
+        <Animated.Image
+          source={item.imageLeft}
+          resizeMode="contain"
+          fadeDuration={0}
+          style={[styles.tikImageBase, styles.imageOverlay, {opacity: leftOpacity}]}
+        />
+        {/* center image: fades in as this slot reaches the center position */}
+        <Animated.Image
+          source={item.image}
+          resizeMode="contain"
+          fadeDuration={0}
+          style={[styles.tikImageBase, styles.imageOverlay, {opacity: centerOpacity}]}
+        />
+      </Animated.View>
     </TouchableOpacity>
   );
 });
@@ -328,13 +365,16 @@ const Carusel = ({
   const onCategorySelectRef = useRef(onCategorySelect);
   onCategorySelectRef.current = onCategorySelect;
 
+  // Animated.Value that tracks scroll X — drives all per-item transforms on the native thread.
+  const scrollAnimRef = useRef(null);
+  if (!scrollAnimRef.current) {
+    scrollAnimRef.current = new Animated.Value(0);
+  }
+
   const emitCategorySelect = useCallback(id => {
     onCategorySelectRef.current?.(id);
   }, []);
 
-  // Picker-wheel tick: plays when a new category passes center during user
-  // scrolling. Silent re-centering (loop jumps) keeps the same logical
-  // category, so it never ticks.
   const tickPoolRef = useRef([]);
   const tickPoolCursorRef = useRef(0);
   const lastTickAtRef = useRef(0);
@@ -398,12 +438,8 @@ const Carusel = ({
     (async () => {
       try {
         const status = await sound.getStatusAsync();
-        if (!status.isLoaded) {
-          return;
-        }
-        if (status.isPlaying) {
-          await sound.stopAsync();
-        }
+        if (!status.isLoaded) return;
+        if (status.isPlaying) await sound.stopAsync();
         await sound.setPositionAsync(0);
         await sound.playAsync();
       } catch {
@@ -412,7 +448,6 @@ const Carusel = ({
     })();
   }, []);
 
-  /** Tick only when the logical (mod listLength) category actually changes. */
   const tickIfLogicalChange = useCallback(
     (prevVirtualIndex, nextVirtualIndex) => {
       if (
@@ -440,13 +475,24 @@ const Carusel = ({
 
   const jumpToScrollX = useCallback((scrollX, animated = false) => {
     if (!scrollViewRef.current) return;
-    isProgrammaticScrollRef.current = true;
-    scrollViewRef.current.scrollTo({x: scrollX, animated});
-    lastScrollPositionRef.current = scrollX;
-    previousScrollXRef.current = scrollX;
-    requestAnimationFrame(() => {
-      isProgrammaticScrollRef.current = false;
-    });
+    if (animated) {
+      // Animated scroll: let Animated.event drive scrollAnim naturally as the
+      // ScrollView animates. Setting isProgrammatic or calling setValue here
+      // would snap the native interpolation instantly, causing a visual jump.
+      scrollViewRef.current.scrollTo({x: scrollX, animated: true});
+      lastScrollPositionRef.current = scrollX;
+      previousScrollXRef.current = scrollX;
+    } else {
+      // Instant jump: sync scrollAnim immediately and block re-entrant JS logic.
+      isProgrammaticScrollRef.current = true;
+      scrollViewRef.current.scrollTo({x: scrollX, animated: false});
+      scrollAnimRef.current.setValue(scrollX);
+      lastScrollPositionRef.current = scrollX;
+      previousScrollXRef.current = scrollX;
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
+    }
   }, []);
 
   const runSnapToCenter = useCallback(
@@ -596,7 +642,6 @@ const Carusel = ({
       if (!infiniteLoop || listLength <= 1 || !scrollViewRef.current) {
         return false;
       }
-
       const maxScroll = Math.max(0, contentWidth - viewportWidth);
       const edgeBuffer = itemWidth * LOOP_EDGE_BUFFER_ITEMS;
       const atPhysicalEdge =
@@ -625,6 +670,7 @@ const Carusel = ({
 
       isProgrammaticScrollRef.current = true;
       scrollViewRef.current.scrollTo({x: nextScrollX, animated: false});
+      scrollAnimRef.current.setValue(nextScrollX);
       lastScrollPositionRef.current = nextScrollX;
       previousScrollXRef.current = nextScrollX;
       virtualCenterIndexRef.current = middleVirtualIndex;
@@ -647,19 +693,13 @@ const Carusel = ({
   const updateLitCenterDuringScroll = useCallback(
     (scrollPosition, velocity) => {
       if (isDraggingRef.current) {
-        applyVirtualCenter(
-          closestVirtualIndexForScroll(scrollPosition, false),
-        );
+        applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
         return;
       }
-
       if (velocity < MOMENTUM_COAST_FREEZE_VELOCITY) {
         return;
       }
-
-      applyVirtualCenter(
-        closestVirtualIndexForScroll(scrollPosition, true),
-      );
+      applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, true));
     },
     [applyVirtualCenter, closestVirtualIndexForScroll],
   );
@@ -677,10 +717,7 @@ const Carusel = ({
       lastScrollSampleRef.current = {x: scrollPosition, t: now};
       lastScrollPositionRef.current = scrollPosition;
 
-      if (
-        isProgrammaticScrollRef.current ||
-        isSnappingRef.current
-      ) {
+      if (isProgrammaticScrollRef.current || isSnappingRef.current) {
         return;
       }
 
@@ -747,9 +784,15 @@ const Carusel = ({
               viewportWidth,
             )
           : nativeCarouselSnapScrollX(clamped, itemWidth);
-      tickIfLogicalChange(virtualCenterIndexRef.current, clamped);
-      virtualCenterIndexRef.current = clamped;
-      setVirtualCenterIndex(clamped);
+      if (!animated) {
+        // Instant jump: set state immediately since no scroll events will fire.
+        tickIfLogicalChange(virtualCenterIndexRef.current, clamped);
+        virtualCenterIndexRef.current = clamped;
+        setVirtualCenterIndex(clamped);
+      }
+      // Animated scroll: let handleScroll/applyVirtualCenter update state
+      // progressively as the animation runs — pre-setting it here causes a
+      // visual jump because the scale snaps before the ScrollView arrives.
       jumpToScrollX(scrollX, animated);
     },
     [
@@ -842,9 +885,7 @@ const Carusel = ({
       [row.image, row.imageLeft, row.imageRight].forEach(src => {
         try {
           const resolved = Image.resolveAssetSource(src);
-          if (resolved?.uri) {
-            Image.prefetch(resolved.uri);
-          }
+          if (resolved?.uri) Image.prefetch(resolved.uri);
         } catch (_) {
           /* ignore */
         }
@@ -852,9 +893,21 @@ const Carusel = ({
     });
   }, [categoryIdsKey]);
 
+  // Build Animated.event handler once per relevant dependency change.
+  // useNativeDriver: true keeps all transform/opacity interpolations on the native thread.
+  const animatedScrollHandler = useMemo(
+    () =>
+      Animated.event(
+        [{nativeEvent: {contentOffset: {x: scrollAnimRef.current}}}],
+        {useNativeDriver: true, listener: handleScroll},
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [handleScroll],
+  );
+
   return (
     <View>
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollViewRef}
         contentOffset={
           Platform.OS === 'web' || initialScrollX <= 0
@@ -878,10 +931,10 @@ const Carusel = ({
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate="normal"
+        decelerationRate={Platform.OS === 'ios' ? 0.992 : 'normal'}
         bounces={false}
         pagingEnabled={false}
-        onScroll={handleScroll}
+        onScroll={animatedScrollHandler}
         onScrollBeginDrag={handleScrollBeginDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollEndDrag={handleScrollEndDrag}
@@ -897,11 +950,14 @@ const Carusel = ({
             itemWidth={itemWidth}
             virtualIndex={virtualIndex}
             virtualCenterIndex={virtualCenterIndex}
+
             onCategorySelect={emitCategorySelect}
             scrollToVirtualIndex={scrollToVirtualIndex}
+            scrollAnim={scrollAnimRef.current}
+            viewportWidth={viewportWidth}
           />
         ))}
-      </ScrollView>
+      </Animated.ScrollView>
       {Platform.OS === 'web' ? (
         <View style={styles.webCategoryPicker}>
           {list.map((item, index) => {
@@ -955,12 +1011,18 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     flexShrink: 0,
   },
+  imageSlot: {
+    width: CATEGORY_SLOT_W,
+    height: CATEGORY_SLOT_H,
+  },
   tikImageBase: {
     width: CATEGORY_SLOT_W,
     height: CATEGORY_SLOT_H,
   },
-  fadedImage: {
-    opacity: 0.2,
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   webCategoryPicker: {
     flexDirection: 'row-reverse',
