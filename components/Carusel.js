@@ -27,7 +27,7 @@ const TICK_POOL_SIZE = 4;
 
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
-const CATEGORY_SIDE_SCALE_X = 104 / CATEGORY_SLOT_W;
+const CATEGORY_SIDE_SCALE_X = 0.64;
 const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
 
 const LOOP_COPIES = 7;
@@ -244,7 +244,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
 
     const translateY = offset.interpolate({
       inputRange: [-iW, 0, iW],
-      outputRange: [0, -15, 0],
+      outputRange: [0, -2, 0],
       extrapolate: 'clamp',
     });
 
