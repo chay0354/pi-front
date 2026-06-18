@@ -16,6 +16,7 @@ import {
   Platform,
   Text,
   Animated,
+  Vibration,
 } from 'react-native';
 import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
 import {userCategories} from '../utils/constant';
@@ -456,6 +457,11 @@ const Carusel = ({
           positiveMod(prevVirtualIndex, listLength)
       ) {
         playTick();
+        // Short haptic pulse on each category change — 20ms is subtle on Android,
+        // iOS uses its system haptics pattern for short durations.
+        if (Platform.OS !== 'web') {
+          Vibration.vibrate(20);
+        }
       }
     },
     [listLength, playTick],
