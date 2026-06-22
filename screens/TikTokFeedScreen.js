@@ -77,7 +77,6 @@ import {
   recordUserSearch,
   clearRecentUserSearches,
   uploadFile,
-  measureDistancesBatchWithGemini,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
@@ -129,6 +128,30 @@ function normalizeLandYesNot(v) {
   }
   return s;
 }
+
+function hasActiveFeedFilters(filters = {}) {
+  if (!filters || typeof filters !== 'object') return false;
+  if (filters.city != null) return true;
+  if (filters.price != null) return true;
+  if (filters.rooms != null) return true;
+  if (filters.office != null) return true;
+  if (filters.donam != null) return true;
+  if (filters.meter != null && String(filters.meter).trim() !== '') return true;
+  if (filters.preferences != null && String(filters.preferences).trim() !== '')
+    return true;
+  const apt = filters.apartmentType;
+  if (apt != null && apt !== '') {
+    if (Array.isArray(apt) && apt.length > 0) return true;
+    if (!Array.isArray(apt) && String(apt).trim() !== '') return true;
+  }
+  const type = filters.type;
+  if (type != null) {
+    if (Array.isArray(type) && type.length > 0) return true;
+    if (!Array.isArray(type) && String(type).trim() !== '') return true;
+  }
+  return false;
+}
+
 function normalizeLandOwnership(v) {
   if (v == null || v === '') {
     return null;
@@ -1659,6 +1682,7 @@ const TikTokFeedScreen = ({
   const [shareCountOverrides, setShareCountOverrides] = useState({});
   const [dbListings, setDbListings] = useState([]);
   const [userCoords, setUserCoords] = useState(null);
+  const [userCoordsReady, setUserCoordsReady] = useState(false);
   const listingCoordsRef = useRef({});
   const listingDistanceKmRef = useRef({});
   const [listingDistanceVersion, setListingDistanceVersion] = useState(0);
@@ -3528,17 +3552,31 @@ const TikTokFeedScreen = ({
 
   useEffect(() => {
     let cancelled = false;
+    setUserCoordsReady(false);
     (async () => {
       const coords = await resolveUserReferenceCoords(
         currentUser?.business_address,
         currentUser?.id,
       );
-      if (!cancelled) setUserCoords(coords);
+      if (!cancelled) {
+        setUserCoords(coords);
+        setUserCoordsReady(true);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.business_address, cityDistanceKm, selectedCategory]);
+  }, [currentUser?.business_address, currentUser?.id, cityDistanceKm, selectedCategory]);
+
+  useEffect(() => {
+    listingDistanceKmRef.current = {};
+    setListingDistanceVersion(v => v + 1);
+  }, [
+    userCoords?.latitude,
+    userCoords?.longitude,
+    cityDistanceKm,
+    selectedCategory,
+  ]);
 
   useEffect(() => {
     const maxDist = Number(cityDistanceKm);
@@ -3549,6 +3587,7 @@ const TikTokFeedScreen = ({
       maxDist <= 0 ||
       isBnbFeed ||
       isGlobalFeed ||
+      !userCoordsReady ||
       !userCoords
     ) {
       return undefined;
@@ -3560,33 +3599,18 @@ const TikTokFeedScreen = ({
       for (const l of dbListings) {
         const q = getListingGeocodeQuery(l);
         if (q && listingDistanceKmRef.current[q] === undefined) {
-          pending.push({key: q, address: q});
+          pending.push(q);
         }
       }
       if (!pending.length) return;
 
-      for (let i = 0; i < pending.length; i += 40) {
+      for (const query of pending) {
         if (cancelled) return;
-        const chunk = pending.slice(i, i + 40);
-        const gemini = await measureDistancesBatchWithGemini(userCoords, chunk);
-        if (gemini.success && gemini.distances) {
-          for (const [key, km] of Object.entries(gemini.distances)) {
-            const normalized = Number(km);
-            if (Number.isFinite(normalized) && normalized >= 0) {
-              listingDistanceKmRef.current[key] = normalized;
-            }
-          }
-        }
-
-        for (const item of chunk) {
-          if (cancelled) return;
-          if (listingDistanceKmRef.current[item.key] !== undefined) continue;
-          const coords = await geocodeAddress(item.address);
-          listingCoordsRef.current[item.key] = coords;
-          listingDistanceKmRef.current[item.key] = coords
-            ? haversineDistanceKm(userCoords, coords)
-            : null;
-        }
+        const coords = await geocodeAddress(query);
+        listingCoordsRef.current[query] = coords;
+        listingDistanceKmRef.current[query] = coords
+          ? haversineDistanceKm(userCoords, coords)
+          : null;
         if (!cancelled) setListingDistanceVersion(v => v + 1);
       }
     })();
@@ -3594,7 +3618,7 @@ const TikTokFeedScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [dbListings, cityDistanceKm, selectedCategory, userCoords]);
+  }, [dbListings, cityDistanceKm, selectedCategory, userCoords, userCoordsReady]);
 
   const applyFeedFilters = list => {
     let out = list;
@@ -3920,16 +3944,15 @@ const TikTokFeedScreen = ({
         Number.isFinite(maxDistKm) &&
         maxDistKm > 0 &&
         !isBnbFeedDist &&
-        !isGlobalFeedDist &&
-        userCoords
+        !isGlobalFeedDist
       ) {
         out = out.filter(l => {
           if (isPostVideo(l)) return false;
+          if (!userCoordsReady || !userCoords) return false;
           const query = getListingGeocodeQuery(l);
           if (!query) return false;
           const distKm = listingDistanceKmRef.current[query];
-          if (distKm === undefined) return true;
-          if (distKm == null) return false;
+          if (distKm === undefined || distKm == null) return false;
           return distKm <= maxDistKm;
         });
       }
@@ -4162,8 +4185,16 @@ const TikTokFeedScreen = ({
       : dbListings;
   const uploadedVideos = useMemo(() => {
     void listingDistanceVersion;
+    void userCoordsReady;
     return applyFeedFilters(baseList);
-  }, [baseList, feedFilters, selectedCategory, userCoords, listingDistanceVersion]);
+  }, [
+    baseList,
+    feedFilters,
+    selectedCategory,
+    userCoords,
+    userCoordsReady,
+    listingDistanceVersion,
+  ]);
 
   // Mock video data - only used when NO category is selected (for general browsing)
   // When a category is opened, show ONLY database content
@@ -5532,34 +5563,54 @@ const TikTokFeedScreen = ({
   const feedIsEmpty = videos.length === 0 && !loadingListings;
 
   const renderEmptyCategoryBody = () => {
-    const textStyle = {
-      color: '#fff',
-      fontSize: 18,
-      textAlign: 'center',
-      padding: 20,
-    };
     if (listingsError) {
       return (
-        <>
-          <Text style={textStyle}>שגיאה בטעינת הרשימות</Text>
+        <View style={styles.feedEmptyCard}>
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={48}
+            color={Colors.yellowIcons}
+            style={styles.feedEmptyIcon}
+          />
+          <Text style={styles.feedEmptyTitle}>שגיאה בטעינת הרשימות</Text>
+          <Text style={styles.feedEmptySubtitle}>
+            לא הצלחנו לטעון את המודעות. נסו שוב בעוד רגע.
+          </Text>
           <TouchableOpacity
             onPress={() => {
               setListingsError(null);
               setRefreshKey(k => k + 1);
             }}
-            style={{
-              marginTop: 20,
-              padding: 15,
-              backgroundColor: Colors.yellowIcons,
-              borderRadius: 8,
-            }}>
-            <Text style={{color: '#000', fontWeight: 'bold'}}>נסה שוב</Text>
+            style={styles.feedEmptyActionBtn}
+            activeOpacity={0.85}>
+            <Text style={styles.feedEmptyActionText}>נסה שוב</Text>
           </TouchableOpacity>
-        </>
+        </View>
       );
     }
+
+    const filtersActive =
+      hasActiveFeedFilters(feedFilters) ||
+      (dbListings.length > 0 && uploadedVideos.length === 0);
+
     return (
-      <Text style={textStyle}>עדיין אין תוכן כאן</Text>
+      <View style={styles.feedEmptyCard}>
+        <View style={styles.feedEmptyIconWrap}>
+          <MaterialCommunityIcons
+            name="filter-off-outline"
+            size={36}
+            color={Colors.yellowIcons}
+          />
+        </View>
+        <Text style={styles.feedEmptyTitle}>
+          לא נמצאו מודעות שעומדות בקריטריונים שבחרתם
+        </Text>
+        <Text style={styles.feedEmptySubtitle}>
+          {filtersActive
+            ? 'נסו לשנות את הסינון, להרחיב את טווח המרחק, או לאפס את הפילטרים.'
+            : 'אין מודעות להצגה בקטגוריה זו כרגע. חזרו מאוחר יותר.'}
+        </Text>
+      </View>
     );
   };
 
@@ -7982,6 +8033,58 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  feedEmptyCard: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    borderRadius: 20,
+    backgroundColor: '#2B2A39',
+    borderWidth: 1,
+    borderColor: '#373548',
+  },
+  feedEmptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 196, 10, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  feedEmptyIcon: {
+    marginBottom: 20,
+  },
+  feedEmptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 28,
+    marginBottom: 12,
+  },
+  feedEmptySubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  feedEmptyActionBtn: {
+    marginTop: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    backgroundColor: Colors.yellowIcons,
+    borderRadius: 12,
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  feedEmptyActionText: {
+    color: '#1E1D27',
+    fontSize: 16,
+    fontWeight: '700',
   },
   /** Empty category: same chrome as feed (top + bottom bar); fill between them. */
   feedEmptyFullScreen: {
