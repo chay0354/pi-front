@@ -4546,6 +4546,11 @@ expo-linking@~6.2.0:
     expo-constants "~15.4.3"
     invariant "^2.2.4"
 
+expo-location@~16.5.5:
+  version "16.5.5"
+  resolved "https://registry.npmjs.org/expo-location/-/expo-location-16.5.5.tgz"
+  integrity sha512-dXEd1HaZgdi6yHVF8R+SMnGlKDYrD+Hkkzd/b9edjMSUBLxF2y824AFSSNUf6BVOM53tJBOFEELneXkU1uj9nA==
+
 expo-modules-autolinking@>=0.8.1, expo-modules-autolinking@1.10.3:
   version "1.10.3"
   resolved "https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-1.10.3.tgz"

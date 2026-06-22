@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   followingPreviewTitle: {
-    color: '#D2D0DC',
+    color: Colors.yellowIcons,
     fontSize: 16,
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',

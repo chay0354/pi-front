@@ -73,6 +73,8 @@ export default function ChatVoiceMessageBubble({
   isPlaying,
   progress = 0,
   durationMs = 0,
+  playStartedAt = 0,
+  playStartProgress = 0,
   onTogglePlay,
   onDurationKnown,
 }) {
@@ -97,32 +99,34 @@ export default function ChatVoiceMessageBubble({
     }).start();
   }, [appearAnim]);
 
-  // Drive a smooth fill while playing: animate toward the end over the remaining
-  // time, starting from wherever the head currently is. We deliberately do NOT
-  // restart on every progress tick (that caused the stutter).
+  // Drive a smooth fill that is synced to the *actual* audio. `playStartedAt`
+  // only changes once the player reports it really started producing sound, so
+  // the bar no longer runs ahead of a clip that is still loading. We anchor at
+  // the real position (`playStartProgress`) and animate to the end over the
+  // remaining real duration, so it finishes exactly when the voice does.
   useEffect(() => {
-    if (isPlaying && durationMs > 0) {
-      progressAnim.stopAnimation(current => {
-        const remaining = Math.max(0, (1 - current) * durationMs);
-        Animated.timing(progressAnim, {
-          toValue: 1,
-          duration: remaining,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }).start();
-      });
-    } else {
-      progressAnim.stopAnimation();
+    if (playStartedAt > 0 && durationMs > 0) {
+      const start = Math.max(0, Math.min(1, Number(playStartProgress) || 0));
+      progressAnim.setValue(start);
+      const remaining = Math.max(0, (1 - start) * durationMs);
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: remaining,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }).start();
     }
-  }, [isPlaying, durationMs, progressAnim]);
+    // No-op on cleanup: the "not playing" effect below handles stop/snap.
+  }, [playStartedAt, durationMs, playStartProgress, progressAnim]);
 
-  // When paused / seeked / finished, snap to the real position from the parent.
+  // When not actively playing (idle / paused / seeked / finished), stop and
+  // snap to the real position reported by the parent.
   useEffect(() => {
-    if (!isPlaying) {
+    if (playStartedAt === 0) {
       progressAnim.stopAnimation();
       progressAnim.setValue(clampedProgress);
     }
-  }, [clampedProgress, isPlaying, progressAnim]);
+  }, [clampedProgress, playStartedAt, progressAnim]);
 
   useEffect(() => {
     if (!mediaUrl || durationMs > 0 || !onDurationKnown) return undefined;

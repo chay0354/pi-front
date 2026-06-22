@@ -15,6 +15,11 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
+import {
+  PROFESSIONAL_FILTER_TYPES,
+  getProfessionalSpecializationsForTypes,
+  professionalMatchesTypeFilter,
+} from '../utils/constant';
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {flexEnd, flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
@@ -309,12 +314,13 @@ const ProfessionalsDirectoryScreen = ({
       }
 
       if (appliedTypeFilters.length > 0) {
-        const typeSet = new Set(
-          (Array.isArray(item?.types) ? item.types : []).map(v =>
-            String(v || '').trim(),
-          ),
-        );
-        if (!appliedTypeFilters.some(tag => typeSet.has(tag))) return false;
+        if (
+          !appliedTypeFilters.some(filterType =>
+            professionalMatchesTypeFilter(filterType, item?.types),
+          )
+        ) {
+          return false;
+        }
       }
 
       if (appliedExpertiseFilters.length > 0) {
@@ -351,64 +357,30 @@ const ProfessionalsDirectoryScreen = ({
       prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none',
     );
   };
-  const typeOptions = useMemo(() => {
-    const preferred = [
-      'תיווך',
-      'עו״ד',
-      'עיצוב פנים',
-      'יועץ משכנתאות',
-      'שמאות',
-      'אדריכלות',
-    ];
-    const seen = new Set();
-    const out = [];
-    preferred.forEach(tag => {
-      seen.add(tag);
-      out.push(tag);
-    });
-    professionals.forEach(item => {
-      (Array.isArray(item?.types) ? item.types : []).forEach(tag => {
-        const normalized = String(tag || '').trim();
-        if (!normalized || seen.has(normalized)) return;
-        seen.add(normalized);
-        out.push(normalized);
-      });
-    });
-    return out;
-  }, [professionals]);
+  const typeOptions = PROFESSIONAL_FILTER_TYPES;
 
-  const expertiseOptions = useMemo(() => {
-    const preferred = [
-      'נדל״ן',
-      'קבוצות רכישה',
-      'חוזים וקרקעות',
-      'השקעות',
-      'מלווה משקיעים',
-    ];
-    const seen = new Set();
-    const out = [];
-    preferred.forEach(tag => {
-      seen.add(tag);
-      out.push(tag);
-    });
-    professionals.forEach(item => {
-      (Array.isArray(item?.specializations)
-        ? item.specializations
-        : []
-      ).forEach(tag => {
-        const normalized = String(tag || '').trim();
-        if (!normalized || seen.has(normalized)) return;
-        seen.add(normalized);
-        out.push(normalized);
-      });
-    });
-    return out;
-  }, [professionals]);
+  const expertiseOptions = useMemo(
+    () => getProfessionalSpecializationsForTypes(draftTypeFilters),
+    [draftTypeFilters],
+  );
 
   const toggleDraftFilter = (value, kind) => {
-    const setter =
-      kind === 'type' ? setDraftTypeFilters : setDraftExpertiseFilters;
-    setter(prev =>
+    if (kind === 'type') {
+      setDraftTypeFilters(prev => {
+        const next = prev.includes(value)
+          ? prev.filter(v => v !== value)
+          : [...prev, value];
+        const validSpecs = new Set(
+          getProfessionalSpecializationsForTypes(next),
+        );
+        setDraftExpertiseFilters(prevExp =>
+          prevExp.filter(spec => validSpecs.has(spec)),
+        );
+        return next;
+      });
+      return;
+    }
+    setDraftExpertiseFilters(prev =>
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
     );
   };
@@ -665,29 +637,35 @@ const ProfessionalsDirectoryScreen = ({
 
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionTitle}>התמחות</Text>
-                <View style={styles.settingsChipWrap}>
-                  {expertiseOptions.map(tag => {
-                    const active = draftExpertiseFilters.includes(tag);
-                    return (
-                      <TouchableOpacity
-                        key={`expertise-${tag}`}
-                        style={[
-                          styles.settingsChip,
-                          active && styles.settingsChipActive,
-                        ]}
-                        onPress={() => toggleDraftFilter(tag, 'expertise')}
-                        activeOpacity={0.85}>
-                        <Text
+                {draftTypeFilters.length === 0 ? (
+                  <Text style={styles.settingsHintText}>
+                    בחר סוג כדי לראות התמחויות רלוונטיות
+                  </Text>
+                ) : (
+                  <View style={styles.settingsChipWrap}>
+                    {expertiseOptions.map(tag => {
+                      const active = draftExpertiseFilters.includes(tag);
+                      return (
+                        <TouchableOpacity
+                          key={`expertise-${tag}`}
                           style={[
-                            styles.settingsChipText,
-                            active && styles.settingsChipTextActive,
-                          ]}>
-                          {tag}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                            styles.settingsChip,
+                            active && styles.settingsChipActive,
+                          ]}
+                          onPress={() => toggleDraftFilter(tag, 'expertise')}
+                          activeOpacity={0.85}>
+                          <Text
+                            style={[
+                              styles.settingsChipText,
+                              active && styles.settingsChipTextActive,
+                            ]}>
+                            {tag}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -1248,6 +1226,13 @@ const styles = StyleSheet.create({
   settingsSectionTitle: {
     color: '#D2D0DC',
     fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
+  },
+  settingsHintText: {
+    color: '#8C85B3',
+    fontSize: 15,
+    lineHeight: 22,
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
   },

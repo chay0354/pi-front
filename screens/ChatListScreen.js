@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useRef,
   useReducer,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -20,6 +21,8 @@ import {
   Pressable,
   Alert,
   I18nManager,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -32,6 +35,7 @@ import {
   uploadGroupImage,
   getChatParticipantDisplay,
   getResolvedApiUrl,
+  deleteChatConversation,
 } from '../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
@@ -350,6 +354,163 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
 /**
  * Chat list: Pi welcome + real conversations from API (layout matches PiChat design).
  */
+/** Width of the revealed delete action when a chat row is swiped left. */
+const SWIPE_DELETE_WIDTH = 88;
+/** Drag distance (px) past which release snaps the row fully open. */
+const SWIPE_OPEN_THRESHOLD = 44;
+
+/**
+ * Wraps a direct-chat row so it can be swiped to reveal a delete action.
+ * RTL: swipe right (+X) reveals delete on the start edge (physical left with swap).
+ * Falls back to rendering children as-is when not deletable (groups / Pi).
+ */
+function SwipeableConversationRow({
+  deletable,
+  deleting,
+  onDelete,
+  onPress,
+  children,
+}) {
+  const isRtl = I18nManager.isRTL;
+  /** Fully open row offset: RTL swipes right (+X), LTR swipes left (-X). */
+  const openTranslate = isRtl ? SWIPE_DELETE_WIDTH : -SWIPE_DELETE_WIDTH;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const openRef = useRef(false);
+  const dragBaseRef = useRef(0);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const clampTranslate = useCallback(
+    value => {
+      if (isRtl) {
+        if (value < 0) return 0;
+        if (value > SWIPE_DELETE_WIDTH) return SWIPE_DELETE_WIDTH;
+        return value;
+      }
+      if (value > 0) return 0;
+      if (value < -SWIPE_DELETE_WIDTH) return -SWIPE_DELETE_WIDTH;
+      return value;
+    },
+    [isRtl],
+  );
+
+  const shouldSnapOpen = useCallback(
+    finalX => {
+      return isRtl
+        ? finalX > SWIPE_OPEN_THRESHOLD
+        : finalX < -SWIPE_OPEN_THRESHOLD;
+    },
+    [isRtl],
+  );
+
+  const snapTo = useCallback(
+    toOpen => {
+      openRef.current = toOpen;
+      setIsOpen(toOpen);
+      Animated.timing(translateX, {
+        toValue: toOpen ? openTranslate : 0,
+        duration: 160,
+        useNativeDriver: true,
+      }).start();
+    },
+    [openTranslate, translateX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => openRef.current,
+        onMoveShouldSetPanResponder: (_evt, g) => {
+          const absDx = Math.abs(g.dx);
+          const absDy = Math.abs(g.dy);
+          return absDx > 6 && absDx > absDy * 1.15;
+        },
+        onMoveShouldSetPanResponderCapture: (_evt, g) => {
+          const absDx = Math.abs(g.dx);
+          const absDy = Math.abs(g.dy);
+          return absDx > 8 && absDx > absDy * 1.35;
+        },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          dragBaseRef.current = openRef.current ? openTranslate : 0;
+        },
+        onPanResponderMove: (_evt, g) => {
+          translateX.setValue(clampTranslate(dragBaseRef.current + g.dx));
+        },
+        onPanResponderRelease: (_evt, g) => {
+          const finalX = dragBaseRef.current + g.dx;
+          const isTap = Math.abs(g.dx) < 8 && Math.abs(g.dy) < 8;
+          if (isTap) {
+            if (openRef.current) {
+              snapTo(false);
+              return;
+            }
+            if (typeof onPress === 'function') onPress();
+            return;
+          }
+          snapTo(shouldSnapOpen(finalX));
+        },
+        onPanResponderTerminate: () => snapTo(openRef.current),
+      }),
+    [clampTranslate, onPress, openTranslate, shouldSnapOpen, snapTo, translateX],
+  );
+
+  const handleDeletePress = useCallback(() => {
+    snapTo(false);
+    if (typeof onDelete === 'function') onDelete();
+  }, [onDelete, snapTo]);
+
+  if (!deletable) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({pressed}) => [pressed && styles.rowPressed]}>
+        {children}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.swipeRowWrap}>
+      <View
+        style={[
+          styles.swipeDeleteAction,
+          isOpen && styles.swipeDeleteActionOpen,
+        ]}>
+        <TouchableOpacity
+          style={styles.swipeDeleteBtn}
+          activeOpacity={0.8}
+          disabled={deleting}
+          onPress={handleDeletePress}
+          accessibilityRole="button"
+          accessibilityLabel="מחק שיחה">
+          {deleting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <MaterialCommunityIcons
+                name="trash-can-outline"
+                size={22}
+                color="#fff"
+              />
+              <Text style={styles.swipeDeleteText}>מחק</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+      <Animated.View
+        style={[
+          styles.swipeRowContent,
+          Platform.OS === 'web' ? styles.swipeRowContentWeb : null,
+          {transform: [{translateX}]},
+        ]}
+        pointerEvents={isOpen ? 'none' : 'auto'}
+        {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
 const ChatListScreen = ({
   onClose,
   onOpenChat,
@@ -361,6 +522,7 @@ const ChatListScreen = ({
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingConvId, setDeletingConvId] = useState(null);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatSearch, setNewChatSearch] = useState('');
   const [blockCollabOffers, setBlockCollabOffers] = useState(false);
@@ -392,6 +554,8 @@ const ChatListScreen = ({
   const groupMetaLookupInFlight = useRef(new Set());
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
   const isBrokerUser = currentUserType === 'broker';
+  const isCompanyUser = currentUserType === 'company';
+  const canShowListingAdNumber = isBrokerUser || isCompanyUser;
   const canOpenGroups = !currentUserType || isBrokerUser;
 
   useEffect(() => {
@@ -867,6 +1031,48 @@ const ChatListScreen = ({
       )
     : conversations;
 
+  const handleDeleteConversation = useCallback(
+    conv => {
+      if (!conv || conv.isGroup === true || conv.id === '1') return;
+      const myEmail = currentUser?.email
+        ? String(currentUser.email).trim().toLowerCase()
+        : '';
+      const otherEmail = conv.otherUserEmail
+        ? String(conv.otherUserEmail).trim().toLowerCase()
+        : '';
+      if (!myEmail || !otherEmail) return;
+      Alert.alert(
+        'מחיקת שיחה',
+        'האם למחוק את השיחה? לא ניתן לשחזר את ההודעות.',
+        [
+          {text: 'ביטול', style: 'cancel'},
+          {
+            text: 'מחק',
+            style: 'destructive',
+            onPress: async () => {
+              setDeletingConvId(conv.id);
+              try {
+                await deleteChatConversation(myEmail, otherEmail);
+                setConversations(prev =>
+                  prev.filter(c => c.id !== conv.id),
+                );
+              } catch (err) {
+                Alert.alert(
+                  'שגיאה',
+                  err?.message || 'מחיקת השיחה נכשלה, נסה שוב.',
+                );
+              } finally {
+                setDeletingConvId(null);
+              }
+            },
+          },
+        ],
+        {cancelable: true},
+      );
+    },
+    [currentUser?.email],
+  );
+
   const renderRowMeta = conv => {
     const isPi = conv.id === '1';
     const rel = formatRelativeTimeHebrew(conv.lastMessageAt) || conv.time || '';
@@ -883,9 +1089,16 @@ const ChatListScreen = ({
         exStatus === 'rejected');
     const showGroup = !isPi && isGroup;
     const showListing =
-      !isPi && !isGroup && !!conv.listingId && !showExclusiveRow;
+      canShowListingAdNumber &&
+      !isPi &&
+      !isGroup &&
+      !!conv.listingId &&
+      !showExclusiveRow;
     const showCategory =
-      !isPi && !isGroup && !!conv.listingCategoryLabel && !showExclusiveRow;
+      !isPi &&
+      !isGroup &&
+      !!conv.listingCategoryLabel &&
+      !showExclusiveRow;
 
     if (isPi) {
       return (
@@ -1045,32 +1258,39 @@ const ChatListScreen = ({
               const rowDebugKey =
                 conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
               const rowUserRef = conv.otherUserEmail || conv.id || null;
+              const isDeletable =
+                conv.isGroup !== true &&
+                conv.id !== '1' &&
+                !!conv.otherUserEmail;
               return (
-                <TouchableOpacity
+                <SwipeableConversationRow
                   key={conv.id ?? conv.name ?? `conv-${index}`}
-                  style={styles.messageRow}
-                  onPress={() => onOpenChat && onOpenChat(conv)}
-                  activeOpacity={0.75}>
-                  <View style={styles.rowMain}>
-                    {renderRowMeta(conv)}
-                    <Text style={styles.messagePreview} numberOfLines={2}>
-                      {conv.preview != null &&
-                      String(conv.preview).trim() !== ''
-                        ? String(conv.preview)
-                        : 'אין הודעות'}
-                    </Text>
+                  deletable={isDeletable}
+                  deleting={deletingConvId === conv.id}
+                  onDelete={() => handleDeleteConversation(conv)}
+                  onPress={() => onOpenChat && onOpenChat(conv)}>
+                  <View style={styles.messageRow}>
+                    <View style={styles.rowMain}>
+                      {renderRowMeta(conv)}
+                      <Text style={styles.messagePreview} numberOfLines={2}>
+                        {conv.preview != null &&
+                        String(conv.preview).trim() !== ''
+                          ? String(conv.preview)
+                          : 'אין הודעות'}
+                      </Text>
+                    </View>
+                    <View style={styles.avatarCol}>
+                      <ChatListRowAvatar
+                        uri={rowAvatarUrl}
+                        debugKey={rowDebugKey}
+                        userRef={rowUserRef}
+                      />
+                      <Text style={styles.senderName} numberOfLines={1}>
+                        {conv.name != null ? String(conv.name) : 'משתמש'}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.avatarCol}>
-                    <ChatListRowAvatar
-                      uri={rowAvatarUrl}
-                      debugKey={rowDebugKey}
-                      userRef={rowUserRef}
-                    />
-                    <Text style={styles.senderName} numberOfLines={1}>
-                      {conv.name != null ? String(conv.name) : 'משתמש'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                </SwipeableConversationRow>
               );
             })}
           </View>
@@ -1809,6 +2029,48 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: '#1c1b22',
     width: '100%',
+  },
+  swipeRowWrap: {
+    position: 'relative',
+    width: '100%',
+    backgroundColor: '#C0392B',
+    overflow: 'hidden',
+  },
+  swipeDeleteAction: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: SWIPE_DELETE_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeDeleteActionOpen: {
+    zIndex: 2,
+    elevation: 2,
+  },
+  swipeDeleteBtn: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeDeleteText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  swipeRowContent: {
+    width: '100%',
+    backgroundColor: '#2B2A39',
+  },
+  swipeRowContentWeb: {
+    touchAction: 'pan-y',
+    cursor: 'grab',
+  },
+  rowPressed: {
+    opacity: 0.75,
   },
   messageRow: {
     flexDirection: 'row-reverse',

@@ -174,6 +174,50 @@ export const firstImageUrl = listing => {
   return listing?.main_image_url || listing?.image_url || null;
 };
 
+export const firstVideoUrl = listing => {
+  const videos = listing?.listing_videos;
+  if (Array.isArray(videos)) {
+    const main = videos.find(v => v?.video_type === 'main' && v?.video_url);
+    if (main?.video_url) return String(main.video_url).trim();
+    const any = videos.find(v => v?.video_url);
+    if (any?.video_url) return String(any.video_url).trim();
+  }
+  const direct = listing?.video_url;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  return null;
+};
+
+const normalizeListingFeedDisplayPriority = listing => {
+  const raw =
+    listing?.feed_display_priority ?? listing?.feedDisplayPriority ?? '';
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'mainimage' || s === 'main_image') return 'mainImage';
+  return 'video';
+};
+
+/** Hero card on home: prefer video when both exist unless creator chose main image. */
+export const resolveListingHeroMedia = listing => {
+  if (!listing) return null;
+  const imageUri = firstImageUrl(listing);
+  const videoUri = firstVideoUrl(listing);
+  if (videoUri && imageUri) {
+    const priority = normalizeListingFeedDisplayPriority(listing);
+    if (priority === 'mainImage') {
+      return {type: 'image', uri: imageUri};
+    }
+    return {type: 'video', uri: videoUri, posterUri: imageUri};
+  }
+  if (videoUri) {
+    return {type: 'video', uri: videoUri, posterUri: imageUri || null};
+  }
+  if (imageUri) {
+    return {type: 'image', uri: imageUri};
+  }
+  return null;
+};
+
+export const listingHasHeroMedia = listing => !!resolveListingHeroMedia(listing);
+
 export const listingImageUrls = listing => {
   const lis = listing?.listing_images;
   if (Array.isArray(lis) && lis.length > 0) {

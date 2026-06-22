@@ -10,6 +10,8 @@ import {
   ImageBackground,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -76,11 +78,6 @@ const VerificationScreen = ({
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   const activeSubscriptionId = subscriptionId || propSubscriptionId || null;
-  const canApplyPromo =
-    !!activeSubscriptionId &&
-    !promoApplied &&
-    promoCode.trim().length >= 3 &&
-    !isApplyingPromo;
 
   const passwordsFilled =
     password.length >= MIN_PASSWORD_LENGTH &&
@@ -89,6 +86,42 @@ const VerificationScreen = ({
   const passwordsReady = passwordsFilled && passwordsMatch;
   const isSendReady =
     passwordsReady && !!displayEmail && !verificationEmailSent;
+
+  const canApplyPromo =
+    !promoApplied &&
+    promoCode.trim().length >= 3 &&
+    !isApplyingPromo &&
+    (!!activeSubscriptionId || passwordsReady);
+
+  const ensureSubscriptionId = async () => {
+    let subId = subscriptionId || propSubscriptionId || null;
+    if (subId) return subId;
+
+    if (!displayEmail) {
+      throw new Error('חסר מייל מהשלב הקודם. חזרו לשלב 1.');
+    }
+    if (!passwordsReady) {
+      throw new Error(
+        `הגדירו סיסמה תואמת (לפחות ${MIN_PASSWORD_LENGTH} תווים) לפני הפעלת הקופון`,
+      );
+    }
+    if (!pendingSubmit?.formData) {
+      throw new Error('חסרים פרטי הרשמה. חזרו לשלב 1.');
+    }
+
+    const prepared = await prepareSubscriptionSubmitPayload(
+      pendingSubmit.formData,
+      pendingSubmit.files || {},
+    );
+    const created = await submitSubscription(prepared.formData, prepared.files);
+    if (!created?.success || !created.subscriptionId) {
+      throw new Error(created?.error || 'נכשל בשמירת הטופס');
+    }
+    subId = created.subscriptionId;
+    setSubscriptionId(subId);
+    await setSubscriptionPassword(subId, password);
+    return subId;
+  };
 
   const handleSendVerificationEmail = async () => {
     console.log('[VerificationScreen] send verification code: pressed', {
@@ -137,37 +170,7 @@ const VerificationScreen = ({
     setIsSending(true);
     console.log('[VerificationScreen] send verification code: started');
     try {
-      let subId = subscriptionId;
-      if (!subId && pendingSubmit?.formData) {
-        console.log('[VerificationScreen] submitSubscription: start');
-        const prepared = await prepareSubscriptionSubmitPayload(
-          pendingSubmit.formData,
-          pendingSubmit.files || {},
-        );
-        const created = await submitSubscription(
-          prepared.formData,
-          prepared.files,
-        );
-        console.log('[VerificationScreen] submitSubscription: done', {
-          success: created?.success,
-          subscriptionId: created?.subscriptionId,
-          verificationEmailDeferred: created?.verificationEmailDeferred,
-        });
-        if (!created?.success || !created.subscriptionId) {
-          throw new Error(created?.error || 'נכשל בשמירת הטופס');
-        }
-        subId = created.subscriptionId;
-        setSubscriptionId(subId);
-      }
-      if (!subId) {
-        throw new Error('חסר מזהה מנוי. חזרו לשלב 1 ונסו שוב.');
-      }
-
-      console.log('[VerificationScreen] setSubscriptionPassword: start', {
-        subId,
-      });
-      await setSubscriptionPassword(subId, password);
-      console.log('[VerificationScreen] setSubscriptionPassword: success');
+      const subId = await ensureSubscriptionId();
 
       console.log('[VerificationScreen] resendVerificationCode: start', {
         email: displayEmail,
@@ -246,11 +249,12 @@ const VerificationScreen = ({
   };
 
   const handleApplyPromoCode = async () => {
-    if (!canApplyPromo) return;
+    if (promoApplied || promoCode.trim().length < 3 || isApplyingPromo) return;
     setIsApplyingPromo(true);
     try {
+      const subId = await ensureSubscriptionId();
       const result = await applySubscriptionPromoCode(
-        activeSubscriptionId,
+        subId,
         promoCode.trim(),
       );
       const quota =
@@ -384,14 +388,22 @@ const VerificationScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={styles.overlay} />
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.contentContainer,
-          {paddingTop: insets.top},
-        ]}
-        showsVerticalScrollIndicator={false}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          style={styles.scrollFill}
+          contentContainerStyle={[
+            styles.contentContainer,
+            {
+              paddingTop: insets.top,
+              paddingBottom: Math.max(insets.bottom, 24) + 140,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}>
         <View style={styles.topSection}>
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={styles.backButton}>
@@ -544,8 +556,7 @@ const VerificationScreen = ({
               <Text style={styles.promoTitle}>קוד קופון (אופציונלי)</Text>
             </View>
             <Text style={styles.promoSubtitle}>
-              כל מנוי חדש כולל 3 חודשי שימוש · קופון מאריך את המנוי ב-3, 6 או
-              12 חודשים נוספים
+              אם יש ברשותכם קוד קופון הזינו אותו כאן
             </Text>
 
             {promoApplied ? (
@@ -563,7 +574,6 @@ const VerificationScreen = ({
               style={[
                 styles.inputRow,
                 promoApplied && styles.inputRowFilled,
-                !activeSubscriptionId && styles.inputRowDisabled,
               ]}>
               <TextInput
                 style={[
@@ -576,7 +586,7 @@ const VerificationScreen = ({
                 onChangeText={setPromoCode}
                 autoCapitalize="characters"
                 autoCorrect={false}
-                editable={!promoApplied && !!activeSubscriptionId}
+                editable={!promoApplied}
                 textAlign="right"
               />
             </View>
@@ -692,6 +702,7 @@ const VerificationScreen = ({
           </View>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 };
@@ -716,6 +727,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     zIndex: 2,
+  },
+  scrollFill: {
+    flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
@@ -800,6 +814,7 @@ const styles = StyleSheet.create({
   },
   promoSection: {
     paddingHorizontal: 24,
+    marginBottom: 8,
   },
   promoCard: {
     width: '100%',
@@ -809,6 +824,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(77,73,102,0.35)',
     paddingHorizontal: 18,
     paddingVertical: 18,
+    paddingBottom: 22,
     gap: 12,
   },
   promoHeaderRow: {

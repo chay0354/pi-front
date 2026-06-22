@@ -49,6 +49,24 @@ const ANALYSIS_ROWS = [
 
 const DEFAULT_LISTING_QUOTA = DEFAULT_MONTHLY_LISTING_QUOTA;
 
+/** Resolves subscription type from user + nested subscription (API shapes vary). */
+function getUserSubscriptionTypeLower(user) {
+  if (!user || typeof user !== 'object') return '';
+  const subObj =
+    user.subscription && typeof user.subscription === 'object'
+      ? user.subscription
+      : null;
+  const raw =
+    user.subscription_type ??
+    user.subscriptionType ??
+    user.type ??
+    subObj?.subscription_type ??
+    subObj?.subscriptionType ??
+    subObj?.type ??
+    '';
+  return String(raw).trim().toLowerCase();
+}
+
 const categoryMeta = id => brokerCategories.find(c => c.id === id) || null;
 
 const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
@@ -94,6 +112,10 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Only brokers have the monthly publish limit; everyone else publishes freely,
+  // so the quota summary card is hidden for non-broker accounts.
+  const isBrokerUser = getUserSubscriptionTypeLower(currentUser) === 'broker';
 
   const quota =
     currentUser?.max_published_listings ??
@@ -170,28 +192,30 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryTopRow}>
-              <Text style={styles.summaryLabel}>מודעות פעילות</Text>
-              <Text style={styles.summaryCountWrap}>
-                <Text style={styles.summaryCountCurrent}>{activeTotal}</Text>
-                <Text style={styles.summaryCountSlash}>/</Text>
-                <Text style={styles.summaryCountQuota}>{quota}</Text>
+          {isBrokerUser ? (
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryTopRow}>
+                <Text style={styles.summaryLabel}>מודעות פעילות</Text>
+                <Text style={styles.summaryCountWrap}>
+                  <Text style={styles.summaryCountCurrent}>{activeTotal}</Text>
+                  <Text style={styles.summaryCountSlash}>/</Text>
+                  <Text style={styles.summaryCountQuota}>{quota}</Text>
+                </Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <LinearGradient
+                  colors={GOLD_GRADIENT}
+                  locations={GOLD_GRADIENT_LOCATIONS}
+                  start={{x: 0.5, y: 0}}
+                  end={{x: 0.5, y: 1}}
+                  style={[styles.progressFill, {width: `${progress * 100}%`}]}
+                />
+              </View>
+              <Text style={styles.summaryFooter}>
+                ניתן לפרסם עוד {remaining} מודעות
               </Text>
             </View>
-            <View style={styles.progressTrack}>
-              <LinearGradient
-                colors={GOLD_GRADIENT}
-                locations={GOLD_GRADIENT_LOCATIONS}
-                start={{x: 0.5, y: 0}}
-                end={{x: 0.5, y: 1}}
-                style={[styles.progressFill, {width: `${progress * 100}%`}]}
-              />
-            </View>
-            <Text style={styles.summaryFooter}>
-              ניתן לפרסם עוד {remaining} מודעות
-            </Text>
-          </View>
+          ) : null}
 
           <View style={styles.tableHeader}>
             <Text style={styles.tableHeaderRight}>קטגוריה</Text>

@@ -58,8 +58,8 @@ const INPUT_BORDER = '#8C85B3';
 const MAX_PRICE_DEFAULT = 10000000;
 const MAX_PRICE_LAND = 100000000;
 const MAX_PRICE_BNB = 10000;
-/** Non–BnB (except land): slider moves in ₪250,000 increments. Land keeps ₪1M steps on the 100M scale. */
-const PRICE_SLIDER_STEP = 250000;
+/** Non–BnB (except land): slider moves in ₪1,000 increments. Land keeps ₪1M steps on the 100M scale. */
+const PRICE_SLIDER_STEP = 1000;
 const PRICE_SLIDER_STEP_LAND = 1000000;
 const BNB_PRICE_SLIDER_STEP = 100;
 // BnB: default max (₪/night) when no saved filter. Non-BnB uses `MAX_PRICE_DEFAULT` (0–10M+).

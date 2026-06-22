@@ -20,14 +20,22 @@ const KEY_ICON = require('../assets/menu/key.png');
 /**
  * שכחתי סיסמה – sends to the logged-in account email only (no typing).
  */
-const SecretCodeRecoveryScreen = ({onClose, onSent, userEmail = ''}) => {
+const SecretCodeRecoveryScreen = ({
+  onClose,
+  onSent,
+  userEmail = '',
+  fromLogin = false,
+}) => {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const accountEmail = String(userEmail || '').trim();
 
   useEffect(() => {
     if (!accountEmail) {
-      Alert.alert('שגיאה', 'לא נמצא מייל בחשבון המחובר.', [
+      Alert.alert(
+        'שגיאה',
+        fromLogin ? 'אנא הזן כתובת מייל.' : 'לא נמצא מייל בחשבון המחובר.',
+        [
         {text: 'אישור', onPress: () => onClose && onClose()},
       ]);
     }
@@ -74,8 +82,9 @@ const SecretCodeRecoveryScreen = ({onClose, onSent, userEmail = ''}) => {
           </View>
           <Text style={styles.cardTitle}>שכחתי סיסמה</Text>
           <Text style={styles.cardBody}>
-            לחץ שלח וישלח אלייך מייל עם הסיסמה העדכנית שלך לכתובת המייל של
-            החשבון המחובר:
+            {fromLogin
+              ? 'לחץ שלח וישלח אלייך מייל עם הסיסמה העדכנית שלך לכתובת המייל שהזנת:'
+              : 'לחץ שלח וישלח אלייך מייל עם הסיסמה העדכנית שלך לכתובת המייל של החשבון המחובר:'}
           </Text>
 
           <View style={styles.emailReadOnlyWrap}>

@@ -77,10 +77,17 @@ import {
   recordUserSearch,
   clearRecentUserSearches,
   uploadFile,
+  measureDistancesBatchWithGemini,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
+import {
+  geocodeAddress,
+  getListingGeocodeQuery,
+  haversineDistanceKm,
+} from '../utils/geocoding';
+import {resolveUserReferenceCoords} from '../utils/userLocation';
 import {
   flexEnd,
   flexStart,
@@ -1175,6 +1182,8 @@ const FEED_IMAGE_PROPS =
 
 /** Auto-advance interval for multi-photo ad slideshows in the TikTok feed. */
 const SLIDESHOW_AUTO_ADVANCE_MS = 900;
+/** Crossfade duration when auto-advancing slideshow photos. */
+const SLIDESHOW_FADE_MS = 450;
 
 function isFeedPostVideo(video) {
   if (!video) return false;
@@ -1206,71 +1215,126 @@ const ImageSwiper = ({
   const {width: winWidth} = useWindowDimensions();
   const pageWidth = Math.min(Math.max(1, winWidth), FEED_PAGE_MAX_WIDTH);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [fadeIdxA, setFadeIdxA] = useState(0);
+  const [fadeIdxB, setFadeIdxB] = useState(0);
   const [erroredKeys, setErroredKeys] = useState(() => new Set());
   const scrollViewRef = useRef(null);
   const loopSnapRef = useRef(false);
+  const fadeLayerA = useRef(new Animated.Value(1)).current;
+  const fadeLayerB = useRef(new Animated.Value(0)).current;
+  const fadeFrontRef = useRef('a');
+  const fadeIndexA = useRef(0);
+  const fadeIndexB = useRef(0);
+  const fadeTransitionLock = useRef(false);
+  const prevAutoSlideshowRef = useRef(false);
   const autoSlideshow =
     isActivePage &&
     !pauseAutoAdvance &&
     displayOption === 'slideshow' &&
     images.length > 1 &&
     !isFeedPostVideo(video);
-  // Extra clone of slide 0 at the end so last → first loops with a forward swipe.
-  const useLoopClone = autoSlideshow;
-  const slideshowSlides =
-    useLoopClone && images.length > 1
-      ? [...images, images[0]]
-      : images;
+  // Loop clone only for manual horizontal swiping — auto mode uses crossfade.
+  const slideshowSlides = images;
+
+  useEffect(() => {
+    const wasAuto = prevAutoSlideshowRef.current;
+    prevAutoSlideshowRef.current = autoSlideshow;
+    if (!autoSlideshow || wasAuto) return;
+    fadeIndexA.current = currentImageIndex;
+    fadeIndexB.current = currentImageIndex;
+    setFadeIdxA(currentImageIndex);
+    setFadeIdxB(currentImageIndex);
+    fadeFrontRef.current = 'a';
+    fadeLayerA.setValue(1);
+    fadeLayerB.setValue(0);
+    fadeTransitionLock.current = false;
+  }, [autoSlideshow, currentImageIndex, fadeLayerA, fadeLayerB]);
 
   useEffect(() => {
     setCurrentImageIndex(0);
     loopSnapRef.current = false;
     setErroredKeys(new Set());
+    fadeIndexA.current = 0;
+    fadeIndexB.current = 0;
+    setFadeIdxA(0);
+    setFadeIdxB(0);
+    fadeFrontRef.current = 'a';
+    fadeLayerA.setValue(1);
+    fadeLayerB.setValue(0);
+    fadeTransitionLock.current = false;
     if (scrollViewRef.current && displayOption === 'slideshow') {
       scrollViewRef.current.scrollTo({x: 0, animated: false});
     }
-  }, [images, displayOption, pageWidth]);
+  }, [images, displayOption, pageWidth, fadeLayerA, fadeLayerB]);
 
   useEffect(() => {
     if (!autoSlideshow) return undefined;
-    const id = setInterval(() => {
-      setCurrentImageIndex(prev => {
-        if (prev >= images.length) return prev;
-        return prev + 1;
+
+    const advance = () => {
+      if (fadeTransitionLock.current || images.length < 2) return;
+      fadeTransitionLock.current = true;
+
+      const current =
+        fadeFrontRef.current === 'a'
+          ? fadeIndexA.current
+          : fadeIndexB.current;
+      const next = (current + 1) % images.length;
+      const fadeOut = fadeFrontRef.current === 'a' ? fadeLayerA : fadeLayerB;
+      const fadeIn = fadeFrontRef.current === 'a' ? fadeLayerB : fadeLayerA;
+
+      if (fadeFrontRef.current === 'a') {
+        fadeIndexB.current = next;
+        setFadeIdxB(next);
+      } else {
+        fadeIndexA.current = next;
+        setFadeIdxA(next);
+      }
+
+      fadeIn.setValue(0);
+      Animated.parallel([
+        Animated.timing(fadeOut, {
+          toValue: 0,
+          duration: SLIDESHOW_FADE_MS,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeIn, {
+          toValue: 1,
+          duration: SLIDESHOW_FADE_MS,
+          useNativeDriver: true,
+        }),
+      ]).start(({finished}) => {
+        fadeTransitionLock.current = false;
+        if (!finished) return;
+
+        fadeFrontRef.current = fadeFrontRef.current === 'a' ? 'b' : 'a';
+        if (fadeFrontRef.current === 'a') {
+          fadeIndexA.current = next;
+          setFadeIdxA(next);
+          fadeLayerA.setValue(1);
+          fadeLayerB.setValue(0);
+        } else {
+          fadeIndexB.current = next;
+          setFadeIdxB(next);
+          fadeLayerB.setValue(1);
+          fadeLayerA.setValue(0);
+        }
+        setCurrentImageIndex(next);
       });
-    }, SLIDESHOW_AUTO_ADVANCE_MS);
+    };
+
+    const id = setInterval(advance, SLIDESHOW_AUTO_ADVANCE_MS);
     return () => clearInterval(id);
-  }, [autoSlideshow, images.length]);
+  }, [autoSlideshow, images.length, fadeLayerA, fadeLayerB]);
 
   useEffect(() => {
-    if (scrollViewRef.current && displayOption === 'slideshow') {
-      const snapWithoutAnim = loopSnapRef.current;
-      if (snapWithoutAnim) loopSnapRef.current = false;
-      scrollViewRef.current.scrollTo({
-        x: currentImageIndex * pageWidth,
-        animated: autoSlideshow && !snapWithoutAnim,
-      });
+    if (autoSlideshow || !scrollViewRef.current || displayOption !== 'slideshow') {
+      return;
     }
-  }, [currentImageIndex, displayOption, pageWidth, autoSlideshow]);
-
-  // After animating onto the cloned first slide, snap back to real slide 0.
-  // Also recovers when the index is past the last real slide (e.g. the
-  // slideshow was paused at the edge and the clone slide was removed), so the
-  // loop always continues instead of stalling.
-  useEffect(() => {
-    if (images.length < 2 || currentImageIndex < images.length) {
-      return undefined;
-    }
-    const snapTimer = setTimeout(
-      () => {
-        loopSnapRef.current = true;
-        scrollViewRef.current?.scrollTo({x: 0, animated: false});
-        setCurrentImageIndex(0);
-      },
-      useLoopClone ? 320 : 0,
-    );
-    return () => clearTimeout(snapTimer);
-  }, [useLoopClone, currentImageIndex, images.length]);
+    scrollViewRef.current.scrollTo({
+      x: currentImageIndex * pageWidth,
+      animated: true,
+    });
+  }, [autoSlideshow, currentImageIndex, displayOption, pageWidth]);
 
   const handleScroll = event => {
     if (displayOption === 'slideshow') {
@@ -1283,22 +1347,7 @@ const ImageSwiper = ({
     }
   };
 
-  const handleSlideshowScrollEnd = event => {
-    if (!useLoopClone) {
-      handleScroll(event);
-      return;
-    }
-    const idx = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
-    if (idx >= images.length) {
-      loopSnapRef.current = true;
-      scrollViewRef.current?.scrollTo({x: 0, animated: false});
-      setCurrentImageIndex(0);
-      return;
-    }
-    if (idx !== currentImageIndex) {
-      setCurrentImageIndex(idx);
-    }
-  };
+  const handleSlideshowScrollEnd = handleScroll;
 
   const resolveImageUri = image => {
     if (image == null) return '';
@@ -1324,6 +1373,49 @@ const ImageSwiper = ({
       return next;
     });
   };
+
+  const renderSlideshowSlide = (image, slideKey, single = false) => {
+    const uri = resolveImageUri(image);
+    const useFallback = !uri || erroredKeys.has(slideKey);
+    const imageSource = useFallback ? fallbackCategoryImage : {uri};
+    return (
+      <View
+        style={[
+          styles.swiperImageContainer,
+          {width: pageWidth, height: screenHeight},
+          single && styles.swiperImageContainerSingle,
+        ]}>
+        <Image
+          source={imageSource}
+          {...FEED_IMAGE_PROPS}
+          style={[
+            styles.swiperImage,
+            single && styles.swiperImageSingle,
+            {maxWidth: pageWidth, maxHeight: screenHeight},
+          ]}
+          resizeMode="contain"
+          onError={() => markImageErrored(slideKey)}
+        />
+      </View>
+    );
+  };
+
+  const renderSlideshowDots = () =>
+    images.length > 1 ? (
+      <View
+        style={[styles.imageIndicator, {top: FEED_IMAGE_INDICATOR_TOP_GAP}]}>
+        {images.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.indicatorDot,
+              index === currentImageIndex % images.length &&
+                styles.indicatorDotActive,
+            ]}
+          />
+        ))}
+      </View>
+    ) : null;
 
   // Collage view — dedicated geometry per image count (2–5): see utils/collageLayouts.js
   if (displayOption === 'collage' && images.length > 0) {
@@ -1394,8 +1486,49 @@ const ImageSwiper = ({
     );
   }
 
-  // Slideshow view — multi-photo ads auto-advance; single image stays centered.
+  // Slideshow view — multi-photo ads auto-advance with crossfade; manual swipe uses horizontal scroll.
   const isSingleImage = images.length === 1;
+
+  if (autoSlideshow) {
+    return (
+      <View
+        style={[
+          styles.videoItem,
+          forceLtrStyle,
+          {
+            height: screenHeight,
+            minHeight: screenHeight,
+            maxHeight: screenHeight,
+          },
+        ]}>
+        <View
+          style={{
+            width: pageWidth,
+            height: screenHeight,
+            alignSelf: 'center',
+            position: 'relative',
+          }}>
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, {opacity: fadeLayerA}]}>
+            {renderSlideshowSlide(
+              images[fadeIdxA],
+              `fade-a-${fadeIdxA}`,
+            )}
+          </Animated.View>
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, {opacity: fadeLayerB}]}>
+            {renderSlideshowSlide(
+              images[fadeIdxB],
+              `fade-b-${fadeIdxB}`,
+            )}
+          </Animated.View>
+        </View>
+        {renderSlideshowDots()}
+      </View>
+    );
+  }
 
   return (
     <View
@@ -1416,61 +1549,24 @@ const ImageSwiper = ({
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={autoSlideshow ? undefined : handleScroll}
-        onMomentumScrollEnd={
-          autoSlideshow ? handleSlideshowScrollEnd : undefined
-        }
+        onScroll={handleScroll}
+        onMomentumScrollEnd={handleSlideshowScrollEnd}
         scrollEventThrottle={16}
         style={[styles.imageSwiper, forceLtrStyle]}
-        scrollEnabled={!isSingleImage && !autoSlideshow}
-        pointerEvents={autoSlideshow ? 'box-none' : 'auto'}
+        scrollEnabled={!isSingleImage}
+        pointerEvents="auto"
       >
         {slideshowSlides.map((image, index) => {
           const uri = resolveImageUri(image);
           const slideKey = `slide-${index}`;
-          const useFallback = !uri || erroredKeys.has(slideKey);
-          const imageSource = useFallback ? fallbackCategoryImage : {uri};
           return (
-            <View
-              key={`${slideKey}-${uri || 'empty'}`}
-              style={[
-                styles.swiperImageContainer,
-                {width: pageWidth},
-                isSingleImage && styles.swiperImageContainerSingle,
-              ]}>
-              <Image
-                source={imageSource}
-                {...FEED_IMAGE_PROPS}
-                style={[
-                  styles.swiperImage,
-                  isSingleImage && styles.swiperImageSingle,
-                  {maxWidth: pageWidth, maxHeight: screenHeight},
-                ]}
-                resizeMode="contain"
-                onError={() => markImageErrored(slideKey)}
-              />
+            <View key={`${slideKey}-${uri || 'empty'}`} style={{width: pageWidth}}>
+              {renderSlideshowSlide(image, slideKey, isSingleImage)}
             </View>
           );
         })}
       </ScrollView>
-      {images.length > 1 ? (
-        <View
-          style={[
-            styles.imageIndicator,
-            {top: FEED_IMAGE_INDICATOR_TOP_GAP},
-          ]}>
-          {images.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.indicatorDot,
-                index === currentImageIndex % images.length &&
-                  styles.indicatorDotActive,
-              ]}
-            />
-          ))}
-        </View>
-      ) : null}
+      {renderSlideshowDots()}
     </View>
   );
 };
@@ -1530,6 +1626,8 @@ const TikTokFeedScreen = ({
   uploadedListings = [],
   selectedCategory = null,
   feedFilters = {},
+  selectedSidebarFilter: selectedSidebarFilterProp = null,
+  onSidebarFilterChange = null,
   currentUser = null,
   /** Guest taps follow + → App opens regular user registration (return to feed after). */
   onOpenUserRegistration = null,
@@ -1560,6 +1658,10 @@ const TikTokFeedScreen = ({
   const [sharePost, setSharePost] = useState(null);
   const [shareCountOverrides, setShareCountOverrides] = useState({});
   const [dbListings, setDbListings] = useState([]);
+  const [userCoords, setUserCoords] = useState(null);
+  const listingCoordsRef = useRef({});
+  const listingDistanceKmRef = useRef({});
+  const [listingDistanceVersion, setListingDistanceVersion] = useState(0);
   const [loadingListings, setLoadingListings] = useState(false);
   const [listingsError, setListingsError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh when this changes
@@ -1596,7 +1698,18 @@ const TikTokFeedScreen = ({
     SIDEBAR_FILTER_HEIGHT_FALLBACK,
   );
   const [sidebarFilterLayouts, setSidebarFilterLayouts] = useState({});
-  const [selectedSidebarFilter, setSelectedSidebarFilter] = useState(null); // sidebar chip id, or null = all
+  const selectedSidebarFilter = selectedSidebarFilterProp;
+  const setSelectedSidebarFilter = useCallback(
+    updater => {
+      if (typeof onSidebarFilterChange !== 'function') return;
+      const next =
+        typeof updater === 'function'
+          ? updater(selectedSidebarFilterProp ?? null)
+          : updater;
+      onSidebarFilterChange(next);
+    },
+    [onSidebarFilterChange, selectedSidebarFilterProp],
+  );
   /** Default = first icon yellow; does not narrow feed. Toggle same filter again → back to this. */
   const [selectedTopBarFilter, setSelectedTopBarFilter] = useState(
     DEFAULT_TOP_BAR_FILTER,
@@ -1751,7 +1864,7 @@ const TikTokFeedScreen = ({
     if (selectedSidebarFilter != null && !valid.has(selectedSidebarFilter)) {
       setSelectedSidebarFilter(null);
     }
-  }, [sidebarFiltersForFeed, selectedSidebarFilter]);
+  }, [sidebarFiltersForFeed, selectedSidebarFilter, setSelectedSidebarFilter]);
   const sidebarFilterCount = sidebarFiltersForFeed.length;
   const firstFilterTop = sidebarFilterLayouts[0]?.y;
   const lastFilterIndex = Math.max(0, sidebarFilterCount - 1);
@@ -2205,9 +2318,11 @@ const TikTokFeedScreen = ({
           legacySidebarFilter?.has_video === true;
         const hasVideo = hasVideoFromSidebar;
 
-        const result = await getListings({
+        const apartmentsNewsIncludesNewFromDeveloper =
+          categoryToFetch === 10 && selectedSidebarFilter === 'new';
+
+        const sharedListingFetchParams = {
           status: 'published',
-          category: categoryToFetch,
           ...(subscriptionType != null && {
             subscription_type: subscriptionType,
           }),
@@ -2235,9 +2350,47 @@ const TikTokFeedScreen = ({
           ...(landFilter?.feed_post === true && {feed_post: true}),
           ...(commercialFilter?.feed_post === true && {feed_post: true}),
           ...(legacySidebarFilter?.feed_post === true && {feed_post: true}),
-          // Keep user_id only for liked-state and personalized ordering.
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+        };
+
+        const result = await getListings({
+          category: categoryToFetch,
+          ...sharedListingFetchParams,
         });
+
+        let mergedListings = Array.isArray(result?.listings)
+          ? [...result.listings]
+          : [];
+
+        if (
+          apartmentsNewsIncludesNewFromDeveloper &&
+          result.success &&
+          !result.offline
+        ) {
+          const cat1Result = await getListings({
+            category: 1,
+            status: 'published',
+            subscription_type: 'company',
+            ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+          });
+          if (cat1Result.success && Array.isArray(cat1Result.listings)) {
+            const seen = new Set(
+              mergedListings.map(l => String(l?.id ?? '')).filter(Boolean),
+            );
+            for (const row of cat1Result.listings) {
+              const id = String(row?.id ?? '');
+              if (id && !seen.has(id)) {
+                seen.add(id);
+                mergedListings.push(row);
+              }
+            }
+          }
+        }
+
+        const resultForTransform = {
+          ...result,
+          listings: mergedListings,
+        };
 
         if (result.offline) {
           setListingsError(
@@ -2254,10 +2407,10 @@ const TikTokFeedScreen = ({
           );
         }
 
-        if (result.success && result.listings) {
+        if (resultForTransform.success && resultForTransform.listings) {
 
           // Transform database listings to video format (include posts with image, video, or text only)
-          const transformedListings = result.listings
+          const transformedListings = resultForTransform.listings
             .filter(listing => {
               const images = listing.listing_images || [];
               const videos = listing.listing_videos || [];
@@ -2590,7 +2743,18 @@ const TikTokFeedScreen = ({
             ? parseInt(String(selectedCategory), 10)
             : NaN;
           const filteredListings = Number.isFinite(selectedCatNum)
-            ? afterTopBar.filter(listing => listing.category === selectedCatNum)
+            ? afterTopBar.filter(listing => {
+                if (
+                  apartmentsNewsIncludesNewFromDeveloper &&
+                  listing.category === 1 &&
+                  String(listing.subscription_type || '').toLowerCase() ===
+                    'company' &&
+                  !isFeedPost(listing)
+                ) {
+                  return true;
+                }
+                return listing.category === selectedCatNum;
+              })
             : afterTopBar;
 
           const finalListings =
@@ -2654,7 +2818,16 @@ const TikTokFeedScreen = ({
             );
           }
           if (sidebarWantsNewAds) {
-            displayListings = displayListings.filter(isNewConditionRow);
+            displayListings = displayListings.filter(l => {
+              if (
+                apartmentsNewsIncludesNewFromDeveloper &&
+                l.category === 1 &&
+                isCompany(l)
+              ) {
+                return true;
+              }
+              return isNewConditionRow(l);
+            });
           }
           if (legacySidebarFilter?.id === 'presale') {
             displayListings = displayListings.filter(
@@ -3351,6 +3524,78 @@ const TikTokFeedScreen = ({
     }
   };
 
+  const cityDistanceKm = feedFilters?.city?.distanceKm;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const coords = await resolveUserReferenceCoords(
+        currentUser?.business_address,
+        currentUser?.id,
+      );
+      if (!cancelled) setUserCoords(coords);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.business_address, cityDistanceKm, selectedCategory]);
+
+  useEffect(() => {
+    const maxDist = Number(cityDistanceKm);
+    const isBnbFeed = selectedCategory === 5 || selectedCategory === '5';
+    const isGlobalFeed = selectedCategory === 4 || selectedCategory === '4';
+    if (
+      !Number.isFinite(maxDist) ||
+      maxDist <= 0 ||
+      isBnbFeed ||
+      isGlobalFeed ||
+      !userCoords
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const pending = [];
+      for (const l of dbListings) {
+        const q = getListingGeocodeQuery(l);
+        if (q && listingDistanceKmRef.current[q] === undefined) {
+          pending.push({key: q, address: q});
+        }
+      }
+      if (!pending.length) return;
+
+      for (let i = 0; i < pending.length; i += 40) {
+        if (cancelled) return;
+        const chunk = pending.slice(i, i + 40);
+        const gemini = await measureDistancesBatchWithGemini(userCoords, chunk);
+        if (gemini.success && gemini.distances) {
+          for (const [key, km] of Object.entries(gemini.distances)) {
+            const normalized = Number(km);
+            if (Number.isFinite(normalized) && normalized >= 0) {
+              listingDistanceKmRef.current[key] = normalized;
+            }
+          }
+        }
+
+        for (const item of chunk) {
+          if (cancelled) return;
+          if (listingDistanceKmRef.current[item.key] !== undefined) continue;
+          const coords = await geocodeAddress(item.address);
+          listingCoordsRef.current[item.key] = coords;
+          listingDistanceKmRef.current[item.key] = coords
+            ? haversineDistanceKm(userCoords, coords)
+            : null;
+        }
+        if (!cancelled) setListingDistanceVersion(v => v + 1);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dbListings, cityDistanceKm, selectedCategory, userCoords]);
+
   const applyFeedFilters = list => {
     let out = list;
     if (feedFilters.price != null) {
@@ -3668,6 +3913,26 @@ const TikTokFeedScreen = ({
           );
         });
       }
+      const maxDistKm = Number(c.distanceKm);
+      const isBnbFeedDist = selectedCategory === 5 || selectedCategory === '5';
+      const isGlobalFeedDist = selectedCategory === 4 || selectedCategory === '4';
+      if (
+        Number.isFinite(maxDistKm) &&
+        maxDistKm > 0 &&
+        !isBnbFeedDist &&
+        !isGlobalFeedDist &&
+        userCoords
+      ) {
+        out = out.filter(l => {
+          if (isPostVideo(l)) return false;
+          const query = getListingGeocodeQuery(l);
+          if (!query) return false;
+          const distKm = listingDistanceKmRef.current[query];
+          if (distKm === undefined) return true;
+          if (distKm == null) return false;
+          return distKm <= maxDistKm;
+        });
+      }
     }
     const apartmentTypeFilterIds = (() => {
       const a = feedFilters.apartmentType;
@@ -3895,7 +4160,10 @@ const TikTokFeedScreen = ({
     selectedTopBarFilter === 'liked'
       ? dbListings.filter(l => isItemLiked(l))
       : dbListings;
-  const uploadedVideos = applyFeedFilters(baseList);
+  const uploadedVideos = useMemo(() => {
+    void listingDistanceVersion;
+    return applyFeedFilters(baseList);
+  }, [baseList, feedFilters, selectedCategory, userCoords, listingDistanceVersion]);
 
   // Mock video data - only used when NO category is selected (for general browsing)
   // When a category is opened, show ONLY database content
@@ -5291,30 +5559,7 @@ const TikTokFeedScreen = ({
       );
     }
     return (
-      <>
-        <Text style={textStyle}>אין רשימות זמינות בקטגוריה זו</Text>
-        <TouchableOpacity
-          onPress={() => {
-            const isCompanyOrBroker =
-              currentUser?.subscription_type === subscriptionTypes.company ||
-              currentUser?.subscription_type === subscriptionTypes.broker;
-            if (isCompanyOrBroker && onOpenEditPublishAdWithCategory) {
-              onOpenEditPublishAdWithCategory(selectedCategory);
-            } else if (onOpenOfficeListing) {
-              onOpenOfficeListing(selectedCategory);
-            }
-          }}
-          style={{
-            marginTop: 20,
-            padding: 15,
-            backgroundColor: Colors.yellowIcons,
-            borderRadius: 8,
-          }}>
-          <Text style={{color: '#000', fontWeight: 'bold'}}>
-            פרסם רשימה חדשה
-          </Text>
-        </TouchableOpacity>
-      </>
+      <Text style={textStyle}>עדיין אין תוכן כאן</Text>
     );
   };
 

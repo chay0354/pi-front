@@ -35,6 +35,10 @@ const SuccessScreen = ({
   const isCompany =
     subscriptionType === subscriptionTypes.company ||
     String(subscription?.subscription_type || '').toLowerCase() === 'company';
+  // Only brokers have the 65-ad publish quota, so the quota line is broker-only.
+  const isBroker =
+    subscriptionType === subscriptionTypes.broker ||
+    String(subscription?.subscription_type || '').toLowerCase() === 'broker';
   const companyLogoUrl =
     subscription?.company_logo_url || subscription?.companyLogoUrl || null;
   const serverImageUrl = isCompany
@@ -141,10 +145,12 @@ const SuccessScreen = ({
 
           <View style={styles.successTitleBlock}>
             <Text style={styles.successTitle}>הרישום בוצע בהצלחה!</Text>
-            <Text style={styles.successSubtitle}>
-              ניתן לפרסם עד {monthlyQuota} מודעות בכל הקטגוריות
-              {subscription?.promo_code ? ' (קופון הופעל)' : ''}
-            </Text>
+            {isBroker ? (
+              <Text style={styles.successSubtitle}>
+                ניתן לפרסם עד {monthlyQuota} מודעות בכל הקטגוריות
+                {subscription?.promo_code ? ' (קופון הופעל)' : ''}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.subscriberCardWrap}>

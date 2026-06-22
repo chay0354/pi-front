@@ -60,6 +60,31 @@ export const companySheetAdListingCategoryIds = new Set([
   2, 4, 6, 7, 8, 10, 12,
 ]);
 
+/** Whether the create sheet shows a listing/ad row (not post-only) for this user + DB category. */
+export function canShowListingAdInCreateSheet(
+  subscriptionType,
+  listingCategoryId,
+) {
+  const sub = String(subscriptionType ?? '').toLowerCase();
+  const n = Number(listingCategoryId);
+  if (!Number.isFinite(n)) {
+    return false;
+  }
+  if (sub === subscriptionTypes.professional) {
+    return false;
+  }
+  if (sub === subscriptionTypes.user) {
+    return regularUserAdListingCategoryIds.has(n);
+  }
+  if (sub === subscriptionTypes.broker) {
+    return brokerSheetAdListingCategoryIds.has(n);
+  }
+  if (sub === subscriptionTypes.company) {
+    return companySheetAdListingCategoryIds.has(n);
+  }
+  return true;
+}
+
 /** Default residential/global strip icon (חדש מקבלן for non–regular-user accounts). */
 export const RESIDENTIAL_LISTING_SHEET_ICON = require('../assets/upload-ad/1.png');
 /** House icon — brokers (residential strip) and regular users (partners + listed categories). */
@@ -335,6 +360,108 @@ export const getHeaderTitle = subscriptionType => {
       return 'מנוי למתווכים';
   }
 };
+
+/** Professionals directory filter — סוג (fixed list). */
+export const PROFESSIONAL_FILTER_TYPES = [
+  'תיווך',
+  'עורך דין',
+  'עיצוב פנים',
+  'יועץ משכנתאות',
+  'שמאות',
+  'אדריכלות',
+  'מלווה משקיעים',
+];
+
+/** Professionals directory filter — התמחות options per סוג. */
+export const PROFESSIONAL_SPECIALIZATIONS_BY_TYPE = {
+  תיווך: [
+    'קבוצות רכישה',
+    'קרקעות',
+    'השקעות',
+    'קומבינציה',
+    'נדלן מיסחרי',
+    'נדלן למגורים',
+    'שיווק פרוייקטים',
+  ],
+  'עורך דין': [
+    'חוזים וקרקעות',
+    'השקעות',
+    'קבוצות רכישה',
+    'התחדשות עירונית',
+    'מכר ורכישה',
+    'מיסוי',
+    'נדל״ן מסחרי מניב',
+  ],
+  'עיצוב פנים': [
+    'מגורים',
+    'מיסחרי וקמעוני',
+    'משרדים',
+    'חללי עבודה',
+    'תעשייתי',
+    'שינוי דיירים',
+  ],
+  אדריכלות: [
+    'תכנון סטטוטורי',
+    'בניה רוויה',
+    'וילות',
+    'מיסחרי',
+    'ציבורי',
+    'שימור מיבנים',
+  ],
+  'יועץ משכנתאות': [
+    'מגורים דירה ראשונה',
+    'מחזור משכנתאות',
+    'ליווי פיננסי למשקעים',
+    'משכנתאות מסחריות',
+    'ליווי פרוייקטים',
+  ],
+  'מלווה משקיעים': [
+    'עסקאות אקזיט',
+    'נדל״ן מניב ותזרים',
+    'נדל״ן בן לאומי',
+    'השקעות',
+    'שלבים מוקדמים',
+  ],
+  שמאות: [
+    'שמאות תקן 21',
+    'שמאות למשכנתאות',
+    'הטילי השבחה ומיסוי',
+    'הערכת שווי חברות',
+    'קרקעות ופרוייקטים',
+  ],
+};
+
+/** Map filter labels to values stored on professional profiles (legacy aliases). */
+export const PROFESSIONAL_TYPE_DB_ALIASES = {
+  תיווך: ['תיווך'],
+  'עורך דין': ['עורך דין', 'עו"ד', 'עו״ד'],
+  'עיצוב פנים': ['עיצוב פנים'],
+  'יועץ משכנתאות': ['יועץ משכנתאות', 'ייעוץ משכנתאות'],
+  שמאות: ['שמאות'],
+  אדריכלות: ['אדריכלות'],
+  'מלווה משקיעים': ['מלווה משקיעים'],
+};
+
+export function getProfessionalSpecializationsForTypes(selectedTypes = []) {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(selectedTypes) ? selectedTypes : []).forEach(type => {
+    (PROFESSIONAL_SPECIALIZATIONS_BY_TYPE[type] || []).forEach(spec => {
+      if (seen.has(spec)) return;
+      seen.add(spec);
+      out.push(spec);
+    });
+  });
+  return out;
+}
+
+export function professionalMatchesTypeFilter(filterType, itemTypes) {
+  const aliases = PROFESSIONAL_TYPE_DB_ALIASES[filterType] || [filterType];
+  const typeSet = new Set(
+    (Array.isArray(itemTypes) ? itemTypes : []).map(v => String(v || '').trim()),
+  );
+  return aliases.some(alias => typeSet.has(alias));
+}
 
 // Shared BnB (category 5) ad form fields – used by user, broker, and company
 const bnbFormFields = [

@@ -10,7 +10,6 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -20,10 +19,6 @@ import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
 import {flexStart} from '../utils/rtlLayout';
 
-/**
- * Regular user registration – shown when user without profile tries to publish an ad.
- * Matches design: title, subtitle, profile pic, name, email, phone, register button, Google/Apple, cancel, login.
- */
 const UserRegistrationScreen = ({
   onSuccess,
   onCancel,
@@ -34,6 +29,7 @@ const UserRegistrationScreen = ({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [profileImage, setProfileImage] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -56,6 +52,7 @@ const UserRegistrationScreen = ({
         fallbackName = '',
         fallbackPhone = '',
         fallbackProfilePictureUrl = null,
+        fallbackAddress = '',
       } = {},
     ) => {
       if (!reg || !reg.success || !reg.subscription || !reg.subscription.id) {
@@ -73,6 +70,8 @@ const UserRegistrationScreen = ({
         email: sub.email || fallbackEmail,
         name: sub.name || fallbackName || sub.email || fallbackEmail,
         phone: sub.phone || fallbackPhone || null,
+        business_address:
+          sub.business_address || fallbackAddress || null,
         profile_picture_url:
           sub.profile_picture_url || fallbackProfilePictureUrl || null,
         status: sub.status || 'verified',
@@ -156,6 +155,7 @@ const UserRegistrationScreen = ({
     const name = fullName.trim();
     const emailTrim = email.trim();
     const phoneTrim = phone.trim();
+    const addressTrim = address.trim();
 
     if (!name) {
       setErrorMessage('אנא הזן שם מלא');
@@ -203,6 +203,7 @@ const UserRegistrationScreen = ({
           email: emailTrim,
           name,
           phone: phoneTrim,
+          businessAddress: addressTrim || null,
           profilePictureUrl,
           password,
         });
@@ -223,6 +224,7 @@ const UserRegistrationScreen = ({
         fallbackEmail: emailTrim,
         fallbackName: name,
         fallbackPhone: phoneTrim,
+        fallbackAddress: addressTrim,
         fallbackProfilePictureUrl: profilePictureUrl,
       });
     } catch (err) {
@@ -266,10 +268,23 @@ const UserRegistrationScreen = ({
 
   return (
     <View style={styles.container}>
+      <View style={[styles.topBar, {paddingTop: insets.top + 8}]}>
+        <TouchableOpacity
+          onPress={onCancel}
+          style={styles.backButton}
+          hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}
+          accessibilityRole="button"
+          accessibilityLabel="חזרה">
+          <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, {paddingTop: insets.top}]}
+        contentContainerStyle={[
+          styles.content,
+          {paddingBottom: Math.max(insets.bottom, 16) + 48},
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.mainContent}>
@@ -406,6 +421,18 @@ const UserRegistrationScreen = ({
                   </TouchableOpacity>
                 </View>
               </View>
+
+              <View style={styles.inputWrap}>
+                <Text style={styles.label}>כתובת</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="רחוב, עיר"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={address}
+                  onChangeText={setAddress}
+                  textAlign="right"
+                />
+              </View>
             </View>
 
             <TouchableOpacity
@@ -468,10 +495,6 @@ const UserRegistrationScreen = ({
               </TouchableOpacity>
             </View>
           </View>
-
-          <TouchableOpacity onPress={onCancel} activeOpacity={0.8}>
-            <Text style={styles.footerCancel}>בטל הרשמה ופרסום מודעה</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
       {GoogleAuthComponent ? (
@@ -492,6 +515,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#2B2A39',
   },
+  topBar: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+    width: '100%',
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: {
     flex: 1,
   },
@@ -505,7 +541,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingTop: 28,
-    paddingBottom: 28,
+    paddingBottom: 36,
     gap: 32,
     maxWidth: 366,
     alignSelf: 'center',
@@ -759,15 +795,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(43, 42, 57, 0.35)',
-  },
-  footerCancel: {
-    fontSize: 18,
-    lineHeight: 34,
-    color: '#FFFFFF',
-    fontFamily: 'Rubik-Regular',
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-    textDecorationColor: '#FFFFFF',
   },
 });
 

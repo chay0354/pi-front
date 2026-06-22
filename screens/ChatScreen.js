@@ -34,6 +34,7 @@ import {
   getChatParticipantDisplay,
   getListingPreview,
   sendChatMessage,
+  deleteChatMessage,
   uploadChatMedia,
   getGroupChatMessages,
   sendGroupChatMessage,
@@ -273,6 +274,7 @@ const ChatScreen = ({
   onMessageSent,
   onPiWelcomeOpened,
   onOpenPost,
+  onOpenPeerProfile,
 }) => {
   const insets = useSafeAreaInsets();
   const msg = DEFAULT_WELCOME_MESSAGE;
@@ -321,6 +323,9 @@ const ChatScreen = ({
       : null);
 
   const [messages, setMessages] = useState([]);
+  /** Message targeted by long-press for the action sheet (delete). */
+  const [actionMenuMessage, setActionMenuMessage] = useState(null);
+  const [deletingMessage, setDeletingMessage] = useState(false);
   const [listingPreviewCache, setListingPreviewCache] = useState({});
   const [conversationId, setConversationId] = useState(null);
   const [inputText, setInputText] = useState('');
@@ -335,6 +340,17 @@ const ChatScreen = ({
   const [voiceLockHint, setVoiceLockHint] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState(null);
   const [voiceMetaById, setVoiceMetaById] = useState({});
+  /**
+   * Marks the moment the active voice clip *actually* started producing audio
+   * (first status callback reporting isPlaying), so the bubble fill animation
+   * begins in sync with the sound instead of when the button is tapped.
+   */
+  const [activeVoicePlay, setActiveVoicePlay] = useState({
+    id: null,
+    startedAt: 0,
+    startProgress: 0,
+  });
+  const voicePlayBeganRef = useRef(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
@@ -421,6 +437,23 @@ const ChatScreen = ({
   const {isEmailOnline} = usePresence();
   const showPeerOnlineSubtitle =
     isDirectPeer && otherUserEmail && isEmailOnline(otherUserEmail);
+
+  const handleOpenPeerProfile = useCallback(() => {
+    if (!isDirectPeer || typeof onOpenPeerProfile !== 'function') return;
+    onOpenPeerProfile({
+      userRef: otherUserRef,
+      email: otherUserEmail,
+      name: displayName,
+      profileImageUrl: profileAvatarUrl,
+    });
+  }, [
+    isDirectPeer,
+    onOpenPeerProfile,
+    otherUserRef,
+    otherUserEmail,
+    displayName,
+    profileAvatarUrl,
+  ]);
 
   const groupTitleResolved =
     (groupDetail?.title != null && String(groupDetail.title).trim()) ||
@@ -1705,6 +1738,8 @@ const ChatScreen = ({
         if (st.isLoaded && st.isPlaying) {
           await soundRef.current.pauseAsync();
           setPlayingMessageId(null);
+          voicePlayBeganRef.current = false;
+          setActiveVoicePlay({id: null, startedAt: 0, startProgress: 0});
           setVoiceProgress(id, {
             positionMs: st.positionMillis || 0,
             durationMs: st.durationMillis || 0,
@@ -1715,6 +1750,8 @@ const ChatScreen = ({
         await soundRef.current.unloadAsync();
         soundRef.current = null;
         setPlayingMessageId(null);
+        voicePlayBeganRef.current = false;
+        setActiveVoicePlay({id: null, startedAt: 0, startProgress: 0});
         return;
       }
       if (soundRef.current) {
@@ -1724,7 +1761,11 @@ const ChatScreen = ({
       }
       // Flip the button to "playing" immediately so the press feels instant
       // (the audio file still has to load, but the UI no longer feels frozen).
+      // The waveform fill, however, only starts once audio truly begins (see
+      // voicePlayBeganRef in onStatus) so the bar stays in sync with the sound.
       setPlayingMessageId(id);
+      voicePlayBeganRef.current = false;
+      setActiveVoicePlay({id: null, startedAt: 0, startProgress: 0});
       const resumeMs = voiceMetaById[id]?.positionMs || 0;
       const onStatus = st => {
         if (!st.isLoaded) return;
@@ -1742,7 +1783,18 @@ const ChatScreen = ({
             };
           });
         }
+        // First tick where audio is actually advancing: anchor the fill to the
+        // real position/duration and let the bubble animate from there.
+        if (st.isPlaying && !st.didJustFinish && !voicePlayBeganRef.current) {
+          voicePlayBeganRef.current = true;
+          const dur = st.durationMillis || voiceMetaById[id]?.durationMs || 0;
+          const pos = st.positionMillis || 0;
+          const startProgress = dur > 0 ? Math.min(1, pos / dur) : 0;
+          setActiveVoicePlay({id, startedAt: Date.now(), startProgress});
+        }
         if (st.didJustFinish) {
+          voicePlayBeganRef.current = false;
+          setActiveVoicePlay({id: null, startedAt: 0, startProgress: 0});
           setPlayingMessageId(current => (current === id ? null : current));
           setVoiceProgress(id, {
             positionMs: 0,
@@ -1805,6 +1857,40 @@ const ChatScreen = ({
     exclusiveOfferMeta,
     myEmail,
   ]);
+
+  /** Long-press on a message bubble opens the action sheet (own messages only). */
+  const handleMessageLongPress = useCallback(
+    m => {
+      if (!m || m.isMe !== true) return;
+      if (isWelcome) return;
+      const id = m.id != null ? String(m.id).trim() : '';
+      if (!id) return;
+      setActionMenuMessage(m);
+    },
+    [isWelcome],
+  );
+
+  const handleDeleteMessage = useCallback(async () => {
+    const target = actionMenuMessage;
+    if (!target || deletingMessage) return;
+    const id = target.id != null ? String(target.id).trim() : '';
+    if (!id || !myEmail) {
+      setActionMenuMessage(null);
+      return;
+    }
+    setDeletingMessage(true);
+    try {
+      await deleteChatMessage(id, myEmail);
+      setMessages(prev =>
+        prev.filter(x => String(x.id).trim() !== id),
+      );
+      setActionMenuMessage(null);
+    } catch (e) {
+      Alert.alert('שגיאה', e?.message || 'מחיקת ההודעה נכשלה');
+    } finally {
+      setDeletingMessage(false);
+    }
+  }, [actionMenuMessage, deletingMessage, myEmail]);
 
   const renderMessages = () => {
     if (isWelcome) {
@@ -1933,7 +2019,12 @@ const ChatScreen = ({
                 !m.isMe && styles.bubbleWrapThem,
                 m.isMe && styles.bubbleWrapMe,
               ]}>
-              <View
+              <Pressable
+                onLongPress={() => handleMessageLongPress(m)}
+                delayLongPress={300}
+                android_ripple={
+                  m.isMe ? {color: 'rgba(0,0,0,0.12)', borderless: false} : null
+                }
                 style={[
                   styles.bubble,
                   m.isMe ? styles.bubbleMe : styles.bubbleThem,
@@ -2103,6 +2194,16 @@ const ChatScreen = ({
                     isPlaying={playingMessageId === String(m.id)}
                     progress={voiceMetaById[String(m.id)]?.progress || 0}
                     durationMs={voiceMetaById[String(m.id)]?.durationMs || 0}
+                    playStartedAt={
+                      activeVoicePlay.id === String(m.id)
+                        ? activeVoicePlay.startedAt
+                        : 0
+                    }
+                    playStartProgress={
+                      activeVoicePlay.id === String(m.id)
+                        ? activeVoicePlay.startProgress
+                        : 0
+                    }
                     onTogglePlay={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
                     onDurationKnown={handleVoiceDurationKnown}
                   />
@@ -2128,7 +2229,7 @@ const ChatScreen = ({
                       : ''}
                   </Text>
                 ) : null}
-              </View>
+              </Pressable>
             </View>
           </View>
           {isExclusiveOffer && m.isMe ? (
@@ -2605,9 +2706,12 @@ const ChatScreen = ({
               />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={handleOpenPeerProfile}
+              disabled={!isDirectPeer || typeof onOpenPeerProfile !== 'function'}
               style={styles.headerIdentityTap}
-              activeOpacity={0.85}>
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="פתח פרופיל">
               <ProfileAvatar
                 uri={profileAvatarUrl || null}
                 name={displayName}
@@ -3434,6 +3538,55 @@ const ChatScreen = ({
             resizeMode="contain"
           />
         </View>
+      </Modal>
+
+      <Modal
+        visible={!!actionMenuMessage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deletingMessage && setActionMenuMessage(null)}>
+        <Pressable
+          style={styles.msgMenuBackdrop}
+          onPress={() => !deletingMessage && setActionMenuMessage(null)}>
+          <Pressable style={styles.msgMenuSheet} onPress={() => {}}>
+            <View style={styles.msgMenuHandle} />
+            <TouchableOpacity
+              style={styles.msgMenuItem}
+              activeOpacity={0.7}
+              disabled={deletingMessage}
+              onPress={handleDeleteMessage}
+              accessibilityRole="button"
+              accessibilityLabel="מחק הודעה">
+              <Text style={[styles.msgMenuItemText, styles.msgMenuItemTextDanger]}>
+                מחק הודעה
+              </Text>
+              {deletingMessage ? (
+                <ActivityIndicator size="small" color="#E5484D" />
+              ) : (
+                <MaterialCommunityIcons
+                  name="trash-can-outline"
+                  size={22}
+                  color="#E5484D"
+                />
+              )}
+            </TouchableOpacity>
+            <View style={styles.msgMenuDivider} />
+            <TouchableOpacity
+              style={styles.msgMenuItem}
+              activeOpacity={0.7}
+              disabled={deletingMessage}
+              onPress={() => setActionMenuMessage(null)}
+              accessibilityRole="button"
+              accessibilityLabel="ביטול">
+              <Text style={styles.msgMenuItemText}>ביטול</Text>
+              <MaterialCommunityIcons
+                name="close"
+                size={22}
+                color={TEXT_LIGHT}
+              />
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -4373,6 +4526,50 @@ const styles = StyleSheet.create({
   fullScreenImage: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
+  },
+  msgMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  msgMenuSheet: {
+    backgroundColor: '#2B2A39',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    paddingHorizontal: 8,
+  },
+  msgMenuHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 8,
+  },
+  msgMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+  },
+  msgMenuItemText: {
+    fontSize: 17,
+    fontFamily: 'Rubik-Medium',
+    color: '#FFFFFF',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  msgMenuItemTextDanger: {
+    color: '#E5484D',
+  },
+  msgMenuDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 16,
   },
   sharedPostCard: {
     width: 236,

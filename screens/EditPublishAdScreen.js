@@ -20,11 +20,9 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Octicons} from '@expo/vector-icons';
 import {
   brokerCategories,
-  brokerSheetAdListingCategoryIds,
+  canShowListingAdInCreateSheet,
   categoriesEditProfile,
-  companySheetAdListingCategoryIds,
   getCreateSheetListingIcon,
-  regularUserAdListingCategoryIds,
   subscriptionTypes,
 } from '../utils/constant';
 import CreateAdSheet, {
@@ -91,6 +89,17 @@ const isPostListingRecord = item => {
   return urls.some(u => /post_\d/i.test(String(u)));
 };
 
+const isCompanyUser = user =>
+  String(user?.subscription_type || '').trim().toLowerCase() ===
+  subscriptionTypes.company;
+
+/** White badge on ad cards: company accounts label their ads "פרויקט". */
+const getListingTypeBadgeLabel = (listing, currentUser) => {
+  if (isPostListingRecord(listing)) return 'פוסט';
+  if (isCompanyUser(currentUser)) return 'פרויקט';
+  return 'נכס';
+};
+
 // Category icon: crop outer background (dark card) so only center content shows
 const CATEGORY_ICON_SIZE = 110;
 const CATEGORY_ICON_CROP = 0.24; // crop from each edge (show center ~52%)
@@ -132,6 +141,32 @@ const toListingCategoryId = value => {
 
 const resolveListingCategoryId = uiCategoryId =>
   toListingCategoryId(uiCategoryId);
+
+/** UI strip id for חדש מקבלן — pinned to the physical right when shown. */
+const NEW_BUILDER_UI_CATEGORY_ID = 1;
+
+/** Strip order: under forceRTL the first item sits on the physical right. */
+const orderPublishCategoriesStrip = strip => {
+  if (!strip?.length) return strip || [];
+  const newBuilder = strip.find(cat => cat.id === NEW_BUILDER_UI_CATEGORY_ID);
+  if (!newBuilder) return strip;
+  return [
+    newBuilder,
+    ...strip.filter(cat => cat.id !== NEW_BUILDER_UI_CATEGORY_ID),
+  ];
+};
+
+/** First strip item = physical right under RTL horizontal scroll. */
+const getRightmostStripCategoryId = strip =>
+  strip?.length ? strip[0].id : null;
+
+/** Last strip item = physical left at end of horizontal scroll (RTL). */
+const getLeftmostStripCategoryId = strip =>
+  strip?.length ? strip[strip.length - 1].id : null;
+
+const scrollCategoryStripToPhysicalRight = scrollRef => {
+  scrollRef.current?.scrollTo({x: 0, animated: false});
+};
 
 const EditPublishAdScreen = ({
   onClose,
@@ -182,12 +217,12 @@ const EditPublishAdScreen = ({
   const [boostedOverrides, setBoostedOverrides] = useState({});
   const categoryScrollRef = useRef(null);
   const didInitialCategoryScrollRef = useRef(false);
-  // Auto-scroll "demo swipe" on entrance: sweeps the strip across so the user
-  // sees every category go by from left → right, then settles at the start.
+  // Entrance sweep: categories pass left → right, then rest at the far scroll (no snap-back).
   const categoryContentWidthRef = useRef(0);
   const categoryViewportWidthRef = useRef(0);
   const categorySweepAnim = useRef(new Animated.Value(0)).current;
   const didCategorySweepRef = useRef(false);
+  const publishCategoriesStripRef = useRef([]);
 
   const runCategorySweep = () => {
     if (didCategorySweepRef.current) return;
@@ -202,8 +237,7 @@ const EditPublishAdScreen = ({
       categoryScrollRef.current?.scrollTo({x: value, animated: false});
     });
 
-    // Start at the near edge, then glide across so every category passes
-    // left → right (RTL scroll inverts x, so we sweep 0 → maxScroll).
+    // RTL: start at x=0 (physical right). Sweep 0 → maxScroll so categories pass left → right.
     categorySweepAnim.setValue(0);
     categoryScrollRef.current?.scrollTo({x: 0, animated: false});
     Animated.timing(categorySweepAnim, {
@@ -212,10 +246,15 @@ const EditPublishAdScreen = ({
       delay: 350,
       easing: Easing.inOut(Easing.cubic),
       useNativeDriver: false,
-    }).start(() => {
+    }).start(({finished}) => {
       categorySweepAnim.removeListener(id);
-      // Rest where the strip normally sits after load.
-      categoryScrollRef.current?.scrollToEnd({animated: false});
+      if (finished) {
+        categorySweepAnim.setValue(maxScroll);
+        const strip = publishCategoriesStripRef.current;
+        if (strip.length) {
+          setSelectedCategoryId(getLeftmostStripCategoryId(strip));
+        }
+      }
     });
   };
 
@@ -231,11 +270,6 @@ const EditPublishAdScreen = ({
     categoryViewportWidthRef.current = e.nativeEvent.layout.width || 0;
     runCategorySweep();
   };
-
-  // Sync selected tab with feed category; carousel lists every category for all user types.
-  useEffect(() => {
-    setSelectedCategoryId(toUiCategoryId(initialCategoryId));
-  }, [initialCategoryId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,56 +389,60 @@ const EditPublishAdScreen = ({
   const isBnbCategory = Number(selectedListingCategoryId) === 5;
   const isPartnersCategory = Number(selectedListingCategoryId) === 3;
   const isOfficesListingCategory = Number(selectedListingCategoryId) === 2;
-  const isRegularUser =
-    (currentUser?.subscription_type || '').toLowerCase() ===
-    subscriptionTypes.user;
-  const isBroker =
-    (currentUser?.subscription_type || '').toLowerCase() ===
-    subscriptionTypes.broker;
-  const isCompany =
-    (currentUser?.subscription_type || '').toLowerCase() ===
-    subscriptionTypes.company;
-  const isProfessional =
-    (currentUser?.subscription_type || '').toLowerCase() ===
-    subscriptionTypes.professional;
-  const publishCategoriesStrip = categoriesEditProfile;
-  const showListingCreateInSheet = useMemo(() => {
-    if (isProfessional) {
-      return false;
+  const publishCategoriesStrip = useMemo(() => {
+    const filtered = categoriesEditProfile.filter(cat =>
+      canShowListingAdInCreateSheet(
+        currentUser?.subscription_type,
+        resolveListingCategoryId(cat.id),
+      ),
+    );
+    return orderPublishCategoriesStrip(filtered);
+  }, [currentUser?.subscription_type]);
+  publishCategoriesStripRef.current = publishCategoriesStrip;
+
+  useEffect(() => {
+    if (publishCategoriesStrip.length === 0) {
+      setSelectedCategoryId(toUiCategoryId(initialCategoryId));
+      return;
     }
-    if (isRegularUser) {
-      return (
-        selectedListingCategoryId != null &&
-        regularUserAdListingCategoryIds.has(Number(selectedListingCategoryId))
-      );
+    setSelectedCategoryId(getRightmostStripCategoryId(publishCategoriesStrip));
+    // When the strip fits on screen the entrance sweep is skipped — scroll manually.
+    const contentW = categoryContentWidthRef.current;
+    const viewportW = categoryViewportWidthRef.current;
+    const maxScroll = Math.max(0, contentW - viewportW);
+    if (maxScroll <= 4 || viewportW <= 0) {
+      requestAnimationFrame(() => {
+        scrollCategoryStripToPhysicalRight(categoryScrollRef);
+      });
     }
-    if (isBroker) {
-      return (
-        selectedListingCategoryId != null &&
-        brokerSheetAdListingCategoryIds.has(Number(selectedListingCategoryId))
-      );
+  }, [initialCategoryId, publishCategoriesStrip]);
+
+  const showListingCreateInSheet = useMemo(
+    () =>
+      canShowListingAdInCreateSheet(
+        currentUser?.subscription_type,
+        selectedListingCategoryId,
+      ),
+    [currentUser?.subscription_type, selectedListingCategoryId],
+  );
+  const filteredListings = useMemo(() => {
+    if (publishCategoriesStrip.length === 0) {
+      return mergedListings;
     }
-    if (isCompany) {
-      return (
-        selectedListingCategoryId != null &&
-        companySheetAdListingCategoryIds.has(Number(selectedListingCategoryId))
-      );
+    if (!selectedCategoryId) {
+      return mergedListings;
     }
-    return true;
+    return mergedListings.filter(
+      l =>
+        (l.category != null && parseInt(l.category, 10)) ===
+        selectedListingCategoryId,
+    );
   }, [
-    isRegularUser,
-    isBroker,
-    isCompany,
-    isProfessional,
+    mergedListings,
+    publishCategoriesStrip.length,
+    selectedCategoryId,
     selectedListingCategoryId,
   ]);
-  const filteredListings = selectedCategoryId
-    ? mergedListings.filter(
-        l =>
-          (l.category != null && parseInt(l.category, 10)) ===
-          selectedListingCategoryId,
-      )
-    : mergedListings;
 
   const getFirstImage = listing => {
     if (listing.images && listing.images.length > 0) {
@@ -702,7 +740,7 @@ const EditPublishAdScreen = ({
           )}
           <View style={styles.topRightTextWrap}>
             <Text style={styles.topRightText}>
-              {postRecord ? 'פוסט' : 'נכס'}
+              {getListingTypeBadgeLabel(listing, currentUser)}
             </Text>
           </View>
           {!postRecord || onEditPost ? (
@@ -763,7 +801,7 @@ const EditPublishAdScreen = ({
           ) : null}
           <View style={styles.topRightTextWrap}>
             <Text style={styles.topRightText}>
-              {postRecord ? 'פוסט' : 'נכס'}
+              {getListingTypeBadgeLabel(listing, currentUser)}
             </Text>
           </View>
           <View style={styles.advertisementNo}>
@@ -936,57 +974,58 @@ const EditPublishAdScreen = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topPanel}>
-          {/* Category prompt - horizontal scroll */}
-          <Text style={styles.sectionLabel}>בחרו קטגוריה לפרסם בה</Text>
-          <ScrollView
-            ref={categoryScrollRef}
-            horizontal
-            directionalLockEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScrollContent}
-            style={styles.categoryScroll}
-            onLayout={onCategoryScrollLayout}
-            onContentSizeChange={onCategoryScrollContentSizeChange}>
-            {publishCategoriesStrip.map(cat => {
-              const selected = selectedCategoryId === cat.id;
-              return (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={styles.categoryItem}
-                  onPress={() => setSelectedCategoryId(cat.id)}
-                  activeOpacity={0.8}>
-                  <Image
-                    source={selected ? cat.selectedImage : cat.image}
-                    style={[
-                      {
-                        width: 100,
-                        height: 100,
-                        // width: Dimensions.get('window').width * 0.27,
-                        // height: Dimensions.get('window').width * 0.27,
-                      },
-                    ]}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.categoryNameRow}>
-                    <Text
-                      style={[
-                        styles.categoryName,
-                        selected && styles.categoryNameSelected,
-                      ]}>
-                      {cat.name}
-                    </Text>
-                    {selected ? (
+          {publishCategoriesStrip.length > 0 ? (
+            <>
+              <Text style={styles.sectionLabel}>בחרו קטגוריה לפרסם בה</Text>
+              <ScrollView
+                ref={categoryScrollRef}
+                horizontal
+                directionalLockEnabled
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryScrollContent}
+                style={styles.categoryScroll}
+                onLayout={onCategoryScrollLayout}
+                onContentSizeChange={onCategoryScrollContentSizeChange}>
+                {publishCategoriesStrip.map(cat => {
+                  const selected = selectedCategoryId === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={styles.categoryItem}
+                      onPress={() => setSelectedCategoryId(cat.id)}
+                      activeOpacity={0.8}>
                       <Image
-                        source={require('../assets/checkbox.png')}
-                        style={styles.categoryCheckbox}
+                        source={selected ? cat.selectedImage : cat.image}
+                        style={[
+                          {
+                            width: 100,
+                            height: 100,
+                          },
+                        ]}
                         resizeMode="contain"
                       />
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                      <View style={styles.categoryNameRow}>
+                        <Text
+                          style={[
+                            styles.categoryName,
+                            selected && styles.categoryNameSelected,
+                          ]}>
+                          {cat.name}
+                        </Text>
+                        {selected ? (
+                          <Image
+                            source={require('../assets/checkbox.png')}
+                            style={styles.categoryCheckbox}
+                            resizeMode="contain"
+                          />
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </>
+          ) : null}
 
           {/* Action bar: Create Ad + view toggles */}
           {filteredListings && filteredListings.length > 0 && (
@@ -1103,14 +1142,18 @@ const EditPublishAdScreen = ({
                         ? 'משרד'
                         : isPartnersCategory
                           ? 'פרסם מודעה'
-                          : 'נכס'
+                          : isCompanyUser(currentUser)
+                            ? 'פרויקט'
+                            : 'נכס'
                     }
                     subtitle={
                       isPartnersCategory
                         ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
                         : isOfficesListingCategory
                           ? 'פרסם משרד למכירה או השכרה'
-                          : 'פרסם נכס למכירה או השכרה'
+                          : isCompanyUser(currentUser)
+                            ? 'פרסמו פרויקט'
+                            : 'פרסמו נכס למכירה או להשכרה'
                     }
                     iconSource={getCreateSheetListingIcon(
                       selectedListingCategoryId,

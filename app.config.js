@@ -81,6 +81,8 @@ module.exports = {
           'אנחנו צריכים גישה לספריית התמונות כדי להוסיף תמונות',
         NSMicrophoneUsageDescription:
           'אנחנו צריכים גישה למיקרופון כדי לשלוח הודעות קול',
+        NSLocationWhenInUseUsageDescription:
+          'אנחנו צריכים גישה למיקום שלך כדי לסנן מודעות לפי מרחק ממך',
       },
     },
     android: {
@@ -99,6 +101,8 @@ module.exports = {
         'READ_MEDIA_IMAGES',
         'READ_MEDIA_VIDEO',
         'RECORD_AUDIO',
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_COARSE_LOCATION',
       ],
       ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY
         ? {
@@ -116,6 +120,13 @@ module.exports = {
     },
     plugins: [
       'expo-font',
+      [
+        'expo-location',
+        {
+          locationWhenInUsePermission:
+            'אנחנו צריכים גישה למיקום שלך כדי לסנן מודעות לפי מרחק ממך',
+        },
+      ],
       [
         'expo-build-properties',
         {

@@ -10,21 +10,142 @@ import {
 import React, {useCallback, useEffect, useRef, useState, memo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {Video, ResizeMode} from 'expo-av';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
-import {getStoriesFeed} from '../utils/api';
+import {getListings, getStoriesFeed} from '../utils/api';
+import {
+  listingHasHeroMedia,
+  resolveListingHeroMedia,
+} from '../utils/listingGridCardFigma';
 
 import {userCategories} from '../utils/constant';
 import {flexStart} from '../utils/rtlLayout';
 
-/**
- * Hero: static PNG on Android (smooth decode). Web + iOS use optimized
- * project_image.gif (~3MB, 640×441, 30 frames) — run scripts/compress-project-gif.sh to rebuild.
- */
-const PROJECT_FEATURE_IMAGE = require('../assets/project_image.gif');
+const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
+
+const isFeedPostListing = listing =>
+  listing?.feed_post === true ||
+  listing?.feed_post === 'true' ||
+  listing?.feed_post === 't';
+
+const pickRandomCompanyProjectListing = listings => {
+  const candidates = (Array.isArray(listings) ? listings : []).filter(
+    listing =>
+      !isFeedPostListing(listing) &&
+      String(listing?.subscription_type || '').trim().toLowerCase() ===
+        'company' &&
+      listingHasHeroMedia(listing),
+  );
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)] || null;
+};
+
+const FeatureHeroMedia = memo(function FeatureHeroMedia({
+  media,
+  loading,
+  paused,
+  fallbackSource,
+}) {
+  const webVideoRef = useRef(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = webVideoRef.current;
+    if (!el || media?.type !== 'video') return;
+    if (paused) {
+      el.pause();
+      return;
+    }
+    const playPromise = el.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {});
+    }
+  }, [paused, media?.type, media?.uri]);
+
+  if (loading) {
+    return (
+      <View style={[styles.projectImage, styles.projectImagePlaceholder]} />
+    );
+  }
+
+  if (media?.type === 'video' && media.uri) {
+    if (Platform.OS === 'web') {
+      return (
+        <View style={styles.projectImage}>
+          {media.posterUri ? (
+            <Image
+              source={{uri: media.posterUri}}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+            />
+          ) : null}
+          <video
+            ref={webVideoRef}
+            src={media.uri}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              borderRadius: 16,
+            }}
+            autoPlay={!paused}
+            muted
+            loop
+            playsInline
+            preload="auto"
+          />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.projectImage}>
+        {media.posterUri ? (
+          <Image
+            source={{uri: media.posterUri}}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        ) : null}
+        <Video
+          key={media.uri}
+          source={{uri: media.uri}}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={!paused}
+          isMuted
+          isLooping
+          useNativeControls={false}
+          onError={() => {}}
+        />
+      </View>
+    );
+  }
+
+  if (media?.type === 'image' && media.uri) {
+    return (
+      <Image
+        source={{uri: media.uri}}
+        style={styles.projectImage}
+        resizeMode="cover"
+        fadeDuration={0}
+      />
+    );
+  }
+
+  return (
+    <Image
+      source={fallbackSource}
+      style={styles.projectImage}
+      resizeMode="cover"
+      fadeDuration={0}
+    />
+  );
+});
 
 const HomeBackground = memo(function HomeBackground({children}) {
   return (
@@ -46,12 +167,14 @@ const Home = ({
   onOpenSelectedProjects,
   onOpenProfessionalsDirectory,
   onOpenUserProfile,
+  onOpenFeatureListing,
   onOpenStoryProfile,
   carouselCategoryId = null,
   reopenAi = false,
   aiSnapshot = null,
   onAiReopenConsumed,
   onAiSnapshotChange,
+  unreadChatCount = 0,
 }) => {
   const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
@@ -65,8 +188,8 @@ const Home = ({
   const [flipped, setFlipped] = useState(reopenAi);
   const flipAnimRef = useRef(null);
   const [aiMounted, setAiMounted] = useState(reopenAi);
-  // Project feature card starts muted (matches Figma node 7:40660).
-  const [projectMuted, setProjectMuted] = useState(true);
+  const [featureListing, setFeatureListing] = useState(null);
+  const [featureMediaLoading, setFeatureMediaLoading] = useState(true);
   const logoTapCountRef = useRef(0);
   const logoTapResetTimerRef = useRef(null);
 
@@ -93,12 +216,38 @@ const Home = ({
     }
   }, []);
 
+  const loadFeatureProjectImage = useCallback(async () => {
+    setFeatureMediaLoading(true);
+    try {
+      const res = await getListings({
+        status: 'published',
+        category: 1,
+        subscription_type: 'company',
+      });
+      setFeatureListing(pickRandomCompanyProjectListing(res?.listings));
+    } catch (_) {
+      setFeatureListing(null);
+    } finally {
+      setFeatureMediaLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       loadStories();
+      loadFeatureProjectImage();
     });
     return () => task.cancel();
-  }, [loadStories]);
+  }, [loadStories, loadFeatureProjectImage]);
+
+  const featureMedia = featureListing
+    ? resolveListingHeroMedia(featureListing)
+    : null;
+
+  const handleOpenFeatureListing = useCallback(() => {
+    if (!featureListing || typeof onOpenFeatureListing !== 'function') return;
+    onOpenFeatureListing(featureListing);
+  }, [featureListing, onOpenFeatureListing]);
 
   const toggleFlip = useCallback(() => {
     if (flipAnimRef.current) flipAnimRef.current.stop();
@@ -210,8 +359,23 @@ const Home = ({
 
   const frontFace = (
     <>
-      <TouchableOpacity onPress={onOpenSettings}>
+      <TouchableOpacity
+        onPress={onOpenSettings}
+        activeOpacity={0.85}
+        style={styles.menuWrap}
+        hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+        accessibilityRole="button"
+        accessibilityLabel="תפריט">
         <Image source={require('../assets/menu.png')} style={styles.menu} />
+        {unreadChatCount > 0 ? (
+          <View
+            style={styles.menuBadge}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants">
+            <MaterialCommunityIcons name="send" size={13} color="#1a1a2e" />
+          </View>
+        ) : null}
       </TouchableOpacity>
       <TouchableOpacity
         activeOpacity={0.85}
@@ -222,12 +386,14 @@ const Home = ({
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Carusel
-          categoriesList={userCategories}
-          initialCategoryId={carouselCategoryId}
-          onCategorySelect={handleCategorySelect}
-        />
-        <View style={[styles.profileBarHeader, {marginTop: 8}]}>
+        <View style={styles.carouselWrap}>
+          <Carusel
+            categoriesList={userCategories}
+            initialCategoryId={carouselCategoryId}
+            onCategorySelect={handleCategorySelect}
+          />
+        </View>
+        <View style={styles.projectsSectionHeader}>
           <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           <TouchableOpacity
             onPress={() => onOpenSelectedProjects?.()}
@@ -235,38 +401,28 @@ const Home = ({
             <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.projectCardWrap}>
-          <View style={styles.videoContainer}>
+        <View style={styles.projectCardSlot}>
+          <TouchableOpacity
+            activeOpacity={featureListing ? 0.92 : 1}
+            disabled={!featureListing || featureMediaLoading}
+            onPress={handleOpenFeatureListing}
+            style={styles.projectCardWrap}
+            accessibilityRole="button"
+            accessibilityLabel="פתח מודעת פרויקט">
+            <View style={styles.videoContainer}>
+              <FeatureHeroMedia
+                media={featureMedia}
+                loading={featureMediaLoading}
+                paused={flipped}
+                fallbackSource={FALLBACK_PROJECT_IMAGE}
+              />
+            </View>
             <Image
-              source={PROJECT_FEATURE_IMAGE}
-              style={styles.projectImage}
-              resizeMode="cover"
-              fadeDuration={0}
-            />
-            <Image
-              source={require('../assets/videoLogo.png')}
-              style={styles.videoLogo}
+              source={require('../assets/popular.png')}
+              style={styles.popularLogo}
               resizeMode="contain"
             />
-            <TouchableOpacity
-              style={styles.muteBtn}
-              activeOpacity={0.8}
-              onPress={() => setProjectMuted(m => !m)}
-              hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-              accessibilityRole="button"
-              accessibilityLabel={projectMuted ? 'בטל השתקה' : 'השתק'}>
-              <MaterialCommunityIcons
-                name={projectMuted ? 'volume-mute' : 'volume-high'}
-                size={24}
-                color="#FFFFFF"
-              />
-            </TouchableOpacity>
-          </View>
-          <Image
-            source={require('../assets/popular.png')}
-            style={styles.popularLogo}
-            resizeMode="contain"
-          />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -278,13 +434,7 @@ const Home = ({
           <TouchableOpacity
             onPress={() => onOpenProfessionalsDirectory?.()}
             style={styles.profileBarHeaderButton}>
-            <Text
-              style={[
-                styles.profileBarHeaderButtonText,
-                styles.profileBarHeaderButtonTextAlt,
-              ]}>
-              חפשו עוד
-            </Text>
+            <Text style={styles.profileBarHeaderButtonText}>חפשו עוד</Text>
           </TouchableOpacity>
         </View>
         <HomeStoryStrip
@@ -381,6 +531,8 @@ const Home = ({
 
 export default memo(Home);
 
+const PROJECT_CARD_EXTRA_HEIGHT = 28;
+
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -398,12 +550,33 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
   },
-  menu: {
+  menuWrap: {
     alignSelf: flexStart,
-    width: 28,
-    height: 20,
     marginTop: 20,
     marginStart: 26,
+    position: 'relative',
+  },
+  menu: {
+    width: 28,
+    height: 20,
+  },
+  // Top-right of hamburger (forceRTL swaps left/right → `left` = physical right).
+  menuBadge: {
+    position: 'absolute',
+    top: -8,
+    left: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#5EEAD4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    elevation: 6,
+    shadowColor: '#5EEAD4',
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
   },
   safeArea: {
     flex: 1,
@@ -419,9 +592,24 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  projectCardWrap: {
+  carouselWrap: {
+    marginBottom: -PROJECT_CARD_EXTRA_HEIGHT,
+  },
+  projectsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 4,
+    marginBottom: 8,
+    zIndex: 2,
+  },
+  projectCardSlot: {
     flex: 1,
     marginHorizontal: 20,
+  },
+  projectCardWrap: {
+    flex: 1,
     position: 'relative',
     overflow: 'visible',
   },
@@ -435,24 +623,8 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 16,
   },
-  videoLogo: {
-    position: 'absolute',
-    right: 10,
-    top: 10,
-    width: 45,
-    height: 45,
-    resizeMode: 'contain',
-  },
-  // Mute toggle bottom-left of the feature card (Figma node I7:40660;391:18915).
-  // Under forceRTL the left/right props are swapped, so `right` = physical left.
-  muteBtn: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+  projectImagePlaceholder: {
+    backgroundColor: '#2B2A39',
   },
   popularLogo: {
     position: 'absolute',
@@ -480,10 +652,6 @@ const styles = StyleSheet.create({
     color: '#FFC40A',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-  },
-  /** Second חפשו עוד (בעלי מקצוע) — distinct color from the gold one above. */
-  profileBarHeaderButtonTextAlt: {
-    color: '#D2D0DC',
   },
   profileBarHeaderText: {
     color: 'white',

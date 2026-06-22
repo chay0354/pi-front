@@ -141,6 +141,10 @@ const SubscriptionScreen = ({
 }) => {
   const [isAgreed, setIsAgreed] = useState(false);
   const insets = useSafeAreaInsets();
+  // Only brokers must confirm the "no fictitious ads" agreement; other account
+  // types skip the checkbox and can start right away.
+  const requiresAgreement = subscriptionType === subscriptionTypes.broker;
+  const canStart = !requiresAgreement || isAgreed;
   const copy = useMemo(
     () => subscriptionCopy(subscriptionType, isAgreed, currentUser),
     [subscriptionType, isAgreed, currentUser],
@@ -151,7 +155,7 @@ const SubscriptionScreen = ({
   );
 
   const handleStart = () => {
-    if (!isAgreed || !onStart) return;
+    if (!canStart || !onStart) return;
     onStart();
   };
 
@@ -240,47 +244,49 @@ const SubscriptionScreen = ({
             </View>
           </View>
 
-          <View style={styles.agreementBlock}>
-            <View style={styles.agreementRow}>
-              <TouchableOpacity
-                onPress={() => setIsAgreed(!isAgreed)}
-                style={styles.checkboxHit}
-                hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                {isAgreed ? (
-                  <View style={styles.checkboxChecked}>
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={14}
-                      color="#F4AD39"
-                    />
-                  </View>
-                ) : (
-                  <View style={styles.checkboxEmpty} />
-                )}
-              </TouchableOpacity>
-              <View style={styles.agreementTexts}>
-                <Text style={styles.agreementMain}>
-                  אני מאשר/ת שלא אפרסם מודעות פיקטיביות
-                </Text>
-                <Text style={styles.disclaimerText}>
-                  במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע
-                  חסימה אוטומטית של החשבון.
-                </Text>
+          {requiresAgreement ? (
+            <View style={styles.agreementBlock}>
+              <View style={styles.agreementRow}>
+                <TouchableOpacity
+                  onPress={() => setIsAgreed(!isAgreed)}
+                  style={styles.checkboxHit}
+                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                  {isAgreed ? (
+                    <View style={styles.checkboxChecked}>
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={14}
+                        color="#F4AD39"
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.checkboxEmpty} />
+                  )}
+                </TouchableOpacity>
+                <View style={styles.agreementTexts}>
+                  <Text style={styles.agreementMain}>
+                    אני מאשר/ת שלא אפרסם מודעות פיקטיביות
+                  </Text>
+                  <Text style={styles.disclaimerText}>
+                    במקרה של פרסום כוזב – התראה ראשונה תישלח, ובפעם השנייה תבוצע
+                    חסימה אוטומטית של החשבון.
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.actionsBlock}>
             <TouchableOpacity
-              disabled={!isAgreed}
+              disabled={!canStart}
               onPress={handleStart}
               activeOpacity={0.85}
               style={[
                 styles.primaryButton,
-                !isAgreed && styles.primaryButtonDisabled,
-                isAgreed && styles.primaryButtonEnabled,
+                !canStart && styles.primaryButtonDisabled,
+                canStart && styles.primaryButtonEnabled,
               ]}>
-              {isAgreed ? (
+              {canStart ? (
                 <LinearGradient
                   colors={['#FEE787', '#BD9947', '#9C6522']}
                   locations={[0.0456, 0.5076, 0.8831]}

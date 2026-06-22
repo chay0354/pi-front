@@ -1071,6 +1071,25 @@ export const getSubscription = async subscriptionId => {
 };
 
 /**
+ * Update editable profile fields for a subscription (all account types).
+ * @param {string} subscriptionId - subscription UUID
+ * @param {object} fields - whitelist of editable fields (name, phone, description, etc.)
+ * @returns {Promise<{success: boolean, subscription?: object, error?: string}>}
+ */
+export const updateSubscriptionProfile = async (subscriptionId, fields = {}) => {
+  const id = toSubscriptionId(subscriptionId);
+  if (!id) throw new Error('Valid subscription id is required');
+  const response = await apiFetch(`${apiBase()}/api/subscription/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields || {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Failed to update profile');
+  return data;
+};
+
+/**
  * Ask AI for smart info about a topic (e.g. transport, security) for an address.
  * @param {string} topic - Topic key (e.g. 'transport', 'security')
  * @param {string} topicLabel - Hebrew label (e.g. 'תחבורה', 'ביטחון')
@@ -1115,6 +1134,61 @@ export const piAiSearchListings = async (query, listingSummaries) => {
     return { success: true, ids: Array.isArray(data.ids) ? data.ids : [] };
   } catch (error) {
     console.warn('piAiSearchListings error:', error?.message);
+    return { success: false, error: error?.message };
+  }
+};
+
+/**
+ * Gemini estimates straight-line km from GPS origin to one property address.
+ * @param {{ latitude: number, longitude: number }} origin
+ * @param {string} destinationAddress
+ */
+export const measureDistanceWithGemini = async (origin, destinationAddress) => {
+  try {
+    const response = await apiFetch(`${apiBase()}/api/ai/distance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin, destinationAddress }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      return { success: false, error: data?.error || `HTTP ${response.status}` };
+    }
+    return {
+      success: true,
+      distanceKm: Number(data.distanceKm),
+      source: data.source || 'gemini',
+    };
+  } catch (error) {
+    console.warn('measureDistanceWithGemini error:', error?.message);
+    return { success: false, error: error?.message };
+  }
+};
+
+/**
+ * Gemini batch distance map: { [addressKey]: distanceKm }.
+ * @param {{ latitude: number, longitude: number }} origin
+ * @param {Array<{ key: string, address: string }>} destinations
+ */
+export const measureDistancesBatchWithGemini = async (origin, destinations) => {
+  try {
+    const response = await apiFetch(`${apiBase()}/api/ai/distance-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin, destinations }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      return { success: false, error: data?.error || `HTTP ${response.status}` };
+    }
+    return {
+      success: true,
+      distances:
+        data.distances && typeof data.distances === 'object' ? data.distances : {},
+      source: data.source || 'gemini',
+    };
+  } catch (error) {
+    console.warn('measureDistancesBatchWithGemini error:', error?.message);
     return { success: false, error: error?.message };
   }
 };
@@ -1182,6 +1256,7 @@ export const registerRegularUser = async ({
   email,
   name = null,
   phone = null,
+  businessAddress = null,
   profilePictureUrl = null,
   password = null,
 } = {}) => {
@@ -1205,6 +1280,7 @@ export const registerRegularUser = async ({
         email: normalizedEmail,
         name,
         phone,
+        business_address: businessAddress,
         profile_picture_url: profilePictureUrl,
         password: pwd,
       }),
@@ -2159,6 +2235,29 @@ export const getChatConversations = async (userEmail) => {
 };
 
 /**
+ * Delete a 1-on-1 (direct) chat between the current user and another user.
+ * Group chats are not deletable via this call.
+ * @param {string} userEmail - current user's email
+ * @param {string} otherUserEmail - the other participant's email
+ */
+export const deleteChatConversation = async (userEmail, otherUserEmail) => {
+  const email = userEmail != null ? String(userEmail).trim().toLowerCase() : '';
+  const other =
+    otherUserEmail != null ? String(otherUserEmail).trim().toLowerCase() : '';
+  if (!email || !other) {
+    throw new Error('userEmail and otherUserEmail required');
+  }
+  const response = await apiFetch(`${apiBase()}/api/chat/conversations`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_email: email, other_user_email: other }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Failed to delete conversation');
+  return data;
+};
+
+/**
  * Search brokers (verified, active, or pending verification — not suspended) by name, contact, or office text (min 2 characters).
  * @param {string} q - search query
  * @param {string|null} [excludeEmail] - omit this email from results (e.g. current user)
@@ -2544,6 +2643,30 @@ export const sendChatMessage = async (
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to send message');
+  return data;
+};
+
+/**
+ * Delete a chat message (direct or group). Only the sender can delete it.
+ * @param {string} messageId
+ * @param {string} userEmail - the requesting user's email (must be the sender)
+ */
+export const deleteChatMessage = async (messageId, userEmail) => {
+  const id = messageId != null ? String(messageId).trim() : '';
+  const email = userEmail != null ? String(userEmail).trim().toLowerCase() : '';
+  if (!id || !email) {
+    throw new Error('messageId and userEmail required');
+  }
+  const response = await apiFetch(
+    `${apiBase()}/api/chat/messages/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_email: email }),
+    },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Failed to delete message');
   return data;
 };
 

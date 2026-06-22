@@ -27,6 +27,7 @@ import {
   CompanyProjectsScreen,
   CompanyReportScreen,
   SettingsScreen,
+  EditProfileScreen,
   SuccessScreen,
   TikTokFeedScreen,
   OfficeListingScreen,
@@ -66,7 +67,7 @@ import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
 import {ContextHook} from './hooks/ContextHook';
 import {PresenceProvider} from './hooks/PresenceContext';
 import {subscriptionTypes} from './utils/constant';
-import {getChatUnreadCount, getListings} from './utils/api';
+import {getChatUnreadCount, getListings, getCurrentUser, toSubscriptionId} from './utils/api';
 import {
   getUserProfileImageUrl,
   normalizeUserProfileAliases,
@@ -151,6 +152,7 @@ const screenName = {
   companyReport: 'companyReport',
   /** Figma 10:31152 — full ביקורות list from profile "קרא עוד". */
   profileReviews: 'profileReviews',
+  editProfile: 'editProfile',
 };
 
 const INITIAL_FEED_FILTERS = {
@@ -179,7 +181,9 @@ function normalizeCityFeedFilter(f) {
   const imm = f.immediateEntry === true;
   const p = f.purpose;
   const hasPurpose = p === 'rent' || p === 'sale';
-  if (!hasLoc && !imm && !hasPurpose && !hasRegions) return null;
+  const hasDistance =
+    f.distanceKm != null && Number.isFinite(Number(f.distanceKm));
+  if (!hasLoc && !imm && !hasPurpose && !hasRegions && !hasDistance) return null;
   return f;
 }
 
@@ -190,6 +194,7 @@ function normalizeRoomsFeedFilter(f) {
 
 /** Same key as TikTokFeedScreen — opening feed from Home always starts on default (pics). */
 const TIKTOK_TOP_BAR_FILTER_STORAGE_KEY = 'tikTokFeedSelectedTopBarFilter';
+const TIKTOK_SIDEBAR_FILTERS_STORAGE_KEY = 'tikTokSidebarFiltersByCategory';
 const DEFAULT_TIKTOK_TOP_FILTER = 'pics';
 
 /**
@@ -280,6 +285,10 @@ export default function App() {
   // 'userProfile' | 'home' | 'settings' | 'tikTokFeed' | 'favorites' | null
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
   const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שכחתי סיסמה success screen
+  const [secretRecoveryTargetEmail, setSecretRecoveryTargetEmail] =
+    useState('');
+  const [secretRecoveryReturnScreen, setSecretRecoveryReturnScreen] =
+    useState(screenName.settings);
   const [postEditorConfig, setPostEditorConfig] = useState(() => ({
     publishTarget: 'post',
     returnScreen: screenName.tikTokFeed,
@@ -290,6 +299,8 @@ export default function App() {
   const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] = useState(null);
   // Feed filters (price, rooms, city, apartment type) – applied client-side in TikTokFeedScreen
   const [feedFilters, setFeedFilters] = useState(INITIAL_FEED_FILTERS);
+  /** Sidebar chip filters keyed by feed category id — survives profile/chat navigation. */
+  const [sidebarFiltersByCategory, setSidebarFiltersByCategory] = useState({});
   /** Filter modals return here on save/cancel (TikTok feed vs Favorites). */
   const [screenAfterFilter, setScreenAfterFilter] = useState(
     screenName.tikTokFeed,
@@ -303,6 +314,40 @@ export default function App() {
   /** Merges one key into `feedFilters` (does not wipe other filters; use when saving a single filter sheet). */
   const setFeedFilterKey = useCallback((key, value) => {
     setFeedFilters(prev => ({...prev, [key]: value}));
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(TIKTOK_SIDEBAR_FILTERS_STORAGE_KEY)
+      .then(raw => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            setSidebarFiltersByCategory(parsed);
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSidebarFilterChange = useCallback((category, filterId) => {
+    const catKey =
+      category != null && String(category).trim() !== ''
+        ? String(category).trim()
+        : 'all';
+    setSidebarFiltersByCategory(prev => {
+      const next = {...prev};
+      if (filterId == null || String(filterId).trim() === '') {
+        delete next[catKey];
+      } else {
+        next[catKey] = String(filterId);
+      }
+      AsyncStorage.setItem(
+        TIKTOK_SIDEBAR_FILTERS_STORAGE_KEY,
+        JSON.stringify(next),
+      ).catch(() => {});
+      return next;
+    });
   }, []);
 
   const CHAT_LAST_OPENED_KEY = 'pi_chat_last_opened';
@@ -525,6 +570,37 @@ export default function App() {
     [openUserProfileForSubscription],
   );
 
+  const openUserProfileFromChatPeer = useCallback(
+    async (peer = {}) => {
+      const refRaw = peer?.userRef != null ? String(peer.userRef).trim() : '';
+      const emailRaw =
+        peer?.email != null
+          ? String(peer.email).trim().toLowerCase()
+          : refRaw.includes('@')
+            ? refRaw.toLowerCase()
+            : '';
+      const meta = {
+        name: peer?.name || '',
+        display_name: peer?.name || '',
+        image_url: peer?.profileImageUrl || null,
+        profile_image_url: peer?.profileImageUrl || null,
+      };
+      let sid = toSubscriptionId(refRaw);
+      if (!sid && emailRaw) {
+        try {
+          const res = await getCurrentUser(emailRaw);
+          sid = toSubscriptionId(res?.subscription?.id);
+        } catch (_) {}
+      }
+      if (!sid) {
+        Alert.alert('', 'לא ניתן לפתוח פרופיל');
+        return;
+      }
+      await openUserProfileForSubscription(sid, meta, screenName.chat);
+    },
+    [openUserProfileForSubscription],
+  );
+
   const openCompanyReportFromProfile = useCallback(
     (forcedSubjectType = null) => {
       const u = profileUser;
@@ -651,11 +727,19 @@ export default function App() {
                   setProfileUser(listing);
                   setCurrentScreen(screenName.userProfile);
                 }}
+                onOpenFeatureListing={listing => {
+                  setProfileReturnScreen(screenName.home);
+                  setProfileUser(enrichListingForUserProfile(listing));
+                  setCurrentScreen(screenName.userProfile);
+                }}
                 onOpenStoryProfile={openUserProfileFromStoryRing}
                 reopenAi={piAiReopen}
                 aiSnapshot={piAiReopen ? piAiSnapshot : null}
                 onAiReopenConsumed={() => setPiAiReopen(false)}
                 onAiSnapshotChange={setPiAiSnapshot}
+                unreadChatCount={
+                  currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
+                }
               />
             )}
             {currentScreen === screenName.tikTokFeed && (
@@ -809,6 +893,14 @@ export default function App() {
                 uploadedListings={uploadedListings}
                 selectedCategory={selectedCategory}
                 feedFilters={feedFilters}
+                selectedSidebarFilter={
+                  selectedCategory != null
+                    ? sidebarFiltersByCategory[String(selectedCategory)] ?? null
+                    : null
+                }
+                onSidebarFilterChange={filterId =>
+                  handleSidebarFilterChange(selectedCategory, filterId)
+                }
                 currentUser={currentUser}
                 userSearchOpenTrigger={tikTokUserSearchOpenTrigger}
                 onUserSearchBackToDefaultFeed={() =>
@@ -827,12 +919,7 @@ export default function App() {
                   }
                   setTikTokFocusListingId(String(listing.id).trim());
                   setTikTokUserSearchOpenTrigger(0);
-                  resetFeedFilters();
                   setTikTokFeedRefreshKey(k => k + 1);
-                  AsyncStorage.setItem(
-                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                    DEFAULT_TIKTOK_TOP_FILTER,
-                  ).catch(() => {});
                   setCurrentScreen(screenName.tikTokFeed);
                 }}
               />
@@ -1130,13 +1217,8 @@ export default function App() {
                   }
                   setTikTokFocusListingId(String(listing.id).trim());
                   setTikTokUserSearchOpenTrigger(0);
-                  resetFeedFilters();
                   setTikTokReturnScreen(screenName.userProfile);
                   setTikTokFeedRefreshKey(k => k + 1);
-                  AsyncStorage.setItem(
-                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                    DEFAULT_TIKTOK_TOP_FILTER,
-                  ).catch(() => {});
                   setCurrentScreen(screenName.tikTokFeed);
                 }}
               />
@@ -1531,6 +1613,14 @@ export default function App() {
                   }
                 }}
                 onLogout={() => setCurrentUser(null)}
+                onEditProfile={() => {
+                  if (!currentUser) {
+                    setReturnToScreenAfterAuth('settings');
+                    setCurrentScreen(screenName.userRegistration);
+                    return;
+                  }
+                  setCurrentScreen(screenName.editProfile);
+                }}
                 onOpenLogin={() => setCurrentScreen(screenName.login)}
                 onOpenSecretCodeRecovery={() => {
                   if (!currentUser) {
@@ -1538,6 +1628,10 @@ export default function App() {
                     setCurrentScreen(screenName.userRegistration);
                     return;
                   }
+                  setSecretRecoveryTargetEmail(
+                    String(currentUser.email || '').trim(),
+                  );
+                  setSecretRecoveryReturnScreen(screenName.settings);
                   setCurrentScreen(screenName.secretCodeRecovery);
                 }}
                 onOpenFavorites={() => {
@@ -1643,6 +1737,11 @@ export default function App() {
                 }}
               />
             )}
+            {currentScreen === screenName.editProfile && (
+              <EditProfileScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+              />
+            )}
             {currentScreen === screenName.termsOfUse && (
               <TermsOfUseScreen
                 onClose={() => setCurrentScreen(screenName.settings)}
@@ -1743,8 +1842,18 @@ export default function App() {
             )}
             {currentScreen === screenName.secretCodeRecovery && (
               <SecretCodeRecoveryScreen
-                userEmail={String(currentUser?.email || '').trim()}
-                onClose={() => setCurrentScreen(screenName.settings)}
+                userEmail={
+                  secretRecoveryTargetEmail ||
+                  String(currentUser?.email || '').trim()
+                }
+                fromLogin={
+                  secretRecoveryReturnScreen === screenName.login
+                }
+                onClose={() =>
+                  setCurrentScreen(
+                    secretRecoveryReturnScreen || screenName.settings,
+                  )
+                }
                 onSent={em => {
                   setSecretRecoveryEmail(em);
                   setCurrentScreen(screenName.secretCodeRecoverySent);
@@ -1754,7 +1863,11 @@ export default function App() {
             {currentScreen === screenName.secretCodeRecoverySent && (
               <SecretCodeRecoverySentScreen
                 email={secretRecoveryEmail}
-                onBack={() => setCurrentScreen(screenName.settings)}
+                onBack={() =>
+                  setCurrentScreen(
+                    secretRecoveryReturnScreen || screenName.settings,
+                  )
+                }
               />
             )}
             {currentScreen === screenName.listingAnalysis && (
@@ -1852,10 +1965,7 @@ export default function App() {
             )}
             {currentScreen === screenName.chatList && (
               <ChatListScreen
-                onClose={() => {
-                  resetFeedFilters();
-                  setCurrentScreen(screenName.home);
-                }}
+                onClose={() => setCurrentScreen(screenName.settings)}
                 currentUser={currentUser}
                 refreshKey={chatListRefreshKey}
                 onOpenChat={conv => {
@@ -1894,6 +2004,7 @@ export default function App() {
                     } catch (_) {}
                   }
                 }}
+                onOpenPeerProfile={openUserProfileFromChatPeer}
               />
             )}
             {currentScreen === screenName.login && (
@@ -1901,6 +2012,11 @@ export default function App() {
                 onClose={() => {
                   setReturnToScreenAfterAuth(null);
                   setCurrentScreen(screenName.settings);
+                }}
+                onForgotPassword={forgotEmail => {
+                  setSecretRecoveryTargetEmail(String(forgotEmail || '').trim());
+                  setSecretRecoveryReturnScreen(screenName.login);
+                  setCurrentScreen(screenName.secretCodeRecovery);
                 }}
                 onLoginSuccess={subscription => {
                   setCurrentUser(subscription);

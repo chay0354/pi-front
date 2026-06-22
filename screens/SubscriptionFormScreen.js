@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useMemo} from 'react';
 import {
   View,
   ScrollView,
@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
   I18nManager,
+  KeyboardAvoidingView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -23,7 +24,12 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
-import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {
+  getHeaderTitle,
+  subscriptionTypes,
+  PROFESSIONAL_FILTER_TYPES,
+  getProfessionalSpecializationsForTypes,
+} from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
 
 /**
@@ -75,22 +81,12 @@ const SubscriptionFormScreen = ({
   const [errorMessage, setErrorMessage] = useState(null);
   const profileVideoPreviewRef = useRef(null);
 
-  const types = [
-    'תיווך',
-    'עו"ד',
-    'עיצוב פנים',
-    'ייעוץ משכנתאות',
-    'אדריכלות',
-    'שמאות',
-  ];
+  const types = PROFESSIONAL_FILTER_TYPES;
 
-  const specializations = [
-    'חוזים וקרקעות',
-    'קבוצות רכישה',
-    'נדל"ן',
-    'השקעות',
-    'מלווה משקיעים',
-  ];
+  const specializationOptions = useMemo(
+    () => getProfessionalSpecializationsForTypes(selectedTypes),
+    [selectedTypes],
+  );
 
   // Activity regions for broker subscription
   const activityRegions = [
@@ -108,9 +104,16 @@ const SubscriptionFormScreen = ({
   ];
 
   const toggleType = type => {
-    setSelectedTypes(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type],
-    );
+    setSelectedTypes(prev => {
+      const next = prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type];
+      const validSpecs = new Set(getProfessionalSpecializationsForTypes(next));
+      setSelectedSpecializations(prevSpecs =>
+        prevSpecs.filter(spec => validSpecs.has(spec)),
+      );
+      return next;
+    });
   };
 
   const toggleSpecialization = specialization => {
@@ -461,8 +464,7 @@ const SubscriptionFormScreen = ({
     companyName.trim() &&
     contactPersonName.trim() &&
     officePhone.trim() &&
-    companyEmail.trim() &&
-    companyWebsite.trim();
+    companyEmail.trim();
   const brokerCanProceed =
     brokerageLicenseNumber.trim() &&
     brokerOfficeName.trim() &&
@@ -490,15 +492,23 @@ const SubscriptionFormScreen = ({
       style={styles.container}
       resizeMode="cover">
       <View style={[styles.overlay, styles.companyOverlay]} />
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.contentContainer,
-          styles.companyContentContainer,
-          {paddingTop: insets.top},
-        ]}
-        showsVerticalScrollIndicator={false}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          style={styles.scrollFill}
+          contentContainerStyle={[
+            styles.contentContainer,
+            styles.companyContentContainer,
+            {
+              paddingTop: insets.top,
+              paddingBottom: Math.max(insets.bottom, 24) + 140,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}>
         {/* Top nav section (dark wrapper with header + wizard) */}
         <View style={styles.topNavSection}>
           <View style={styles.topNavHeader}>
@@ -828,27 +838,33 @@ const SubscriptionFormScreen = ({
             {subscriptionType === subscriptionTypes.professional && (
               <View style={styles.professionalTagSection}>
                 <Text style={styles.sectionTitle}>התמחות</Text>
-                <View style={styles.optionsContainer}>
-                  {specializations.map((specialization, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.optionButton,
-                        selectedSpecializations.includes(specialization) &&
-                          styles.optionButtonSelected,
-                      ]}
-                      onPress={() => toggleSpecialization(specialization)}>
-                      <Text
+                {selectedTypes.length === 0 ? (
+                  <Text style={styles.professionalSpecializationHint}>
+                    בחר סוג כדי לראות התמחויות רלוונטיות
+                  </Text>
+                ) : (
+                  <View style={styles.optionsContainer}>
+                    {specializationOptions.map((specialization, index) => (
+                      <TouchableOpacity
+                        key={index}
                         style={[
-                          styles.optionText,
+                          styles.optionButton,
                           selectedSpecializations.includes(specialization) &&
-                            styles.optionTextSelected,
-                        ]}>
-                        {specialization}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                            styles.optionButtonSelected,
+                        ]}
+                        onPress={() => toggleSpecialization(specialization)}>
+                        <Text
+                          style={[
+                            styles.optionText,
+                            selectedSpecializations.includes(specialization) &&
+                              styles.optionTextSelected,
+                          ]}>
+                          {specialization}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </>
@@ -979,10 +995,10 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('כתובת אתר החברה', true)}
+                {renderCompanyLabel('כתובת אתר החברה')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן כתובת אתר"
+                  placeholder="הזן כתובת אתר (אופציונלי)"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyWebsite}
                   onChangeText={setCompanyWebsite}
@@ -1288,6 +1304,7 @@ const SubscriptionFormScreen = ({
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 };
@@ -1316,6 +1333,9 @@ const styles = StyleSheet.create({
     flex: 1,
     zIndex: 2,
   },
+  scrollFill: {
+    flex: 1,
+  },
   contentContainer: {
     flexGrow: 1,
     paddingTop: 50,
@@ -1326,7 +1346,6 @@ const styles = StyleSheet.create({
   companyContentContainer: {
     paddingTop: 0,
     paddingHorizontal: 0,
-    paddingBottom: 24,
     gap: 16,
     alignItems: 'center',
   },
@@ -1650,6 +1669,13 @@ const styles = StyleSheet.create({
     gap: 24,
     marginBottom: 16,
   },
+  professionalSpecializationHint: {
+    color: '#8C85B3',
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'left',
+  },
   optionButton: {
     paddingHorizontal: 9.286,
     height: 27.143,
@@ -1784,6 +1810,7 @@ const styles = StyleSheet.create({
     borderRadius: 1000,
     backgroundColor: '#4d4966',
     marginTop: 4,
+    marginBottom: 40,
   },
   companyNextButtonDisabled: {
     opacity: 0.4,
