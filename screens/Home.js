@@ -11,6 +11,7 @@ import React, {useCallback, useEffect, useRef, useState, memo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Video, ResizeMode} from 'expo-av';
+import {LinearGradient} from 'expo-linear-gradient';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
@@ -42,6 +43,17 @@ const pickRandomCompanyProjectListing = listings => {
   );
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)] || null;
+};
+
+const getFeatureProjectName = listing => {
+  if (!listing) return '';
+  return String(
+    listing.project_name ||
+      listing.property_name ||
+      listing.business_name ||
+      listing.creator_business_name ||
+      '',
+  ).trim();
 };
 
 const FeatureHeroMedia = memo(function FeatureHeroMedia({
@@ -416,6 +428,29 @@ const Home = ({
                 paused={flipped}
                 fallbackSource={FALLBACK_PROJECT_IMAGE}
               />
+              {!featureMediaLoading ? (
+                <>
+                  <View style={styles.projectCardDim} pointerEvents="none" />
+                  <LinearGradient
+                    colors={[
+                      'rgba(34,31,60,0.12)',
+                      'rgba(34,31,60,0.62)',
+                    ]}
+                    locations={[0.3, 1]}
+                    style={styles.projectCardGradient}
+                    pointerEvents="none"
+                  />
+                  <View style={styles.projectCardOverlay} pointerEvents="none">
+                    <Text
+                      style={styles.projectCardTitle}
+                      numberOfLines={2}
+                      accessibilityRole="header">
+                      {getFeatureProjectName(featureListing) || 'פרויקט נבחר'}
+                    </Text>
+                    <Text style={styles.projectCardCta}>צפו בפרויקט</Text>
+                  </View>
+                </>
+              ) : null}
             </View>
             <Image
               source={require('../assets/popular.png')}
@@ -612,11 +647,49 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'visible',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 10,
   },
   videoContainer: {
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: '#E0DEF7',
+  },
+  projectCardDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderRadius: 16,
+  },
+  projectCardGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+  },
+  projectCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  projectCardTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 26,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  projectCardCta: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 34,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+    textDecorationColor: '#FFFFFF',
   },
   projectImage: {
     width: '100%',

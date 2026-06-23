@@ -18,13 +18,42 @@ import {
   Animated,
   Vibration,
 } from 'react-native';
-import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
 import {userCategories} from '../utils/constant';
 
-const TICK_SOUND = require('../assets/sounds/carousel-tick.wav');
-const TICK_MIN_GAP_MS = 45;
-const TICK_VOLUME = 0.85;
-const TICK_POOL_SIZE = 4;
+const TICK_MIN_GAP_MS = 10;
+/** Short pulse so rapid category ticks don't queue/block on Android during fast swipes. */
+const CAROUSEL_HAPTIC_PULSE_MS = 18;
+const CAROUSEL_HAPTIC_BURST_GAP_MS = 10;
+const CAROUSEL_HAPTIC_BURST_MAX = 5;
+
+function logicalStepsCrossed(prevLogical, nextLogical, listLength) {
+  if (prevLogical === nextLogical || listLength <= 1) return 0;
+  const forward = (nextLogical - prevLogical + listLength) % listLength;
+  const backward = (prevLogical - nextLogical + listLength) % listLength;
+  return Math.min(forward, backward) || 1;
+}
+
+function fireCarouselHaptic(crossed = 1) {
+  if (Platform.OS === 'web') return;
+  const count = Math.min(Math.max(1, crossed), CAROUSEL_HAPTIC_BURST_MAX);
+
+  if (Platform.OS === 'android') {
+    Vibration.cancel();
+    if (count > 1) {
+      const pattern = [0];
+      for (let i = 0; i < count; i += 1) {
+        pattern.push(CAROUSEL_HAPTIC_PULSE_MS);
+        if (i < count - 1) {
+          pattern.push(CAROUSEL_HAPTIC_BURST_GAP_MS);
+        }
+      }
+      Vibration.vibrate(pattern);
+      return;
+    }
+  }
+
+  Vibration.vibrate(CAROUSEL_HAPTIC_PULSE_MS);
+}
 
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
@@ -376,95 +405,28 @@ const Carusel = ({
     onCategorySelectRef.current?.(id);
   }, []);
 
-  const tickPoolRef = useRef([]);
-  const tickPoolCursorRef = useRef(0);
   const lastTickAtRef = useRef(0);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      return undefined;
-    }
-    let mounted = true;
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-          shouldDuckAndroid: false,
-          playThroughEarpieceAndroid: false,
-        });
-        const pool = await Promise.all(
-          Array.from({length: TICK_POOL_SIZE}, async () => {
-            const {sound} = await Audio.Sound.createAsync(TICK_SOUND, {
-              volume: TICK_VOLUME,
-              shouldPlay: false,
-            });
-            return sound;
-          }),
-        );
-        if (mounted) {
-          tickPoolRef.current = pool;
-        } else {
-          await Promise.all(pool.map(s => s.unloadAsync().catch(() => {})));
-        }
-      } catch {
-        /* tick is optional UX polish */
-      }
-    })();
-    return () => {
-      mounted = false;
-      const pool = tickPoolRef.current;
-      tickPoolRef.current = [];
-      Promise.all(pool.map(s => s.unloadAsync().catch(() => {}))).catch(
-        () => {},
-      );
-    };
-  }, []);
-
-  const playTick = useCallback(() => {
-    const now = Date.now();
-    if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
-      return;
-    }
-    lastTickAtRef.current = now;
-    const pool = tickPoolRef.current;
-    if (!pool.length) {
-      return;
-    }
-    const sound = pool[tickPoolCursorRef.current % pool.length];
-    tickPoolCursorRef.current += 1;
-    (async () => {
-      try {
-        const status = await sound.getStatusAsync();
-        if (!status.isLoaded) return;
-        if (status.isPlaying) await sound.stopAsync();
-        await sound.setPositionAsync(0);
-        await sound.playAsync();
-      } catch {
-        /* ignore overlapping tick races */
-      }
-    })();
-  }, []);
 
   const tickIfLogicalChange = useCallback(
     (prevVirtualIndex, nextVirtualIndex) => {
-      if (
-        listLength > 1 &&
-        positiveMod(nextVirtualIndex, listLength) !==
-          positiveMod(prevVirtualIndex, listLength)
-      ) {
-        playTick();
-        // Short haptic pulse on each category change — 20ms is subtle on Android,
-        // iOS uses its system haptics pattern for short durations.
-        if (Platform.OS !== 'web') {
-          Vibration.vibrate(20);
-        }
+      if (listLength <= 1) {
+        return;
       }
+      const prevLogical = positiveMod(prevVirtualIndex, listLength);
+      const nextLogical = positiveMod(nextVirtualIndex, listLength);
+      const crossed = logicalStepsCrossed(prevLogical, nextLogical, listLength);
+      if (crossed === 0) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
+        return;
+      }
+      lastTickAtRef.current = now;
+      fireCarouselHaptic(crossed);
     },
-    [listLength, playTick],
+    [listLength],
   );
 
   const categoryIdsKey = list.map(c => c.id).join(',');

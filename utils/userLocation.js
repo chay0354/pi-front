@@ -45,6 +45,9 @@ async function getNativeDeviceLocation() {
   try {
     const {status} = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return null;
+    const lastKnown = await Location.getLastKnownPositionAsync();
+    const lastCoords = readCoordsFromPosition(lastKnown);
+    if (lastCoords) return lastCoords;
     const pos = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
@@ -72,14 +75,23 @@ export async function getDeviceLocation() {
 /**
  * Reference point for "מרחק ממני":
  * 1) phone GPS (when permitted)
- * 2) geocoded profile address
+ * 2) geocoded profile address (unless gpsOnly)
  * 3) last cached coords for this user
  */
-export async function resolveUserReferenceCoords(profileAddress, userId = null) {
+export async function resolveUserReferenceCoords(
+  profileAddress,
+  userId = null,
+  options = {},
+) {
+  const gpsOnly = options?.gpsOnly === true;
   const device = await getDeviceLocation();
   if (device) {
     await cacheUserCoords(userId, device);
     return device;
+  }
+
+  if (gpsOnly) {
+    return readCachedUserCoords(userId);
   }
 
   const query = normalizeGeocodeQuery(profileAddress);

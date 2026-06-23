@@ -184,7 +184,16 @@ function normalizeCityFeedFilter(f) {
   const hasDistance =
     f.distanceKm != null && Number.isFinite(Number(f.distanceKm));
   if (!hasLoc && !imm && !hasPurpose && !hasRegions && !hasDistance) return null;
-  return f;
+  return {
+    ...f,
+    country: country || null,
+    city: city || null,
+    street: street || null,
+    purpose: hasPurpose ? p : null,
+    distanceKm: hasDistance ? Number(f.distanceKm) : null,
+    regions: hasRegions ? regions : null,
+    immediateEntry: imm ? true : null,
+  };
 }
 
 /** `onSave(null)` or merge from RoomsFilterScreen. */

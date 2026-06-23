@@ -9,6 +9,8 @@ import {
   Image,
   useWindowDimensions,
   PanResponder,
+  Platform,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -17,11 +19,8 @@ import FilterScreenBackBar from '../components/FilterScreenBackBar';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {
   flexStart,
-  forceLtrStyle,
   getRangeSliderPercentFromEvent,
   getSheetBottomInset,
-  rangeSliderThumbStyle,
-  rangeSliderTrailingFillStyle,
 } from '../utils/rtlLayout';
 
 const BG = '#2B2A39';
@@ -32,6 +31,42 @@ const TEXT_CLUE = 'rgba(255,255,255,0.35)';
 
 const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
 const KNOB_SIZE = 22;
+const DOT_SIZE = 4;
+const MARKER_CELL_WIDTH = 44;
+const IS_WEB = Platform.OS === 'web';
+
+/**
+ * Same RTL-visual technique as PriceFilterScreen: the app forces RTL +
+ * swapLeftAndRightInRTL, so authored `left: X%` is mirrored to `right: X%`
+ * (0% sits on the physical right). All slider parts use this single helper so
+ * the thumb, dots and markers mirror identically and stay aligned. Touch X is
+ * physical-LTR, so we flip it to value% (see touchPercentToValuePercent).
+ *
+ * valuePercent: 0% = 20 km (physical right) … 100% = 100+ km (physical left).
+ */
+function sliderPosStyle(percent, size) {
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  return IS_WEB
+    ? {right: `${p}%`, marginRight: -size / 2}
+    : {left: `${p}%`, marginLeft: -size / 2};
+}
+
+/** Gold fill anchored at the 20 km (physical right) end, growing toward the thumb. */
+function distanceFillStyle(percent) {
+  const w = Math.max(0, Math.min(100, Number(percent) || 0));
+  return IS_WEB ? {right: '0%', width: `${w}%`} : {left: '0%', width: `${w}%`};
+}
+
+/** km → valuePercent (20→0 … 100→100). */
+function distanceKmToPercent(km) {
+  const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(km));
+  const steps = DISTANCE_OPTIONS.length - 1;
+  return ((steps - idx) / steps) * 100;
+}
+
+const SLIDER_IS_RTL_VISUAL = IS_WEB || I18nManager.isRTL;
+const touchPercentToValuePercent = touchPercent =>
+  SLIDER_IS_RTL_VISUAL ? 100 - touchPercent : touchPercent;
 
 const BNB_REGIONS = [
   {id: 'north', label: 'צפון'},
@@ -41,12 +76,13 @@ const BNB_REGIONS = [
   {id: 'west', label: 'מערב'},
 ];
 
+/** valuePercent → km (0%→20, 100%→100). */
 function percentToDistanceKm(percent) {
   const steps = DISTANCE_OPTIONS.length - 1;
-  const idx = Math.round(
+  const fromSmall = Math.round(
     (Math.max(0, Math.min(100, percent)) / 100) * steps,
   );
-  return DISTANCE_OPTIONS[idx];
+  return DISTANCE_OPTIONS[steps - fromSmall];
 }
 
 // Figma assets for node 12:74885
@@ -87,15 +123,14 @@ const CityFilterScreen = ({
     initialFilter?.immediateEntry ?? false,
   );
 
-  const [sliderWidth, setSliderWidth] = useState(1);
   const sliderWidthRef = useRef(1);
   const sliderWindowXRef = useRef(0);
   const sliderRef = useRef(null);
 
-  const thumbPercent = useMemo(() => {
-    const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(distanceKm));
-    return (idx / (DISTANCE_OPTIONS.length - 1)) * 100;
-  }, [distanceKm]);
+  const thumbPercent = useMemo(
+    () => distanceKmToPercent(distanceKm),
+    [distanceKm],
+  );
 
   const syncSliderMeasure = useCallback(() => {
     const node = sliderRef.current;
@@ -104,18 +139,18 @@ const CityFilterScreen = ({
       if (width > 0) {
         sliderWindowXRef.current = x;
         sliderWidthRef.current = width;
-        setSliderWidth(width);
       }
     });
   }, []);
 
   const percentFromNativeEvent = useCallback(nativeEvent => {
-    return getRangeSliderPercentFromEvent(
+    const touchPercent = getRangeSliderPercentFromEvent(
       nativeEvent,
       sliderWidthRef.current,
       sliderWindowXRef.current,
       sliderRef,
     );
+    return touchPercentToValuePercent(touchPercent);
   }, []);
 
   const refreshMeasureThen = useCallback(
@@ -171,11 +206,14 @@ const CityFilterScreen = ({
 
   const handleSave = () => {
     if (onSave) {
+      const trimmedCity = String(city || '').trim();
+      const trimmedStreet = String(street || '').trim();
+      const trimmedCountry = String(country || '').trim();
       onSave({
         purpose: hidePurpose ? null : purpose,
-        country: isGlobal ? country : null,
-        city,
-        street,
+        country: isGlobal && trimmedCountry ? trimmedCountry : null,
+        city: trimmedCity || null,
+        street: trimmedStreet || null,
         distanceKm: isGlobal || isBnb ? null : distanceKm,
         regions: isBnb && regions.length > 0 ? regions : null,
         immediateEntry: isGlobal || isBnb || isLand ? null : immediateEntry,
@@ -321,46 +359,44 @@ const CityFilterScreen = ({
             collapsable={false}>
             <View style={styles.sliderMarkers}>
               {DISTANCE_OPTIONS.map(km => (
-                <View key={km} style={styles.sliderMarkerCell}>
-                  <Text style={styles.sliderMarkerText}>{km}</Text>
+                <View
+                  key={km}
+                  style={[
+                    styles.sliderMarkerCell,
+                    sliderPosStyle(distanceKmToPercent(km), MARKER_CELL_WIDTH),
+                  ]}>
+                  <Text style={styles.sliderMarkerText} numberOfLines={1}>
+                    {km === 100 ? '\u200E100+' : String(km)}
+                  </Text>
                 </View>
               ))}
             </View>
             <View style={styles.sliderRow}>
-              <View style={styles.sliderTrack}>
-                {DISTANCE_OPTIONS.map((_, idx) => {
-                  if (idx === DISTANCE_OPTIONS.length - 1) return null;
-                  const dotPct =
-                    (idx / (DISTANCE_OPTIONS.length - 1)) * 100;
-                  return (
-                    <View
-                      key={`dot-${idx}`}
-                      style={[
-                        styles.sliderDot,
-                        rangeSliderThumbStyle(sliderWidth, dotPct, 4),
-                      ]}
-                    />
-                  );
-                })}
-                <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{x: 0.5, y: 0}}
-                  end={{x: 0.5, y: 1}}
-                  style={[
-                    styles.sliderTrackFill,
-                    rangeSliderTrailingFillStyle(sliderWidth, thumbPercent),
-                  ]}
-                />
-              </View>
+              <View style={styles.sliderTrack} />
+              <LinearGradient
+                colors={['#FEE787', '#BD9947', '#9C6522']}
+                locations={[0.0456, 0.5076, 0.8831]}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={[styles.sliderTrackFill, distanceFillStyle(thumbPercent)]}
+              />
+              {DISTANCE_OPTIONS.map(km => {
+                if (km === 20 || km === 100) return null;
+                return (
+                  <View
+                    key={`dot-${km}`}
+                    style={[
+                      styles.sliderDot,
+                      sliderPosStyle(distanceKmToPercent(km), DOT_SIZE),
+                    ]}
+                  />
+                );
+              })}
               <LinearGradient
                 colors={['#FFE073', '#FFBA30']}
                 start={{x: 0.17, y: 0.13}}
                 end={{x: 0.79, y: 0.87}}
-                style={[
-                  styles.sliderThumb,
-                  rangeSliderThumbStyle(sliderWidth, thumbPercent, KNOB_SIZE),
-                ]}
+                style={[styles.sliderThumb, sliderPosStyle(thumbPercent, KNOB_SIZE)]}
               />
             </View>
           </View>
@@ -526,18 +562,18 @@ const styles = StyleSheet.create({
   },
   sliderTrackWrap: {
     marginTop: 10,
+    marginHorizontal: KNOB_SIZE / 2,
     paddingVertical: 10,
-    ...forceLtrStyle,
   },
   sliderMarkers: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    position: 'relative',
+    height: 22,
     marginBottom: 14,
-    ...forceLtrStyle,
   },
   sliderMarkerCell: {
-    width: 31,
+    position: 'absolute',
+    top: 0,
+    width: MARKER_CELL_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -547,32 +583,34 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
+    writingDirection: 'ltr',
   },
   sliderRow: {
     height: KNOB_SIZE,
     justifyContent: 'center',
     position: 'relative',
-    ...forceLtrStyle,
   },
   sliderTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: (KNOB_SIZE - 4) / 2,
     height: 4,
     backgroundColor: '#D2D0DC',
     borderRadius: 1000,
-    position: 'relative',
-    marginHorizontal: KNOB_SIZE / 2,
   },
   sliderDot: {
     position: 'absolute',
-    top: 0,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    top: (KNOB_SIZE - DOT_SIZE) / 2,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
     backgroundColor: '#A5A3B6',
   },
   sliderTrackFill: {
     position: 'absolute',
-    top: 0,
-    height: '100%',
+    top: (KNOB_SIZE - 4) / 2,
+    height: 4,
     borderRadius: 1000,
   },
   sliderThumb: {

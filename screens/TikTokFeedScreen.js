@@ -77,6 +77,7 @@ import {
   recordUserSearch,
   clearRecentUserSearches,
   uploadFile,
+  measureDistancesBatchWithGemini,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
@@ -1686,6 +1687,7 @@ const TikTokFeedScreen = ({
   const listingCoordsRef = useRef({});
   const listingDistanceKmRef = useRef({});
   const [listingDistanceVersion, setListingDistanceVersion] = useState(0);
+  const [distanceCalcReady, setDistanceCalcReady] = useState(false);
   const [loadingListings, setLoadingListings] = useState(false);
   const [listingsError, setListingsError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh when this changes
@@ -3549,6 +3551,13 @@ const TikTokFeedScreen = ({
   };
 
   const cityDistanceKm = feedFilters?.city?.distanceKm;
+  const distanceFilterActive =
+    Number.isFinite(Number(cityDistanceKm)) &&
+    Number(cityDistanceKm) > 0 &&
+    selectedCategory !== 5 &&
+    selectedCategory !== '5' &&
+    selectedCategory !== 4 &&
+    selectedCategory !== '4';
 
   useEffect(() => {
     let cancelled = false;
@@ -3557,6 +3566,7 @@ const TikTokFeedScreen = ({
       const coords = await resolveUserReferenceCoords(
         currentUser?.business_address,
         currentUser?.id,
+        {gpsOnly: distanceFilterActive},
       );
       if (!cancelled) {
         setUserCoords(coords);
@@ -3566,34 +3576,31 @@ const TikTokFeedScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.business_address, currentUser?.id, cityDistanceKm, selectedCategory]);
+  }, [currentUser?.business_address, currentUser?.id, distanceFilterActive]);
 
   useEffect(() => {
+    if (!userCoords) return;
     listingDistanceKmRef.current = {};
+    setDistanceCalcReady(false);
     setListingDistanceVersion(v => v + 1);
-  }, [
-    userCoords?.latitude,
-    userCoords?.longitude,
-    cityDistanceKm,
-    selectedCategory,
-  ]);
+  }, [userCoords?.latitude, userCoords?.longitude]);
 
   useEffect(() => {
-    const maxDist = Number(cityDistanceKm);
-    const isBnbFeed = selectedCategory === 5 || selectedCategory === '5';
-    const isGlobalFeed = selectedCategory === 4 || selectedCategory === '4';
-    if (
-      !Number.isFinite(maxDist) ||
-      maxDist <= 0 ||
-      isBnbFeed ||
-      isGlobalFeed ||
-      !userCoordsReady ||
-      !userCoords
-    ) {
+    if (!distanceFilterActive) {
+      setDistanceCalcReady(true);
+      return undefined;
+    }
+    if (!userCoordsReady) {
+      setDistanceCalcReady(false);
+      return undefined;
+    }
+    if (!userCoords) {
+      setDistanceCalcReady(true);
       return undefined;
     }
 
     let cancelled = false;
+    setDistanceCalcReady(false);
     (async () => {
       const pending = [];
       for (const l of dbListings) {
@@ -3602,23 +3609,53 @@ const TikTokFeedScreen = ({
           pending.push(q);
         }
       }
-      if (!pending.length) return;
+      if (!pending.length) {
+        if (!cancelled) setDistanceCalcReady(true);
+        return;
+      }
+
+      for (let i = 0; i < pending.length; i += 40) {
+        if (cancelled) return;
+        const chunk = pending.slice(i, i + 40);
+        const batch = await measureDistancesBatchWithGemini(
+          userCoords,
+          chunk.map(q => ({key: q, address: q})),
+        );
+        if (batch.success && batch.distances) {
+          for (const [key, km] of Object.entries(batch.distances)) {
+            const normalized = Number(km);
+            if (Number.isFinite(normalized) && normalized >= 0) {
+              listingDistanceKmRef.current[key] = normalized;
+            }
+          }
+        }
+      }
 
       for (const query of pending) {
         if (cancelled) return;
+        if (listingDistanceKmRef.current[query] !== undefined) continue;
         const coords = await geocodeAddress(query);
-        listingCoordsRef.current[query] = coords;
         listingDistanceKmRef.current[query] = coords
           ? haversineDistanceKm(userCoords, coords)
-          : null;
+          : Number.POSITIVE_INFINITY;
         if (!cancelled) setListingDistanceVersion(v => v + 1);
+      }
+
+      if (!cancelled) {
+        setListingDistanceVersion(v => v + 1);
+        setDistanceCalcReady(true);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [dbListings, cityDistanceKm, selectedCategory, userCoords, userCoordsReady]);
+  }, [
+    dbListings,
+    distanceFilterActive,
+    userCoords,
+    userCoordsReady,
+  ]);
 
   const applyFeedFilters = list => {
     let out = list;
@@ -3854,17 +3891,9 @@ const TikTokFeedScreen = ({
     }
     if (feedFilters.city != null) {
       const c = feedFilters.city;
-      const cityStr = String(c.city || '')
-        .trim()
-        .toLowerCase();
-      const streetStr = String(c.street || '')
-        .trim()
-        .toLowerCase();
-      const locationTokens = `${cityStr} ${streetStr}`
-        .split(/\s+/)
-        .map(token => token.trim())
-        .filter(Boolean);
-      const hasLocation = locationTokens.length > 0;
+      const cityQuery = String(c.city || '').trim().toLowerCase();
+      const streetQuery = String(c.street || '').trim().toLowerCase();
+      const countryQuery = String(c.country || '').trim().toLowerCase();
       const purpose = c.purpose;
       if (purpose === 'rent' || purpose === 'sale') {
         out = out.filter(l => {
@@ -3885,7 +3914,7 @@ const TikTokFeedScreen = ({
           );
         });
       }
-      if (hasLocation) {
+      if (cityQuery || streetQuery || countryQuery) {
         out = out.filter(l => {
           const searchBlob = [
             l.address,
@@ -3900,8 +3929,15 @@ const TikTokFeedScreen = ({
             .map(s => String(s ?? '').toLowerCase())
             .filter(Boolean)
             .join(' ');
-          // All tokens must appear somewhere in location/title/name text (and API location field).
-          return locationTokens.every(token => searchBlob.includes(token));
+          const matchesTokens = query => {
+            const tokens = query.split(/\s+/).map(t => t.trim()).filter(Boolean);
+            if (!tokens.length) return true;
+            return tokens.every(token => searchBlob.includes(token));
+          };
+          if (!matchesTokens(cityQuery)) return false;
+          if (!matchesTokens(streetQuery)) return false;
+          if (!matchesTokens(countryQuery)) return false;
+          return true;
         });
       }
       const regionIds = Array.isArray(c.regions)
@@ -3949,10 +3985,13 @@ const TikTokFeedScreen = ({
         out = out.filter(l => {
           if (isPostVideo(l)) return false;
           if (!userCoordsReady || !userCoords) return false;
+          if (!distanceCalcReady) return false;
           const query = getListingGeocodeQuery(l);
           if (!query) return false;
           const distKm = listingDistanceKmRef.current[query];
-          if (distKm === undefined || distKm == null) return false;
+          if (typeof distKm !== 'number' || !Number.isFinite(distKm)) {
+            return false;
+          }
           return distKm <= maxDistKm;
         });
       }
@@ -4186,6 +4225,7 @@ const TikTokFeedScreen = ({
   const uploadedVideos = useMemo(() => {
     void listingDistanceVersion;
     void userCoordsReady;
+    void distanceCalcReady;
     return applyFeedFilters(baseList);
   }, [
     baseList,
@@ -4193,6 +4233,7 @@ const TikTokFeedScreen = ({
     selectedCategory,
     userCoords,
     userCoordsReady,
+    distanceCalcReady,
     listingDistanceVersion,
   ]);
 
@@ -5560,7 +5601,21 @@ const TikTokFeedScreen = ({
 
   const showInitialLoading =
     loadingListings && dbListings.length === 0 && videos.length === 0;
-  const feedIsEmpty = videos.length === 0 && !loadingListings;
+  const showDistanceFilterLoading =
+    distanceFilterActive &&
+    (!userCoordsReady || (!!userCoords && !distanceCalcReady));
+  const distanceFilterLoadingText = !userCoordsReady
+    ? 'מאתרים את המיקום שלך...'
+    : 'מחשבים מרחקים לפי הסינון...';
+  const showFeedLoading = showInitialLoading || showDistanceFilterLoading;
+  const feedIsEmpty = videos.length === 0 && !showFeedLoading;
+
+  const renderFeedLoadingBody = (message = 'טוען רשימות...') => (
+    <>
+      <ActivityIndicator size="large" color={Colors.yellowIcons} />
+      <Text style={styles.feedLoadingText}>{message}</Text>
+    </>
+  );
 
   const renderEmptyCategoryBody = () => {
     if (listingsError) {
@@ -7021,14 +7076,18 @@ const TikTokFeedScreen = ({
               styles.listScrollContent,
               styles.listScrollContentGrid,
               listModeListings.length === 0 &&
-                !loadingListings &&
+                !showFeedLoading &&
                 styles.listScrollContentEmpty,
             ]}
             showsVerticalScrollIndicator={false}
             scrollEventThrottle={16}>
-            {loadingListings && listModeListings.length === 0 ? (
+            {showFeedLoading ? (
               <View style={styles.listResultsLoadingWrap}>
-                <ActivityIndicator color={Colors.blue100} size="large" />
+                {renderFeedLoadingBody(
+                  showDistanceFilterLoading
+                    ? distanceFilterLoadingText
+                    : 'טוען רשימות...',
+                )}
               </View>
             ) : listModeListings.length === 0 ? (
               <View style={styles.listEmptyInner}>
@@ -7094,14 +7153,17 @@ const TikTokFeedScreen = ({
             </TouchableOpacity>
           </View>
 
-          {showInitialLoading ? (
+          {showFeedLoading ? (
             <View
               style={[
                 styles.feedLoadingFullScreen,
                 {top: topBarHeight, bottom: bottomBarHeight},
               ]}>
-              <ActivityIndicator size="large" color={Colors.yellowIcons} />
-              <Text style={styles.feedLoadingText}>טוען רשימות...</Text>
+              {renderFeedLoadingBody(
+                showDistanceFilterLoading
+                  ? distanceFilterLoadingText
+                  : 'טוען רשימות...',
+              )}
             </View>
           ) : feedIsEmpty ? (
             <View

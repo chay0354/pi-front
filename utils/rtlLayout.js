@@ -84,9 +84,8 @@ export function rangeSliderThumbStyle(
 }
 
 /**
- * Dual-handle range slider thumb — min on the physical left, max on the right.
- * Pixel offsets avoid `%` + forceRTL/swapLeftAndRightInRTL fighting `forceLtrStyle`.
- * Native RTL: authored `right: 0` anchors the physical left (ChatVoiceMessageBubble).
+ * Dual-handle range slider thumb — for containers with `forceLtrStyle`.
+ * Always anchors from the physical left via translateX (RTL-proof on Android).
  */
 export function rangeSliderThumbLtrVisualStyle(
   trackWidth,
@@ -98,14 +97,20 @@ export function rangeSliderThumbLtrVisualStyle(
   if (w <= 0) {
     return {opacity: 0};
   }
-  const offset = Math.max(0, Math.min(w, (p / 100) * w)) - thumbSize / 2;
-  if (Platform.OS === 'web') {
-    return {left: offset};
-  }
-  if (I18nManager.isRTL) {
-    return {right: offset};
-  }
-  return {left: offset};
+  const x = Math.max(0, Math.min(w, (p / 100) * w)) - thumbSize / 2;
+  return {left: 0, transform: [{translateX: x}]};
+}
+
+/** Single-thumb slider: filled segment from `percent` to the track end (LTR visual, pixel-based). */
+export function rangeSliderTrailingFillLtrVisualStyle(trackWidth, percent) {
+  const w = Math.max(0, Number(trackWidth) || 0);
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  const start = (p / 100) * w;
+  return {
+    left: 0,
+    width: Math.max(0, w - start),
+    transform: [{translateX: start}],
+  };
 }
 
 /** Dual-handle range slider fill between min and max (LTR visual, pixel-based). */
@@ -119,13 +124,7 @@ export function rangeSliderFillLtrVisualStyle(
   const maxP = Math.max(0, Math.min(100, Number(maxPercent) || 0));
   const start = (minP / 100) * w;
   const width = Math.max(0, ((maxP - minP) / 100) * w);
-  if (Platform.OS === 'web') {
-    return {left: start, width};
-  }
-  if (I18nManager.isRTL) {
-    return {right: start, width};
-  }
-  return {left: start, width};
+  return {left: 0, width, transform: [{translateX: start}]};
 }
 
 /** Dual-handle range slider fill between min and max. */

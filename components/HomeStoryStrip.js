@@ -12,7 +12,7 @@ import ProfileAvatar, {
   PROFILE_RING_COLORS,
 } from './ProfileAvatar';
 
-const OUTER = 68;
+const OUTER = 76;
 const ITEM_SPACING = 15;
 
 const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
