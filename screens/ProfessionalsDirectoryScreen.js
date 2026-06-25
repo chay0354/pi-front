@@ -698,8 +698,6 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: '#1F1E27',
-    width: '100%',
-    maxWidth: 414,
     alignSelf: 'center',
     ...Platform.select({
       web: {
@@ -852,7 +850,7 @@ const styles = StyleSheet.create({
   cardShell: {
     borderRadius: 16,
     overflow: 'hidden',
-    width: 340,
+    width: "100%",
     alignSelf: 'center',
     backgroundColor: '#2B2A39',
   },
@@ -898,6 +896,8 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     letterSpacing: 0.16,
     fontFamily: 'Rubik-Medium',
+    // right: 28,
+    top: 4,
     zIndex: 1,
     // Vertically center the number on the star (was sitting slightly low).
     transform: [{translateY: -5}],
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     position: 'absolute',
-    marginLeft: -6,
+    left: -60,
     top: -26,
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
@@ -1057,20 +1057,22 @@ const styles = StyleSheet.create({
   },
   cardPiBadgeText: {
     color: '#FFD275',
-    fontSize: 24,
+    fontSize: 22,
     lineHeight: 30,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Medium',
     zIndex: 1,
+    // right: 28,
+    top: 4,
     // Vertically center the number on the star (was sitting slightly low).
     transform: [{translateY: -6}],
   },
   cardPiBadgeImage: {
-    width: 85,
-    height: 85,
+    width: 72,
+    height: 72,
     position: 'absolute',
-    marginLeft: -7,
-    top: -35,
+    left: -60,
+    top: -26,
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   cardTitle: {

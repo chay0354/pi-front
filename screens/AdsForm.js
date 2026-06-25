@@ -546,7 +546,6 @@ const AdsForm = ({
   const [category, setCategory] = useState(
     initialCategory ? parseInt(initialCategory) : 1,
   ); // Category 1-11 (default: 1, or use initialCategory if provided)
-  console.log('category', category);
   /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7), hide irrelevant blocks */
   const adsFormFields = useMemo(() => {
     return (
@@ -1392,7 +1391,6 @@ const AdsForm = ({
           setMainImage(fileFromPickerAsset(result.assets[0], 'image'));
         }
       } catch (error) {
-        console.log('errrorr', error);
         alert('שגיאה בבחירת תמונה: ' + error.message);
       }
     }
@@ -1541,7 +1539,6 @@ const AdsForm = ({
         setHasVideo(true);
       }
     } catch (error) {
-      console.log('video picker error:', error);
       Alert.alert(
         'שגיאה בבחירת סרטון',
         error?.message || 'לא ניתן לפתוח את ספריית הסרטונים.',
@@ -1922,7 +1919,6 @@ const AdsForm = ({
 
       for (const outcome of uploadOutcomes) {
         if (!outcome.ok) {
-          console.log(`${outcome.key} upload error:`, outcome.error);
           if (outcome.fatal) {
             const detail = errorMessageFromUnknown(outcome.error, '');
             alert(
@@ -2193,7 +2189,6 @@ const AdsForm = ({
     }
   };
 
-  console.log('ads form screen', adsFormFields);
 
   const publishButton = (
     <PublishAdButton

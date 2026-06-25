@@ -15,6 +15,7 @@ import {
   Share,
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import {SvgXml} from 'react-native-svg';
 import {Colors} from '../constants/styles';
 import {
@@ -766,9 +767,7 @@ const UserProfileScreen = ({
       (!isListingFromFeed && !isAdsListingRecord(user) ? profile?.id : null),
   );
   const currentSubscriptionId = toSubscriptionId(
-    currentUser?.id ||
-      currentUser?.subscription_id ||
-      currentUser?.owner_id,
+    currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id,
   );
   const viewedProfileEmail = String(
     resolvedCreator?.email ||
@@ -792,22 +791,19 @@ const UserProfileScreen = ({
     viewedProfileEmail === currentProfileEmail;
   const isOwnProfile =
     subscriptionIdsMatch &&
-    (!viewedProfileEmail ||
-      !currentProfileEmail ||
-      profileEmailsMatch);
+    (!viewedProfileEmail || !currentProfileEmail || profileEmailsMatch);
 
-  const copyContactDetails = () => {
+  const copyContactDetails = async () => {
     const lines = [...contactPhones, contactEmail].filter(Boolean);
     const text = lines.join('\n');
     if (!text) return;
-    if (
-      Platform.OS === 'web' &&
-      typeof navigator !== 'undefined' &&
-      navigator.clipboard?.writeText
-    ) {
-      navigator.clipboard.writeText(text);
+    try {
+      // expo-clipboard covers iOS/Android natively and falls back to the
+      // browser clipboard API on web — previously native platforms never
+      // actually copied anything, they only showed the text in an alert.
+      await Clipboard.setStringAsync(text);
       Alert.alert('הועתק', 'פרטי ההתקשרות הועתקו ללוח');
-    } else {
+    } catch (_) {
       Alert.alert('פרטי התקשרות', text);
     }
   };
@@ -1030,9 +1026,7 @@ const UserProfileScreen = ({
     return uniquePostRows
       .map(item => {
         const grid = firstImageFor(item);
-        return grid
-          ? {...grid, listingId: item?.id, listing: item}
-          : null;
+        return grid ? {...grid, listingId: item?.id, listing: item} : null;
       })
       .filter(Boolean);
   })();
@@ -2000,24 +1994,26 @@ const UserProfileScreen = ({
                             {displayName}
                           </Text>
                         ) : isCompany ? (
-                              <Image
-                                source={require('../assets/pre-sale.png')}
-                                style={styles.preSaleBadgeImage}
-                                resizeMode="contain"
-                              />
-                            ) : (
-                              <View style={styles.lastAdPurposeTag}>
-                                <Text style={styles.lastAdPurposeText}>
-                                  {lastAd.purpose || 'להשכרה'}
-                                </Text>
-                              </View>
-                            )}
+                          <Image
+                            source={require('../assets/pre-sale.png')}
+                            style={styles.preSaleBadgeImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View style={styles.lastAdPurposeTag}>
+                            <Text style={styles.lastAdPurposeText}>
+                              {lastAd.purpose || 'להשכרה'}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       {!isProfessional && (
                         <Text style={styles.lastAdPrice}>
                           {isCompany
                             ? String(
-                                lastAd?.project_name || lastAd?.projectName || '',
+                                lastAd?.project_name ||
+                                  lastAd?.projectName ||
+                                  '',
                               ).trim() || formatPriceHe(lastAd)
                             : lastAd.price || '₪5,000'}
                         </Text>
@@ -2930,17 +2926,17 @@ const UserProfileScreen = ({
                       style={styles.profileCtaPhoneBtn}
                       onPress={handleCallPress}
                       activeOpacity={0.85}>
+                      <Image
+                        source={require('../assets/phone.png')}
+                        style={styles.profileCtaPhoneIcon}
+                        resizeMode="contain"
+                      />
                       <Text
                         style={styles.profileCtaPhoneText}
                         numberOfLines={1}
                         ellipsizeMode="tail">
                         פנייה בטלפון {primaryContactPhone}
                       </Text>
-                      <Image
-                        source={require('../assets/phone.png')}
-                        style={styles.profileCtaPhoneIcon}
-                        resizeMode="contain"
-                      />
                     </TouchableOpacity>
                   </>
                 )}
@@ -3076,6 +3072,7 @@ const UserProfileScreen = ({
           <FlatList
             ref={fullScreenCarouselRef}
             data={lastAdImages}
+            keyExtractor={(_, i) => String(i)}
             horizontal
             pagingEnabled
             scrollEventThrottle={16}
@@ -3111,7 +3108,6 @@ const UserProfileScreen = ({
                 />
               </View>
             )}
-            keyExtractor={(_, i) => String(i)}
           />
 
           {/* Image counter and dots at bottom */}
@@ -3736,7 +3732,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     marginBottom: 24,
     alignSelf: 'center',
-    width: '80%',
+    width: '94%',
     alignItems: 'center',
   },
   reviewsRateBtnPressed: {opacity: 0.85},
@@ -3744,7 +3740,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 846,
     width: '100%',
-    maxWidth: 320,
+    // maxWidth: 320,
     alignSelf: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8.5,
@@ -3975,10 +3971,10 @@ const styles = StyleSheet.create({
   },
   lastAdPiText: {
     color: '#FFD275',
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'Rubik-Medium',
     // Number sat a little low vs the star — nudge it up to the star's optical center.
-    transform: [{translateY: -6}],
+    transform: [{translateY: -3}],
   },
   lastAdDots: {
     position: 'absolute',

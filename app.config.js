@@ -120,6 +120,7 @@ module.exports = {
     },
     plugins: [
       'expo-font',
+      'expo-secure-store',
       [
         'expo-location',
         {
@@ -131,7 +132,8 @@ module.exports = {
         'expo-build-properties',
         {
           android: {
-            usesCleartextTraffic: true,
+            // Only needed for local dev against http://localhost — never ship to production.
+            usesCleartextTraffic: process.env.NODE_ENV !== 'production',
             compileSdkVersion: 34,
             targetSdkVersion: 34,
             minSdkVersion: 23,

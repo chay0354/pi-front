@@ -12,8 +12,6 @@ export function logProfilePic(tag, payload) {
   const sig = payload !== undefined ? JSON.stringify(payload) : '';
   if (profilePicLogLastSig.get(tag) === sig) return;
   profilePicLogLastSig.set(tag, sig);
-  if (payload !== undefined) console.log('[profile-pic]', tag, payload);
-  else console.log('[profile-pic]', tag);
 }
 
 /**

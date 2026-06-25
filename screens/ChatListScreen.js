@@ -878,27 +878,12 @@ const ChatListScreen = ({
     const exclude = currentUser?.email
       ? String(currentUser.email).trim().toLowerCase()
       : null;
-    console.log('[pi-chat][broker-search] ChatListScreen immediate', {
-      seq,
-      query: q,
-      excludeEmail: exclude,
-      platform: Platform.OS,
-    });
     searchBrokers(q, exclude)
       .then(res => {
         if (brokerSearchSeq.current !== seq) {
-          console.log(
-            '[pi-chat][broker-search] ChatListScreen stale response ignored',
-            {seq, current: brokerSearchSeq.current},
-          );
           return;
         }
         const list = res.brokers || [];
-        console.log('[pi-chat][broker-search] ChatListScreen success', {
-          seq,
-          brokerCount: list.length,
-          first: list[0] ? {title: list[0].title, email: list[0].email} : null,
-        });
         setBrokerResults(list);
       })
       .catch(err => {

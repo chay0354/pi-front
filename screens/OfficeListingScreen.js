@@ -219,10 +219,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       const categoryNum = parseInt(initialCategory);
       if (categoryNum >= 1 && categoryNum <= 11) {
         setCategory(categoryNum);
-        console.log(
-          '📂 [OfficeListingScreen] Category updated from initialCategory:',
-          categoryNum,
-        );
       }
     }
   }, [initialCategory]);
@@ -506,10 +502,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             const data = await response.json();
             if (data.success && data.url) {
               uploadedMainImageUrl = data.url;
-              console.log(
-                '📸 User image uploaded for category 3:',
-                uploadedMainImageUrl,
-              );
             } else {
               throw new Error(data.error || 'Failed to upload image');
             }
@@ -552,10 +544,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               const uploadData = await uploadResponse.json();
               if (uploadData.success && uploadData.url) {
                 uploadedMainImageUrl = uploadData.url;
-                console.log(
-                  '📸 Fixed image uploaded for category 3:',
-                  uploadedMainImageUrl,
-                );
               } else {
                 throw new Error(
                   uploadData.error || 'Failed to upload fixed image',
@@ -563,9 +551,6 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               }
             } else {
               // For native, you might need a different approach
-              console.log(
-                '📸 Category 3 fixed image - native platform handling needed',
-              );
             }
           } catch (error) {
             console.error('Error uploading fixed image for category 3:', error);
@@ -725,28 +710,10 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               category: listingCategory,
             };
 
-      console.log(
-        '📂 [OfficeListingScreen] Publishing listing with category:',
-        listingCategory,
-        '(category state:',
-        category,
-        ', initialCategory:',
-        initialCategory,
-        ')',
-      );
-
-      console.log('📝 Publishing listing with data:', {
-        ...listingData,
-        category: listingData.category,
-        hasMainImage: !!listingData.mainImageUrl,
-        additionalImagesCount: listingData.additionalImageUrls?.length || 0,
-        hasVideo: listingData.hasVideo,
-      });
 
       // Create listing in database
       const result = await createListing(listingData);
 
-      console.log('Listing created successfully:', result);
 
       // Pass to parent with Supabase URLs
       if (onPublish) {

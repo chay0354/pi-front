@@ -124,22 +124,8 @@ const VerificationScreen = ({
   };
 
   const handleSendVerificationEmail = async () => {
-    console.log('[VerificationScreen] send verification code: pressed', {
-      displayEmail,
-      passwordsReady,
-      passwordsFilled,
-      passwordsMatch,
-      isSendReady,
-      isSending,
-      verificationEmailSent,
-      subscriptionId,
-      hasPendingSubmit: Boolean(pendingSubmit?.formData),
-    });
 
     if (isSending || verificationEmailSent) {
-      console.log(
-        '[VerificationScreen] send verification code: skipped (sending or already sent)',
-      );
       return;
     }
     if (!displayEmail) {
@@ -168,25 +154,15 @@ const VerificationScreen = ({
     }
 
     setIsSending(true);
-    console.log('[VerificationScreen] send verification code: started');
     try {
       const subId = await ensureSubscriptionId();
 
-      console.log('[VerificationScreen] resendVerificationCode: start', {
-        email: displayEmail,
-        subscriptionId: subId,
-      });
       const sendResult = await resendVerificationCode(
         displayEmail,
         subId,
         password,
       );
-      console.log(
-        '[VerificationScreen] resendVerificationCode: success',
-        sendResult,
-      );
       setVerificationEmailSent(true);
-      console.log('[VerificationScreen] send verification code: completed');
       Alert.alert('הצלחה', 'קוד האימות נשלח למייל שלך');
     } catch (error) {
       console.error(
@@ -199,7 +175,6 @@ const VerificationScreen = ({
       );
     } finally {
       setIsSending(false);
-      console.log('[VerificationScreen] send verification code: finished');
     }
   };
 

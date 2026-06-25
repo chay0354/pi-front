@@ -37,10 +37,6 @@ function apiBase() {
 export const getApiUrl = getResolvedApiUrl;
 
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
-  console.log('[api] EXPO_PUBLIC_API_URL =', process.env.EXPO_PUBLIC_API_URL);
-  console.log('[api] EXPO_PUBLIC_API_URL_ANDROID =', process.env.EXPO_PUBLIC_API_URL_ANDROID);
-  console.log('[api] platform =', Platform.OS);
-  console.log('[api] API base =', apiBase());
 }
 
 const DEFAULT_API_TIMEOUT_MS = 30000;
@@ -456,7 +452,6 @@ async function parseApiJsonResponse(response) {
 }
 
 function logBrokerSearch(step, payload) {
-  console.log(`[pi-chat][broker-search] ${step}`, payload);
 }
 
 /** On web, FormData doesn't accept { uri, type, name }; convert fetchable URIs to File so multipart works. */
@@ -574,10 +569,6 @@ export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
         });
         if (uploaded?.url) {
           data.video_url = uploaded.url;
-          console.log(
-            '[prepareSubscriptionSubmitPayload] intro video uploaded for story:',
-            uploaded.url,
-          );
         }
         delete outFiles.video;
       } catch (err) {
@@ -667,11 +658,6 @@ export const submitSubscription = async (formData, files = {}) => {
     const forceJson = !subscriptionSubmitHasFileAttachments(attach, payload);
 
     if (forceJson) {
-      console.log(
-        '[submitSubscription] JSON →',
-        apiBase(),
-        payload.video_url ? '(includes intro video_url for story)' : '',
-      );
       return await postSubscriptionSubmit(
         toSubscriptionSubmitJsonBody(payload),
       );
@@ -779,12 +765,6 @@ export const verifyEmail = async (
   try {
     const body = {email, verificationCode, subscriptionId};
     if (password) body.password = password;
-    console.log('Calling verify API:', {
-      email,
-      subscriptionId,
-      hasPassword: Boolean(password),
-      apiBase: apiBase(),
-    });
     const response = await apiFetch(`${apiBase()}/api/subscription/verify`, {
       method: 'POST',
       headers: {
@@ -883,10 +863,6 @@ export const loginWithPassword = async (email, password) => {
     throw new Error('אנא הזן סיסמה');
   }
 
-  console.log('[api] loginWithPassword: request', {
-    email: emailNorm,
-    apiBase: apiBase(),
-  });
 
   const response = await apiFetch(`${apiBase()}/api/auth/login`, {
     method: 'POST',
@@ -894,11 +870,6 @@ export const loginWithPassword = async (email, password) => {
     body: JSON.stringify({email: emailNorm, password: pwd}),
   });
   const data = await parseApiJsonResponse(response);
-  console.log('[api] loginWithPassword: response', {
-    ok: response.ok,
-    status: response.status,
-    success: data?.success,
-  });
   if (!response.ok || !data.success) {
     const err = new Error(data.error || 'מייל או סיסמה שגויים');
     err.code = data.code;
@@ -957,12 +928,6 @@ export const resendVerificationCode = async (
   try {
     const body = {email, subscriptionId};
     if (password) body.password = password;
-    console.log('[api] resendVerificationCode: request', {
-      email,
-      subscriptionId,
-      hasPassword: Boolean(password),
-      url: `${apiBase()}/api/subscription/resend-code`,
-    });
     const response = await apiFetch(`${apiBase()}/api/subscription/resend-code`, {
       method: 'POST',
       headers: {
@@ -972,12 +937,6 @@ export const resendVerificationCode = async (
     });
 
     const data = await response.json();
-    console.log('[api] resendVerificationCode: response', {
-      ok: response.ok,
-      status: response.status,
-      success: data?.success,
-      error: data?.error,
-    });
 
     if (!response.ok) {
       throw new Error(data.error || 'Failed to resend code');
@@ -2846,7 +2805,6 @@ export async function syncSubscriptionProfileStory(subscription) {
 
 export const createListing = async listingData => {
   try {
-    console.log('Sending listing data to API:', listingData);
 
     const response = await apiFetch(`${apiBase()}/api/listings`, {
       method: 'POST',

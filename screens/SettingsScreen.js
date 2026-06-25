@@ -132,15 +132,8 @@ const SettingsScreen = ({
   };
 
   const handleLogout = () => {
-    // Clear localStorage
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.removeItem('pi_current_user');
-        console.log('User logged out - cleared localStorage');
-      }
-    } catch (error) {
-      console.error('Error clearing localStorage:', error);
-    }
+    // setCurrentUser(null) below triggers the App-level effect that clears
+    // the persisted session from secure storage — no manual cleanup needed here.
 
     // Clear current user state
     setCurrentUser(null);

@@ -402,13 +402,6 @@ const SubscriptionFormScreen = ({
       }
 
       const hasProfileImage = !!profilePicIsUrl || !!files.profilePicture;
-      console.log(
-        '[SubscriptionFormScreen] Next (stage 2 → verification): profile image included:',
-        hasProfileImage,
-        hasProfileImage
-          ? '(will be uploaded to profile-pics bucket)'
-          : '(no image)',
-      );
 
       if (additionalImages.length > 0)
         files.additionalImages = additionalImages.filter(img => img !== null);
@@ -422,12 +415,6 @@ const SubscriptionFormScreen = ({
       } else if (companyLogo) {
         files.companyLogo = companyLogo;
       }
-      console.log(
-        '[SubscriptionFormScreen] Submitting company logo for subscription_type=',
-        subscriptionType,
-        '-> company_logo_url target column. hasLogo:',
-        !!companyLogo,
-      );
       if (video && activeTab === 'video') files.video = video;
 
       const userEmail =

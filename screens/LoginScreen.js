@@ -43,7 +43,6 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
     setIsLoggingIn(true);
     try {
       const response = await loginWithPassword(email.trim(), password);
-      console.log('Login response:', response);
 
       const status = response?.subscription?.status;
       const canEnter = status === 'verified' || status === 'active';

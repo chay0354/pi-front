@@ -8,8 +8,16 @@ import {
   AppState,
   Platform,
   Linking,
+  BackHandler,
 } from 'react-native';
 import {forceRtlStyle} from './utils/rtlLayout';
+import ErrorBoundary from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
+import {
+  getCurrentUser as getCurrentUserFromStorage,
+  setCurrentUserStorage,
+  clearCurrentUserStorage,
+} from './utils/secureUserStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingFlow from './components/OnboardingOverlay';
 import {
@@ -210,7 +218,7 @@ const DEFAULT_TIKTOK_TOP_FILTER = 'pics';
  * Main App Component
  * Entry point for the PI Real Estate application
  */
-export default function App() {
+function App() {
   const [fontsLoaded] = useFonts(criticalFonts);
 
   useEffect(() => {
@@ -223,6 +231,63 @@ export default function App() {
   /** After onboarding: must accept terms before using the app. */
   const [showTermsGate, setShowTermsGate] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
+
+  // Real navigation history — fixes back/close getting stuck oscillating
+  // between two screens (e.g. chat <-> userProfile) when each screen's
+  // single "return to" variable ends up pointing at the other. The
+  // per-screen XReturnScreen state vars elsewhere are kept as a fallback
+  // for direct entry points (deep link, notification, etc.) where history
+  // is empty, but goBack() always prefers true history when available.
+  const screenHistoryRef = useRef([screenName.home]);
+  const isGoingBackRef = useRef(false);
+
+  useEffect(() => {
+    if (isGoingBackRef.current) {
+      isGoingBackRef.current = false;
+      return;
+    }
+    const history = screenHistoryRef.current;
+    if (history[history.length - 1] !== currentScreen) {
+      history.push(currentScreen);
+      if (history.length > 30) history.shift();
+    }
+  }, [currentScreen]);
+
+  const goBack = useCallback(
+    (fallback = screenName.home) => {
+      const history = screenHistoryRef.current;
+      history.pop(); // drop the entry for the screen we're leaving (top === currentScreen)
+      // Peek (don't pop) the target — it must stay on top so the history's
+      // invariant (top === currentScreen) still holds after we navigate there.
+      // Popping it here too was the bug: it caused every second back-press
+      // to skip a screen instead of unwinding one level at a time.
+      let target = history[history.length - 1];
+      while (target != null && target === currentScreen) {
+        history.pop();
+        target = history[history.length - 1];
+      }
+      isGoingBackRef.current = true;
+      setCurrentScreen(target || fallback);
+    },
+    [currentScreen],
+  );
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const onBackPress = () => {
+      if (currentScreen === screenName.home) {
+        return false; // let the OS handle it (minimize/exit confirmation)
+      }
+      goBack();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => subscription.remove();
+  }, [currentScreen, goBack]);
+
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
   const setCurrentUser = useCallback(u => {
@@ -394,13 +459,13 @@ export default function App() {
     const loadUser = async () => {
       try {
         const [savedUser, onboardingDone, termsAccepted] = await Promise.all([
-          AsyncStorage.getItem('pi_current_user'),
+          getCurrentUserFromStorage(),
           hasCompletedOnboarding(),
           hasAcceptedTerms(),
         ]);
 
         if (savedUser) {
-          const user = JSON.parse(savedUser);
+          const user = savedUser;
           setCurrentUser(user);
           setCurrentScreen(screenName.home);
           const last = await AsyncStorage.getItem(CHAT_LAST_OPENED_KEY);
@@ -487,20 +552,16 @@ export default function App() {
     return () => sub.remove();
   }, [currentUser?.email, refreshUnreadChatCount]);
 
-  // Save user data to AsyncStorage whenever it changes
+  // Persist session to secure, encrypted storage (Keychain/Keystore) whenever it changes.
   useEffect(() => {
     const saveUser = async () => {
       if (currentUser) {
         try {
-          await AsyncStorage.setItem(
-            'pi_current_user',
-            JSON.stringify(currentUser),
-          );
+          await setCurrentUserStorage(currentUser);
         } catch (error) {}
       } else {
-        // Clear AsyncStorage when currentUser is null
         try {
-          await AsyncStorage.removeItem('pi_current_user');
+          await clearCurrentUserStorage();
         } catch (error) {}
       }
     };
@@ -683,6 +744,7 @@ export default function App() {
       <PresenceProvider userEmail={presenceUserEmail}>
         <SafeAreaProvider>
           <View style={[styles.container, forceRtlStyle]}>
+            <OfflineBanner />
             {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
             {__DEV__ && typeof window !== 'undefined' && (
               <View
@@ -1113,7 +1175,7 @@ export default function App() {
               )}
             {currentScreen === screenName.userProfile && (
               <UserProfileScreen
-                onClose={() => setCurrentScreen(profileReturnScreen)}
+                onClose={() => goBack(profileReturnScreen)}
                 onCall={phone => {
                   const u = profileUser;
                   const tel = String(
@@ -1990,7 +2052,7 @@ export default function App() {
                   setSharedListingForChat(null);
                   setSelectedConversation(null);
                   setChatListRefreshKey(k => k + 1);
-                  setCurrentScreen(chatReturnScreen);
+                  goBack(chatReturnScreen);
                 }}
                 sharedListing={sharedListingForChat}
                 conversation={selectedConversation}
@@ -2345,6 +2407,14 @@ export default function App() {
         </SafeAreaProvider>
       </PresenceProvider>
     </ContextHook.Provider>
+  );
+}
+
+export default function RootApp() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   );
 }
 

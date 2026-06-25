@@ -13,7 +13,6 @@ const ProfilePic = ({style, prop, item}) => {
     <TouchableOpacity
       style={[styles.profilePicParent, style]}
       onPress={() => {
-        console.log('profile pic pressed');
       }}>
       <View style={styles.profilePicIconContainer}>
         <Image

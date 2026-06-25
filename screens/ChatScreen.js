@@ -612,16 +612,6 @@ const ChatScreen = ({
   }, [conversation, currentUser]);
 
   const fetchMessages = useCallback(() => {
-    console.log('[ChatScreen.fetchMessages] attempt', {
-      myEmail,
-      otherUserEmail,
-      otherUserRef,
-      isUser,
-      isDirectPeer,
-      isGroupThread,
-      groupConversationId,
-      conversationIdOnConv: conversation?.id,
-    });
     if (!myEmail) {
       console.warn('[ChatScreen.fetchMessages] aborting: no myEmail');
       return;
@@ -629,9 +619,6 @@ const ChatScreen = ({
     if (isGroupThread && groupConversationId) {
       getGroupChatMessages(myEmail, groupConversationId)
         .then(res => {
-          console.log('[ChatScreen.fetchMessages] group res', {
-            count: res?.messages?.length || 0,
-          });
           if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
           if (res.conversation_id) setConversationId(res.conversation_id);
           if (res.group) setGroupDetail(res.group);
@@ -659,9 +646,6 @@ const ChatScreen = ({
     }
     getChatMessages(myEmail, otherUserEmail)
       .then(res => {
-        console.log('[ChatScreen.fetchMessages] direct res', {
-          count: res?.messages?.length || 0,
-        });
         if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (res.conversation_id) setConversationId(res.conversation_id);
         setExclusiveOfferMeta(prev => {
@@ -740,14 +724,6 @@ const ChatScreen = ({
   }, [profileAvatarUrl]);
 
   useEffect(() => {
-    console.log('[ChatScreen.initialLoad] deps', {
-      myEmail,
-      otherUserEmail,
-      isDirectPeer,
-      isGroupThread,
-      groupConversationId,
-      conversationProp: conversation,
-    });
     if (!myEmail) {
       console.warn('[ChatScreen.initialLoad] aborting: no myEmail');
       return;
@@ -768,10 +744,6 @@ const ChatScreen = ({
     };
     load()
       .then(res => {
-        console.log('[ChatScreen.initialLoad] res', {
-          count: res?.messages?.length || 0,
-          conversation_id: res?.conversation_id,
-        });
         if (!cancelled && res.messages)
           setMessages(res.messages.map(normalizeChatMessage));
         if (!cancelled && res.conversation_id)
@@ -1254,12 +1226,6 @@ const ChatScreen = ({
       Alert.alert('', 'כתוב הודעה לפני השליחה');
       return;
     }
-    console.log('[ExclusiveOffer] submit', {
-      myEmail,
-      otherUserEmail,
-      contextListingId,
-      hasText: !!text,
-    });
     if (!myEmail || !otherUserEmail) {
       Alert.alert(
         '',
@@ -1281,7 +1247,6 @@ const ChatScreen = ({
         null,
         contextListingId,
       );
-      console.log('[ExclusiveOffer] server response', res);
       if (!res || res.success === false || !res.message) {
         throw new Error(res?.error || 'שליחת ההצעה נכשלה');
       }

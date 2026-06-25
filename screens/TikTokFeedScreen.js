@@ -2426,11 +2426,6 @@ const TikTokFeedScreen = ({
           setListingsError(null);
         }
         if (__DEV__) {
-          console.log(
-            '[TikTokFeedScreen] getListings:',
-            result?.listings?.length ?? 0,
-            'items',
-          );
         }
 
         if (resultForTransform.success && resultForTransform.listings) {
@@ -2980,10 +2975,6 @@ const TikTokFeedScreen = ({
             });
           }
         } else {
-          console.log(
-            'No listings found or result was not successful. Result:',
-            result,
-          );
           setDbListings([]);
           setFollowStatusByTargetId({});
         }
@@ -9209,7 +9200,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 20,
     letterSpacing: 0.2,
-    textAlign: 'right',
+    textAlign: 'left',
     writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
   },
