@@ -1,6 +1,9 @@
 /** @type {Map<string, string>} */
 const profilePicLogLastSig = new Map();
 
+/** Default avatar when no profile photo was uploaded. */
+export const DEFAULT_PI_PROFILE_AVATAR = require('../assets/chat/noprofileimage.png');
+
 /**
  * Dev-only: log profile-picture resolution. Filter the console by `[profile-pic]`.
  * Skips logging when the same tag + payload was already logged (stops render/refetch spam).

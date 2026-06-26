@@ -42,6 +42,7 @@ import {
   resolveSubscriptionId,
 } from '../utils/api';
 import {forceLtrStyle} from '../utils/rtlLayout';
+import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -652,7 +653,7 @@ const PostEditorScreen = ({
   const [textBlocks, setTextBlocks] = useState([]);
   const [editingTextBlockId, setEditingTextBlockId] = useState(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const keyboardInset = useKeyboardInset();
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
@@ -870,14 +871,12 @@ const PostEditorScreen = ({
   const formatToolbarSafeBottom = Math.max(bottom, 8);
 
   useEffect(() => {
-    const onShow = event => {
+    const onShow = () => {
       setIsKeyboardVisible(true);
-      setKeyboardHeight(event?.endCoordinates?.height ?? 0);
     };
     const onHide = () => {
       setIsKeyboardVisible(false);
       setSelectedFormat(null);
-      setKeyboardHeight(0);
     };
 
     const showEvent =
@@ -891,6 +890,14 @@ const PostEditorScreen = ({
       hideSub?.remove?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (keyboardInset <= 0) {
+      setIsKeyboardVisible(false);
+    } else if (Platform.OS === 'web') {
+      setIsKeyboardVisible(true);
+    }
+  }, [keyboardInset]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -1537,8 +1544,7 @@ const PostEditorScreen = ({
                 styles.stageColumn,
                 showTextFormatToolbar && {
                   paddingBottom:
-                    formatToolbarHeight +
-                    (Platform.OS === 'android' ? keyboardHeight : 0),
+                    formatToolbarHeight + (keyboardInset > 0 ? keyboardInset : 0),
                 },
               ]}>
               <View
@@ -1705,14 +1711,12 @@ const PostEditorScreen = ({
                 }}
                 style={[
                   styles.keyboardControls,
-                  Platform.OS === 'android' && keyboardHeight > 0
-                    ? {bottom: keyboardHeight}
-                    : null,
+                  keyboardInset > 0 ? {bottom: keyboardInset} : null,
                   {
                     paddingTop: 10,
                     paddingBottom:
                       Platform.OS === 'web'
-                        ? Math.max(bottom, keyboardHeight > 0 ? 8 : 10)
+                        ? Math.max(bottom, keyboardInset > 0 ? 8 : 10)
                         : formatToolbarSafeBottom,
                   },
                 ]}>
@@ -2030,7 +2034,10 @@ const PostEditorScreen = ({
           }}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.hashtagAvoid}>
+            style={[
+              styles.hashtagAvoid,
+              keyboardInset > 0 ? {paddingBottom: keyboardInset} : null,
+            ]}>
             <View
               style={styles.hashtagCard}
               onStartShouldSetResponder={() => true}>

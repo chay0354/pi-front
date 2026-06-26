@@ -32,6 +32,47 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
+/** Gold profile ring: company, broker, professional only — not regular `user`. */
+export const shouldShowProfileGoldRing = subscriptionType => {
+  const t = resolveSubscriptionType(subscriptionType);
+  return (
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.professional ||
+    t === subscriptionTypes.broker
+  );
+};
+
+/** Normalize subscription type from strings, users, listings, or chat peers. */
+export function resolveSubscriptionType(source) {
+  if (source == null) return '';
+  if (typeof source === 'string' || typeof source === 'number') {
+    return String(source).toLowerCase().trim();
+  }
+  if (typeof source !== 'object') return '';
+  const subObj =
+    source.subscription && typeof source.subscription === 'object'
+      ? source.subscription
+      : null;
+  const candidates = [
+    source.subscription_type,
+    source.subscriptionType,
+    source.type,
+    source.creator_subscription_type,
+    source.created_by_subscription_type,
+    source.recentSubscriptionType,
+    subObj?.subscription_type,
+    subObj?.subscriptionType,
+    subObj?.type,
+    source.creator?.subscription_type,
+  ];
+  for (const v of candidates) {
+    if (v != null && String(v).trim() !== '') {
+      return String(v).toLowerCase().trim();
+    }
+  }
+  return '';
+};
+
 /**
  * DB `ads.category` values where a **regular** (`subscription_type === 'user'`) user may
  * open "פרסם מודעה" from the create sheet. Other categories (e.g. 1 חדש מקבלן) show
@@ -53,11 +94,11 @@ export const brokerSheetAdListingCategoryIds = new Set([
 /**
  * DB `ads.category` values where **company** (not professional) users see "פרסם מודעה"
  * (ערוך/פרסם מודעה sheet + TikTok feed compose row).
- * Matches product tabs: גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7), מסחר (8),
- * משרדים (2), דירות / בלעדי (10). Professional accounts never get this listing row.
+ * Matches product tabs: חדש מקבלן (1), גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7),
+ * מסחר (8), משרדים (2). Professional accounts never get this listing row.
  */
 export const companySheetAdListingCategoryIds = new Set([
-  2, 4, 6, 7, 8, 10, 12,
+  1, 2, 4, 6, 7, 8, 12,
 ]);
 
 /** Whether the create sheet shows a listing/ad row (not post-only) for this user + DB category. */
@@ -83,6 +124,65 @@ export function canShowListingAdInCreateSheet(
     return companySheetAdListingCategoryIds.has(n);
   }
   return true;
+}
+
+/** EditPublishAd + ListingAnalysis: UI strip id → DB `ads.category`. */
+export const EDIT_PROFILE_UI_TO_LISTING_CATEGORY_ID = {
+  1: 1,
+  2: 5,
+  3: 4,
+  4: 6,
+  5: 12,
+  6: 7,
+  7: 8,
+  8: 2,
+  9: 10,
+  10: 3,
+};
+
+const LISTING_TO_EDIT_PROFILE_UI_CATEGORY_ID = Object.entries(
+  EDIT_PROFILE_UI_TO_LISTING_CATEGORY_ID,
+).reduce((acc, [uiId, listingId]) => {
+  acc[listingId] = Number(uiId);
+  return acc;
+}, {});
+
+export function toEditProfileUiCategoryId(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 9;
+  return LISTING_TO_EDIT_PROFILE_UI_CATEGORY_ID[n] ?? n;
+}
+
+export function resolveListingCategoryFromEditProfileUi(uiCategoryId) {
+  const n = Number(uiCategoryId);
+  if (!Number.isFinite(n)) return null;
+  return EDIT_PROFILE_UI_TO_LISTING_CATEGORY_ID[n] ?? n;
+}
+
+const NEW_BUILDER_EDIT_PROFILE_UI_CATEGORY_ID = 1;
+
+/** Strip order: under forceRTL the first item sits on the physical right. */
+export function orderPublishCategoriesStrip(strip) {
+  if (!strip?.length) return strip || [];
+  const newBuilder = strip.find(
+    cat => cat.id === NEW_BUILDER_EDIT_PROFILE_UI_CATEGORY_ID,
+  );
+  if (!newBuilder) return strip;
+  return [
+    newBuilder,
+    ...strip.filter(cat => cat.id !== NEW_BUILDER_EDIT_PROFILE_UI_CATEGORY_ID),
+  ];
+}
+
+/** Categories on EditPublishAd carousel + ListingAnalysis — filtered by user type, same order. */
+export function getPublishCategoriesStrip(subscriptionType) {
+  const filtered = categoriesEditProfile.filter(cat =>
+    canShowListingAdInCreateSheet(
+      subscriptionType,
+      resolveListingCategoryFromEditProfileUi(cat.id),
+    ),
+  );
+  return orderPublishCategoriesStrip(filtered);
 }
 
 /** Default residential/global strip icon (חדש מקבלן for non–regular-user accounts). */

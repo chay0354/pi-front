@@ -443,6 +443,12 @@ async function parseApiJsonResponse(response) {
     return JSON.parse(text);
   } catch {
     if (response.status === 404) {
+      const reqUrl = String(response.url || '');
+      if (reqUrl.includes('/api/listings/') && !reqUrl.includes('/like')) {
+        throw new Error(
+          'מחיקת מודעות לא זמינה בשרת. יש לעדכן ולהפעיל מחדש את pi-back.',
+        );
+      }
       throw new Error(
         'שירות ההתחברות לא זמין בשרת. יש לפרוס גרסה מעודכנת של pi-back (כולל /api/auth/login).',
       );
@@ -1860,6 +1866,36 @@ export const updateListingFreeze = async (listingId, isFrozen) => {
     return data;
   } catch (error) {
     console.error('Error updating listing:', error);
+    throw error;
+  }
+};
+
+/**
+ * Permanently delete a listing owned by the current user.
+ * @param {string} listingId - UUID of the listing
+ * @param {string} userEmail - owner subscription email
+ */
+export const deleteListing = async (listingId, userEmail) => {
+  const id = listingId != null ? String(listingId).trim() : '';
+  const email = userEmail != null ? String(userEmail).trim() : '';
+  if (!id || !email) throw new Error('listingId and userEmail required');
+  try {
+    const response = await apiFetch(
+      `${apiBase()}/api/listings/${encodeURIComponent(id)}?user_email=${encodeURIComponent(email)}`,
+      {method: 'DELETE'},
+    );
+    const data = await parseApiJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to delete listing');
+    }
+    return data;
+  } catch (error) {
+    console.error('Error deleting listing:', error);
+    if (/unexpected token|<!doctype/i.test(String(error?.message || ''))) {
+      throw new Error(
+        'מחיקת מודעות לא זמינה בשרת. יש לעדכן ולהפעיל מחדש את pi-back.',
+      );
+    }
     throw error;
   }
 };

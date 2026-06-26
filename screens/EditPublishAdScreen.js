@@ -14,6 +14,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -21,16 +22,18 @@ import {Octicons} from '@expo/vector-icons';
 import {
   brokerCategories,
   canShowListingAdInCreateSheet,
-  categoriesEditProfile,
   getCreateSheetListingIcon,
+  getPublishCategoriesStrip,
+  resolveListingCategoryFromEditProfileUi,
   subscriptionTypes,
+  toEditProfileUiCategoryId,
 } from '../utils/constant';
 import CreateAdSheet, {
   CreateAdSheetDivider,
   CreateAdSheetRow,
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
-import {getListings, getBoostQuota, boostListing} from '../utils/api';
+import {getListings, getBoostQuota, boostListing, deleteListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
 
@@ -41,6 +44,82 @@ const CARD_BG = '#2B2A39';
 const BORDER_GOLD = '#D4AF37';
 const FROZEN_ACTION_BLUE = '#4DA3FF';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
+
+const LISTING_STAT_ICONS = {
+  views: require('../assets/eye_icon.png'),
+  adComment: require('../assets/chat_icon.png'),
+};
+
+const STAT_ICON_COLOR = '#D2D0DC';
+
+const getListingEngagementStats = (listing, postRecord) => {
+  const views = listing.views ?? listing.view_count ?? 0;
+  const likes = postRecord
+    ? listing.post_like_count != null
+      ? Number(listing.post_like_count)
+      : listing.like_count != null
+        ? Number(listing.like_count)
+        : 0
+    : listing.like_count != null
+      ? Number(listing.like_count)
+      : 0;
+  const comments = postRecord
+    ? listing.comment_count != null
+      ? Number(listing.comment_count)
+      : listing.comments != null
+        ? Number(listing.comments)
+        : 0
+    : listing.review_count != null
+      ? Number(listing.review_count)
+      : listing.comment_count != null
+        ? Number(listing.comment_count)
+        : 0;
+  return {views, likes, comments};
+};
+
+const ListingStatsRow = ({listing, postRecord, textStyle}) => {
+  const {views, likes, comments} = getListingEngagementStats(
+    listing,
+    postRecord,
+  );
+
+  return (
+    <View style={styles.statsRow}>
+      <View style={styles.statItem}>
+        <Image
+          source={LISTING_STAT_ICONS.views}
+          style={styles.statIcon}
+          resizeMode="contain"
+        />
+        <Text style={[styles.statText, textStyle]}>{views}</Text>
+      </View>
+      <View style={styles.statItem}>
+        <MaterialCommunityIcons
+          name={postRecord ? 'thumb-up-outline' : 'heart-outline'}
+          size={22}
+          color={STAT_ICON_COLOR}
+        />
+        <Text style={[styles.statText, textStyle]}>{likes}</Text>
+      </View>
+      <View style={styles.statItem}>
+        {postRecord ? (
+          <MaterialCommunityIcons
+            name="comment-outline"
+            size={22}
+            color={STAT_ICON_COLOR}
+          />
+        ) : (
+          <Image
+            source={LISTING_STAT_ICONS.adComment}
+            style={styles.statIcon}
+            resizeMode="contain"
+          />
+        )}
+        <Text style={[styles.statText, textStyle]}>{comments}</Text>
+      </View>
+    </View>
+  );
+};
 
 // Detect feed-post rows so this screen shows only real ads (not free-form posts).
 const isPostListingRecord = item => {
@@ -106,63 +185,9 @@ const CATEGORY_ICON_CROP = 0.24; // crop from each edge (show center ~52%)
 const CATEGORY_ICON_INNER = 1 - 2 * CATEGORY_ICON_CROP;
 const categoryImageSize = Math.ceil(CATEGORY_ICON_SIZE / CATEGORY_ICON_INNER); // ~196
 const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
-// categoriesEditProfile uses UI ids (1..9) that differ from ads.category values in DB.
-const UI_TO_LISTING_CATEGORY_ID = {
-  1: 1, // חדש מקבלן
-  2: 5, // BNB
-  3: 4, // גלובל
-  4: 6, // מגזר דתי
-  5: 12, // יוקרה
-  6: 7, // קרקעות
-  7: 8, // מסחר
-  8: 2, // משרדים
-  9: 10, // דירות
-  10: 3, // שותפים
-};
 
-const LISTING_TO_UI_CATEGORY_ID = Object.entries(
-  UI_TO_LISTING_CATEGORY_ID,
-).reduce((acc, [uiId, listingId]) => {
-  acc[listingId] = Number(uiId);
-  return acc;
-}, {});
-
-const toUiCategoryId = value => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 9;
-  return LISTING_TO_UI_CATEGORY_ID[n] ?? n;
-};
-
-const toListingCategoryId = value => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return UI_TO_LISTING_CATEGORY_ID[n] ?? n;
-};
-
-const resolveListingCategoryId = uiCategoryId =>
-  toListingCategoryId(uiCategoryId);
-
-/** UI strip id for חדש מקבלן — pinned to the physical right when shown. */
-const NEW_BUILDER_UI_CATEGORY_ID = 1;
-
-/** Strip order: under forceRTL the first item sits on the physical right. */
-const orderPublishCategoriesStrip = strip => {
-  if (!strip?.length) return strip || [];
-  const newBuilder = strip.find(cat => cat.id === NEW_BUILDER_UI_CATEGORY_ID);
-  if (!newBuilder) return strip;
-  return [
-    newBuilder,
-    ...strip.filter(cat => cat.id !== NEW_BUILDER_UI_CATEGORY_ID),
-  ];
-};
-
-/** First strip item = physical right under RTL horizontal scroll. */
 const getRightmostStripCategoryId = strip =>
   strip?.length ? strip[0].id : null;
-
-/** Last strip item = physical left at end of horizontal scroll (RTL). */
-const getLeftmostStripCategoryId = strip =>
-  strip?.length ? strip[strip.length - 1].id : null;
 
 const scrollCategoryStripToPhysicalRight = scrollRef => {
   scrollRef.current?.scrollTo({x: 0, animated: false});
@@ -172,7 +197,7 @@ const EditPublishAdScreen = ({
   onClose,
   uploadedListings = [],
   currentUser = null,
-  initialCategoryId = 9,
+  initialCategoryId = null,
   onCreateAd,
   onEditAd,
   /** Optional: edit handler for feed posts (plain listings); if omitted, posts show without pencil edit */
@@ -197,11 +222,12 @@ const EditPublishAdScreen = ({
   // });
   const [viewMode, setViewMode] = useState('grid'); // 'list' | 'grid'
   const [selectedCategoryId, setSelectedCategoryId] = useState(
-    toUiCategoryId(initialCategoryId),
+    toEditProfileUiCategoryId(initialCategoryId),
   );
   const [fetchedListings, setFetchedListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
   const [removeConfirmListing, setRemoveConfirmListing] = useState(null);
+  const [removeSubmitting, setRemoveSubmitting] = useState(false);
   const [freezeConfirmListing, setFreezeConfirmListing] = useState(null);
   const [unfreezeConfirmListing, setUnfreezeConfirmListing] = useState(null);
   const [showCreateSheet, setShowCreateSheet] = useState(false);
@@ -223,13 +249,20 @@ const EditPublishAdScreen = ({
   const categorySweepAnim = useRef(new Animated.Value(0)).current;
   const didCategorySweepRef = useRef(false);
   const publishCategoriesStripRef = useRef([]);
+  const initialCategoryIdRef = useRef(initialCategoryId);
+  const categoryStripScrollXRef = useRef(null);
+  initialCategoryIdRef.current = initialCategoryId;
 
   const runCategorySweep = () => {
     if (didCategorySweepRef.current) return;
+    const explicit = initialCategoryIdRef.current;
+    if (explicit != null && explicit !== '') {
+      didCategorySweepRef.current = true;
+      return;
+    }
     const contentW = categoryContentWidthRef.current;
     const viewportW = categoryViewportWidthRef.current;
     const maxScroll = Math.max(0, contentW - viewportW);
-    // Need both measurements and something to scroll before we animate.
     if (maxScroll <= 4 || viewportW <= 0) return;
     didCategorySweepRef.current = true;
 
@@ -237,29 +270,32 @@ const EditPublishAdScreen = ({
       categoryScrollRef.current?.scrollTo({x: value, animated: false});
     });
 
-    // RTL: start at x=0 (physical right). Sweep 0 → maxScroll so categories pass left → right.
     categorySweepAnim.setValue(0);
     categoryScrollRef.current?.scrollTo({x: 0, animated: false});
     Animated.timing(categorySweepAnim, {
       toValue: maxScroll,
       duration: 1600,
       delay: 350,
-      easing: Easing.inOut(Easing.cubic),
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start(({finished}) => {
       categorySweepAnim.removeListener(id);
-      if (finished) {
-        categorySweepAnim.setValue(maxScroll);
-        const strip = publishCategoriesStripRef.current;
-        if (strip.length) {
-          setSelectedCategoryId(getLeftmostStripCategoryId(strip));
-        }
-      }
+      if (!finished) return;
+      categoryStripScrollXRef.current = maxScroll;
+      categorySweepAnim.setValue(maxScroll);
+      categoryScrollRef.current?.scrollTo({x: maxScroll, animated: false});
     });
   };
 
   const onCategoryScrollContentSizeChange = width => {
     categoryContentWidthRef.current = width || 0;
+    if (categoryStripScrollXRef.current != null) {
+      categoryScrollRef.current?.scrollTo({
+        x: categoryStripScrollXRef.current,
+        animated: false,
+      });
+      return;
+    }
     if (!didInitialCategoryScrollRef.current) {
       didInitialCategoryScrollRef.current = true;
     }
@@ -339,6 +375,12 @@ const EditPublishAdScreen = ({
               views: l.view_count,
               view_count: l.view_count,
               like_count: l.like_count != null ? Number(l.like_count) : 0,
+              post_like_count:
+                l.post_like_count != null ? Number(l.post_like_count) : 0,
+              review_count:
+                l.review_count != null ? Number(l.review_count) : 0,
+              comment_count:
+                l.comment_count != null ? Number(l.comment_count) : 0,
               comments: l.comment_count,
               is_frozen: l.is_frozen === true || l.is_frozen === 'true',
               exposure_level: l.exposure_level || 'medium',
@@ -385,32 +427,37 @@ const EditPublishAdScreen = ({
   })();
 
   const selectedListingCategoryId =
-    resolveListingCategoryId(selectedCategoryId);
+    resolveListingCategoryFromEditProfileUi(selectedCategoryId);
   const isBnbCategory = Number(selectedListingCategoryId) === 5;
   const isPartnersCategory = Number(selectedListingCategoryId) === 3;
   const isOfficesListingCategory = Number(selectedListingCategoryId) === 2;
-  const publishCategoriesStrip = useMemo(() => {
-    const filtered = categoriesEditProfile.filter(cat =>
-      canShowListingAdInCreateSheet(
-        currentUser?.subscription_type,
-        resolveListingCategoryId(cat.id),
-      ),
-    );
-    return orderPublishCategoriesStrip(filtered);
-  }, [currentUser?.subscription_type]);
+  const publishCategoriesStrip = useMemo(
+    () => getPublishCategoriesStrip(currentUser?.subscription_type),
+    [currentUser?.subscription_type],
+  );
   publishCategoriesStripRef.current = publishCategoriesStrip;
 
   useEffect(() => {
+    if (categoryStripScrollXRef.current != null) return;
     if (publishCategoriesStrip.length === 0) {
-      setSelectedCategoryId(toUiCategoryId(initialCategoryId));
+      setSelectedCategoryId(
+        initialCategoryId != null
+          ? toEditProfileUiCategoryId(initialCategoryId)
+          : null,
+      );
       return;
     }
-    setSelectedCategoryId(getRightmostStripCategoryId(publishCategoriesStrip));
-    // When the strip fits on screen the entrance sweep is skipped — scroll manually.
-    const contentW = categoryContentWidthRef.current;
-    const viewportW = categoryViewportWidthRef.current;
-    const maxScroll = Math.max(0, contentW - viewportW);
-    if (maxScroll <= 4 || viewportW <= 0) {
+    const explicitUiId =
+      initialCategoryId != null && initialCategoryId !== ''
+        ? toEditProfileUiCategoryId(initialCategoryId)
+        : null;
+    const nextSelectedId =
+      explicitUiId != null &&
+      publishCategoriesStrip.some(cat => cat.id === explicitUiId)
+        ? explicitUiId
+        : getRightmostStripCategoryId(publishCategoriesStrip);
+    setSelectedCategoryId(nextSelectedId);
+    if (explicitUiId != null) {
       requestAnimationFrame(() => {
         scrollCategoryStripToPhysicalRight(categoryScrollRef);
       });
@@ -531,6 +578,31 @@ const EditPublishAdScreen = ({
     };
   }, [currentUser?.email]);
 
+  const handleConfirmRemove = async () => {
+    const listing = removeConfirmListing;
+    if (!listing || removeSubmitting) return;
+    const listingId = listing.id ?? listing.ad_number;
+    const email = currentUser?.email;
+    if (!listingId || !email) {
+      Alert.alert('', 'לא ניתן להסיר כרגע');
+      return;
+    }
+    setRemoveSubmitting(true);
+    try {
+      await deleteListing(listingId, email);
+      const idStr = String(listingId);
+      setFetchedListings(prev =>
+        prev.filter(l => String(l.id ?? l.ad_number) !== idStr),
+      );
+      if (typeof onRemove === 'function') onRemove(listing);
+      setRemoveConfirmListing(null);
+    } catch (e) {
+      Alert.alert('', e?.message || 'שגיאה בהסרת המודעה');
+    } finally {
+      setRemoveSubmitting(false);
+    }
+  };
+
   const handleConfirmBoost = async () => {
     const listing = boostConfirmListing;
     if (!listing || boostSubmitting) return;
@@ -607,10 +679,6 @@ const EditPublishAdScreen = ({
   const renderListAdCard = ({item: listing}) => {
     const postRecord = isPostListingRecord(listing);
     const imageSource = getFirstImage(listing);
-    const views = listing.views ?? listing.view_count ?? 0;
-    const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const reviewCount =
-      listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -630,43 +698,11 @@ const EditPublishAdScreen = ({
                 {listing.description || '—'}
               </Text>
 
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Image
-                    source={require('../assets/eye_icon.png')}
-                    style={styles.actionBtnImage}
-                    resizeMode="contain"
-                  />
-                  <Text style={[styles.statText, styles.statTextList]}>
-                    {views}
-                  </Text>
-                </View>
-                <View style={styles.statItem}>
-                  {postRecord ? (
-                    <>
-                      <Image
-                        source={require('../assets/chat_icon.png')}
-                        style={styles.actionBtnImage}
-                        resizeMode="contain"
-                      />
-                      <Text style={[styles.statText, styles.statTextList]}>
-                        {likes}
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Image
-                        source={require('../assets/chat_icon.png')}
-                        style={styles.actionBtnImage}
-                        resizeMode="contain"
-                      />
-                      <Text style={[styles.statText, styles.statTextList]}>
-                        {reviewCount}
-                      </Text>
-                    </>
-                  )}
-                </View>
-              </View>
+              <ListingStatsRow
+                listing={listing}
+                postRecord={postRecord}
+                textStyle={styles.statTextList}
+              />
             </View>
           </View>
           <View style={[styles.actionRow, {marginTop: 16}]}>
@@ -763,10 +799,6 @@ const EditPublishAdScreen = ({
   const renderGridAdCard = ({item: listing, index}) => {
     const postRecord = isPostListingRecord(listing);
     const imageSource = getFirstImage(listing);
-    const views = listing.views ?? listing.view_count ?? 0;
-    const likes = listing.like_count != null ? Number(listing.like_count) : 0;
-    const reviewCount =
-      listing.review_count != null ? Number(listing.review_count) : 0;
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -828,37 +860,7 @@ const EditPublishAdScreen = ({
               <Text style={styles.adDescription} numberOfLines={2}>
                 {listing.description || '—'}
               </Text>
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Image
-                    source={require('../assets/eye_icon.png')}
-                    style={styles.actionBtnImage}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.statText}>{views}</Text>
-                </View>
-                <View style={styles.statItem}>
-                  {postRecord ? (
-                    <>
-                      <Image
-                        source={require('../assets/chat_icon.png')}
-                        style={styles.actionBtnImage}
-                        resizeMode="contain"
-                      />
-                      <Text style={styles.statText}>{likes}</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Image
-                        source={require('../assets/chat_icon.png')}
-                        style={styles.actionBtnImage}
-                        resizeMode="contain"
-                      />
-                      <Text style={styles.statText}>{reviewCount}</Text>
-                    </>
-                  )}
-                </View>
-              </View>
+              <ListingStatsRow listing={listing} postRecord={postRecord} />
             </View>
           </View>
 
@@ -992,7 +994,10 @@ const EditPublishAdScreen = ({
                     <TouchableOpacity
                       key={cat.id}
                       style={styles.categoryItem}
-                      onPress={() => setSelectedCategoryId(cat.id)}
+                      onPress={() => {
+                        categoryStripScrollXRef.current = null;
+                        setSelectedCategoryId(cat.id);
+                      }}
                       activeOpacity={0.8}>
                       <Image
                         source={selected ? cat.selectedImage : cat.image}
@@ -1182,10 +1187,14 @@ const EditPublishAdScreen = ({
         visible={removeConfirmListing != null}
         transparent
         animationType="fade"
-        onRequestClose={() => setRemoveConfirmListing(null)}>
+        onRequestClose={() =>
+          !removeSubmitting && setRemoveConfirmListing(null)
+        }>
         <Pressable
           style={styles.removeModalOverlay}
-          onPress={() => setRemoveConfirmListing(null)}>
+          onPress={() =>
+            !removeSubmitting && setRemoveConfirmListing(null)
+          }>
           <View
             style={styles.removeModalContent}
             onStartShouldSetResponder={() => true}>
@@ -1204,18 +1213,23 @@ const EditPublishAdScreen = ({
               <TouchableOpacity
                 style={styles.removeModalCancelBtn}
                 onPress={() => setRemoveConfirmListing(null)}
+                disabled={removeSubmitting}
                 activeOpacity={0.8}>
                 <Text style={styles.removeModalCancelText}>ביטול</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.removeModalConfirmBtn}
-                onPress={() => {
-                  if (removeConfirmListing && onRemove)
-                    onRemove(removeConfirmListing);
-                  setRemoveConfirmListing(null);
-                }}
+                style={[
+                  styles.removeModalConfirmBtn,
+                  removeSubmitting && styles.actionBtnDisabled,
+                ]}
+                onPress={handleConfirmRemove}
+                disabled={removeSubmitting}
                 activeOpacity={0.8}>
-                <Text style={styles.removeModalConfirmText}>הסרה</Text>
+                {removeSubmitting ? (
+                  <ActivityIndicator color="#1E1D27" size="small" />
+                ) : (
+                  <Text style={styles.removeModalConfirmText}>הסרה</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1613,6 +1627,7 @@ const styles = StyleSheet.create({
     left: 0,
   },
   statItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  statIcon: {width: 22, height: 22},
   statText: {
     color: '#D2D0DC',
     fontSize: 14,

@@ -23,6 +23,7 @@ import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useKeyboardInset} from '../utils/formKeyboardScroll';
 import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {
   getHeaderTitle,
@@ -42,6 +43,7 @@ const SubscriptionFormScreen = ({
   subscriptionType = subscriptionTypes.broker,
 }) => {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const isCompanyFlow = subscriptionType === subscriptionTypes.company;
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
@@ -492,7 +494,7 @@ const SubscriptionFormScreen = ({
             styles.companyContentContainer,
             {
               paddingTop: insets.top,
-              paddingBottom: Math.max(insets.bottom, 24) + 140,
+              paddingBottom: Math.max(insets.bottom, 24) + 140 + keyboardInset,
             },
           ]}
           showsVerticalScrollIndicator={false}>

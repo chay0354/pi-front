@@ -7,9 +7,8 @@ import {
   Platform,
   InteractionManager,
 } from 'react-native';
-import React, {useCallback, useEffect, useRef, useState, memo} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import Carusel from '../components/Carusel';
@@ -187,10 +186,12 @@ const Home = ({
   onAiReopenConsumed,
   onAiSnapshotChange,
   unreadChatCount = 0,
+  eagerLoad = false,
+  onInitialContentReady,
 }) => {
   const insets = useSafeAreaInsets();
   const [storyRings, setStoryRings] = useState([]);
-  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [storiesLoading, setStoriesLoading] = useState(eagerLoad);
   const [viewerRing, setViewerRing] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
   // Start already flipped to the Pi AI back face when returning from a listing
@@ -204,6 +205,7 @@ const Home = ({
   const [featureMediaLoading, setFeatureMediaLoading] = useState(true);
   const logoTapCountRef = useRef(0);
   const logoTapResetTimerRef = useRef(null);
+  const initialReadySentRef = useRef(false);
 
   // Consume the one-shot reopen flag once we've restored the flipped state.
   useEffect(() => {
@@ -245,12 +247,28 @@ const Home = ({
   }, []);
 
   useEffect(() => {
+    if (eagerLoad) {
+      loadStories();
+      loadFeatureProjectImage();
+      return undefined;
+    }
     const task = InteractionManager.runAfterInteractions(() => {
       loadStories();
       loadFeatureProjectImage();
     });
     return () => task.cancel();
-  }, [loadStories, loadFeatureProjectImage]);
+  }, [eagerLoad, loadStories, loadFeatureProjectImage]);
+
+  useEffect(() => {
+    if (!onInitialContentReady || initialReadySentRef.current) return;
+    if (storiesLoading || featureMediaLoading) return;
+    initialReadySentRef.current = true;
+    onInitialContentReady();
+  }, [
+    storiesLoading,
+    featureMediaLoading,
+    onInitialContentReady,
+  ]);
 
   const featureMedia = featureListing
     ? resolveListingHeroMedia(featureListing)
@@ -362,6 +380,43 @@ const Home = ({
     handleCloseViewer();
   }, [viewerRing, storyRings, handleCloseViewer]);
 
+  /** Previous ring in strip order (left → right on the home row). */
+  const handleAdvanceToPrevUser = useCallback(() => {
+    if (!viewerRing) return;
+    const currentIndex = storyRings.findIndex(
+      r => String(r.subscription_id) === String(viewerRing.subscription_id),
+    );
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (storyRings[i]?.slides?.length) {
+        setViewerRing(storyRings[i]);
+        return;
+      }
+    }
+  }, [viewerRing, storyRings]);
+
+  const viewerRingIndex = useMemo(() => {
+    if (!viewerRing?.subscription_id) return -1;
+    return storyRings.findIndex(
+      r => String(r.subscription_id) === String(viewerRing.subscription_id),
+    );
+  }, [viewerRing, storyRings]);
+
+  const viewerPrevRing = useMemo(() => {
+    if (viewerRingIndex <= 0) return null;
+    for (let i = viewerRingIndex - 1; i >= 0; i--) {
+      if (storyRings[i]?.slides?.length) return storyRings[i];
+    }
+    return null;
+  }, [viewerRingIndex, storyRings]);
+
+  const viewerNextRing = useMemo(() => {
+    if (viewerRingIndex < 0) return null;
+    for (let i = viewerRingIndex + 1; i < storyRings.length; i++) {
+      if (storyRings[i]?.slides?.length) return storyRings[i];
+    }
+    return null;
+  }, [viewerRingIndex, storyRings]);
+
   const handleCategorySelect = useCallback(
     category => {
       onOpenTikTokFeed?.(category);
@@ -380,13 +435,14 @@ const Home = ({
         accessibilityLabel="תפריט">
         <Image source={require('../assets/menu.png')} style={styles.menu} />
         {unreadChatCount > 0 ? (
-          <View
+          <Image
+            source={require('../assets/chat/plane.png')}
             style={styles.menuBadge}
+            resizeMode="contain"
             pointerEvents="none"
             accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants">
-            <MaterialCommunityIcons name="send" size={13} color="#1a1a2e" />
-          </View>
+            importantForAccessibility="no-hide-descendants"
+          />
         ) : null}
       </TouchableOpacity>
       <TouchableOpacity
@@ -554,8 +610,11 @@ const Home = ({
           <StoryViewerModal
             visible={viewerVisible}
             ring={viewerRing}
+            prevRing={viewerPrevRing}
+            nextRing={viewerNextRing}
             onClose={handleCloseViewer}
             onAdvanceToNextUser={handleAdvanceToNextUser}
+            onAdvanceToPrevUser={handleAdvanceToPrevUser}
             onOpenProfile={handleOpenStoryProfile}
           />
         </View>
@@ -598,20 +657,12 @@ const styles = StyleSheet.create({
   // Top-right of hamburger (forceRTL swaps left/right → `left` = physical right).
   menuBadge: {
     position: 'absolute',
-    top: -8,
-    left: -6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#5EEAD4',
-    alignItems: 'center',
-    justifyContent: 'center',
+    top: -10,
+    left: -8,
+    width: 26,
+    height: 26,
     zIndex: 2,
     elevation: 6,
-    shadowColor: '#5EEAD4',
-    shadowOffset: {width: 0, height: 0},
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
   },
   safeArea: {
     flex: 1,
@@ -621,7 +672,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 130,
     height: 122,
-    marginTop: -48,
+    marginTop: -36,
     resizeMode: 'contain',
   },
   content: {

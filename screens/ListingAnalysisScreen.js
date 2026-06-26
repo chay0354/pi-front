@@ -15,6 +15,8 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   brokerCategories,
   DEFAULT_MONTHLY_LISTING_QUOTA,
+  getPublishCategoriesStrip,
+  resolveListingCategoryFromEditProfileUi,
 } from '../utils/constant';
 import {getListings} from '../utils/api';
 import {flexStart} from '../utils/rtlLayout';
@@ -36,17 +38,6 @@ const ANALYSIS_ICON_BORDER_RADIUS = Math.round(
   (14 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE,
 );
 
-// Rows match Figma display order (id → label).
-const ANALYSIS_ROWS = [
-  {id: 1, label: 'חדש מקבלן'},
-  {id: 10, label: 'דירות'},
-  {id: 8, label: 'מסחר'},
-  {id: 2, label: 'משרדים'},
-  {id: 12, label: 'יוקרה'},
-  {id: 4, label: 'גלובל'},
-  {id: 6, label: 'מגזר דתי'},
-];
-
 const DEFAULT_LISTING_QUOTA = DEFAULT_MONTHLY_LISTING_QUOTA;
 
 /** Resolves subscription type from user + nested subscription (API shapes vary). */
@@ -67,9 +58,8 @@ function getUserSubscriptionTypeLower(user) {
   return String(raw).trim().toLowerCase();
 }
 
-const categoryMeta = id => brokerCategories.find(c => c.id === id) || null;
-
-const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
+const categoryMeta = listingCategoryId =>
+  brokerCategories.find(c => c.id === listingCategoryId) || null;
 
 /** Crops the category asset the same way EditPublishAdScreen does. */
 const CroppedCategoryImage = ({source, categoryId}) => {
@@ -108,6 +98,8 @@ const CroppedCategoryImage = ({source, categoryId}) => {
   );
 };
 
+const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
+
 const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
@@ -116,6 +108,18 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   // Only brokers have the monthly publish limit; everyone else publishes freely,
   // so the quota summary card is hidden for non-broker accounts.
   const isBrokerUser = getUserSubscriptionTypeLower(currentUser) === 'broker';
+
+  const subscriptionType = getUserSubscriptionTypeLower(currentUser);
+
+  const analysisRows = useMemo(
+    () =>
+      getPublishCategoriesStrip(subscriptionType).map(cat => ({
+        uiCategoryId: cat.id,
+        listingCategoryId: resolveListingCategoryFromEditProfileUi(cat.id),
+        label: cat.name,
+      })),
+    [subscriptionType],
+  );
 
   const quota =
     currentUser?.max_published_listings ??
@@ -152,8 +156,10 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   const {countsByCategory, activeTotal} = useMemo(() => {
     const active = listings.filter(l => !isListingFrozen(l));
     const byCat = {};
-    ANALYSIS_ROWS.forEach(r => {
-      byCat[r.id] = 0;
+    analysisRows.forEach(r => {
+      if (r.listingCategoryId != null) {
+        byCat[r.listingCategoryId] = 0;
+      }
     });
     active.forEach(l => {
       const cid = l.category != null ? parseInt(String(l.category), 10) : NaN;
@@ -165,7 +171,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
       }
     });
     return {countsByCategory: byCat, activeTotal: active.length};
-  }, [listings]);
+  }, [listings, analysisRows]);
 
   const remaining = Math.max(0, quota - activeTotal);
   const progress = quota > 0 ? Math.min(1, activeTotal / quota) : 0;
@@ -222,17 +228,17 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
             <Text style={styles.tableHeaderLeft}>פרסומים</Text>
           </View>
 
-          {ANALYSIS_ROWS.map((row, idx) => {
-            const meta = categoryMeta(row.id);
-            const count = countsByCategory[row.id] ?? 0;
+          {analysisRows.map((row, idx) => {
+            const meta = categoryMeta(row.listingCategoryId);
+            const count = countsByCategory[row.listingCategoryId] ?? 0;
             return (
-              <View key={row.id}>
+              <View key={row.uiCategoryId}>
                 <View style={styles.tableRow}>
                   <View style={styles.rowRight}>
                     {meta?.image ? (
                       <CroppedCategoryImage
                         source={meta.image}
-                        categoryId={row.id}
+                        categoryId={row.listingCategoryId}
                       />
                     ) : (
                       <View
@@ -266,7 +272,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
                     <Text style={styles.rowCount}>{count}</Text>
                   </View>
                 </View>
-                {idx < ANALYSIS_ROWS.length - 1 ? (
+                {idx < analysisRows.length - 1 ? (
                   <View style={styles.divider} />
                 ) : null}
               </View>

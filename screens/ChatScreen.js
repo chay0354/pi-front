@@ -47,7 +47,7 @@ import {
   updateGroupMemberRole,
   respondToExclusiveOffer,
 } from '../utils/api';
-import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
+import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
@@ -133,7 +133,6 @@ const isUserConversation = conv => conv && conv.id && conv.id !== '1';
 
 const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DEFAULT_CHAT_AVATAR = require('../assets/image-copy-10.png');
 const WELCOME_PI_AVATAR = require('../assets/chat/welcome-pi-avatar.png');
 /** Matches SharePostSheet fallback body — hide under bubble when post card is shown. */
 const SHARE_POST_DEFAULT_CAPTION = 'פוסט משותף';
@@ -413,7 +412,7 @@ const ChatScreen = ({
   const senderAvatarSource =
     !senderAvatarFailed && profileAvatarUrl
       ? {uri: profileAvatarUrl}
-      : DEFAULT_CHAT_AVATAR;
+      : DEFAULT_PI_PROFILE_AVATAR;
 
   const peerPhone =
     resolvedDisplay?.phone != null &&
@@ -709,8 +708,13 @@ const ChatScreen = ({
           res.phone != null && String(res.phone).trim() !== ''
             ? String(res.phone).trim()
             : null;
-        if (name || profileImageUrl || phone) {
-          setResolvedDisplay({name, profileImageUrl, phone});
+        if (name || profileImageUrl || phone || res.subscription_type) {
+          setResolvedDisplay({
+            name,
+            profileImageUrl,
+            phone,
+            subscriptionType: res.subscription_type || null,
+          });
         }
       })
       .catch(() => {});
@@ -1963,7 +1967,7 @@ const ChatScreen = ({
                     />
                   ) : (
                     <Image
-                      source={DEFAULT_CHAT_AVATAR}
+                      source={DEFAULT_PI_PROFILE_AVATAR}
                       style={styles.senderLogo}
                       resizeMode="cover"
                     />
@@ -2681,7 +2685,8 @@ const ChatScreen = ({
                 uri={profileAvatarUrl || null}
                 name={displayName}
                 size={40}
-                placeholderImage={DEFAULT_CHAT_AVATAR}
+                subscriptionType={resolvedDisplay || conversation}
+                placeholderImage={DEFAULT_PI_PROFILE_AVATAR}
               />
               <View style={styles.headerTitleWrap}>
                 <Text style={styles.headerTitle} numberOfLines={1}>
@@ -2826,7 +2831,7 @@ const ChatScreen = ({
                               />
                             ) : (
                               <Image
-                                source={require('../assets/image-copy-10.png')}
+                                source={DEFAULT_PI_PROFILE_AVATAR}
                                 style={styles.groupMemberAvatar}
                                 resizeMode="cover"
                               />
@@ -3365,7 +3370,7 @@ const ChatScreen = ({
                         source={
                           pic
                             ? {uri: pic}
-                            : require('../assets/image-copy-10.png')
+                            : DEFAULT_PI_PROFILE_AVATAR
                         }
                         style={styles.addMemberAvatar}
                         resizeMode="cover"
@@ -3385,6 +3390,7 @@ const ChatScreen = ({
         displayName={displayName}
         avatarUri={profileAvatarUrl}
         phone={peerPhone}
+        subscriptionType={resolvedDisplay}
       />
 
       <ChatGroupManageModal

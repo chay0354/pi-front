@@ -1,8 +1,14 @@
-import React, {useState, useEffect, useRef, useCallback} from 'react';
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import {
   StyleSheet,
   View,
-  ActivityIndicator,
+  Image,
   Text,
   Alert,
   AppState,
@@ -20,6 +26,7 @@ import {
 } from './utils/secureUserStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingFlow from './components/OnboardingOverlay';
+import SplashHomeIntroOverlay from './components/SplashHomeIntroOverlay';
 import {
   hasCompletedOnboarding,
   markOnboardingCompleted,
@@ -91,16 +98,17 @@ import {useFonts, loadAsync as loadFontsAsync} from 'expo-font';
 import {criticalFonts, deferredFonts} from './utils/fonts';
 import {schedulePreloadAppAssets} from './utils/preloadAppAssets';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const AppBootLoading = () => (
-  <View
-    style={{
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#1e1d27',
-    }}>
-    <ActivityIndicator size="large" color="#ffffff" />
+  <View style={styles.bootRoot}>
+    <Image
+      source={require('./assets/SplashScreen.png')}
+      style={StyleSheet.absoluteFillObject}
+      resizeMode="cover"
+    />
   </View>
 );
 
@@ -226,11 +234,20 @@ function App() {
     loadFontsAsync(deferredFonts).catch(() => {});
     return schedulePreloadAppAssets();
   }, [fontsLoaded]);
+
   const [appBootstrapDone, setAppBootstrapDone] = useState(false);
+  /** One-shot splash → home intro after onboarding + terms (Figma). */
+  const [showSplashIntro, setShowSplashIntro] = useState(false);
+  const [homeIntroReady, setHomeIntroReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   /** After onboarding: must accept terms before using the app. */
   const [showTermsGate, setShowTermsGate] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
+
+  useLayoutEffect(() => {
+    if (!fontsLoaded || !appBootstrapDone) return;
+    SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, appBootstrapDone]);
 
   // Real navigation history — fixes back/close getting stuck oscillating
   // between two screens (e.g. chat <-> userProfile) when each screen's
@@ -324,6 +341,10 @@ function App() {
   /** Where TikTok back button returns (home vs profile). */
   const [tikTokReturnScreen, setTikTokReturnScreen] = useState(screenName.home);
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
+  /** Subscription-level profile to restore after opening an ad from הנכסים שלי carousel. */
+  const [profileOverviewSnapshot, setProfileOverviewSnapshot] = useState(null);
+  /** Changes when drilling into a specific ad so UserProfile remounts at top. */
+  const [profileListingFocusKey, setProfileListingFocusKey] = useState('');
   const [profileReturnScreen, setProfileReturnScreen] = useState(
     screenName.tikTokFeed,
   );
@@ -479,9 +500,12 @@ function App() {
         setShowOnboarding(!onboardingDone);
         // Onboarding already done previously but terms not yet accepted → show the gate.
         setShowTermsGate(onboardingDone && !termsAccepted);
+        setShowSplashIntro(onboardingDone && termsAccepted);
+        setHomeIntroReady(false);
       } catch (error) {
         setCurrentScreen(screenName.home);
         setShowOnboarding(true);
+        setShowSplashIntro(false);
       } finally {
         setAppBootstrapDone(true);
       }
@@ -671,6 +695,70 @@ function App() {
     [openUserProfileForSubscription],
   );
 
+  const mergeListingWithProfileContext = useCallback((listing, base, extras = {}) => {
+    return {
+      ...listing,
+      ...extras,
+      subscription_id:
+        listing.subscription_id ||
+        listing.owner_id ||
+        base?.subscription_id ||
+        base?.owner_id,
+      owner_id:
+        listing.owner_id ||
+        listing.subscription_id ||
+        base?.owner_id ||
+        base?.subscription_id,
+      creator_name:
+        listing.creator_name ||
+        base?.creator_name ||
+        base?.name ||
+        base?.business_name ||
+        base?.broker_office_name,
+      creator_email:
+        listing.creator_email || base?.creator_email || base?.email,
+      creator_profile_image_url:
+        listing.creator_profile_image_url ||
+        getUserProfileImageUrl(base),
+      company_logo_url:
+        listing.company_logo_url || base?.company_logo_url || null,
+      subscription_type:
+        listing.subscription_type ||
+        listing.creator_subscription_type ||
+        base?.subscription_type,
+    };
+  }, []);
+
+  const openListingAdProfile = useCallback(
+    (listing, options = {}) => {
+      const listingId =
+        listing?.id != null ? String(listing.id).trim() : '';
+      if (!listingId) return;
+
+      const {
+        returnScreen = screenName.userProfile,
+        saveOverviewSnapshot = false,
+        profileExtras = {},
+      } = options;
+
+      const base = profileUser;
+      if (saveOverviewSnapshot && base && !isAdsListingRecord(base)) {
+        setProfileOverviewSnapshot(base);
+      }
+
+      const merged = mergeListingWithProfileContext(
+        listing,
+        base,
+        profileExtras,
+      );
+      setProfileReturnScreen(returnScreen);
+      setProfileListingFocusKey(listingId);
+      setProfileUser(enrichListingForUserProfile(merged));
+      setCurrentScreen(screenName.userProfile);
+    },
+    [mergeListingWithProfileContext, profileUser],
+  );
+
   const openCompanyReportFromProfile = useCallback(
     (forcedSubjectType = null) => {
       const u = profileUser;
@@ -763,8 +851,13 @@ function App() {
                 </Text>
               </View>
             )}
-            {currentScreen === screenName.home && (
+            {currentScreen === screenName.home ? (
+              <View style={styles.homeShell}>
               <Home
+                eagerLoad={
+                  showSplashIntro && !showOnboarding && !showTermsGate
+                }
+                onInitialContentReady={() => setHomeIntroReady(true)}
                 carouselCategoryId={selectedCategory}
                 onOpenSelectedProjects={() =>
                   setCurrentScreen(screenName.selectedProjects)
@@ -812,7 +905,17 @@ function App() {
                   currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
                 }
               />
-            )}
+              {showSplashIntro && !showOnboarding && !showTermsGate ? (
+                <SplashHomeIntroOverlay
+                  readyToDismiss={homeIntroReady}
+                  onComplete={() => {
+                    setShowSplashIntro(false);
+                    setHomeIntroReady(false);
+                  }}
+                />
+              ) : null}
+              </View>
+            ) : null}
             {currentScreen === screenName.tikTokFeed && (
               <TikTokFeedScreen
                 key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
@@ -1142,10 +1245,9 @@ function App() {
                     const returnTo = companyProjectsReturnScreen;
                     setCompanyProjectsContext(null);
                     setCompanyProjectsReturnScreen(screenName.selectedProjects);
-                    setCurrentScreen(returnTo);
+                    goBack(returnTo);
                   }}
                   onOpenListing={listing => {
-                    setProfileReturnScreen(screenName.companyProjects);
                     const ctx = companyProjectsContext;
                     const fromListing =
                       listing.creator_profile_image_url ||
@@ -1156,26 +1258,49 @@ function App() {
                       (fromListing && String(fromListing).trim()) ||
                       (ctx?.logo_url && String(ctx.logo_url).trim()) ||
                       null;
-                    setProfileUser({
-                      ...listing,
-                      _fromCompanyProjects: true,
-                      subscription_id: listing.subscription_id || ctx?.id,
-                      owner_id: listing.owner_id || ctx?.id,
-                      business_name: listing.business_name || ctx?.name,
-                      creator_name: listing.creator_name || ctx?.name,
-                      creator_profile_image_url: companyPic,
-                      company_logo_url:
-                        listing.company_logo_url || ctx?.logo_url || null,
-                      profile_picture_url:
-                        listing.profile_picture_url || ctx?.logo_url || null,
+                    openListingAdProfile(listing, {
+                      returnScreen: screenName.companyProjects,
+                      profileExtras: {
+                        _fromCompanyProjects: true,
+                        business_name:
+                          listing.business_name || ctx?.name || null,
+                        creator_name:
+                          listing.creator_name || ctx?.name || null,
+                        creator_profile_image_url: companyPic,
+                        company_logo_url:
+                          listing.company_logo_url || ctx?.logo_url || null,
+                        profile_picture_url:
+                          listing.profile_picture_url || ctx?.logo_url || null,
+                      },
                     });
-                    setCurrentScreen(screenName.userProfile);
                   }}
                 />
               )}
             {currentScreen === screenName.userProfile && (
               <UserProfileScreen
-                onClose={() => goBack(profileReturnScreen)}
+                key={
+                  profileListingFocusKey ||
+                  String(
+                    profileUser?.subscription_id ||
+                      profileUser?.owner_id ||
+                      profileUser?.id ||
+                      'profile',
+                  )
+                }
+                onClose={() => {
+                  if (
+                    profileOverviewSnapshot &&
+                    isAdsListingRecord(profileUser)
+                  ) {
+                    setProfileUser(profileOverviewSnapshot);
+                    setProfileOverviewSnapshot(null);
+                    setProfileListingFocusKey('');
+                    return;
+                  }
+                  setProfileOverviewSnapshot(null);
+                  setProfileListingFocusKey('');
+                  goBack(profileReturnScreen);
+                }}
                 onCall={phone => {
                   const u = profileUser;
                   const tel = String(
@@ -1292,6 +1417,12 @@ function App() {
                   setTikTokFeedRefreshKey(k => k + 1);
                   setCurrentScreen(screenName.tikTokFeed);
                 }}
+                onOpenListing={listing =>
+                  openListingAdProfile(listing, {
+                    returnScreen: screenName.userProfile,
+                    saveOverviewSnapshot: true,
+                  })
+                }
               />
             )}
             {currentScreen === screenName.profileReviews &&
@@ -1356,12 +1487,12 @@ function App() {
                   profileUser?.business_name ||
                   ''
                 }
-                onClose={() => setCurrentScreen(screenName.userProfile)}
-                onOpenListing={listing => {
-                  setProfileReturnScreen(screenName.userListings);
-                  setProfileUser(enrichListingForUserProfile(listing));
-                  setCurrentScreen(screenName.userProfile);
-                }}
+                onClose={() => goBack(screenName.userProfile)}
+                onOpenListing={listing =>
+                  openListingAdProfile(listing, {
+                    returnScreen: screenName.userListings,
+                  })
+                }
               />
             )}
             {currentScreen === screenName.cityFilter && (
@@ -1652,6 +1783,8 @@ function App() {
                     setCurrentScreen(screenName.userRegistration);
                     return;
                   }
+                  setEditPublishSourceCategory(null);
+                  setBnbPublishHostType(null);
                   setCurrentScreen(screenName.editPublishAd);
                 }}
                 onOpenChat={async () => {
@@ -1959,9 +2092,7 @@ function App() {
                 initialCategoryId={
                   editPublishSourceCategory != null
                     ? Number(editPublishSourceCategory)
-                    : selectedCategory
-                      ? parseInt(selectedCategory, 10)
-                      : 8
+                    : null
                 }
                 onOpenListingAnalysis={() =>
                   setCurrentScreen(screenName.listingAnalysis)
@@ -2030,7 +2161,12 @@ function App() {
                   }
                 }}
                 onRemove={listing => {
-                  if (typeof alert !== 'undefined') alert('הסרה – יישום בהמשך');
+                  const id = listing?.id ?? listing?.ad_number;
+                  if (id == null) return;
+                  const idStr = String(id);
+                  setUploadedListings(prev =>
+                    prev.filter(l => String(l.id ?? l.ad_number) !== idStr),
+                  );
                 }}
               />
             )}
@@ -2419,6 +2555,13 @@ export default function RootApp() {
 }
 
 const styles = StyleSheet.create({
+  bootRoot: {
+    flex: 1,
+    backgroundColor: '#1e1d27',
+  },
+  homeShell: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: '#1e1d27',

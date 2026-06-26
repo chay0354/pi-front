@@ -7,13 +7,15 @@ import Svg, {
   Stop,
   Circle,
 } from 'react-native-svg';
+import {resolveSubscriptionType, shouldShowProfileGoldRing} from '../utils/constant';
+import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 
 /**
  * Single source of truth for user profile photos with the gold gradient ring.
  *
  *   <ProfileAvatar uri={profileUrl} fallbackUri={companyLogoUrl} size={60} />
  *
- * Order: profile photo → fallbackUri (e.g. company logo) → initial letter.
+ * Order: profile photo → fallbackUri (e.g. company logo) → default no-profile image.
  *
  * Implementation notes:
  * - The gold gradient ring is drawn with an SVG <Circle stroke="url(#...)">.
@@ -23,8 +25,8 @@ import Svg, {
  *   consistent at any size.
  * - Use `ringColors` to override the gradient if a screen ever needs a
  *   different ring.
- * - Optional `placeholderImage` (e.g. require('...png')) when there is no
- *   `uri` or the remote image failed, instead of the default letter/icon.
+ * - Optional `placeholderImage` overrides the default no-profile image when there is no
+ *   `uri` or the remote image failed.
  */
 const RING_RATIO = 3.5 / 82; // gold band thickness
 const GAP_RATIO = 2 / 82; // transparent space between ring and photo
@@ -44,11 +46,12 @@ export const ProfileAvatar = ({
   size = 60,
   ringColors = DEFAULT_RING_COLORS,
   ringLocations = DEFAULT_RING_LOCATIONS,
+  subscriptionType,
   showRing = true,
   style,
   imageStyle,
   placeholderLabel,
-  placeholderImage,
+  placeholderImage = DEFAULT_PI_PROFILE_AVATAR,
   fallbackResizeMode = 'contain',
   onImageError,
 }) => {
@@ -76,6 +79,13 @@ export const ProfileAvatar = ({
   const showFallback = !showPrimary && Boolean(fallbackUri) && !fallbackFailed;
   const displayUri = showPrimary ? uri : showFallback ? fallbackUri : null;
   const displayResizeMode = showPrimary ? 'cover' : fallbackResizeMode;
+  const resolvedType = resolveSubscriptionType(subscriptionType);
+  const effectiveShowRing =
+    showRing === false
+      ? false
+      : resolvedType !== ''
+        ? shouldShowProfileGoldRing(resolvedType)
+        : showRing;
 
   const Photo = displayUri ? (
     <Image
@@ -110,7 +120,7 @@ export const ProfileAvatar = ({
     </View>
   );
 
-  if (!showRing) {
+  if (!effectiveShowRing) {
     return (
       <View
         style={[

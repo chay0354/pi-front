@@ -240,10 +240,13 @@ const UserProfileScreen = ({
   unreadChatCount = 0,
   /** Profile post grid (6 tiles): open TikTok feed scrolled to that listing. */
   onOpenPostInFeed = null,
+  /** הנכסים שלי / פרוייקטים נבחרים carousel: open that listing's ad profile. */
+  onOpenListing = null,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
   const bottom = insets.bottom;
+  const scrollRef = useRef(null);
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
   const isListingFromFeed =
     user && (isAdsListingRecord(user) || isPostListingRecord(user));
@@ -1040,6 +1043,23 @@ const UserProfileScreen = ({
     [onOpenPostInFeed],
   );
 
+  const handleMyPropertyPress = useCallback(
+    listing => {
+      const listingId =
+        listing?.id != null ? String(listing.id).trim() : '';
+      if (!listingId || typeof onOpenListing !== 'function') return;
+      onOpenListing(listing);
+    },
+    [onOpenListing],
+  );
+
+  useEffect(() => {
+    if (user?.id == null) return;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({y: 0, animated: false});
+    });
+  }, [user?.id]);
+
   /** >6: show all tiles (page ScrollView scrolls). ≤6: keep 2×3 grid with empty placeholders. */
   const postGridDisplayItems =
     recentPostGridImages.length > 6
@@ -1664,10 +1684,79 @@ const UserProfileScreen = ({
     showFixedCompanyHero || showFixedProHero || showFixedBackOnly;
 
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
+
+  const showProfileMessagingCta =
+    (isCompany || isBroker || isProfessional) &&
+    (!user?._fromTikTokPost || isCompany);
+
+  const renderProfileCtaSection = extraStyle => (
+    <View style={[styles.profileCtaSection, extraStyle]}>
+      <TouchableOpacity
+        style={styles.profileCtaWarningBtn}
+        onPress={handleReportPress}
+        activeOpacity={0.85}>
+        <Text style={styles.profileCtaWarningText}>דווח</Text>
+        <MaterialCommunityIcons
+          name="alert-outline"
+          size={22}
+          color="#F7F3E6"
+        />
+      </TouchableOpacity>
+      {showProfileMessagingCta ? (
+        <>
+          <View style={styles.profilePiChatWrap}>
+            <TouchableOpacity
+              style={styles.profileCtaChatImageOnlyBtn}
+              onPress={handleChatPress}
+              activeOpacity={0.85}>
+              <Image
+                source={require('../assets/menu/pichat.png')}
+                style={styles.profileCtaChatImageOnlyAsset}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+            {unreadChatCount > 0 ? (
+              <View
+                style={styles.profilePiChatBadge}
+                pointerEvents="none"
+                accessibilityRole="text"
+                accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+                <Text
+                  style={styles.profilePiChatBadgeText}
+                  numberOfLines={1}>
+                  {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={styles.profileCtaPhoneBtn}
+            onPress={handleCallPress}
+            activeOpacity={0.85}>
+            <Image
+              source={require('../assets/phone.png')}
+              style={styles.profileCtaPhoneIcon}
+              resizeMode="contain"
+            />
+            <Text
+              style={styles.profileCtaPhoneText}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              פנייה בטלפון {primaryContactPhone}
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+    </View>
+  );
+
   return (
     <View style={[styles.container, {paddingTop: heroNavPaddingTop}]}>
       <ScrollView
+        ref={scrollRef}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled={Platform.OS === 'android'}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -1697,6 +1786,7 @@ const UserProfileScreen = ({
                   uri={displayLogoSource?.uri}
                   name={displayName}
                   size={78}
+                  subscriptionType={resolvedCreator || user}
                   imageStyle={
                     Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
                   }
@@ -2597,6 +2687,8 @@ const UserProfileScreen = ({
                 <FlatList
                   data={userListings.filter(l => !isPostListingRecord(l))}
                   horizontal
+                  nestedScrollEnabled
+                  removeClippedSubviews={false}
                   showsHorizontalScrollIndicator={false}
                   style={styles.myPropertiesFlatList}
                   contentContainerStyle={styles.myPropertiesListContent}
@@ -2629,7 +2721,12 @@ const UserProfileScreen = ({
                         ''
                       ).trim() || '—';
                     return (
-                      <View style={styles.myPropertiesCard}>
+                      <TouchableOpacity
+                        style={styles.myPropertiesCard}
+                        activeOpacity={0.85}
+                        onPress={() => handleMyPropertyPress(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel="פתח מודעה">
                         <View style={styles.myPropertiesCardImageWrap}>
                           {firstImg ? (
                             <Image
@@ -2674,7 +2771,7 @@ const UserProfileScreen = ({
                             {location}
                           </Text>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   }}
                 />
@@ -2695,6 +2792,7 @@ const UserProfileScreen = ({
                   uri={contactLogo || undefined}
                   name={displayName}
                   size={100}
+                  subscriptionType={resolvedCreator || user}
                   style={styles.contactDetailsProfileAvatar}
                   imageStyle={
                     Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
@@ -2757,6 +2855,7 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
             </View>
+            {isCompany ? renderProfileCtaSection(styles.contactDetailsCtaSection) : null}
           </View>
         )}
         {!isRegularUserAdView && showListingContactAndReviews && (
@@ -2879,68 +2978,7 @@ const UserProfileScreen = ({
                 <View style={styles.contactDetailsDivider} />
               </View>
             ) : null}
-            <View style={styles.profileCtaSection}>
-              <TouchableOpacity
-                style={styles.profileCtaWarningBtn}
-                onPress={handleReportPress}
-                activeOpacity={0.85}>
-                <Text style={styles.profileCtaWarningText}>דווח</Text>
-                <MaterialCommunityIcons
-                  name="alert-outline"
-                  size={22}
-                  color="#F7F3E6"
-                />
-              </TouchableOpacity>
-              {(isCompany || isBroker || isProfessional) &&
-                (!user?._fromTikTokPost || isCompany) && (
-                  <>
-                    <View style={styles.profilePiChatWrap}>
-                      <TouchableOpacity
-                        style={styles.profileCtaChatImageOnlyBtn}
-                        onPress={handleChatPress}
-                        activeOpacity={0.85}>
-                        <Image
-                          source={require('../assets/menu/pichat.png')}
-                          style={styles.profileCtaChatImageOnlyAsset}
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                      {unreadChatCount > 0 ? (
-                        <View
-                          style={styles.profilePiChatBadge}
-                          pointerEvents="none"
-                          accessibilityRole="text"
-                          accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
-                          <Text
-                            style={styles.profilePiChatBadgeText}
-                            numberOfLines={1}>
-                            {unreadChatCount > 99
-                              ? '99+'
-                              : String(unreadChatCount)}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.profileCtaPhoneBtn}
-                      onPress={handleCallPress}
-                      activeOpacity={0.85}>
-                      <Image
-                        source={require('../assets/phone.png')}
-                        style={styles.profileCtaPhoneIcon}
-                        resizeMode="contain"
-                      />
-                      <Text
-                        style={styles.profileCtaPhoneText}
-                        numberOfLines={1}
-                        ellipsizeMode="tail">
-                        פנייה בטלפון {primaryContactPhone}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-            </View>
+            {!isCompany ? renderProfileCtaSection() : null}
           </View>
         ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
           <View style={styles.profileCtaSection}>
@@ -3593,6 +3631,11 @@ const styles = StyleSheet.create({
   },
   contactDetailsCopyBtn: {
     alignSelf: 'flex-end',
+  },
+  contactDetailsCtaSection: {
+    marginTop: 20,
+    marginHorizontal: 0,
+    width: '100%',
   },
   reviewsSection: {paddingHorizontal: 10, paddingBottom: 32},
   reviewsPiTitle: {

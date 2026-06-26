@@ -8,8 +8,7 @@ import {
   StyleSheet,
   Pressable,
   Platform,
-  Animated,
-  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
@@ -22,70 +21,171 @@ import {
 } from './index';
 
 const STORY_DURATION_MS = 12000;
+const MEDIA_READY_TIMEOUT_MS = 2500;
 
-/**
- * Full-screen story viewer: tap advances slide; progress segments at top.
- */
-const SCREEN_WIDTH = Dimensions.get('window').width;
+function preloadRingImages(ring) {
+  if (!ring?.slides?.length) return;
+  ring.slides.forEach(slide => {
+    const uri = slide?.media_url;
+    if (!uri || slide.media_type === 'video') return;
+    Image.prefetch(String(uri)).catch(() => {});
+  });
+  const avatar = ring.profile_image_url;
+  if (avatar) Image.prefetch(String(avatar)).catch(() => {});
+}
+
+function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
+  const webVideoRef = useRef(null);
+  const uri = slide?.media_url;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = webVideoRef.current;
+    if (!el || slide?.media_type !== 'video') return;
+    if (isPaused) {
+      el.pause();
+      return;
+    }
+    const playPromise = el.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {});
+    }
+  }, [isPaused, slide?.media_type, uri]);
+
+  if (!uri) {
+    return (
+      <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
+        <Text style={styles.placeholderText}>אין מדיה</Text>
+      </View>
+    );
+  }
+
+  if (slide.media_type === 'video') {
+    if (Platform.OS === 'web') {
+      return (
+        <View style={styles.mediaFullScreen}>
+          <video
+            ref={webVideoRef}
+            src={String(uri)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              backgroundColor: '#000',
+            }}
+            autoPlay={!isPaused}
+            muted={isMuted}
+            loop
+            playsInline
+            preload="auto"
+            onLoadedData={onReady}
+            onCanPlay={onReady}
+          />
+        </View>
+      );
+    }
+
+    return (
+      <Video
+        key={String(uri)}
+        source={{uri: String(uri)}}
+        style={styles.mediaFullScreen}
+        resizeMode={ResizeMode.CONTAIN}
+        shouldPlay={!isPaused}
+        isMuted={isMuted}
+        useNativeControls={false}
+        isLooping
+        onLoad={onReady}
+        onReadyForDisplay={onReady}
+      />
+    );
+  }
+
+  return (
+    <Image
+      key={String(uri)}
+      source={{uri: String(uri)}}
+      style={styles.mediaFullScreen}
+      resizeMode="cover"
+      onLoadEnd={onReady}
+      onError={onReady}
+    />
+  );
+}
 
 const StoryViewerModal = ({
   visible,
   ring,
+  prevRing = null,
+  nextRing = null,
   onClose,
   onAdvanceToNextUser,
+  onAdvanceToPrevUser,
   onOpenProfile,
 }) => {
   const insets = useSafeAreaInsets();
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(true);
   const timerRef = useRef(null);
   const startRef = useRef(0);
   const rafRef = useRef(null);
-  const videoRef = useRef(null);
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const prevRingIdRef = useRef(null);
+  const mediaReadyTimerRef = useRef(null);
+  const slideIndexRef = useRef(0);
 
   const slides = ring?.slides || [];
   const total = slides.length;
   const currentSlide = total ? slides[slideIndex] : null;
-  const currentIsVideo = currentSlide?.media_type === 'video';
+
+  slideIndexRef.current = slideIndex;
+
+  useEffect(() => {
+    preloadRingImages(ring);
+  }, [ring?.subscription_id]);
+
+  useEffect(() => {
+    preloadRingImages(prevRing);
+    preloadRingImages(nextRing);
+  }, [prevRing?.subscription_id, nextRing?.subscription_id]);
 
   useEffect(() => {
     if (!visible || !total) {
+      slideIndexRef.current = 0;
       setSlideIndex(0);
       setProgress(0);
-      setMediaReady(false);
-      prevRingIdRef.current = null;
-      slideAnim.setValue(0);
+      setMediaLoading(false);
       return;
     }
+    slideIndexRef.current = 0;
     setSlideIndex(0);
     setProgress(0);
-    setMediaReady(false);
-
-    const ringId = ring?.subscription_id;
-    if (
-      prevRingIdRef.current != null &&
-      ringId != null &&
-      prevRingIdRef.current !== ringId
-    ) {
-      slideAnim.setValue(SCREEN_WIDTH);
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 280,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      slideAnim.setValue(0);
-    }
-    prevRingIdRef.current = ringId ?? null;
-  }, [visible, ring?.subscription_id, total, slideAnim]);
+    setMediaLoading(true);
+  }, [visible, ring?.subscription_id, total]);
 
   useEffect(() => {
-    setMediaReady(false);
+    setMediaLoading(true);
+    if (mediaReadyTimerRef.current) {
+      clearTimeout(mediaReadyTimerRef.current);
+    }
+    mediaReadyTimerRef.current = setTimeout(() => {
+      setMediaLoading(false);
+    }, MEDIA_READY_TIMEOUT_MS);
+    return () => {
+      if (mediaReadyTimerRef.current) {
+        clearTimeout(mediaReadyTimerRef.current);
+        mediaReadyTimerRef.current = null;
+      }
+    };
   }, [slideIndex, currentSlide?.media_url]);
+
+  const handleMediaReady = useCallback(() => {
+    if (mediaReadyTimerRef.current) {
+      clearTimeout(mediaReadyTimerRef.current);
+      mediaReadyTimerRef.current = null;
+    }
+    setMediaLoading(false);
+  }, []);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -94,19 +194,37 @@ const StoryViewerModal = ({
     rafRef.current = null;
   }, []);
 
+  const advanceToNextUser = useCallback(() => {
+    if (onAdvanceToNextUser) {
+      onAdvanceToNextUser();
+      return;
+    }
+    onClose?.();
+  }, [onAdvanceToNextUser, onClose]);
+
+  const advanceToPrevUser = useCallback(() => {
+    if (prevRing && onAdvanceToPrevUser) {
+      onAdvanceToPrevUser();
+    }
+  }, [prevRing, onAdvanceToPrevUser]);
+
   const goNext = useCallback(() => {
-    setSlideIndex(i => {
-      if (i + 1 >= total) {
-        if (onAdvanceToNextUser) {
-          onAdvanceToNextUser();
-        } else {
-          onClose?.();
-        }
-        return i;
-      }
-      return i + 1;
-    });
-  }, [total, onClose, onAdvanceToNextUser]);
+    const i = slideIndexRef.current;
+    if (i + 1 >= total) {
+      advanceToNextUser();
+      return;
+    }
+    setSlideIndex(i + 1);
+  }, [total, advanceToNextUser]);
+
+  const goPrev = useCallback(() => {
+    const i = slideIndexRef.current;
+    if (i > 0) {
+      setSlideIndex(i - 1);
+      return;
+    }
+    advanceToPrevUser();
+  }, [advanceToPrevUser]);
 
   useEffect(() => {
     if (!visible || !ring || !total) return;
@@ -134,10 +252,6 @@ const StoryViewerModal = ({
     return clearTimers;
   }, [visible, slideIndex, total, goNext, clearTimers, ring]);
 
-  const onTapContent = useCallback(() => {
-    goNext();
-  }, [goNext]);
-
   const onPressProfile = useCallback(() => {
     if (!ring) return;
     clearTimers();
@@ -145,9 +259,6 @@ const StoryViewerModal = ({
   }, [ring, onOpenProfile, clearTimers]);
 
   if (!ring || total === 0) return null;
-
-  const slide = slides[slideIndex];
-  const uri = slide?.media_url;
 
   const overlayPadTop = Math.max(insets.top, Platform.OS === 'ios' ? 8 : 4);
 
@@ -159,48 +270,25 @@ const StoryViewerModal = ({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}>
       <View style={styles.root}>
-        {/* Tap anywhere to advance slide; last slide advances to next user (RTL strip order). */}
-        <Animated.View
-          style={[
-            styles.mediaTap,
-            {transform: [{translateX: slideAnim}]},
-          ]}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={onTapContent}>
-            {uri && currentIsVideo ? (
-              <Video
-                ref={videoRef}
-                source={{uri}}
-                style={[
-                  styles.mediaFullScreen,
-                  !mediaReady && styles.mediaUntilReady,
-                ]}
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay
-                isMuted={isMuted}
-                useNativeControls={false}
-                isLooping
-                onLoad={() => setMediaReady(true)}
-                onReadyForDisplay={() => setMediaReady(true)}
-              />
-            ) : uri ? (
-              <Image
-                source={{uri}}
-                style={[
-                  styles.mediaFullScreen,
-                  !mediaReady && styles.mediaUntilReady,
-                ]}
-                resizeMode="cover"
-                onLoadEnd={() => setMediaReady(true)}
-              />
-            ) : (
-              <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
-                <Text style={styles.placeholderText}>אין מדיה</Text>
-              </View>
-            )}
-          </Pressable>
-        </Animated.View>
+        <View style={styles.mediaLayer}>
+          <StorySlideMedia
+            slide={currentSlide}
+            isMuted={isMuted}
+            isPaused={false}
+            onReady={handleMediaReady}
+          />
+          {mediaLoading ? (
+            <View style={styles.loadingOverlay} pointerEvents="none">
+              <ActivityIndicator color="#FFFFFF" size="large" />
+            </View>
+          ) : null}
+        </View>
 
-        {/* Progress + header on top (Figma node 98:92) */}
+        <View style={styles.tapZones} pointerEvents="box-none">
+          <Pressable style={styles.tapZoneLeft} onPress={goPrev} />
+          <Pressable style={styles.tapZoneRight} onPress={goNext} />
+        </View>
+
         <LinearGradient
           colors={['rgba(0,0,0,0.4)', 'rgba(0,0,0,0)']}
           locations={[0, 1]}
@@ -246,6 +334,7 @@ const StoryViewerModal = ({
                 uri={ring.profile_image_url}
                 name={ring.display_name}
                 size={52}
+                subscriptionType={ring}
               />
               <Text style={styles.userName} numberOfLines={1}>
                 {ring.display_name || 'משתמש'}
@@ -277,7 +366,6 @@ const StoryViewerModal = ({
             </View>
           </View>
         </LinearGradient>
-
       </View>
     </Modal>
   );
@@ -288,15 +376,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  mediaTap: {
+  mediaLayer: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
   },
   mediaFullScreen: {
     width: '100%',
     height: '100%',
   },
-  mediaUntilReady: {
-    opacity: 0,
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  tapZones: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    zIndex: 5,
+  },
+  tapZoneLeft: {
+    flex: 1,
+  },
+  tapZoneRight: {
+    flex: 2,
   },
   overlayTop: {
     position: 'absolute',

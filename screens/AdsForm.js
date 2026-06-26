@@ -19,7 +19,6 @@ import {
   Dimensions,
   I18nManager,
   Alert,
-  KeyboardAvoidingView,
 } from 'react-native';
 import {FormScrollProvider, useFormScroll} from '../utils/formKeyboardScroll';
 import * as ImagePicker from 'expo-image-picker';
@@ -2692,16 +2691,13 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
   const {scrollRef, keyboardInset, onScroll} = useFormScroll();
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardAvoid}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}>
+    <View style={styles.keyboardAvoid}>
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingBottom: keyboardInset > 0 ? 12 : 24},
+          {paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 24},
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -2713,11 +2709,14 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
       <View
         style={[
           styles.publishFooter,
-          {paddingBottom: Math.max(bottomInset, 8)},
+          {
+            paddingBottom: Math.max(bottomInset, 8),
+            marginBottom: keyboardInset,
+          },
         ]}>
         {publishButton}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
