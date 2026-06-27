@@ -204,7 +204,7 @@ const ProfessionalListCard = ({professional, onPress}) => {
       onPress={onPress}
       activeOpacity={0.9}>
       <View style={[styles.listCardTopRow, listRtlDirection]}>
-        <ProfileAvatar uri={mediaUrl} name={title} size={78} />
+        <ProfileAvatar uri={mediaUrl} name={title} size={78} subscriptionType="professional" />
         <View style={[styles.listInfoCol, listRtlDirection]}>
           <View style={[styles.listTitleRow, listRtlDirection]}>
             <Text style={styles.listTitleText} numberOfLines={1}>

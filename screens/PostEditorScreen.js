@@ -790,10 +790,27 @@ const PostEditorScreen = ({
         return;
       }
 
+      let createdListing = null;
       if (publishTarget === 'story') {
         await createStory({subscription_id: subId, media_url: url});
+      } else if (hasVideoBackground) {
+        createdListing = await createListing({
+          category: resolvedPublishCategory,
+          status: 'published',
+          subscriptionId: subId,
+          subscriptionType: currentUser?.subscription_type || null,
+          videoUrl: url,
+          hasVideo: true,
+          feedDisplayPriority: 'video',
+          description: 'פוסט',
+          feedPost: true,
+          feed_post: true,
+          propertyType: 'post',
+          price: 0,
+          hashtags,
+        });
       } else {
-        await createListing({
+        createdListing = await createListing({
           category: resolvedPublishCategory,
           status: 'published',
           subscriptionId: subId,
@@ -808,7 +825,13 @@ const PostEditorScreen = ({
         });
       }
 
-      onPublish?.({url, publishTarget});
+      onPublish?.({
+        url,
+        publishTarget,
+        isVideo: hasVideoBackground,
+        category: resolvedPublishCategory,
+        id: createdListing?.id ?? createdListing?.listing?.id ?? null,
+      });
       onClose?.();
     } catch (error) {
       Alert.alert('שגיאה', error?.message || 'הפרסום נכשל');

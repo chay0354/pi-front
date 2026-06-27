@@ -33,6 +33,8 @@ const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const TEXT_SECONDARY = 'rgba(255,255,255,0.55)';
 const PLACEHOLDER = 'rgba(255,255,255,0.35)';
+/** Matches Pi Chat unread badge + menu notification teal */
+const CHAT_UNREAD_TEAL = '#5EEAD4';
 
 /** Field definitions per account type. Each: {key, label, placeholder, keyboardType?, multiline?} */
 function getFieldsForType(type) {
@@ -298,6 +300,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                 uri={photoUrl}
                 name={displayName}
                 size={104}
+                subscriptionType={currentUser}
                 fallbackResizeMode="contain"
               />
               <View style={styles.avatarEditBadge}>
@@ -436,7 +439,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#E8B34D',
+    backgroundColor: CHAT_UNREAD_TEAL,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

@@ -38,7 +38,7 @@ import {
   deleteChatConversation,
 } from '../utils/api';
 import * as ImagePicker from 'expo-image-picker';
-import {getUserProfileImageUrl, logProfilePic} from '../utils/userProfileImage';
+import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import ProfileAvatar from '../components/ProfileAvatar';
 
@@ -49,6 +49,8 @@ const CARD_BG = '#252436';
 const GOLD = '#D4AF37';
 /** Category chip on chat rows (e.g. דירות) */
 const CATEGORY_BADGE_BG = '#FFC40A';
+/** Matches Settings / chat list unread badge teal */
+const CHAT_UNREAD_TEAL = '#5EEAD4';
 const TEXT_LIGHT = 'rgba(255,255,255,0.55)';
 const SEARCH_CLUE = 'rgba(255,255,255,0.35)';
 const ROW_DIVIDER = '#373548';
@@ -246,14 +248,17 @@ function normalizeChatListAvatarUri(value) {
 }
 
 const CHAT_LIST_AVATAR_PX = 56;
-const CHAT_LIST_AVATAR_PLACEHOLDER = require('../assets/image-copy-10.png');
+const CHAT_LIST_AVATAR_PLACEHOLDER = DEFAULT_PI_PROFILE_AVATAR;
 
 /**
  * RN Web: `Image` often renders blank inside circular overflow + % sizes. Use DOM `img` with fixed px.
  */
-function ChatListRowAvatar({uri, debugKey, userRef}) {
+function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
   const trimmed = uri != null && String(uri).trim() ? String(uri).trim() : null;
   const [resolvedUri, setResolvedUri] = useState(trimmed);
+  const [resolvedSubscriptionType, setResolvedSubscriptionType] = useState(
+    subscriptionType || null,
+  );
   const [lookupTried, setLookupTried] = useState(false);
   const [useProxyStream, setUseProxyStream] = useState(false);
   const proxyBase = getResolvedApiUrl();
@@ -263,9 +268,10 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
       : resolvedUri;
   useEffect(() => {
     setResolvedUri(trimmed);
+    setResolvedSubscriptionType(subscriptionType || null);
     setLookupTried(false);
     setUseProxyStream(false);
-  }, [trimmed]);
+  }, [trimmed, subscriptionType]);
 
   useEffect(() => {
     logProfilePic(`ChatListRowAvatar.pull.${String(debugKey || 'row')}`, {
@@ -312,13 +318,21 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
         normalizeChatListAvatarUri(
           res?.profileImageUrl || res?.profile_picture_url || null,
         ) || null;
+      const subType =
+        res?.subscription_type != null && String(res.subscription_type).trim()
+          ? String(res.subscription_type).trim()
+          : null;
       logProfilePic(`ChatListRowAvatar.lookup.${String(debugKey || 'row')}`, {
         row: debugKey || null,
         userRef,
         apiSuccess: !!res?.success,
         apiProfileImageUrl: res?.profileImageUrl ?? null,
         fallbackUri: fallback,
+        subscriptionType: subType,
       });
+      if (subType) {
+        setResolvedSubscriptionType(subType);
+      }
       if (fallback && fallback !== resolvedUri) {
         setResolvedUri(fallback);
         setUseProxyStream(false);
@@ -345,6 +359,7 @@ function ChatListRowAvatar({uri, debugKey, userRef}) {
     <ProfileAvatar
       uri={sourceUri}
       size={CHAT_LIST_AVATAR_PX}
+      subscriptionType={resolvedSubscriptionType}
       placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
       onImageError={handleImageError}
     />
@@ -516,6 +531,7 @@ const ChatListScreen = ({
   onOpenChat,
   currentUser = null,
   refreshKey = 0,
+  piWelcomeRead = true,
 }) => {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
@@ -959,6 +975,8 @@ const ChatListScreen = ({
               : null,
           listingCategoryLabel: c.listingCategoryLabel || null,
           exclusiveOfferStatus: c.exclusiveOfferStatus || null,
+          unreadCount:
+            typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
         }));
         const cu = currentUserRef.current;
         logProfilePic('ChatListScreen.fetchConversations', {
@@ -1056,6 +1074,18 @@ const ChatListScreen = ({
       );
     },
     [currentUser?.email],
+  );
+
+  const getConversationUnreadCount = useCallback(
+    conv => {
+      if (!conv) return 0;
+      if (conv.id === '1' && !piWelcomeRead) {
+        return Math.max(Number(conv.unreadCount) || 0, 1);
+      }
+      const n = Number(conv.unreadCount);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    [piWelcomeRead],
   );
 
   const renderRowMeta = conv => {
@@ -1247,6 +1277,7 @@ const ChatListScreen = ({
                 conv.isGroup !== true &&
                 conv.id !== '1' &&
                 !!conv.otherUserEmail;
+              const unreadCount = getConversationUnreadCount(conv);
               return (
                 <SwipeableConversationRow
                   key={conv.id ?? conv.name ?? `conv-${index}`}
@@ -1274,6 +1305,18 @@ const ChatListScreen = ({
                         {conv.name != null ? String(conv.name) : 'משתמש'}
                       </Text>
                     </View>
+                    {unreadCount > 0 ? (
+                      <View
+                        style={styles.chatUnreadBadge}
+                        accessibilityRole="text"
+                        accessibilityLabel={`הודעות שלא נקראו: ${
+                          unreadCount > 99 ? 'יותר מ־99' : unreadCount
+                        }`}>
+                        <Text style={styles.chatUnreadBadgeText} numberOfLines={1}>
+                          {unreadCount > 99 ? '99+' : String(unreadCount)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </SwipeableConversationRow>
               );
@@ -1487,7 +1530,7 @@ const ChatListScreen = ({
                                   />
                                 ) : (
                                   <Image
-                                    source={require('../assets/image-copy-10.png')}
+                                    source={DEFAULT_PI_PROFILE_AVATAR}
                                     style={styles.ncChipAvatarImg}
                                     resizeMode="cover"
                                   />
@@ -1656,7 +1699,7 @@ const ChatListScreen = ({
                                   />
                                 ) : (
                                   <Image
-                                    source={require('../assets/image-copy-10.png')}
+                                    source={DEFAULT_PI_PROFILE_AVATAR}
                                     style={styles.ncBrokerAvatarImg}
                                     resizeMode="cover"
                                   />
@@ -1735,7 +1778,7 @@ const ChatListScreen = ({
                                       />
                                     ) : (
                                       <Image
-                                        source={require('../assets/image-copy-10.png')}
+                                        source={DEFAULT_PI_PROFILE_AVATAR}
                                         style={styles.ncBrokerAvatarImg}
                                         resizeMode="cover"
                                       />
@@ -1804,7 +1847,7 @@ const ChatListScreen = ({
                                   />
                                 ) : (
                                   <Image
-                                    source={require('../assets/image-copy-10.png')}
+                                    source={DEFAULT_PI_PROFILE_AVATAR}
                                     style={styles.ncBrokerAvatarImg}
                                     resizeMode="cover"
                                   />
@@ -2069,6 +2112,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexShrink: 0,
     gap: 12,
+    position: 'relative',
   },
   rowMain: {
     flex: 1,
@@ -2145,6 +2189,28 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     width: '100%',
     fontFamily: 'Rubik-Regular',
+  },
+  chatUnreadBadge: {
+    position: 'absolute',
+    left: 16,
+    top: 12,
+    minWidth: 24,
+    height: 24,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: CHAT_UNREAD_TEAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 7,
+    zIndex: 2,
+  },
+  chatUnreadBadgeText: {
+    color: '#1a1a2e',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: 'Rubik-Medium',
+    includeFontPadding: false,
+    textAlign: 'center',
   },
   avatarCol: {
     alignItems: 'center',

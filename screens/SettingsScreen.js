@@ -299,6 +299,7 @@ const SettingsScreen = ({
                   fallbackUri={settingsCompanyLogoUrl}
                   name={settingsProfileDisplayName}
                   size={82}
+                  subscriptionType={currentUser}
                   fallbackResizeMode="contain"
                 />
               </TouchableOpacity>
@@ -376,7 +377,6 @@ const SettingsScreen = ({
                         name={row?.name}
                         size={31}
                         showRing={false}
-                        placeholderImage={require('../assets/image-copy-10.png')}
                         imageStyle={styles.followingPreviewAvatar}
                       />
                     </View>

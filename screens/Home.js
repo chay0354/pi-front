@@ -22,7 +22,7 @@ import {
   resolveListingHeroMedia,
 } from '../utils/listingGridCardFigma';
 
-import {userCategories} from '../utils/constant';
+import {userCategories, DEFAULT_HOME_CAROUSEL_CATEGORY_ID} from '../utils/constant';
 import {flexStart} from '../utils/rtlLayout';
 
 const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
@@ -180,7 +180,7 @@ const Home = ({
   onOpenUserProfile,
   onOpenFeatureListing,
   onOpenStoryProfile,
-  carouselCategoryId = null,
+  carouselCategoryId = DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
   reopenAi = false,
   aiSnapshot = null,
   onAiReopenConsumed,
@@ -435,14 +435,17 @@ const Home = ({
         accessibilityLabel="תפריט">
         <Image source={require('../assets/menu.png')} style={styles.menu} />
         {unreadChatCount > 0 ? (
-          <Image
-            source={require('../assets/chat/plane.png')}
+          <View
             style={styles.menuBadge}
-            resizeMode="contain"
             pointerEvents="none"
             accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          />
+            importantForAccessibility="no-hide-descendants">
+            <Image
+              source={require('../assets/chat/plane.png')}
+              style={styles.menuBadgeImage}
+              resizeMode="contain"
+            />
+          </View>
         ) : null}
       </TouchableOpacity>
       <TouchableOpacity
@@ -663,6 +666,10 @@ const styles = StyleSheet.create({
     height: 26,
     zIndex: 2,
     elevation: 6,
+  },
+  menuBadgeImage: {
+    width: '100%',
+    height: '100%',
   },
   safeArea: {
     flex: 1,

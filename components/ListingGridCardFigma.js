@@ -31,6 +31,7 @@ import {
   shouldShowListingPiRating,
   shouldShowCommercialLogoBadge,
   getCompanyLogoUrlFromListing,
+  subscriptionTypeFromListing,
 } from '../utils/listingGridCardFigma';
 import {flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
 
@@ -212,6 +213,7 @@ const ListingGridCardFigma = ({
             <ProfileAvatar
               uri={profileUri}
               size={38}
+              subscriptionType={listing}
               imageStyle={
                 Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
               }

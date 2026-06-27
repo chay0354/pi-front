@@ -33,6 +33,7 @@ import CreateAdSheet, {
   CreateAdSheetRow,
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
+import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {getListings, getBoostQuota, boostListing, deleteListing} from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
@@ -47,10 +48,57 @@ const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 const LISTING_STAT_ICONS = {
   views: require('../assets/eye_icon.png'),
+  postLike: require('../assets/tiktok/likes.png'),
+  adLike: require('../assets/liked-ads/like.png'),
+  postComment: require('../assets/tiktok/comments.png'),
   adComment: require('../assets/chat_icon.png'),
 };
 
-const STAT_ICON_COLOR = '#D2D0DC';
+/** Same muted gray + transparency as eye_icon.png on edit-upload cards. */
+const STAT_ICON_STYLE = {
+  width: 22,
+  height: 22,
+  tintColor: '#848292',
+  opacity: 0.72,
+};
+
+const renderStatIcon = source => (
+  <Image source={source} style={STAT_ICON_STYLE} resizeMode="contain" />
+);
+
+const VIDEO_URL_REGEX = /\.(mp4|mov|webm|m4v|ogg)(\?|$)/i;
+
+const isVideoMediaUrl = url => {
+  if (url == null || url === '') return false;
+  const s = String(url).trim();
+  if (!s) return false;
+  if (VIDEO_URL_REGEX.test(s)) return true;
+  return /\/videos?\//i.test(s);
+};
+
+const getListingVideoUrl = listing => {
+  const fromVideos = listing?.listing_videos?.[0]?.video_url;
+  if (fromVideos && String(fromVideos).trim()) {
+    return String(fromVideos).trim();
+  }
+  if (listing?.video_url && String(listing.video_url).trim()) {
+    return String(listing.video_url).trim();
+  }
+  if (listing?.video?.uri && String(listing.video.uri).trim()) {
+    return String(listing.video.uri).trim();
+  }
+  const candidates = [
+    listing?.main_image_url,
+    listing?.image,
+    ...(Array.isArray(listing?.images)
+      ? listing.images.map(img =>
+          typeof img === 'string' ? img : img?.uri || img?.image_url,
+        )
+      : []),
+  ].filter(Boolean);
+  const legacyVideo = candidates.find(url => isVideoMediaUrl(url));
+  return legacyVideo ? String(legacyVideo).trim() : null;
+};
 
 const getListingEngagementStats = (listing, postRecord) => {
   const views = listing.views ?? listing.view_count ?? 0;
@@ -86,34 +134,20 @@ const ListingStatsRow = ({listing, postRecord, textStyle}) => {
   return (
     <View style={styles.statsRow}>
       <View style={styles.statItem}>
-        <Image
-          source={LISTING_STAT_ICONS.views}
-          style={styles.statIcon}
-          resizeMode="contain"
-        />
+        {renderStatIcon(LISTING_STAT_ICONS.views)}
         <Text style={[styles.statText, textStyle]}>{views}</Text>
       </View>
       <View style={styles.statItem}>
-        <MaterialCommunityIcons
-          name={postRecord ? 'thumb-up-outline' : 'heart-outline'}
-          size={22}
-          color={STAT_ICON_COLOR}
-        />
+        {renderStatIcon(
+          postRecord ? LISTING_STAT_ICONS.postLike : LISTING_STAT_ICONS.adLike,
+        )}
         <Text style={[styles.statText, textStyle]}>{likes}</Text>
       </View>
       <View style={styles.statItem}>
-        {postRecord ? (
-          <MaterialCommunityIcons
-            name="comment-outline"
-            size={22}
-            color={STAT_ICON_COLOR}
-          />
-        ) : (
-          <Image
-            source={LISTING_STAT_ICONS.adComment}
-            style={styles.statIcon}
-            resizeMode="contain"
-          />
+        {renderStatIcon(
+          postRecord
+            ? LISTING_STAT_ICONS.postComment
+            : LISTING_STAT_ICONS.adComment,
         )}
         <Text style={[styles.statText, textStyle]}>{comments}</Text>
       </View>
@@ -356,12 +390,23 @@ const EditPublishAdScreen = ({
             const imgs = l.listing_images || [];
             const main = imgs.find(i => i.image_type === 'main');
             const additional = imgs.filter(i => i.image_type === 'additional');
+            const listingVideos = l.listing_videos || [];
+            const videoUrl =
+              (l.video_url && String(l.video_url).trim()) ||
+              listingVideos[0]?.video_url ||
+              null;
             const images = [];
-            if (main?.image_url) images.push({uri: main.image_url});
+            if (main?.image_url && !isVideoMediaUrl(main.image_url)) {
+              images.push({uri: main.image_url});
+            }
             additional
-              .filter(i => i.image_url)
+              .filter(i => i.image_url && !isVideoMediaUrl(i.image_url))
               .forEach(i => images.push({uri: i.image_url}));
-            if (!images.length && l.main_image_url) {
+            if (
+              !images.length &&
+              l.main_image_url &&
+              !isVideoMediaUrl(l.main_image_url)
+            ) {
               images.push({uri: l.main_image_url});
             }
             return {
@@ -369,6 +414,11 @@ const EditPublishAdScreen = ({
               category: l.category,
               images,
               image: images[0]?.uri,
+              video_url: videoUrl,
+              listing_videos: listingVideos,
+              main_image_url: l.main_image_url,
+              feed_post: l.feed_post,
+              property_type: l.property_type,
               price: l.price,
               budget: l.budget,
               description: l.description,
@@ -493,14 +543,52 @@ const EditPublishAdScreen = ({
 
   const getFirstImage = listing => {
     if (listing.images && listing.images.length > 0) {
-      const img = listing.images[0];
-      return typeof img === 'string' ? {uri: img} : img;
+      for (const img of listing.images) {
+        const uri =
+          typeof img === 'string' ? img : img?.uri || img?.image_url || '';
+        if (uri && !isVideoMediaUrl(uri)) {
+          return typeof img === 'string' ? {uri: img} : img?.uri ? img : {uri};
+        }
+      }
     }
-    if (listing.image)
+    if (listing.image && !isVideoMediaUrl(listing.image)) {
       return typeof listing.image === 'number'
         ? listing.image
         : {uri: listing.image};
+    }
     return null;
+  };
+
+  const renderListingMedia = (listing, frameStyle, mediaStyle) => {
+    const videoUrl = getListingVideoUrl(listing);
+    if (videoUrl) {
+      return (
+        <VideoPreviewThumb
+          uri={videoUrl}
+          style={[frameStyle, {borderRadius: 0}]}
+          videoStyle={mediaStyle}
+        />
+      );
+    }
+    const imageSource = getFirstImage(listing);
+    if (imageSource) {
+      return (
+        <Image
+          source={imageSource}
+          style={mediaStyle}
+          resizeMode="cover"
+        />
+      );
+    }
+    return (
+      <View style={[mediaStyle, styles.adImagePlaceholder]}>
+        <MaterialCommunityIcons
+          name="image-off"
+          size={48}
+          color={TEXT_LIGHT}
+        />
+      </View>
+    );
   };
 
   const formatPrice = p => {
@@ -678,7 +766,6 @@ const EditPublishAdScreen = ({
 
   const renderListAdCard = ({item: listing}) => {
     const postRecord = isPostListingRecord(listing);
-    const imageSource = getFirstImage(listing);
     const exposure = computeExposureLevel(listing);
 
     return (
@@ -759,20 +846,10 @@ const EditPublishAdScreen = ({
           </View>
         </View>
         <View style={styles.adCardListRight}>
-          {imageSource ? (
-            <Image
-              source={imageSource}
-              style={styles.adCardListImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.adImagePlaceholder}>
-              <MaterialCommunityIcons
-                name="image-off"
-                size={48}
-                color={TEXT_LIGHT}
-              />
-            </View>
+          {renderListingMedia(
+            listing,
+            styles.adCardListImage,
+            styles.adCardListImage,
           )}
           <View style={styles.topRightTextWrap}>
             <Text style={styles.topRightText}>
@@ -798,27 +875,12 @@ const EditPublishAdScreen = ({
 
   const renderGridAdCard = ({item: listing, index}) => {
     const postRecord = isPostListingRecord(listing);
-    const imageSource = getFirstImage(listing);
     const exposure = computeExposureLevel(listing);
 
     return (
       <View style={styles.adCard}>
         <View style={styles.adImageWrap}>
-          {imageSource ? (
-            <Image
-              source={imageSource}
-              style={styles.adImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.adImagePlaceholder}>
-              <MaterialCommunityIcons
-                name="image-off"
-                size={48}
-                color={TEXT_LIGHT}
-              />
-            </View>
-          )}
+          {renderListingMedia(listing, styles.adImageWrap, styles.adImage)}
           {!postRecord || onEditPost ? (
             <TouchableOpacity
               style={styles.editBadge}
@@ -1627,7 +1689,6 @@ const styles = StyleSheet.create({
     left: 0,
   },
   statItem: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  statIcon: {width: 22, height: 22},
   statText: {
     color: '#D2D0DC',
     fontSize: 14,

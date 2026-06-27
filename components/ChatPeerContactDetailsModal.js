@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar} from './ProfileAvatar';
+import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 
 /** Matches Figma main-deep-blue / blue-100 */
 const BG = '#1e1d27';
@@ -21,7 +22,7 @@ const NAME_COLOR = '#f7f3e6';
 const LABEL_SECONDARY = '#d2d0dc';
 const WHITE = '#ffffff';
 
-const DEFAULT_AVATAR = require('../assets/image-copy-10.png');
+const DEFAULT_AVATAR = DEFAULT_PI_PROFILE_AVATAR;
 const PHONE_ASSET = require('../assets/pi-chat/phone.png');
 
 const toTelUrl = (raw) => {
@@ -40,6 +41,7 @@ const ChatPeerContactDetailsModal = ({
   displayName,
   avatarUri,
   phone,
+  subscriptionType,
 }) => {
   const name =
     displayName != null && String(displayName).trim()
@@ -89,6 +91,7 @@ const ChatPeerContactDetailsModal = ({
                 uri={avatarUri || null}
                 name={name}
                 size={117}
+                subscriptionType={subscriptionType}
                 placeholderImage={DEFAULT_AVATAR}
               />
               <Text style={styles.displayName} numberOfLines={2}>

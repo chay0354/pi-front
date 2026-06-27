@@ -1060,11 +1060,20 @@ const UserProfileScreen = ({
     });
   }, [user?.id]);
 
-  /** >6: show all tiles (page ScrollView scrolls). ≤6: keep 2×3 grid with empty placeholders. */
-  const postGridDisplayItems =
-    recentPostGridImages.length > 6
-      ? recentPostGridImages
-      : Array.from({length: 6}, (_, i) => recentPostGridImages[i] || null);
+  /** >6: show all tiles (ScrollView scrolls). Otherwise pad only the last row — no extra empty row. */
+  const postGridDisplayItems = (() => {
+    const posts = recentPostGridImages;
+    if (posts.length > 6) return posts;
+    if (posts.length === 0) {
+      return Array.from({length: 6}, () => null);
+    }
+    const remainder = posts.length % 3;
+    if (remainder === 0) return posts;
+    return [
+      ...posts,
+      ...Array.from({length: 3 - remainder}, () => null),
+    ];
+  })();
 
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
@@ -1190,7 +1199,6 @@ const UserProfileScreen = ({
   const shouldShowFollowPlus =
     !!viewedSubscriptionId &&
     !isOwnProfile &&
-    !isRegularUserAccount &&
     (viewerLoggedIn
       ? !followStatusLoading &&
         !!currentSubscriptionId &&
@@ -1205,7 +1213,6 @@ const UserProfileScreen = ({
       }
       return;
     }
-    if (isRegularUserAccount) return;
     if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest)
       return;
     setSendingFollowRequest(true);
@@ -1906,15 +1913,18 @@ const UserProfileScreen = ({
                       return (
                         <View
                           key={`post-grid-ph-${i}`}
-                          style={[
-                            styles.lastAdGridItem,
-                            styles.lastAdGridPlaceholderCell,
-                          ]}>
-                          <MaterialCommunityIcons
-                            name="camera-outline"
-                            size={24}
-                            color="rgba(255,255,255,0.45)"
-                          />
+                          style={styles.lastAdGridItem}>
+                          <View
+                            style={[
+                              styles.lastAdGridItemInner,
+                              styles.lastAdGridPlaceholderCell,
+                            ]}>
+                            <MaterialCommunityIcons
+                              name="camera-outline"
+                              size={24}
+                              color="rgba(255,255,255,0.45)"
+                            />
+                          </View>
                         </View>
                       );
                     }
@@ -1927,7 +1937,7 @@ const UserProfileScreen = ({
                           onPress={() => handlePostGridPress(item)}>
                           <View
                             style={[
-                              styles.lastAdGridImage,
+                              styles.lastAdGridItemInner,
                               styles.lastAdGridVideoCell,
                             ]}>
                             <MaterialCommunityIcons
@@ -1945,11 +1955,13 @@ const UserProfileScreen = ({
                         style={styles.lastAdGridItem}
                         activeOpacity={0.85}
                         onPress={() => handlePostGridPress(item)}>
-                        <Image
-                          source={{uri: item.uri}}
-                          style={styles.lastAdGridImage}
-                          resizeMode="cover"
-                        />
+                        <View style={styles.lastAdGridItemInner}>
+                          <Image
+                            source={{uri: item.uri}}
+                            style={styles.lastAdGridImage}
+                            resizeMode="cover"
+                          />
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -3971,12 +3983,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
   },
-  // aspectRatio = width/height; below 1 yields taller cells than 1:1 (opened-from-post grid).
+  // Outer cell holds gutter padding; inner holds aspectRatio (padding+aspectRatio on one view clips bottoms).
   lastAdGridItem: {
     width: '33.3333%',
-    aspectRatio: 0.78,
-    // Uniform gutter so vertical and horizontal gaps between tiles match (1px padding -> 2px gap each way).
     padding: 1,
+  },
+  // aspectRatio = width/height; below 1 yields taller cells than 1:1 (opened-from-post grid).
+  lastAdGridItemInner: {
+    width: '100%',
+    aspectRatio: 0.78,
+    overflow: 'hidden',
   },
   lastAdGridPlaceholderCell: {
     alignItems: 'center',

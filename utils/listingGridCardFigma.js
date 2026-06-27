@@ -308,8 +308,18 @@ export const isRateableSubscriptionType = type => {
   return t === 'company' || t === 'broker' || t === 'professional';
 };
 
-/** Follow + is only for B2B accounts — not regular `user` subscribers. */
-export const isFollowableSubscriptionType = isRateableSubscriptionType;
+/** Any subscription type can be followed (including regular `user`). */
+export const isFollowableSubscriptionType = type => {
+  const t = String(type || '')
+    .toLowerCase()
+    .trim();
+  return (
+    t === 'user' ||
+    t === 'company' ||
+    t === 'broker' ||
+    t === 'professional'
+  );
+};
 
 export const isFollowableListing = listing =>
   isFollowableSubscriptionType(subscriptionTypeFromListing(listing));

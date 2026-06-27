@@ -317,6 +317,9 @@ export const userCategories = [
   },
 ];
 
+/** Home carousel always opens with דירות centered. */
+export const DEFAULT_HOME_CAROUSEL_CATEGORY_ID = 10;
+
 export const categoriesEditProfile = [
   {
     id: 9,

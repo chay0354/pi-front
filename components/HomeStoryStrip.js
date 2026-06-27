@@ -28,6 +28,7 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
         uri={ring.profile_image_url}
         name={ring.display_name}
         size={OUTER}
+        subscriptionType={ring}
       />
       <Text style={styles.label} numberOfLines={1}>
         {ring.display_name || 'משתמש'}

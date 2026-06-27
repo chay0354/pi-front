@@ -17,6 +17,8 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
 import {isFollowableSubscriptionType} from '../utils/listingGridCardFigma';
+import {shouldShowProfileGoldRing} from '../utils/constant';
+import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 
 import {
   getFollowHubRows,
@@ -303,6 +305,7 @@ const FollowHubScreen = ({
    * Following: you already follow; is_mutual means they also follow you.
    */
   const isMutualGoldRow = row => {
+    if (!shouldShowProfileGoldRing(row)) return false;
     if (!isOwnProfile) return false;
     if (activeTab !== TAB_FOLLOWERS && activeTab !== TAB_FOLLOWING)
       return false;
@@ -563,7 +566,9 @@ const FollowHubScreen = ({
             <Text style={styles.emptyText}>אין נתונים להצגה</Text>
           </View>
         ) : (
-          displayRows.map(row => (
+          displayRows.map(row => {
+            const showGoldRing = shouldShowProfileGoldRing(row);
+            return (
             <View
               key={`${activeTab}-${row.id}`}
               style={[
@@ -577,8 +582,11 @@ const FollowHubScreen = ({
                 onPress={() => onOpenUserProfile && onOpenUserProfile(row)}>
                 <View
                   style={[
-                    styles.avatarRing,
-                    isMutualGoldRow(row) ? styles.avatarRingMutual : null,
+                    styles.avatarOuter,
+                    showGoldRing && styles.avatarRing,
+                    showGoldRing && isMutualGoldRow(row)
+                      ? styles.avatarRingMutual
+                      : null,
                   ]}>
                   {row.image_url ? (
                     <Image
@@ -587,13 +595,11 @@ const FollowHubScreen = ({
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <MaterialCommunityIcons
-                        name="account"
-                        size={18}
-                        color="rgba(255,255,255,0.6)"
-                      />
-                    </View>
+                    <Image
+                      source={DEFAULT_PI_PROFILE_AVATAR}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
                   )}
                 </View>
                 <View style={styles.rowInfo}>
@@ -635,7 +641,8 @@ const FollowHubScreen = ({
               </TouchableOpacity>
               {renderActionButton(row)}
             </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
@@ -939,14 +946,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
   },
-  avatarRing: {
+  avatarOuter: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    borderWidth: 2,
-    borderColor: '#FFC40A',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarRing: {
+    borderWidth: 2,
+    borderColor: '#FFC40A',
   },
   avatarRingMutual: {
     borderWidth: 3,

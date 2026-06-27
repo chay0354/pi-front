@@ -13,9 +13,10 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Audio} from 'expo-av';
 import {forceLtrStyle, hebrewTextAlign} from '../utils/rtlLayout';
+import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 
 const VOICE_WAVE_BAR_COUNT = 28;
-const DEFAULT_CHAT_AVATAR = require('../assets/image-copy-10.png');
+const DEFAULT_CHAT_AVATAR = DEFAULT_PI_PROFILE_AVATAR;
 // On native force-RTL, authored `left` becomes physical-right (and vice-versa).
 // Anchoring the fill/scrubber on the physical LEFT therefore needs `right` here.
 const WAVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;

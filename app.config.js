@@ -48,7 +48,7 @@ module.exports = {
   expo: {
     name: 'pi 2701',
     slug: 'pi-frontend',
-    version: '1.0.0',
+    version: '1.0.2',
     scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/app-icon/icon.png',
@@ -87,7 +87,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 13,
+      versionCode: 15,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
@@ -134,8 +134,8 @@ module.exports = {
           android: {
             // Only needed for local dev against http://localhost — never ship to production.
             usesCleartextTraffic: process.env.NODE_ENV !== 'production',
-            compileSdkVersion: 34,
-            targetSdkVersion: 34,
+            compileSdkVersion: 35,
+            targetSdkVersion: 35,
             minSdkVersion: 23,
             ndkVersion: '26.1.10909125',
             kotlinVersion: '1.8.22',

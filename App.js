@@ -81,7 +81,7 @@ import {
 import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
 import {ContextHook} from './hooks/ContextHook';
 import {PresenceProvider} from './hooks/PresenceContext';
-import {subscriptionTypes} from './utils/constant';
+import {subscriptionTypes, DEFAULT_HOME_CAROUSEL_CATEGORY_ID} from './utils/constant';
 import {getChatUnreadCount, getListings, getCurrentUser, toSubscriptionId} from './utils/api';
 import {
   getUserProfileImageUrl,
@@ -858,7 +858,7 @@ function App() {
                   showSplashIntro && !showOnboarding && !showTermsGate
                 }
                 onInitialContentReady={() => setHomeIntroReady(true)}
-                carouselCategoryId={selectedCategory}
+                carouselCategoryId={DEFAULT_HOME_CAROUSEL_CATEGORY_ID}
                 onOpenSelectedProjects={() =>
                   setCurrentScreen(screenName.selectedProjects)
                 }
@@ -1660,6 +1660,31 @@ function App() {
                         postEditorConfig.publishTarget === 'story',
                     });
                   }
+                  if (
+                    postEditorConfig.returnScreen === screenName.editPublishAd &&
+                    payload?.url &&
+                    postEditorConfig.publishTarget === 'post'
+                  ) {
+                    const categoryRaw =
+                      payload.category ?? postEditorConfig.listingCategoryId;
+                    const categoryNum =
+                      categoryRaw != null ? parseInt(String(categoryRaw), 10) : NaN;
+                    setUploadedListings(prev => [
+                      ...prev,
+                      {
+                        id: payload.id,
+                        category: Number.isFinite(categoryNum)
+                          ? categoryNum
+                          : categoryRaw,
+                        video_url: payload.isVideo ? payload.url : null,
+                        images: payload.isVideo ? [] : [payload.url],
+                        image: payload.isVideo ? null : payload.url,
+                        description: 'פוסט',
+                        feed_post: true,
+                        property_type: 'post',
+                      },
+                    ]);
+                  }
                   if (postEditorConfig.publishTarget === 'post') {
                     setTimeout(() => {
                       setTikTokFeedRefreshKey(prev => prev + 1);
@@ -2175,6 +2200,7 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.settings)}
                 currentUser={currentUser}
                 refreshKey={chatListRefreshKey}
+                piWelcomeRead={piWelcomeRead}
                 onOpenChat={conv => {
                   setSelectedConversation(conv);
                   setChatReturnScreen(screenName.chatList);

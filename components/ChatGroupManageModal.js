@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar} from './ProfileAvatar';
+import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {flexEnd} from '../utils/rtlLayout';
 
 const BG = '#1e1d27';
@@ -24,7 +25,7 @@ const NAME_COLOR = '#f7f3e6';
 const LABEL = '#d2d0dc';
 const WHITE = '#ffffff';
 const CARD = '#252436';
-const DEFAULT_AVATAR = require('../assets/image-copy-10.png');
+const DEFAULT_AVATAR = DEFAULT_PI_PROFILE_AVATAR;
 
 const GROUP_FALLBACK = require('../assets/pi-chat/igroupicon-big.png');
 
@@ -405,6 +406,7 @@ const ChatGroupManageModal = ({
                       uri={pic || null}
                       name={display}
                       size={48}
+                      subscriptionType={m}
                       placeholderImage={DEFAULT_AVATAR}
                     />
                     <View style={[styles.memberMid, {alignItems: flexEnd}]}>

@@ -18,7 +18,10 @@ import {
   Animated,
   Vibration,
 } from 'react-native';
-import {userCategories} from '../utils/constant';
+import {
+  userCategories,
+  DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+} from '../utils/constant';
 
 const TICK_MIN_GAP_MS = 10;
 /** Short pulse so rapid category ticks don't queue/block on Android during fast swipes. */
@@ -57,8 +60,8 @@ function fireCarouselHaptic(crossed = 1) {
 
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
-const CATEGORY_SIDE_SCALE_X = 0.64;
-const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
+/** Side slots stay at this scale; only the centered item renders at 1.0. */
+const CATEGORY_SIDE_SCALE = 0.64;
 
 const LOOP_COPIES = 7;
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
@@ -266,15 +269,18 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
     // offset > 0: item is to the right of viewport center; < 0: to the left
     const offset = Animated.subtract(staticOffset, scrollAnim);
     const iW = itemWidth;
-    const scale = offset.interpolate({
-      inputRange: [-2 * iW, -iW, 0, iW, 2 * iW],
-      outputRange: [CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X, 1, CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X],
-      extrapolate: 'clamp',
-    });
 
-    const translateY = offset.interpolate({
-      inputRange: [-iW, 0, iW],
-      outputRange: [0, -2, 0],
+    // Step scale: sides fixed at CATEGORY_SIDE_SCALE, full size only at center
+    // (no gradual grow/shrink while scrolling between slots).
+    const scale = offset.interpolate({
+      inputRange: [-iW, -0.06 * iW, 0, 0.06 * iW, iW],
+      outputRange: [
+        CATEGORY_SIDE_SCALE,
+        CATEGORY_SIDE_SCALE,
+        1,
+        CATEGORY_SIDE_SCALE,
+        CATEGORY_SIDE_SCALE,
+      ],
       extrapolate: 'clamp',
     });
 
@@ -307,7 +313,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
     });
 
     return {
-      wrapperStyle: {transform: [{scale}, {translateY}], opacity: overallOpacity},
+      wrapperStyle: {transform: [{scale}], opacity: overallOpacity},
       centerOpacity: centerOp,
       leftOpacity: leftOp,
       rightOpacity: rightOp,
@@ -384,6 +390,10 @@ const Carusel = ({
       const idx = list.findIndex(c => Number(c.id) === target);
       if (idx >= 0) return idx;
     }
+    const defaultIdx = list.findIndex(
+      c => Number(c.id) === DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+    );
+    if (defaultIdx >= 0) return defaultIdx;
     return Math.min(2, Math.max(0, listLength - 1));
   }, [list, listLength, initialCategoryId]);
   const initialVirtualIndex = infiniteLoop
