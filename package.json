@@ -23,6 +23,7 @@
     "web:fresh": "powershell -ExecutionPolicy Bypass -File scripts/start-web-fresh.ps1",
     "open-web": "start http://localhost:8084",
     "build:apk": "node scripts/clean-dist-for-eas.js && npx eas-cli@latest build --platform android --profile preview --non-interactive",
+    "build:bundle": "node scripts/clean-dist-for-eas.js && cd android && gradlew.bat bundleRelease",
     "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1"
   },
   "dependencies": {

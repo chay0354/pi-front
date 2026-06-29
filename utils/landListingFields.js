@@ -60,7 +60,7 @@ const LAND_ATTR_CHIPS = [
     id: 'mortgage',
     iconSource: LAND_ATTR_ICONS.ownershipAdmin,
     when: ({mortgage}) => mortgage === 'yes',
-    label: () => 'קרקע במושב',
+    label: () => 'קרקע במושע',
   },
   {
     id: 'permit',

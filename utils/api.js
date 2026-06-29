@@ -2757,14 +2757,18 @@ export async function createSalesImageStory({imageUrl, subscriptionId}) {
  * Home row: subscriptions with profile video (video_url), verified/active
  * @returns {Promise<{ success: boolean, rings?: Array }>}
  */
-export const getStoriesFeed = async () => {
-  const response = await apiFetch(`${apiBase()}/api/stories/feed`, {
-    method: 'GET',
-    headers: {'Content-Type': 'application/json'},
-  });
+export const getStoriesFeed = async ({limit = 80} = {}) => {
+  const safeLimit = Math.min(80, Math.max(1, Number(limit) || 80));
+  const response = await apiFetch(
+    `${apiBase()}/api/stories/feed?limit=${safeLimit}`,
+    {
+      method: 'GET',
+      headers: {'Content-Type': 'application/json'},
+    },
+  );
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return {success: false, rings: [], error: data.error};
+    return {success: false, rings: null, error: data.error};
   }
   return data;
 };

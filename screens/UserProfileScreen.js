@@ -49,7 +49,10 @@ import {
   formatCompanyBuildingsLabel,
   formatCompanyFloorsLabel,
   formatPriceHe,
+  firstImageUrl,
+  firstVideoUrl,
 } from '../utils/listingGridCardFigma';
+import {resolveFeedVideoPosterUri} from '../utils/feedVideoPreload';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   HERO_NAV_BACK_XML,
@@ -79,6 +82,12 @@ const CONSTRUCTION_STATUS_STEPS = [
 ];
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
+const POST_GRID_COLUMNS = 3;
+const POST_GRID_ROWS = 2;
+const POST_GRID_PAGE_SIZE = POST_GRID_COLUMNS * POST_GRID_ROWS;
+const POST_GRID_CELL_WIDTH = SCREEN_WIDTH / POST_GRID_COLUMNS;
+const POST_GRID_ROW_HEIGHT = POST_GRID_CELL_WIDTH / 0.78;
+const POST_GRID_PAGE_HEIGHT = POST_GRID_ROW_HEIGHT * POST_GRID_ROWS + 2;
 const LAST_AD_IMAGE_HEIGHT = 320;
 const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padding 24*2, gap 10
 
@@ -88,6 +97,31 @@ const lastAdImageEndPlaceholder = require('../assets/improve/end.png');
 const piBadgeSource = require('../assets/pi-badge.png');
 const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
 const logoPiAi = require('../assets/paiailogo.png');
+const postGridViewIcon = require('../assets/tiktok/views.png');
+
+const formatPostViewCount = n => {
+  const num = Number(n) || 0;
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  if (num >= 1000) {
+    return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  return String(num);
+};
+
+const getListingViewCount = listing =>
+  Number(listing?.view_count ?? listing?.views ?? 0) || 0;
+
+const isVideoLikeMediaUrl = url => {
+  const s = String(url || '')
+    .trim()
+    .toLowerCase();
+  if (!s) return true;
+  if (/\.(mp4|webm|mov|m4v|mkv)(\?|#|$)/i.test(s)) return true;
+  if (/\/videos?\//i.test(s)) return true;
+  return false;
+};
 
 const isWeb = Platform.OS === 'web';
 const baseUrl =
@@ -263,7 +297,12 @@ const UserProfileScreen = ({
         };
 
   // [UserProfile] Log how we resolve user details (filter console by "UserProfile" to see)
-  const creatorId = user?.subscription_id || user?.owner_id;
+  const creatorId = toSubscriptionId(
+    user?.subscription_id ||
+      user?.owner_id ||
+      user?.id ||
+      (!isListingFromFeed ? profile?.id : null),
+  );
   if (__DEV__ && isListingFromFeed && user) {
     // console.log('[UserProfile] Incoming listing (user):', {
     //   listingId: user?.id,
@@ -286,14 +325,7 @@ const UserProfileScreen = ({
     setResolvedCreator(null);
   }, [user?.id, creatorId]);
   useEffect(() => {
-    if (!isListingFromFeed || !creatorId) {
-      if (__DEV__ && isListingFromFeed) {
-        // console.log(
-        //   '[UserProfile] Skip fetch: creatorId=',
-        //   creatorId,
-        //   '(no subscription_id/owner_id on listing)',
-        // );
-      }
+    if (!creatorId) {
       return;
     }
     // Clear 404 cache so we refetch when opening profile (e.g. get updated description)
@@ -439,7 +471,7 @@ const UserProfileScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [isListingFromFeed, creatorId, user?.id]);
+  }, [creatorId, user?.id]);
 
   // Fetch this user's listings for "הנכסים שלי" section
   useEffect(() => {
@@ -962,7 +994,6 @@ const UserProfileScreen = ({
   })();
   const openedFromPost = isPostListingRecord(user);
   const recentPostGridImages = (() => {
-    if (!openedFromPost) return [];
     const rows = Array.isArray(userListings) ? [...userListings] : [];
     if (user && isPostListingRecord(user)) {
       rows.unshift(user);
@@ -983,7 +1014,9 @@ const UserProfileScreen = ({
     });
     const isPlaceholderUri = u =>
       !u || /^text-post-placeholder$/i.test(String(u).trim());
-    const firstImageFor = item => {
+    const pickStillPosterUri = item => {
+      const fromFeed = resolveFeedVideoPosterUri(item);
+      if (fromFeed && !isPlaceholderUri(fromFeed)) return fromFeed;
       const listingImgs = Array.isArray(item?.listing_images)
         ? item.listing_images
         : [];
@@ -992,7 +1025,7 @@ const UserProfileScreen = ({
           img && typeof img === 'object'
             ? String(img.image_url || img.uri || '').trim()
             : String(img || '').trim();
-        if (!isPlaceholderUri(uri)) return {uri};
+        if (!isPlaceholderUri(uri) && !isVideoLikeMediaUrl(uri)) return uri;
       }
       const directImgs = Array.isArray(item?.images) ? item.images : [];
       for (const img of directImgs) {
@@ -1000,30 +1033,37 @@ const UserProfileScreen = ({
           img && typeof img === 'object'
             ? String(img.uri || img.image_url || '').trim()
             : String(img || '').trim();
-        if (!isPlaceholderUri(uri)) return {uri};
+        if (!isPlaceholderUri(uri) && !isVideoLikeMediaUrl(uri)) return uri;
       }
-      const directUri = String(
-        item?.main_image_url || item?.image_url || '',
-      ).trim();
-      if (!isPlaceholderUri(directUri)) return {uri: directUri};
-      const videoUri = (() => {
-        if (item?.video && typeof item.video === 'object') {
-          return String(item.video.uri || item.video.url || '').trim() || null;
-        }
-        if (typeof item?.video === 'string')
-          return String(item.video).trim() || null;
-        if (item?.video_url) return String(item.video_url).trim() || null;
-        const lv = Array.isArray(item?.listing_videos)
-          ? item.listing_videos
-          : [];
-        for (const v of lv) {
-          if (v && typeof v === 'object' && v.video_url) {
-            return String(v.video_url).trim();
-          }
-        }
-        return null;
-      })();
-      if (videoUri) return {uri: videoUri, isVideo: true};
+      for (const candidate of [
+        item?.main_image_url,
+        item?.image_url,
+        item?.thumbnail_url,
+        item?.cover_url,
+        firstImageUrl(item),
+      ]) {
+        const uri = String(candidate || '').trim();
+        if (!isPlaceholderUri(uri) && !isVideoLikeMediaUrl(uri)) return uri;
+      }
+      return null;
+    };
+    const firstImageFor = item => {
+      const videoUri =
+        firstVideoUrl(item) ||
+        (item?.video && typeof item.video === 'object'
+          ? String(item.video.uri || item.video.url || '').trim() || null
+          : typeof item?.video === 'string'
+            ? String(item.video).trim() || null
+            : null);
+      if (videoUri) {
+        return {
+          uri: videoUri,
+          isVideo: true,
+          posterUri: pickStillPosterUri(item),
+        };
+      }
+      const stillUri = pickStillPosterUri(item);
+      if (stillUri) return {uri: stillUri};
       return null;
     };
     return uniquePostRows
@@ -1055,25 +1095,196 @@ const UserProfileScreen = ({
 
   useEffect(() => {
     if (user?.id == null) return;
+    setPostGridPageIndex(0);
     requestAnimationFrame(() => {
+      postGridPagerRef.current?.scrollToIndex?.({index: 0, animated: false});
       scrollRef.current?.scrollTo({y: 0, animated: false});
     });
   }, [user?.id]);
 
-  /** >6: show all tiles (ScrollView scrolls). Otherwise pad only the last row — no extra empty row. */
-  const postGridDisplayItems = (() => {
-    const posts = recentPostGridImages;
-    if (posts.length > 6) return posts;
-    if (posts.length === 0) {
-      return Array.from({length: 6}, () => null);
+  const postGridViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+  }).current;
+
+  const onPostGridViewableItemsChanged = useRef(({viewableItems}) => {
+    const first = viewableItems?.[0];
+    if (first?.index != null) {
+      setPostGridPageIndex(first.index);
     }
-    const remainder = posts.length % 3;
-    if (remainder === 0) return posts;
-    return [
-      ...posts,
-      ...Array.from({length: 3 - remainder}, () => null),
-    ];
+  }).current;
+
+  const handlePostGridScrollToIndexFailed = useCallback(info => {
+    requestAnimationFrame(() => {
+      postGridPagerRef.current?.scrollToIndex?.({
+        index: info.index,
+        animated: false,
+      });
+    });
+  }, []);
+
+  const renderPostGridCell = useCallback(
+    (item, cellKey) => {
+      if (!item) {
+        return (
+          <View key={cellKey} style={styles.lastAdGridItem}>
+            <View
+              style={[
+                styles.lastAdGridItemInner,
+                styles.lastAdGridPlaceholderCell,
+              ]}>
+              <MaterialCommunityIcons
+                name="camera-outline"
+                size={24}
+                color="rgba(255,255,255,0.45)"
+              />
+            </View>
+          </View>
+        );
+      }
+      const viewCountLabel = formatPostViewCount(
+        getListingViewCount(item.listing),
+      );
+      const viewBadge = (
+        <View style={styles.postGridViewBadge} pointerEvents="none">
+          <Image
+            source={postGridViewIcon}
+            style={styles.postGridViewIcon}
+            resizeMode="contain"
+          />
+          <Text style={styles.postGridViewText}>{viewCountLabel}</Text>
+        </View>
+      );
+      if (item.isVideo) {
+        return (
+          <TouchableOpacity
+            key={cellKey}
+            style={styles.lastAdGridItem}
+            activeOpacity={0.85}
+            onPress={() => handlePostGridPress(item)}>
+            <View
+              style={[styles.lastAdGridItemInner, styles.lastAdGridVideoCell]}>
+              {item.posterUri ? (
+                <Image
+                  source={{uri: item.posterUri}}
+                  style={styles.lastAdGridImage}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View
+                style={[
+                  styles.postGridVideoPlayOverlay,
+                  item.posterUri
+                    ? styles.postGridVideoPlayOverlayDim
+                    : null,
+                ]}
+                pointerEvents="none">
+                <MaterialCommunityIcons
+                  name="play-circle"
+                  size={36}
+                  color="rgba(255,255,255,0.85)"
+                />
+              </View>
+              {viewBadge}
+            </View>
+          </TouchableOpacity>
+        );
+      }
+      return (
+        <TouchableOpacity
+          key={cellKey}
+          style={styles.lastAdGridItem}
+          activeOpacity={0.85}
+          onPress={() => handlePostGridPress(item)}>
+          <View style={styles.lastAdGridItemInner}>
+            <Image
+              source={{uri: item.uri}}
+              style={styles.lastAdGridImage}
+              resizeMode="cover"
+            />
+            {viewBadge}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [handlePostGridPress],
+  );
+
+  /** Always 2×3 per page; swipe horizontally for more pages when >6 posts. */
+  const postGridPages = (() => {
+    const posts = recentPostGridImages;
+    if (posts.length === 0) {
+      return [Array.from({length: POST_GRID_PAGE_SIZE}, () => null)];
+    }
+    const pages = [];
+    for (let i = 0; i < posts.length; i += POST_GRID_PAGE_SIZE) {
+      const slice = posts.slice(i, i + POST_GRID_PAGE_SIZE);
+      const page = [...slice];
+      while (page.length < POST_GRID_PAGE_SIZE) {
+        page.push(null);
+      }
+      pages.push(page);
+    }
+    return pages;
   })();
+
+  const [postGridPageIndex, setPostGridPageIndex] = useState(0);
+  const postGridPagerRef = useRef(null);
+
+  const renderProfilePostGridContent = () => (
+    <View style={styles.lastAdPostGridPagerWrap}>
+      <FlatList
+        ref={postGridPagerRef}
+        data={postGridPages}
+        horizontal
+        pagingEnabled
+        nestedScrollEnabled
+        removeClippedSubviews={false}
+        showsHorizontalScrollIndicator={false}
+        style={[styles.lastAdPostGridPager, {height: POST_GRID_PAGE_HEIGHT}]}
+        keyExtractor={(_, pageIndex) => `post-grid-page-${pageIndex}`}
+        getItemLayout={(_, index) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
+        viewabilityConfig={postGridViewabilityConfig}
+        onViewableItemsChanged={onPostGridViewableItemsChanged}
+        onScrollToIndexFailed={handlePostGridScrollToIndexFailed}
+        renderItem={({item: pageItems, index: pageIndex}) => (
+          <View
+            style={[
+              styles.lastAdGridPage,
+              {
+                width: SCREEN_WIDTH,
+                height: POST_GRID_PAGE_HEIGHT,
+              },
+            ]}>
+            <View style={styles.lastAdGrid}>
+              {pageItems.map((item, cellIndex) =>
+                renderPostGridCell(
+                  item,
+                  `post-grid-${pageIndex}-${cellIndex}`,
+                ),
+              )}
+            </View>
+          </View>
+        )}
+      />
+      {postGridPages.length > 1 ? (
+        <View style={styles.postGridDots}>
+          {postGridPages.map((_, i) => (
+            <View
+              key={`post-grid-dot-${i}`}
+              style={[
+                styles.postGridDot,
+                i === postGridPageIndex && styles.postGridDotActive,
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
 
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
@@ -1289,6 +1500,19 @@ const UserProfileScreen = ({
     isBnbListingAdProfile ||
     isPartnersListingAdProfile ||
     isLandListingAdProfile;
+  /** Post grid + profile-only TikTok feed — any profile with posts, not only own or TikTok-post entry. */
+  const showProfilePostGrid =
+    !isDedicatedListingAdProfile && recentPostGridImages.length > 0;
+  const openedFromProfessionalsDirectory = Boolean(
+    user?._fromProfessionalsDirectory,
+  );
+  const showProfilePostGridAtTop =
+    showProfilePostGrid && !openedFromProfessionalsDirectory;
+  /** From בעלי מקצוע: always show 6-tile grid (empty placeholders when no posts). */
+  const showProfilePostGridAfterBio =
+    openedFromProfessionalsDirectory &&
+    isProfessional &&
+    !isDedicatedListingAdProfile;
   const showLandProfileContactAndReviews = isLandListingAdProfile;
   const showListingContactAndReviews =
     !isDedicatedListingAdProfile || showLandProfileContactAndReviews;
@@ -1413,11 +1637,10 @@ const UserProfileScreen = ({
   const showCompanySelectedProjectsStrip =
     isCompany &&
     (openedFromCompaniesDirectory || (user?._fromTikTokPost && openedFromPost));
-  // Professionals: no listings section.
-  const hideMyPropertiesSection =
-    isProfessional ||
-    (openedFromPost && isProfessional) ||
-    (isCompany && !showCompanySelectedProjectsStrip);
+  // Professionals: no listings section on other users' profiles; always show on own profile.
+  const hideMyPropertiesSection = isOwnProfile
+    ? false
+    : isProfessional || (isCompany && !showCompanySelectedProjectsStrip);
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -1494,6 +1717,31 @@ const UserProfileScreen = ({
           }
         })()
       : [];
+  const specializationsRaw =
+    user?.creator_specializations ??
+    user?.specializations ??
+    resolvedCreator?.specializations ??
+    profile?.specializations;
+  const specializationsArray = Array.isArray(specializationsRaw)
+    ? specializationsRaw
+    : typeof specializationsRaw === 'string'
+      ? (() => {
+          try {
+            const p = JSON.parse(specializationsRaw);
+            return Array.isArray(p)
+              ? p
+              : specializationsRaw
+                  .split(',')
+                  .map(s => s.trim())
+                  .filter(Boolean);
+          } catch (_) {
+            return specializationsRaw
+              .split(',')
+              .map(s => s.trim())
+              .filter(Boolean);
+          }
+        })()
+      : [];
   const brokerBioRaw =
     user?.creator_bio ??
     user?.bio ??
@@ -1543,6 +1791,27 @@ const UserProfileScreen = ({
   const overlayActivityRegions = overlaySource.filter(
     s => tagLabel(s) !== displayName,
   );
+  const professionalTypesDisplay = typesArray
+    .map(tagLabel)
+    .filter(t => t && t !== displayName);
+  const professionalSpecializationsDisplay = specializationsArray
+    .map(tagLabel)
+    .filter(t => t && t !== displayName);
+  const profileSpecialtyTags = isProfessional
+    ? professionalSpecializationsDisplay
+    : overlayActivityRegions;
+
+  const renderProfessionalTypeTags = extraStyle =>
+    professionalTypesDisplay.length > 0 ? (
+      <View
+        style={[styles.brokerCardBottomTags, styles.professionalTypeTags, extraStyle]}>
+        {professionalTypesDisplay.map((typeLabel, i) => (
+          <View key={`pro-type-${i}-${typeLabel}`} style={styles.brokerCardBottomTag}>
+            <Text style={styles.brokerCardBottomTagText}>{typeLabel}</Text>
+          </View>
+        ))}
+      </View>
+    ) : null;
   // if (__DEV__) {
   //   console.log('[UserProfile] התמחויות:', {
   //     types: {
@@ -1693,10 +1962,16 @@ const UserProfileScreen = ({
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
 
   const showProfileMessagingCta =
+    !isOwnProfile &&
     (isCompany || isBroker || isProfessional) &&
-    (!user?._fromTikTokPost || isCompany);
+    (!user?._fromTikTokPost || isCompany || isProfessional);
 
-  const renderProfileCtaSection = extraStyle => (
+  const hideOwnSubscriberProfileCta =
+    isOwnProfile && (isCompany || isProfessional);
+
+  const renderProfileCtaSection = extraStyle => {
+    if (hideOwnSubscriberProfileCta) return null;
+    return (
     <View style={[styles.profileCtaSection, extraStyle]}>
       <TouchableOpacity
         style={styles.profileCtaWarningBtn}
@@ -1756,7 +2031,8 @@ const UserProfileScreen = ({
         </>
       ) : null}
     </View>
-  );
+    );
+  };
 
   return (
     <View style={[styles.container, {paddingTop: heroNavPaddingTop}]}>
@@ -1817,6 +2093,9 @@ const UserProfileScreen = ({
                 ) : null}
               </View>
               <Text style={styles.userName}>{displayName}</Text>
+              {isProfessional && showTikTokProfessionalHeader
+                ? renderProfessionalTypeTags(styles.professionalHeaderTypeTags)
+                : null}
               {displayEmail != null && displayEmail !== '' ? (
                 <Text style={styles.userEmail}>{displayEmail}</Text>
               ) : null}
@@ -1864,7 +2143,8 @@ const UserProfileScreen = ({
           )}
 
         {(!isProfessional || showTikTokProfessionalHeader) &&
-          !showCompanyFeedHeroTop && (
+          !showCompanyFeedHeroTop &&
+          !isOwnProfile && (
             <View style={styles.actionRow}>
               <TouchableOpacity
                 onPress={handleCallPress}
@@ -1898,74 +2178,16 @@ const UserProfileScreen = ({
           )}
 
         {/* Last ad card - full width, no bubble */}
-        {lastAd && (
+        {(lastAd || showProfilePostGridAtTop) && (
           <View style={styles.lastAdCard}>
             <View
               style={
-                openedFromPost
+                showProfilePostGridAtTop
                   ? styles.lastAdImageWrapGridMode
                   : styles.lastAdImageWrap
               }>
-              {openedFromPost ? (
-                <View style={styles.lastAdGrid}>
-                  {postGridDisplayItems.map((item, i) => {
-                    if (!item) {
-                      return (
-                        <View
-                          key={`post-grid-ph-${i}`}
-                          style={styles.lastAdGridItem}>
-                          <View
-                            style={[
-                              styles.lastAdGridItemInner,
-                              styles.lastAdGridPlaceholderCell,
-                            ]}>
-                            <MaterialCommunityIcons
-                              name="camera-outline"
-                              size={24}
-                              color="rgba(255,255,255,0.45)"
-                            />
-                          </View>
-                        </View>
-                      );
-                    }
-                    if (item.isVideo) {
-                      return (
-                        <TouchableOpacity
-                          key={`post-grid-v-${item.listingId || item.uri || i}-${i}`}
-                          style={styles.lastAdGridItem}
-                          activeOpacity={0.85}
-                          onPress={() => handlePostGridPress(item)}>
-                          <View
-                            style={[
-                              styles.lastAdGridItemInner,
-                              styles.lastAdGridVideoCell,
-                            ]}>
-                            <MaterialCommunityIcons
-                              name="play-circle"
-                              size={36}
-                              color="rgba(255,255,255,0.85)"
-                            />
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    }
-                    return (
-                      <TouchableOpacity
-                        key={`post-grid-img-${item.listingId || item.uri}-${i}`}
-                        style={styles.lastAdGridItem}
-                        activeOpacity={0.85}
-                        onPress={() => handlePostGridPress(item)}>
-                        <View style={styles.lastAdGridItemInner}>
-                          <Image
-                            source={{uri: item.uri}}
-                            style={styles.lastAdGridImage}
-                            resizeMode="cover"
-                          />
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+              {showProfilePostGridAtTop ? (
+                renderProfilePostGridContent()
               ) : lastAdImages.length > 0 ? (
                 <>
                   <FlatList
@@ -2577,6 +2799,9 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
+                {isProfessional && !showTikTokProfessionalHeader
+                  ? renderProfessionalTypeTags()
+                  : null}
                 {brokerAddress ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
@@ -2601,8 +2826,8 @@ const UserProfileScreen = ({
                       התמחויות
                     </Text>
                     <View style={styles.brokerCardBottomTags}>
-                      {overlayActivityRegions.length > 0 ? (
-                        overlayActivityRegions.map((s, i) => (
+                      {profileSpecialtyTags.length > 0 ? (
+                        profileSpecialtyTags.map((s, i) => (
                           <View key={i} style={styles.brokerCardBottomTag}>
                             <Text style={styles.brokerCardBottomTagText}>
                               {typeof s === 'string'
@@ -2644,7 +2869,15 @@ const UserProfileScreen = ({
           </View>
         )}
 
-        {!isRegularUserAdView &&
+        {showProfilePostGridAfterBio ? (
+          <View style={styles.lastAdCard}>
+            <View style={styles.lastAdImageWrapGridMode}>
+              {renderProfilePostGridContent()}
+            </View>
+          </View>
+        ) : null}
+
+        {(!isRegularUserAdView || isOwnProfile) &&
           !hideMyPropertiesSection &&
           !isDedicatedListingAdProfile && (
             <View style={styles.myPropertiesSection}>
@@ -2867,7 +3100,9 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
             </View>
-            {isCompany ? renderProfileCtaSection(styles.contactDetailsCtaSection) : null}
+            {(isCompany || isProfessional)
+              ? renderProfileCtaSection(styles.contactDetailsCtaSection)
+              : null}
           </View>
         )}
         {!isRegularUserAdView && showListingContactAndReviews && (
@@ -2990,7 +3225,7 @@ const UserProfileScreen = ({
                 <View style={styles.contactDetailsDivider} />
               </View>
             ) : null}
-            {!isCompany ? renderProfileCtaSection() : null}
+            {!isCompany && !isProfessional ? renderProfileCtaSection() : null}
           </View>
         ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
           <View style={styles.profileCtaSection}>
@@ -3471,6 +3706,17 @@ const styles = StyleSheet.create({
     textAlign: Platform.OS === 'web' ? 'right' : 'left',
     alignSelf: 'stretch',
   },
+  professionalTypeTags: {
+    justifyContent: flexStart,
+    alignSelf: 'stretch',
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  professionalHeaderTypeTags: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
   brokerCardBottomSectionDivider: {
     height: 1,
     backgroundColor: '#373548',
@@ -3534,7 +3780,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     marginBottom: 24,
-    textAlign: 'left',
+    textAlign: Platform.OS === 'web' ? 'right' : 'left',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   brokerCardBottomAboutTitle: {
     color: '#D2D0DC',
@@ -3546,10 +3794,11 @@ const styles = StyleSheet.create({
   brokerCardBottomTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: flexEnd,
+    justifyContent: flexStart,
     gap: 8,
     marginBottom: 12,
-    alignSelf: flexStart,
+    alignSelf: 'stretch',
+    width: '100%',
   },
   brokerCardBottomTag: {
     borderWidth: 1,
@@ -3977,11 +4226,22 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     backgroundColor: Colors.mainDeepBlue,
   },
+  lastAdPostGridPagerWrap: {
+    width: SCREEN_WIDTH,
+  },
+  lastAdPostGridPager: {
+    width: SCREEN_WIDTH,
+  },
+  lastAdGridPage: {
+    overflow: 'hidden',
+  },
   lastAdImage: {height: LAST_AD_IMAGE_HEIGHT},
   lastAdGrid: {
     width: '100%',
+    height: '100%',
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
+    alignContent: 'flex-start',
   },
   // Outer cell holds gutter padding; inner holds aspectRatio (padding+aspectRatio on one view clips bottoms).
   lastAdGridItem: {
@@ -4003,10 +4263,58 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  postGridViewBadge: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    zIndex: 2,
+  },
+  postGridViewIcon: {
+    width: 14,
+    height: 14,
+  },
+  postGridViewText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    lineHeight: 13,
+    fontFamily: 'Rubik-Medium',
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 2,
+  },
   lastAdGridVideoCell: {
+    backgroundColor: '#1E1D27',
+  },
+  postGridVideoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E1D27',
+  },
+  postGridVideoPlayOverlayDim: {
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  postGridDots: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  postGridDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  postGridDotActive: {
+    backgroundColor: GOLD,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   lastAdImagePlaceholder: {alignItems: 'center', justifyContent: 'center'},
   lastAdPiAndPurposeRow: {

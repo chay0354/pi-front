@@ -58,13 +58,15 @@ const SEARCH_BUTTON_PNG = require('../assets/buy-rent/search.png');
 /** Reserve scroll padding so chips aren’t hidden under the pinned footer (~נקה + חפש strip). */
 const SETTINGS_FOOTER_SCROLL_PADDING = 162;
 
+const collectTypes = professional =>
+  (Array.isArray(professional?.types) ? professional.types : [])
+    .map(v => String(v || '').trim())
+    .filter(Boolean);
+
 const collectTags = professional =>
-  [
-    ...(Array.isArray(professional?.specializations)
-      ? professional.specializations
-      : []),
-    ...(Array.isArray(professional?.types) ? professional.types : []),
-  ]
+  (Array.isArray(professional?.specializations)
+    ? professional.specializations
+    : [])
     .map(v => String(v || '').trim())
     .filter(Boolean)
     .slice(0, 3);
@@ -108,6 +110,7 @@ const ProfessionalPiRatingBadge = ({rating, variant = 'list'}) => {
 
 const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
   const tags = collectTags(professional);
+  const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
@@ -142,6 +145,17 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
             <Text style={styles.cardTitle} numberOfLines={2}>
               {title}
             </Text>
+            {types.length > 0 ? (
+              <View style={[styles.typesRow, listRtlDirection]}>
+                {types.map(type => (
+                  <View key={type} style={styles.tagChip}>
+                    <Text style={styles.tagText} numberOfLines={1}>
+                      {type}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <View style={styles.addressRow}>
               <View style={styles.pinIconWrap}>
                 <Image
@@ -194,6 +208,7 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
 
 const ProfessionalListCard = ({professional, onPress}) => {
   const tags = collectTags(professional);
+  const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
@@ -207,9 +222,22 @@ const ProfessionalListCard = ({professional, onPress}) => {
         <ProfileAvatar uri={mediaUrl} name={title} size={78} subscriptionType="professional" />
         <View style={[styles.listInfoCol, listRtlDirection]}>
           <View style={[styles.listTitleRow, listRtlDirection]}>
-            <Text style={styles.listTitleText} numberOfLines={1}>
-              {title}
-            </Text>
+            <View style={[styles.listTitleTypesCol, listRtlDirection]}>
+              <Text style={styles.listTitleText} numberOfLines={1}>
+                {title}
+              </Text>
+              {types.length > 0 ? (
+                <View style={[styles.listTypesRow, listRtlDirection]}>
+                  {types.map(type => (
+                    <View key={type} style={styles.listTagChip}>
+                      <Text style={styles.listTagText} numberOfLines={1}>
+                        {type}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
             <ProfessionalPiRatingBadge
               rating={professional?.average_rating}
               variant="list"
@@ -878,8 +906,15 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
+    ...forceRtlStyle,
+  },
+  listTitleTypesCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+    alignSelf: 'stretch',
     ...forceRtlStyle,
   },
   listPiBadgeWrap: {
@@ -888,6 +923,8 @@ const styles = StyleSheet.create({
     gap: 2,
     flexShrink: 0,
     position: 'relative',
+    minWidth: 48,
+    minHeight: 48,
     ...forceLtrStyle,
   },
   listPiBadgeText: {
@@ -906,18 +943,25 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     position: 'absolute',
-    left: -60,
-    top: -26,
+    marginLeft: -7,
+    top: -20,
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   listTitleText: {
-    flex: 1,
     color: '#F7F3E6',
     textAlign: Platform.OS === 'web' ? 'right' : 'left',
     fontSize: 18,
     lineHeight: 24,
     fontFamily: 'Rubik-Medium',
     alignSelf: 'stretch',
+  },
+  listTypesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: flexStart,
+    alignSelf: 'stretch',
+    ...forceRtlStyle,
   },
   listAddressRow: {
     flexDirection: 'row',
@@ -1053,6 +1097,8 @@ const styles = StyleSheet.create({
     gap: 2,
     flexShrink: 0,
     position: 'relative',
+    minWidth: 48,
+    minHeight: 48,
     ...forceLtrStyle,
   },
   cardPiBadgeText: {
@@ -1071,8 +1117,8 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     position: 'absolute',
-    left: -60,
-    top: -26,
+    marginLeft: -7,
+    top: -20,
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   cardTitle: {
@@ -1082,6 +1128,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'left',
     alignSelf: 'stretch',
+  },
+  typesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: flexStart,
+    gap: 6,
+    alignSelf: 'stretch',
+    ...forceRtlStyle,
   },
   addressRow: {
     flexDirection: 'row',

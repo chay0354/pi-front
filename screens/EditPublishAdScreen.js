@@ -48,22 +48,31 @@ const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 const LISTING_STAT_ICONS = {
   views: require('../assets/eye_icon.png'),
-  postLike: require('../assets/tiktok/likes.png'),
-  adLike: require('../assets/liked-ads/like.png'),
-  postComment: require('../assets/tiktok/comments.png'),
   adComment: require('../assets/chat_icon.png'),
 };
 
-/** Same muted gray + transparency as eye_icon.png on edit-upload cards. */
+const STAT_ICON_COLOR = '#666666';
+const STAT_ICON_OPACITY = 0.72;
+
+/** PNG stats (views/comments) ship with gray strokes; only fade — no tint. */
 const STAT_ICON_STYLE = {
   width: 22,
   height: 22,
-  tintColor: '#848292',
-  opacity: 0.72,
+  opacity: STAT_ICON_OPACITY,
+  ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
 };
 
 const renderStatIcon = source => (
   <Image source={source} style={STAT_ICON_STYLE} resizeMode="contain" />
+);
+
+const renderLikeStatIcon = () => (
+  <MaterialCommunityIcons
+    name="heart-outline"
+    size={22}
+    color={STAT_ICON_COLOR}
+    style={{opacity: STAT_ICON_OPACITY}}
+  />
 );
 
 const VIDEO_URL_REGEX = /\.(mp4|mov|webm|m4v|ogg)(\?|$)/i;
@@ -138,17 +147,11 @@ const ListingStatsRow = ({listing, postRecord, textStyle}) => {
         <Text style={[styles.statText, textStyle]}>{views}</Text>
       </View>
       <View style={styles.statItem}>
-        {renderStatIcon(
-          postRecord ? LISTING_STAT_ICONS.postLike : LISTING_STAT_ICONS.adLike,
-        )}
+        {renderLikeStatIcon()}
         <Text style={[styles.statText, textStyle]}>{likes}</Text>
       </View>
       <View style={styles.statItem}>
-        {renderStatIcon(
-          postRecord
-            ? LISTING_STAT_ICONS.postComment
-            : LISTING_STAT_ICONS.adComment,
-        )}
+        {renderStatIcon(LISTING_STAT_ICONS.adComment)}
         <Text style={[styles.statText, textStyle]}>{comments}</Text>
       </View>
     </View>
@@ -206,9 +209,12 @@ const isCompanyUser = user =>
   String(user?.subscription_type || '').trim().toLowerCase() ===
   subscriptionTypes.company;
 
-/** White badge on ad cards: company accounts label their ads "פרויקט". */
+/** White badge on ad cards: land → קרקע; company → פרויקט; else נכס. */
 const getListingTypeBadgeLabel = (listing, currentUser) => {
   if (isPostListingRecord(listing)) return 'פוסט';
+  const cat =
+    listing?.category != null ? parseInt(String(listing.category), 10) : NaN;
+  if (cat === 7) return 'קרקע';
   if (isCompanyUser(currentUser)) return 'פרויקט';
   return 'נכס';
 };
@@ -481,6 +487,7 @@ const EditPublishAdScreen = ({
   const isBnbCategory = Number(selectedListingCategoryId) === 5;
   const isPartnersCategory = Number(selectedListingCategoryId) === 3;
   const isOfficesListingCategory = Number(selectedListingCategoryId) === 2;
+  const isLandListingCategory = Number(selectedListingCategoryId) === 7;
   const publishCategoriesStrip = useMemo(
     () => getPublishCategoriesStrip(currentUser?.subscription_type),
     [currentUser?.subscription_type],
@@ -1209,18 +1216,22 @@ const EditPublishAdScreen = ({
                         ? 'משרד'
                         : isPartnersCategory
                           ? 'פרסם מודעה'
-                          : isCompanyUser(currentUser)
-                            ? 'פרויקט'
-                            : 'נכס'
+                          : isLandListingCategory
+                            ? 'קרקע'
+                            : isCompanyUser(currentUser)
+                              ? 'פרויקט'
+                              : 'נכס'
                     }
                     subtitle={
                       isPartnersCategory
                         ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
                         : isOfficesListingCategory
                           ? 'פרסם משרד למכירה או השכרה'
-                          : isCompanyUser(currentUser)
-                            ? 'פרסמו פרויקט'
-                            : 'פרסמו נכס למכירה או להשכרה'
+                          : isLandListingCategory
+                            ? 'פרסם קרקע'
+                            : isCompanyUser(currentUser)
+                              ? 'פרסמו פרויקט'
+                              : 'פרסמו נכס למכירה או להשכרה'
                     }
                     iconSource={getCreateSheetListingIcon(
                       selectedListingCategoryId,

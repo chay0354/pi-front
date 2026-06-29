@@ -402,6 +402,20 @@ function mergeServerAndLocalPostComments(serverList, localList) {
   return [...byKey.values()];
 }
 
+function resolvePostPublisherId(post) {
+  return (
+    toSubscriptionId(post?.subscription_id) ||
+    toSubscriptionId(post?.owner_id) ||
+    null
+  );
+}
+
+function isPostPublisherComment(comment, post) {
+  const publisherId = resolvePostPublisherId(post);
+  const commentUserId = toSubscriptionId(comment?.user_id);
+  return !!publisherId && !!commentUserId && publisherId === commentUserId;
+}
+
 // Sidebar filter buttons: each filters ads by type (maps to API subscription_type / has_video)
 // Top bar center filters - icons from assets/top-filters
 const TOP_BAR_FILTERS = [
@@ -1011,6 +1025,53 @@ function truncateTikTokLabel(text, maxLen = BNB_TIKTOK_LABEL_MAX_CHARS) {
   if (s.length <= maxLen) return s;
   return `${s.slice(0, maxLen).trimEnd()}...`;
 }
+
+const parseListingGeneralDetails = raw => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+};
+
+/** Hashtags live in general_details.hashtags (JSONB) or a top-level hashtags array. */
+const getListingHashtags = listing => {
+  if (Array.isArray(listing?.hashtags)) {
+    return listing.hashtags
+      .map(t => String(t || '').trim().replace(/^#+/, ''))
+      .filter(Boolean);
+  }
+  const gd = parseListingGeneralDetails(listing?.general_details);
+  let raw = gd?.hashtags ?? null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      raw = Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+      raw = raw
+        .split(/[\s,]+/)
+        .map(t => t.trim().replace(/^#+/, ''))
+        .filter(Boolean);
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(t => String(t || '').trim().replace(/^#+/, ''))
+    .filter(Boolean);
+};
+
+/** Web StyleSheet omits `direction`; keep post overlay chips/buttons RTL-aligned. */
+const postOverlayRtlDirection =
+  Platform.OS === 'web' ? {direction: 'rtl'} : null;
 
 const resolveFollowUuid = (...candidates) => {
   for (const candidate of candidates) {
@@ -1663,13 +1724,22 @@ const TikTokFeedScreen = ({
   onFocusListingConsumed = null,
   /** Open a specific post in the feed (e.g. from hashtag search results). */
   onOpenPostInFeed = null,
+  /** Profile grid → feed limited to one user's posts; chrome-only top/bottom bars. */
+  profilePostsScope = null,
 }) => {
   const insets = useSafeAreaInsets();
+  const profilePostsSubId = profilePostsScope?.subscriptionId
+    ? String(profilePostsScope.subscriptionId).trim()
+    : '';
+  const isProfilePostsFeed = profilePostsSubId.length > 0;
   /** Actual container frame (full screen edge-to-edge); reliable on Android unlike Dimensions. */
   const safeAreaFrame = useSafeAreaFrame();
   const topBarHeight = TOP_BAR_HEIGHT + insets.top;
   /** Stable from first render (insets known immediately) — matches FeedBottomBar height exactly. */
-  const bottomBarHeight = feedBottomBarHeight(insets.bottom);
+  const bottomBarHeight = feedBottomBarHeight(
+    insets.bottom,
+    isProfilePostsFeed,
+  );
   const feedListRef = useRef(null);
   const listingsFetchCacheRef = useRef(new Map());
   const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
@@ -2129,6 +2199,16 @@ const TikTokFeedScreen = ({
   // Layout effect (runs before paint) so the sidebar is already parked at the
   // profile-only position on the first frame — no "loading" flash on open.
   useLayoutEffect(() => {
+    if (isProfilePostsFeed) {
+      sidebarIntroDone.current = true;
+      sidebarIntroAnimStarted.current = true;
+      sidebarIntroHoldApplied.current = true;
+      sidebarDragY.setValue(sidebarIntroProfileOnlyDown);
+      sidebarDragOffset.current = sidebarIntroProfileOnlyDown;
+      setSidebarIntroVisible(true);
+      setSidebarIntroFinished(true);
+      return;
+    }
     if (selectedTopBarFilter === 'list') {
       sidebarIntroDone.current = false;
       sidebarIntroHoldApplied.current = false;
@@ -2164,13 +2244,16 @@ const TikTokFeedScreen = ({
     sidebarIntroTopTwoOnlyDown,
     isSidebarProfileHoldReady,
     categoryId,
+    isProfilePostsFeed,
   ]);
 
   useEffect(() => {
+    if (isProfilePostsFeed) return;
     setSidebarFilterLayouts({});
-  }, [categoryId, sidebarFilterCount]);
+  }, [categoryId, sidebarFilterCount, isProfilePostsFeed]);
 
   useEffect(() => {
+    if (isProfilePostsFeed) return;
     if (selectedTopBarFilter === 'list') return;
     if (
       sidebarIntroDone.current ||
@@ -2247,12 +2330,14 @@ const TikTokFeedScreen = ({
   // Filter by selectedCategory and selectedSidebarFilter if provided
   useEffect(() => {
     const fetchListings = async () => {
-      const cacheKey = buildListingsFetchCacheKey(
-        selectedCategory,
-        selectedSidebarFilter,
-        selectedTopBarFilter,
-        currentUser?.id,
-      );
+      const cacheKey = isProfilePostsFeed
+        ? `profile-posts|${profilePostsSubId}|${currentUser?.id ?? ''}`
+        : buildListingsFetchCacheKey(
+            selectedCategory,
+            selectedSidebarFilter,
+            selectedTopBarFilter,
+            currentUser?.id,
+          );
       const cachedListings = listingsFetchCacheRef.current.get(cacheKey);
       if (Array.isArray(cachedListings) && cachedListings.length > 0) {
         setDbListings(cachedListings);
@@ -2268,29 +2353,56 @@ const TikTokFeedScreen = ({
         if (!cachedListings?.length) {
           setLoadingListings(true);
         }
+
+        let result = {success: false, offline: false, message: null};
+        let mergedListings = [];
+        let partnersFilter = null;
+        let bnbFilter = null;
+        let officeFilter = null;
+        let landFilter = null;
+        let commercialFilter = null;
+        let legacySidebarFilter = null;
+        let apartmentsNewsIncludesNewFromDeveloper = false;
+
+        if (isProfilePostsFeed) {
+          result = await getListings({
+            status: 'published',
+            subscription_id: profilePostsSubId,
+            feed_post: true,
+            ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+          });
+          mergedListings = Array.isArray(result?.listings)
+            ? [...result.listings]
+            : [];
+          mergedListings.sort(
+            (a, b) =>
+              new Date(b?.created_at || b?.createdAt || 0).getTime() -
+              new Date(a?.created_at || a?.createdAt || 0).getTime(),
+          );
+        } else {
         const parsedCategory = selectedCategory
           ? parseInt(String(selectedCategory), 10)
           : NaN;
         const categoryToFetch = Number.isFinite(parsedCategory)
           ? parsedCategory
           : undefined;
-        const partnersFilter =
+        partnersFilter =
           categoryToFetch === 3
             ? PARTNERS_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
-        const bnbFilter =
+        bnbFilter =
           categoryToFetch === 5
             ? BNB_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
-        const officeFilter =
+        officeFilter =
           categoryToFetch === 2
             ? OFFICE_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
-        const landFilter =
+        landFilter =
           categoryToFetch === 7
             ? LAND_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
-        const commercialFilter =
+        commercialFilter =
           categoryToFetch === 8
             ? COMMERCIAL_SIDEBAR_FILTERS.find(
                 f => f.id === selectedSidebarFilter,
@@ -2319,7 +2431,7 @@ const TikTokFeedScreen = ({
           categoryToFetch !== 10
             ? OFFICE_SIDEBAR_FILTERS.find(f => f.id === selectedSidebarFilter)
             : null;
-        const legacySidebarFilter =
+        legacySidebarFilter =
           newFromDeveloperSidebarFilter ??
           apartmentsLegacyFilter ??
           standardLegacySidebarFilter;
@@ -2344,7 +2456,7 @@ const TikTokFeedScreen = ({
           legacySidebarFilter?.has_video === true;
         const hasVideo = hasVideoFromSidebar;
 
-        const apartmentsNewsIncludesNewFromDeveloper =
+        apartmentsNewsIncludesNewFromDeveloper =
           categoryToFetch === 10 && selectedSidebarFilter === 'new';
 
         const sharedListingFetchParams = {
@@ -2379,12 +2491,12 @@ const TikTokFeedScreen = ({
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         };
 
-        const result = await getListings({
+        result = await getListings({
           category: categoryToFetch,
           ...sharedListingFetchParams,
         });
 
-        let mergedListings = Array.isArray(result?.listings)
+        mergedListings = Array.isArray(result?.listings)
           ? [...result.listings]
           : [];
 
@@ -2411,6 +2523,7 @@ const TikTokFeedScreen = ({
               }
             }
           }
+        }
         }
 
         const resultForTransform = {
@@ -2724,11 +2837,8 @@ const TikTokFeedScreen = ({
                     ? listing.project_offers
                     : null,
                 construction_status: listing.construction_status || null,
-                general_details:
-                  listing.general_details &&
-                  typeof listing.general_details === 'object'
-                    ? listing.general_details
-                    : null,
+                general_details: parseListingGeneralDetails(listing.general_details),
+                hashtags: getListingHashtags(listing),
                 hospitality_nature:
                   listing.hospitality_nature != null
                     ? String(listing.hospitality_nature).trim()
@@ -2766,51 +2876,57 @@ const TikTokFeedScreen = ({
           const selectedCatNum = selectedCategory
             ? parseInt(String(selectedCategory), 10)
             : NaN;
-          const filteredListings = Number.isFinite(selectedCatNum)
-            ? afterTopBar.filter(listing => {
-                if (
-                  apartmentsNewsIncludesNewFromDeveloper &&
-                  listing.category === 1 &&
-                  String(listing.subscription_type || '').toLowerCase() ===
-                    'company' &&
-                  !isFeedPost(listing)
-                ) {
-                  return true;
-                }
-                return listing.category === selectedCatNum;
-              })
-            : afterTopBar;
+          const filteredListings = isProfilePostsFeed
+            ? afterTopBar
+            : Number.isFinite(selectedCatNum)
+              ? afterTopBar.filter(listing => {
+                  if (
+                    apartmentsNewsIncludesNewFromDeveloper &&
+                    listing.category === 1 &&
+                    String(listing.subscription_type || '').toLowerCase() ===
+                      'company' &&
+                    !isFeedPost(listing)
+                  ) {
+                    return true;
+                  }
+                  return listing.category === selectedCatNum;
+                })
+              : afterTopBar;
 
-          const finalListings =
-            selectedTopBarFilter === 'video'
+          const finalListings = isProfilePostsFeed
+            ? filteredListings
+            : selectedTopBarFilter === 'video'
               ? filteredListings.filter(l => listingHasPlayableVideo(l))
               : filteredListings;
 
           // פוסטים / נותני שירות: enforce feed posts only (not regular ads); service = professional’s posts only.
           const sidebarWantsFeedPostsOnly =
-            partnersFilter?.feed_post === true ||
-            bnbFilter?.feed_post === true ||
-            officeFilter?.feed_post === true ||
-            landFilter?.feed_post === true ||
-            commercialFilter?.feed_post === true ||
-            legacySidebarFilter?.feed_post === true;
-          const sidebarWantsProfessionalPosts =
-            (partnersFilter?.id === 'partners_professional' &&
-              partnersFilter?.feed_post === true) ||
-            (officeFilter?.id === 'service' &&
-              officeFilter?.feed_post === true) ||
-            (landFilter?.id === 'land_service' &&
-              landFilter?.feed_post === true) ||
-            (commercialFilter?.id === 'service' &&
-              commercialFilter?.feed_post === true) ||
-            (legacySidebarFilter?.id === 'service' &&
+            !isProfilePostsFeed &&
+            (partnersFilter?.feed_post === true ||
+              bnbFilter?.feed_post === true ||
+              officeFilter?.feed_post === true ||
+              landFilter?.feed_post === true ||
+              commercialFilter?.feed_post === true ||
               legacySidebarFilter?.feed_post === true);
+          const sidebarWantsProfessionalPosts =
+            !isProfilePostsFeed &&
+            ((partnersFilter?.id === 'partners_professional' &&
+              partnersFilter?.feed_post === true) ||
+              (officeFilter?.id === 'service' &&
+                officeFilter?.feed_post === true) ||
+              (landFilter?.id === 'land_service' &&
+                landFilter?.feed_post === true) ||
+              (commercialFilter?.id === 'service' &&
+                commercialFilter?.feed_post === true) ||
+              (legacySidebarFilter?.id === 'service' &&
+                legacySidebarFilter?.feed_post === true));
 
           const sidebarWantsAdsOnly =
-            legacySidebarFilter?.ads_only === true ||
-            officeFilter?.ads_only === true ||
-            commercialFilter?.ads_only === true ||
-            landFilter?.ads_only === true;
+            !isProfilePostsFeed &&
+            (legacySidebarFilter?.ads_only === true ||
+              officeFilter?.ads_only === true ||
+              commercialFilter?.ads_only === true ||
+              landFilter?.ads_only === true);
 
           const isNewConditionRow = l => {
             const c = String(l?.condition ?? '').trim();
@@ -2819,16 +2935,20 @@ const TikTokFeedScreen = ({
             return lower === 'new' || c === 'חדש';
           };
           const sidebarWantsNewAds =
-            (legacySidebarFilter?.id === 'new' &&
+            !isProfilePostsFeed &&
+            ((legacySidebarFilter?.id === 'new' &&
               legacySidebarFilter?.ads_only === true) ||
-            (officeFilter?.id === 'new' && officeFilter?.ads_only === true) ||
-            (commercialFilter?.id === 'new' &&
-              commercialFilter?.ads_only === true);
+              (officeFilter?.id === 'new' && officeFilter?.ads_only === true) ||
+              (commercialFilter?.id === 'new' &&
+                commercialFilter?.ads_only === true));
 
           const isCompany = l =>
             String(l?.subscription_type || '').toLowerCase() === 'company';
 
-          let displayListings = finalListings;
+          let displayListings = isProfilePostsFeed
+            ? finalListings.filter(l => isFeedPost(l))
+            : finalListings;
+          if (!isProfilePostsFeed) {
           if (sidebarWantsFeedPostsOnly) {
             displayListings = displayListings.filter(l => isFeedPost(l));
           } else if (sidebarWantsAdsOnly) {
@@ -2900,6 +3020,7 @@ const TikTokFeedScreen = ({
                 l.searchPurposeKey != null &&
                 String(l.searchPurposeKey).trim() === need,
             );
+          }
           }
 
           const viewerSubIdForPrefetch = resolveFollowUuid(
@@ -2999,6 +3120,8 @@ const TikTokFeedScreen = ({
     selectedTopBarFilter,
     refreshKey,
     currentUser?.id,
+    isProfilePostsFeed,
+    profilePostsSubId,
   ]);
 
   // Map tik image numbers to require statements
@@ -3324,6 +3447,7 @@ const TikTokFeedScreen = ({
 
     const optimistic = {
       id: `local-${Date.now()}`,
+      user_id: userId,
       comment_text: text,
       comment_image_url: localPreviewUrl || null,
       commenter_name:
@@ -5397,22 +5521,6 @@ const TikTokFeedScreen = ({
     return items;
   }, [userSearchSourceListings, userSearchQuery, failedSearchAvatarKeys]);
 
-  /** Pull the hashtags array off a listing's general_details (array or JSON string). */
-  const getListingHashtags = listing => {
-    const gd = listing?.general_details;
-    let raw = gd && typeof gd === 'object' ? gd.hashtags : null;
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        raw = Array.isArray(parsed) ? parsed : null;
-      } catch (_) {
-        raw = null;
-      }
-    }
-    if (!Array.isArray(raw)) return [];
-    return raw.map(t => String(t || '').trim()).filter(Boolean);
-  };
-
   /** Distinct hashtags (with post counts) across all loaded listings, filtered by the query. */
   const hashtagItems = useMemo(() => {
     const counts = new Map();
@@ -5744,6 +5852,7 @@ const TikTokFeedScreen = ({
           </TouchableOpacity>
         ) : null}
       </View>
+      {!isProfilePostsFeed ? (
       <View style={styles.sidebarFiltersStack}>
       {sidebarFiltersForFeed.map((filter, filterIndex) => {
         const isSelected = selectedSidebarFilter === filter.id;
@@ -5857,15 +5966,20 @@ const TikTokFeedScreen = ({
         );
       })}
       </View>
+      ) : null}
     </>
   );
 
   const renderFeedPageSidebar = (video, index) => {
     const isActivePage = index === currentIndex;
-    const pageProfileUrl = getUserProfileImageUrl(video);
-    const inactiveSidebarY = sidebarIntroFinished
-      ? sidebarDragOffset.current
-      : sidebarIntroProfileOnlyDown;
+    const pageProfileUrl =
+      getUserProfileImageUrl(video) ||
+      (isProfilePostsFeed ? profilePostsScope?.profileImageUrl : null);
+    const inactiveSidebarY = isProfilePostsFeed
+      ? sidebarIntroProfileOnlyDown
+      : sidebarIntroFinished
+        ? sidebarDragOffset.current
+        : sidebarIntroProfileOnlyDown;
     if (isActivePage) {
       activeSidebarVideoRef.current = video;
     }
@@ -5902,7 +6016,7 @@ const TikTokFeedScreen = ({
                 styles.sidebarDragContent,
                 {transform: [{translateY: sidebarDragY}]},
               ]}
-              {...sidebarPanResponder.panHandlers}>
+              {...(isProfilePostsFeed ? {} : sidebarPanResponder.panHandlers)}>
               {renderFeedPageSidebarContent(video, pageProfileUrl, true, true)}
             </Animated.View>
           ) : (
@@ -5948,7 +6062,7 @@ const TikTokFeedScreen = ({
               styles.sidebarDragContent,
               {transform: [{translateY: sidebarDragY}]},
             ]}
-            {...sidebarPanResponder.panHandlers}>
+            {...(isProfilePostsFeed ? {} : sidebarPanResponder.panHandlers)}>
             {renderFeedPageSidebarContent(null, null, true, true)}
           </Animated.View>
         </View>
@@ -5958,6 +6072,7 @@ const TikTokFeedScreen = ({
 
   const renderFeedPageActionOverlay = video => {
     const o = getVideoOverlayMeta(video);
+    const postHashtags = o.isPostListing ? getListingHashtags(video) : [];
     return (
       <View
         style={[styles.feedPageActions, {bottom: feedChromeBottom}]}
@@ -6066,8 +6181,20 @@ const TikTokFeedScreen = ({
             </View>
           </View>
         ) : o.isPostListing ? (
-          <View style={styles.postActionsInfo} pointerEvents="box-none">
-            <View style={styles.postActionsRow} pointerEvents="box-none">
+          <View
+            style={[styles.postActionsInfo, postOverlayRtlDirection]}
+            pointerEvents="box-none">
+            {postHashtags.length > 0 ? (
+              <Text
+                style={styles.postHashtagsText}
+                numberOfLines={2}
+                pointerEvents="none">
+                {postHashtags.map(t => `#${t}`).join(' ')}
+              </Text>
+            ) : null}
+            <View
+              style={[styles.postActionsRow, postOverlayRtlDirection]}
+              pointerEvents="box-none">
               <View style={styles.postActionItem}>
                 <Image
                   source={TIKTOK_OVERLAY_ICONS.postView}
@@ -6708,6 +6835,8 @@ const TikTokFeedScreen = ({
               <MaterialCommunityIcons name="close" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
+        ) : isProfilePostsFeed ? (
+          <View style={styles.topBarCenter} />
         ) : (
           <View style={styles.topBarCenter}>
             {TOP_BAR_FILTERS.map(f => {
@@ -6789,6 +6918,8 @@ const TikTokFeedScreen = ({
           </View>
         )}
         {showUserSearchPanel ? (
+          <View style={styles.topBarRightSpacerSmall} />
+        ) : isProfilePostsFeed ? (
           <View style={styles.topBarRightSpacerSmall} />
         ) : (
           <TouchableOpacity
@@ -7262,6 +7393,7 @@ const TikTokFeedScreen = ({
 
       {!showUserSearchPanel && !showBottomSheet && !showCommentsSheet && (
         <FeedBottomBar
+          chromeOnly={isProfilePostsFeed}
           selectedCategory={selectedCategory}
           feedFilters={feedFilters}
           onOpenCityFilter={onOpenCityFilter}
@@ -7362,10 +7494,20 @@ const TikTokFeedScreen = ({
                 {commentsLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  currentComments.map(comment => (
+                  currentComments.map(comment => {
+                    const isPublisherComment = isPostPublisherComment(
+                      comment,
+                      activeCommentsVideo,
+                    );
+                    return (
                     <View key={String(comment.id)} style={styles.commentCard}>
                       <View style={styles.commentHeader}>
                         <View style={styles.commentAuthorWrap}>
+                          {isPublisherComment ? (
+                            <Text style={styles.commentPublisherBadge}>
+                              מפרסם:
+                            </Text>
+                          ) : null}
                           <Text style={styles.commentAuthorText}>
                             {comment.commenter_name || 'משתמש'}
                           </Text>
@@ -7477,7 +7619,8 @@ const TikTokFeedScreen = ({
                         </View>
                       </View>
                     </View>
-                  ))
+                    );
+                  })
                 )}
               </ScrollView>
             </View>
@@ -9117,14 +9260,29 @@ const styles = StyleSheet.create({
     ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   postActionsInfo: {
-    width: 334,
-    maxWidth: '96%',
+    width: '100%',
+    maxWidth: '100%',
+    alignSelf: 'stretch',
     alignItems: flexStart,
+  },
+  postHashtagsText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: 'Rubik-Medium',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    marginBottom: 6,
+    alignSelf: 'stretch',
+    width: '100%',
+    ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   postActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
+    alignSelf: 'stretch',
+    width: '100%',
     gap: 2,
   },
   postActionItem: {
@@ -9227,6 +9385,16 @@ const styles = StyleSheet.create({
   commentAuthorWrap: {
     alignItems: flexStart,
     width: 293.2,
+  },
+  commentPublisherBadge: {
+    color: Colors.yellowIcons,
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.35,
+    marginBottom: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   commentAuthorText: {
     color: '#F7F3E6',

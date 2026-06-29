@@ -1,6 +1,9 @@
 /** Figma bottom bar content height — excludes device safe-area inset. */
 export const FEED_BOTTOM_BAR_CONTENT_HEIGHT = 74;
 
+/** Thin chrome strip for profile-only TikTok feed (background only, no filters). */
+export const FEED_BOTTOM_BAR_CHROME_ONLY_CONTENT_HEIGHT = 20;
+
 /** Gap (px) between TikTok feed overlay chrome and the top of the bottom bar. */
 export const FEED_OVERLAY_ABOVE_BAR_GAP = 12;
 
@@ -14,9 +17,12 @@ export function feedImageIndicatorTop(topBarHeight = 0) {
 }
 
 /** Total height of the bottom bar (content + home-indicator inset). */
-export function feedBottomBarHeight(bottomInset = 0) {
+export function feedBottomBarHeight(bottomInset = 0, chromeOnly = false) {
   const safe = Math.max(0, Number(bottomInset) || 0);
-  return FEED_BOTTOM_BAR_CONTENT_HEIGHT + safe;
+  const content = chromeOnly
+    ? FEED_BOTTOM_BAR_CHROME_ONLY_CONTENT_HEIGHT
+    : FEED_BOTTOM_BAR_CONTENT_HEIGHT;
+  return content + safe;
 }
 
 /** Screen `bottom` for the feed chrome layer (bar top + gap). */

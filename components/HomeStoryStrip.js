@@ -64,10 +64,9 @@ const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
       renderItem={renderItem}
       showsHorizontalScrollIndicator={false}
       nestedScrollEnabled={Platform.OS === 'android'}
-      removeClippedSubviews={Platform.OS === 'android'}
-      initialNumToRender={6}
-      maxToRenderPerBatch={8}
-      windowSize={5}
+      initialNumToRender={8}
+      maxToRenderPerBatch={10}
+      windowSize={7}
       contentContainerStyle={styles.row}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
     />

@@ -51,7 +51,7 @@ export const LandAddress = ({
       <TextAreaBox
         value={description}
         setValue={setDescription}
-        title={'תיאור הפרויקט'}
+        title={'תיאור הקרקע'}
         required={true}
         placeholder={'כתוב תיאור'}
       />

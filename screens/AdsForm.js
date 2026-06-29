@@ -1117,7 +1117,7 @@ const AdsForm = ({
   const salesImageCompanionPendingRef = useRef(false);
   /** True when PostEditor already published the sales image as a story. */
   const salesImageStoryAlreadyCreatedRef = useRef(false);
-  // Land form radio groups (תב״ע, קרקע במושב, etc.) keyed by field title
+  // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
   const [generalDetailsCounts, setGeneralDetailsCounts] = useState({
@@ -2018,7 +2018,7 @@ const AdsForm = ({
               category: listingCategory,
               // Land form radio values (when present)
               planApproval: landRadioValues['תב״ע'] || null,
-              landInMortgage: landRadioValues['קרקע במושב'] || null,
+              landInMortgage: landRadioValues['קרקע במושע'] || null,
               permit: landRadioValues['היתר'] || null,
               agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
               landOwnership: landRadioValues['בעלות קרקע'] || null,

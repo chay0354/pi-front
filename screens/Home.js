@@ -11,6 +11,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState, memo} from 're
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
@@ -18,12 +19,12 @@ import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
 import {
-  listingHasHeroMedia,
-  resolveListingHeroMedia,
+  firstImageUrl,
+  firstVideoUrl,
 } from '../utils/listingGridCardFigma';
 
 import {userCategories, DEFAULT_HOME_CAROUSEL_CATEGORY_ID} from '../utils/constant';
-import {flexStart} from '../utils/rtlLayout';
+import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
 
@@ -32,16 +33,26 @@ const isFeedPostListing = listing =>
   listing?.feed_post === 'true' ||
   listing?.feed_post === 't';
 
+const listingHasVideo = listing => !!firstVideoUrl(listing);
+
 const pickRandomCompanyProjectListing = listings => {
   const candidates = (Array.isArray(listings) ? listings : []).filter(
     listing =>
       !isFeedPostListing(listing) &&
       String(listing?.subscription_type || '').trim().toLowerCase() ===
         'company' &&
-      listingHasHeroMedia(listing),
+      listingHasVideo(listing),
   );
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)] || null;
+};
+
+const resolveFeatureProjectVideoMedia = listing => {
+  if (!listing) return null;
+  const videoUri = firstVideoUrl(listing);
+  if (!videoUri) return null;
+  const imageUri = firstImageUrl(listing);
+  return {type: 'video', uri: videoUri, posterUri: imageUri || null};
 };
 
 const getFeatureProjectName = listing => {
@@ -55,18 +66,35 @@ const getFeatureProjectName = listing => {
   ).trim();
 };
 
+const FEED_IMAGE_PROPS =
+  Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
+
 const FeatureHeroMedia = memo(function FeatureHeroMedia({
   media,
   loading,
   paused,
   fallbackSource,
+  isMuted = true,
+  onProgressChange,
 }) {
   const webVideoRef = useRef(null);
+  const videoRef = useRef(null);
+  const [videoReady, setVideoReady] = useState(false);
+
+  useEffect(() => {
+    setVideoReady(false);
+    onProgressChange?.(0);
+  }, [media?.uri, onProgressChange]);
+
+  const markVideoReady = useCallback(() => {
+    setVideoReady(true);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const el = webVideoRef.current;
     if (!el || media?.type !== 'video') return;
+    el.muted = isMuted;
     if (paused) {
       el.pause();
       return;
@@ -75,7 +103,35 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
     if (playPromise && typeof playPromise.catch === 'function') {
       playPromise.catch(() => {});
     }
-  }, [paused, media?.type, media?.uri]);
+  }, [paused, media?.type, media?.uri, isMuted, videoReady]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = webVideoRef.current;
+    if (!el || media?.type !== 'video') return;
+    const onTimeUpdate = () => {
+      if (el.duration > 0) {
+        onProgressChange?.(Math.min(1, el.currentTime / el.duration));
+      }
+    };
+    el.addEventListener('timeupdate', onTimeUpdate);
+    return () => el.removeEventListener('timeupdate', onTimeUpdate);
+  }, [media?.type, media?.uri, onProgressChange]);
+
+  const handlePlaybackStatusUpdate = useCallback(
+    status => {
+      if (!status?.isLoaded) return;
+      if (status.durationMillis > 0) {
+        onProgressChange?.(
+          Math.min(1, status.positionMillis / status.durationMillis),
+        );
+      }
+      if (!status.isPlaying && !paused) {
+        videoRef.current?.playAsync().catch(() => {});
+      }
+    },
+    [onProgressChange, paused],
+  );
 
   if (loading) {
     return (
@@ -84,10 +140,12 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   }
 
   if (media?.type === 'video' && media.uri) {
+    const showPoster = Boolean(media.posterUri) && !videoReady;
+
     if (Platform.OS === 'web') {
       return (
         <View style={styles.projectImage}>
-          {media.posterUri ? (
+          {showPoster ? (
             <Image
               source={{uri: media.posterUri}}
               style={StyleSheet.absoluteFillObject}
@@ -102,12 +160,15 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
               height: '100%',
               objectFit: 'cover',
               borderRadius: 16,
+              opacity: videoReady ? 1 : 0,
             }}
             autoPlay={!paused}
-            muted
+            muted={isMuted}
             loop
             playsInline
             preload="auto"
+            onLoadedData={markVideoReady}
+            onCanPlay={markVideoReady}
           />
         </View>
       );
@@ -115,36 +176,32 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
 
     return (
       <View style={styles.projectImage}>
-        {media.posterUri ? (
+        {showPoster ? (
           <Image
             source={{uri: media.posterUri}}
+            {...FEED_IMAGE_PROPS}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
           />
         ) : null}
         <Video
+          ref={videoRef}
           key={media.uri}
           source={{uri: media.uri}}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.COVER}
           shouldPlay={!paused}
-          isMuted
+          isMuted={isMuted}
           isLooping
           useNativeControls={false}
+          usePoster={false}
+          progressUpdateIntervalMillis={100}
+          onReadyForDisplay={markVideoReady}
+          onLoad={markVideoReady}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
           onError={() => {}}
         />
       </View>
-    );
-  }
-
-  if (media?.type === 'image' && media.uri) {
-    return (
-      <Image
-        source={{uri: media.uri}}
-        style={styles.projectImage}
-        resizeMode="cover"
-        fadeDuration={0}
-      />
     );
   }
 
@@ -203,9 +260,13 @@ const Home = ({
   const [aiMounted, setAiMounted] = useState(reopenAi);
   const [featureListing, setFeatureListing] = useState(null);
   const [featureMediaLoading, setFeatureMediaLoading] = useState(true);
+  const featureListingRef = useRef(null);
+  const [featureMuted, setFeatureMuted] = useState(true);
+  const [featureProgress, setFeatureProgress] = useState(0);
   const logoTapCountRef = useRef(0);
   const logoTapResetTimerRef = useRef(null);
   const initialReadySentRef = useRef(false);
+  const storiesRequestRef = useRef(0);
 
   // Consume the one-shot reopen flag once we've restored the flipped state.
   useEffect(() => {
@@ -218,28 +279,40 @@ const Home = ({
   const LOGO_TAPS_TO_OPEN_AI = 3;
   const LOGO_TAP_RESET_MS = 700;
 
-  const loadStories = useCallback(async () => {
-    setStoriesLoading(true);
+  const loadStories = useCallback(async ({silent = false} = {}) => {
+    const requestId = ++storiesRequestRef.current;
+    if (!silent) {
+      setStoriesLoading(true);
+    }
     try {
-      const res = await getStoriesFeed();
-      setStoryRings(Array.isArray(res?.rings) ? res.rings : []);
-    } catch (e) {
-      setStoryRings([]);
+      const res = await getStoriesFeed({limit: 80});
+      if (requestId !== storiesRequestRef.current) return;
+      if (res?.success === false || !Array.isArray(res?.rings)) return;
+      setStoryRings(res.rings);
+    } catch (_) {
+      /* keep the strip visible with the last good payload */
     } finally {
-      setStoriesLoading(false);
+      if (requestId === storiesRequestRef.current && !silent) {
+        setStoriesLoading(false);
+      }
     }
   }, []);
 
   const loadFeatureProjectImage = useCallback(async () => {
-    setFeatureMediaLoading(true);
+    if (!featureListingRef.current) {
+      setFeatureMediaLoading(true);
+    }
     try {
       const res = await getListings({
         status: 'published',
         category: 1,
         subscription_type: 'company',
       });
-      setFeatureListing(pickRandomCompanyProjectListing(res?.listings));
+      const picked = pickRandomCompanyProjectListing(res?.listings);
+      featureListingRef.current = picked;
+      setFeatureListing(picked);
     } catch (_) {
+      featureListingRef.current = null;
       setFeatureListing(null);
     } finally {
       setFeatureMediaLoading(false);
@@ -271,8 +344,17 @@ const Home = ({
   ]);
 
   const featureMedia = featureListing
-    ? resolveListingHeroMedia(featureListing)
+    ? resolveFeatureProjectVideoMedia(featureListing)
     : null;
+
+  useEffect(() => {
+    setFeatureMuted(true);
+    setFeatureProgress(0);
+  }, [featureMedia?.uri]);
+
+  const handleFeatureProgressChange = useCallback(progress => {
+    setFeatureProgress(progress);
+  }, []);
 
   const handleOpenFeatureListing = useCallback(() => {
     if (!featureListing || typeof onOpenFeatureListing !== 'function') return;
@@ -349,7 +431,7 @@ const Home = ({
   const handleCloseViewer = useCallback(() => {
     setViewerVisible(false);
     setViewerRing(null);
-    loadStories();
+    loadStories({silent: true});
   }, [loadStories]);
 
   const handleOpenStoryProfile = useCallback(
@@ -486,6 +568,8 @@ const Home = ({
                 loading={featureMediaLoading}
                 paused={flipped}
                 fallbackSource={FALLBACK_PROJECT_IMAGE}
+                isMuted={featureMuted}
+                onProgressChange={handleFeatureProgressChange}
               />
               {!featureMediaLoading ? (
                 <>
@@ -508,6 +592,41 @@ const Home = ({
                     </Text>
                     <Text style={styles.projectCardCta}>צפו בפרויקט</Text>
                   </View>
+                  {featureMedia?.type === 'video' ? (
+                    <View
+                      style={styles.videoControlsLayer}
+                      pointerEvents="box-none">
+                      <TouchableOpacity
+                        style={styles.muteButton}
+                        onPress={() => setFeatureMuted(m => !m)}
+                        activeOpacity={0.7}
+                        hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          featureMuted ? 'הפעלת שמע' : 'השתקת שמע'
+                        }>
+                        <MaterialCommunityIcons
+                          name={featureMuted ? 'volume-off' : 'volume-high'}
+                          size={24}
+                          color="#FFFFFF"
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.timelineTrack} pointerEvents="none">
+                        <LinearGradient
+                          colors={['#FFE073', '#FFBA30']}
+                          locations={[0.11129, 0.86618]}
+                          start={{x: 0, y: 0}}
+                          end={{x: 1, y: 0}}
+                          style={[
+                            styles.timelineProgress,
+                            {
+                              width: `${Math.max(0, Math.min(100, featureProgress * 100))}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
                 </>
               ) : null}
             </View>
@@ -753,9 +872,39 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 16,
+    backgroundColor: '#2B2A39',
   },
   projectImagePlaceholder: {
     backgroundColor: '#2B2A39',
+  },
+  videoControlsLayer: {
+    ...StyleSheet.absoluteFillObject,
+    ...forceLtrStyle,
+    zIndex: 11,
+    elevation: 11,
+  },
+  muteButton: {
+    position: 'absolute',
+    left: 18,
+    bottom: 20,
+    width: 24,
+    height: 24,
+    zIndex: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 12,
+  },
+  timelineTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  timelineProgress: {
+    height: 4,
+    borderRadius: 20.456,
   },
   popularLogo: {
     position: 'absolute',

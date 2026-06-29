@@ -289,6 +289,25 @@ function App() {
     [currentScreen],
   );
 
+  /** Navigate away without leaving the current screen on the back stack. */
+  const replaceCurrentScreen = useCallback(nextScreen => {
+    const history = screenHistoryRef.current;
+    if (history.length > 0) history.pop();
+    isGoingBackRef.current = true;
+    setCurrentScreen(nextScreen);
+  }, []);
+
+  /** Map auth return token → screen name (fallback when history is empty). */
+  const authReturnFallbackScreen = useCallback((back, defaultScreen) => {
+    if (back === 'home') return screenName.home;
+    if (back === 'settings') return screenName.settings;
+    if (back === 'favorites') return screenName.favorites;
+    if (back === 'adsForm') return screenName.adsForm;
+    if (back === 'userProfile') return screenName.userProfile;
+    if (back === 'tikTokFeed') return screenName.tikTokFeed;
+    return defaultScreen;
+  }, []);
+
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     const onBackPress = () => {
@@ -338,6 +357,8 @@ function App() {
   const [tikTokFeedRefreshKey, setTikTokFeedRefreshKey] = useState(0); // Force refresh of TikTok feed
   /** After profile post-grid tap: scroll TikTok feed to this listing id, then clear. */
   const [tikTokFocusListingId, setTikTokFocusListingId] = useState(null);
+  /** Profile post grid → user-only posts feed (subscription + optional avatar). */
+  const [tikTokProfilePostsScope, setTikTokProfilePostsScope] = useState(null);
   /** Where TikTok back button returns (home vs profile). */
   const [tikTokReturnScreen, setTikTokReturnScreen] = useState(screenName.home);
   const [profileUser, setProfileUser] = useState(null); // User to show on UserProfileScreen when opened from feed
@@ -925,9 +946,12 @@ function App() {
                   // user leaves TikTok and comes back.
                   setTikTokUserSearchOpenTrigger(0);
                   setTikTokFocusListingId(null);
+                  setTikTokProfilePostsScope(null);
                   const returnTo = tikTokReturnScreen;
                   setTikTokReturnScreen(screenName.home);
-                  setCurrentScreen(returnTo);
+                  // goBack pops this feed off history — setCurrentScreen(returnTo)
+                  // left tikTokFeed on the stack and caused profile ↔ post loops.
+                  goBack(returnTo);
                 }}
                 onOpenOfficeListing={(category, opts) => {
                   if (category) setSelectedCategory(category);
@@ -1082,6 +1106,7 @@ function App() {
                 }
                 focusListingId={tikTokFocusListingId}
                 onFocusListingConsumed={() => setTikTokFocusListingId(null)}
+                profilePostsScope={tikTokProfilePostsScope}
                 onOpenPostInFeed={listing => {
                   if (!listing?.id) return;
                   const rawCat =
@@ -1119,6 +1144,7 @@ function App() {
                   setProfileReturnScreen(screenName.professionalsDirectory);
                   setProfileUser({
                     ...professional,
+                    _fromProfessionalsDirectory: true,
                     subscription_id: professional?.id || null,
                     owner_id: professional?.id || null,
                     creator_name:
@@ -1404,13 +1430,19 @@ function App() {
                 }
                 onOpenPostInFeed={listing => {
                   if (!listing?.id) return;
-                  const rawCat =
-                    listing.category != null
-                      ? parseInt(String(listing.category), 10)
-                      : NaN;
-                  if (Number.isFinite(rawCat) && rawCat > 0) {
-                    setSelectedCategory(String(rawCat));
-                  }
+                  const subId = String(
+                    listing?.subscription_id ||
+                      listing?.owner_id ||
+                      profileUser?.subscription_id ||
+                      profileUser?.owner_id ||
+                      profileUser?.id ||
+                      '',
+                  ).trim();
+                  if (!subId) return;
+                  setTikTokProfilePostsScope({
+                    subscriptionId: subId,
+                    profileImageUrl: getUserProfileImageUrl(profileUser || listing),
+                  });
                   setTikTokFocusListingId(String(listing.id).trim());
                   setTikTokUserSearchOpenTrigger(0);
                   setTikTokReturnScreen(screenName.userProfile);
@@ -1728,10 +1760,12 @@ function App() {
                   setBnbPublishHostType(null);
                   if (editingListing) {
                     setEditingListing(null);
-                    setCurrentScreen(screenName.editPublishAd);
-                  } else {
-                    setCurrentScreen(screenName.tikTokFeed);
                   }
+                  goBack(
+                    editingListing
+                      ? screenName.editPublishAd
+                      : screenName.tikTokFeed,
+                  );
                 }}
                 onPublish={async listingData => {
                   const wasEditing = !!editingListing;
@@ -1759,7 +1793,7 @@ function App() {
                     () => setTikTokFeedRefreshKey(prev => prev + 1),
                     1500,
                   );
-                  setCurrentScreen(
+                  replaceCurrentScreen(
                     wasEditing
                       ? screenName.editPublishAd
                       : screenName.tikTokFeed,
@@ -2243,8 +2277,17 @@ function App() {
             {currentScreen === screenName.login && (
               <LoginScreen
                 onClose={() => {
+                  if (returnToScreenAfterAuth) {
+                    goBack(
+                      authReturnFallbackScreen(
+                        returnToScreenAfterAuth,
+                        screenName.userRegistration,
+                      ),
+                    );
+                    return;
+                  }
                   setReturnToScreenAfterAuth(null);
-                  setCurrentScreen(screenName.settings);
+                  goBack(screenName.settings);
                 }}
                 onForgotPassword={forgotEmail => {
                   setSecretRecoveryTargetEmail(String(forgotEmail || '').trim());
@@ -2253,9 +2296,10 @@ function App() {
                 }}
                 onLoginSuccess={subscription => {
                   setCurrentUser(subscription);
-                  if (returnToScreenAfterAuth === 'userProfile') {
-                    setReturnToScreenAfterAuth(null);
-                    setCurrentScreen(screenName.userProfile);
+                  const back = returnToScreenAfterAuth;
+                  setReturnToScreenAfterAuth(null);
+                  if (back) {
+                    goBack(authReturnFallbackScreen(back, screenName.home));
                   } else {
                     setCurrentScreen(screenName.home);
                   }
@@ -2269,34 +2313,16 @@ function App() {
                   setCurrentUser(user);
                   const back = returnToScreenAfterAuth;
                   setReturnToScreenAfterAuth(null);
-                  if (back === 'userProfile') {
-                    setCurrentScreen(screenName.userProfile);
-                  } else if (back === 'home') {
-                    setCurrentScreen(screenName.home);
-                  } else if (back === 'settings') {
-                    setCurrentScreen(screenName.settings);
-                  } else if (back === 'tikTokFeed') {
-                    setCurrentScreen(screenName.tikTokFeed);
-                  } else if (back === 'favorites') {
-                    setCurrentScreen(screenName.favorites);
-                  } else {
-                    setCurrentScreen(screenName.adsForm);
-                  }
+                  goBack(
+                    authReturnFallbackScreen(back, screenName.adsForm),
+                  );
                 }}
                 onCancel={() => {
                   const back = returnToScreenAfterAuth;
                   setReturnToScreenAfterAuth(null);
-                  if (back === 'home') {
-                    setCurrentScreen(screenName.home);
-                  } else if (back === 'settings') {
-                    setCurrentScreen(screenName.settings);
-                  } else if (back === 'favorites') {
-                    setCurrentScreen(screenName.favorites);
-                  } else if (back === 'adsForm') {
-                    setCurrentScreen(screenName.adsForm);
-                  } else {
-                    setCurrentScreen(screenName.tikTokFeed);
-                  }
+                  goBack(
+                    authReturnFallbackScreen(back, screenName.tikTokFeed),
+                  );
                 }}
                 onOpenLogin={() => setCurrentScreen(screenName.login)}
               />

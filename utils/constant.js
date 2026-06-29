@@ -868,7 +868,7 @@ export const userCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושב',
+        title: 'קרקע במושע',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},
@@ -1591,7 +1591,7 @@ export const brokerCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושב',
+        title: 'קרקע במושע',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},
@@ -2518,7 +2518,7 @@ export const companyCategoryForm = {
       },
       {
         key: 'radiooptions',
-        title: 'קרקע במושב',
+        title: 'קרקע במושע',
         data: [
           {name: 'not', title: 'לא'},
           {name: 'yes', title: 'כן'},

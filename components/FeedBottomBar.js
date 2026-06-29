@@ -10,10 +10,14 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 const ACTIVE_FILTER_COLOR = '#FFC40A';
-import {FEED_BOTTOM_BAR_CONTENT_HEIGHT} from '../utils/feedLayout';
+import {
+  FEED_BOTTOM_BAR_CONTENT_HEIGHT,
+  FEED_BOTTOM_BAR_CHROME_ONLY_CONTENT_HEIGHT,
+} from '../utils/feedLayout';
 
 export {
   FEED_BOTTOM_BAR_CONTENT_HEIGHT,
+  FEED_BOTTOM_BAR_CHROME_ONLY_CONTENT_HEIGHT,
   FEED_OVERLAY_ABOVE_BAR_GAP,
   feedBottomBarHeight,
   feedChromeScreenBottom,
@@ -213,10 +217,15 @@ const FeedBottomBar = ({
   onOpenPreferencesFilter,
   onOpenPriceFilter,
   onOpenEditPublishAdWithCategory,
+  /** When true: keep bar chrome/background only (no filter buttons). */
+  chromeOnly = false,
   /** Reports rendered bar height so feed chrome can align on every device. */
   onLayoutHeight,
 }) => {
   const insets = useSafeAreaInsets();
+  const barContentHeight = chromeOnly
+    ? FEED_BOTTOM_BAR_CHROME_ONLY_CONTENT_HEIGHT
+    : FEED_BOTTOM_BAR_CONTENT_HEIGHT;
   const categoryNum = useMemo(() => {
     if (selectedCategory == null || selectedCategory === '') return NaN;
     const n = parseInt(String(selectedCategory).trim(), 10);
@@ -317,11 +326,12 @@ const FeedBottomBar = ({
       style={[
         styles.bottomBar,
         {
-          paddingTop: BOTTOM_BAR_TOP_PADDING,
+          paddingTop: chromeOnly ? 0 : BOTTOM_BAR_TOP_PADDING,
           paddingBottom: insets.bottom,
-          height: FEED_BOTTOM_BAR_CONTENT_HEIGHT + insets.bottom,
+          height: barContentHeight + insets.bottom,
         },
       ]}>
+      {chromeOnly ? null : (
       <View style={styles.bottomBarRow}>
         {BOTTOM_BAR_ITEMS.map(item => {
           if (item.id === 'price') {
@@ -502,6 +512,7 @@ const FeedBottomBar = ({
           );
         })}
       </View>
+      )}
     </View>
   );
 };
