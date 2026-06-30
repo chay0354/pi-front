@@ -9,10 +9,28 @@ const MAX_WAIT_MS = 4500;
  * Opaque splash cover that fades out once Home has loaded underneath.
  * Single static image — no scene swaps or background transforms.
  */
-export default function SplashHomeIntroOverlay({readyToDismiss, onComplete}) {
+export default function SplashHomeIntroOverlay({
+  readyToDismiss,
+  onComplete,
+  onFirstPaint,
+}) {
   const opacity = useRef(new Animated.Value(1)).current;
   const mountedAt = useRef(Date.now());
   const finishedRef = useRef(false);
+  const firstPaintReportedRef = useRef(false);
+
+  // onLayout fires once this view has an actual measured frame — a reliable
+  // proxy for "about to paint." Two rAFs add margin so the native splash
+  // only hides once this is confirmed on screen, not just mounted.
+  const handleLayout = useCallback(() => {
+    if (firstPaintReportedRef.current) return;
+    firstPaintReportedRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onFirstPaint?.();
+      });
+    });
+  }, [onFirstPaint]);
 
   const fadeOut = useCallback(() => {
     if (finishedRef.current) return;
@@ -47,7 +65,10 @@ export default function SplashHomeIntroOverlay({readyToDismiss, onComplete}) {
   }, [fadeOut]);
 
   return (
-    <Animated.View pointerEvents="auto" style={[styles.root, {opacity}]}>
+    <Animated.View
+      pointerEvents="auto"
+      onLayout={handleLayout}
+      style={[styles.root, {opacity}]}>
       <Image
         source={require('../assets/SplashScreen.png')}
         style={StyleSheet.absoluteFillObject}

@@ -81,8 +81,16 @@ import {
 import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
 import {ContextHook} from './hooks/ContextHook';
 import {PresenceProvider} from './hooks/PresenceContext';
-import {subscriptionTypes, DEFAULT_HOME_CAROUSEL_CATEGORY_ID} from './utils/constant';
-import {getChatUnreadCount, getListings, getCurrentUser, toSubscriptionId} from './utils/api';
+import {
+  subscriptionTypes,
+  DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+} from './utils/constant';
+import {
+  getChatUnreadCount,
+  getListings,
+  getCurrentUser,
+  toSubscriptionId,
+} from './utils/api';
 import {
   getUserProfileImageUrl,
   normalizeUserProfileAliases,
@@ -199,7 +207,8 @@ function normalizeCityFeedFilter(f) {
   const hasPurpose = p === 'rent' || p === 'sale';
   const hasDistance =
     f.distanceKm != null && Number.isFinite(Number(f.distanceKm));
-  if (!hasLoc && !imm && !hasPurpose && !hasRegions && !hasDistance) return null;
+  if (!hasLoc && !imm && !hasPurpose && !hasRegions && !hasDistance)
+    return null;
   return {
     ...f,
     country: country || null,
@@ -239,6 +248,11 @@ function App() {
   /** One-shot splash → home intro after onboarding + terms (Figma). */
   const [showSplashIntro, setShowSplashIntro] = useState(false);
   const [homeIntroReady, setHomeIntroReady] = useState(false);
+  // Marked true the moment the Home intro animation starts (not when it
+  // finishes) so it can never replay — Home unmounts/remounts every time the
+  // user navigates away and back (currentScreen !== home), which would
+  // otherwise recompute showIntroModal as true again on every return visit.
+  const [hasShownHomeIntro, setHasShownHomeIntro] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   /** After onboarding: must accept terms before using the app. */
   const [showTermsGate, setShowTermsGate] = useState(false);
@@ -246,8 +260,20 @@ function App() {
 
   useLayoutEffect(() => {
     if (!fontsLoaded || !appBootstrapDone) return;
+    if (!showSplashIntro) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [
+    fontsLoaded,
+    appBootstrapDone,
+    showSplashIntro,
+    showOnboarding,
+    showTermsGate,
+  ]);
+
+  const handleSplashOverlayFirstPaint = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded, appBootstrapDone]);
+  }, []);
 
   // Real navigation history — fixes back/close getting stuck oscillating
   // between two screens (e.g. chat <-> userProfile) when each screen's
@@ -403,8 +429,9 @@ function App() {
   const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שכחתי סיסמה success screen
   const [secretRecoveryTargetEmail, setSecretRecoveryTargetEmail] =
     useState('');
-  const [secretRecoveryReturnScreen, setSecretRecoveryReturnScreen] =
-    useState(screenName.settings);
+  const [secretRecoveryReturnScreen, setSecretRecoveryReturnScreen] = useState(
+    screenName.settings,
+  );
   const [postEditorConfig, setPostEditorConfig] = useState(() => ({
     publishTarget: 'post',
     returnScreen: screenName.tikTokFeed,
@@ -412,7 +439,8 @@ function App() {
     listingCategoryId: null,
   }));
   /** Sales image composed in PostEditor before returning to AdsForm. */
-  const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] = useState(null);
+  const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] =
+    useState(null);
   // Feed filters (price, rooms, city, apartment type) – applied client-side in TikTokFeedScreen
   const [feedFilters, setFeedFilters] = useState(INITIAL_FEED_FILTERS);
   /** Sidebar chip filters keyed by feed category id — survives profile/chat navigation. */
@@ -521,7 +549,8 @@ function App() {
         setShowOnboarding(!onboardingDone);
         // Onboarding already done previously but terms not yet accepted → show the gate.
         setShowTermsGate(onboardingDone && !termsAccepted);
-        setShowSplashIntro(onboardingDone && termsAccepted);
+        setShowSplashIntro(true);
+        // setShowSplashIntro(onboardingDone && termsAccepted);
         setHomeIntroReady(false);
       } catch (error) {
         setCurrentScreen(screenName.home);
@@ -716,44 +745,45 @@ function App() {
     [openUserProfileForSubscription],
   );
 
-  const mergeListingWithProfileContext = useCallback((listing, base, extras = {}) => {
-    return {
-      ...listing,
-      ...extras,
-      subscription_id:
-        listing.subscription_id ||
-        listing.owner_id ||
-        base?.subscription_id ||
-        base?.owner_id,
-      owner_id:
-        listing.owner_id ||
-        listing.subscription_id ||
-        base?.owner_id ||
-        base?.subscription_id,
-      creator_name:
-        listing.creator_name ||
-        base?.creator_name ||
-        base?.name ||
-        base?.business_name ||
-        base?.broker_office_name,
-      creator_email:
-        listing.creator_email || base?.creator_email || base?.email,
-      creator_profile_image_url:
-        listing.creator_profile_image_url ||
-        getUserProfileImageUrl(base),
-      company_logo_url:
-        listing.company_logo_url || base?.company_logo_url || null,
-      subscription_type:
-        listing.subscription_type ||
-        listing.creator_subscription_type ||
-        base?.subscription_type,
-    };
-  }, []);
+  const mergeListingWithProfileContext = useCallback(
+    (listing, base, extras = {}) => {
+      return {
+        ...listing,
+        ...extras,
+        subscription_id:
+          listing.subscription_id ||
+          listing.owner_id ||
+          base?.subscription_id ||
+          base?.owner_id,
+        owner_id:
+          listing.owner_id ||
+          listing.subscription_id ||
+          base?.owner_id ||
+          base?.subscription_id,
+        creator_name:
+          listing.creator_name ||
+          base?.creator_name ||
+          base?.name ||
+          base?.business_name ||
+          base?.broker_office_name,
+        creator_email:
+          listing.creator_email || base?.creator_email || base?.email,
+        creator_profile_image_url:
+          listing.creator_profile_image_url || getUserProfileImageUrl(base),
+        company_logo_url:
+          listing.company_logo_url || base?.company_logo_url || null,
+        subscription_type:
+          listing.subscription_type ||
+          listing.creator_subscription_type ||
+          base?.subscription_type,
+      };
+    },
+    [],
+  );
 
   const openListingAdProfile = useCallback(
     (listing, options = {}) => {
-      const listingId =
-        listing?.id != null ? String(listing.id).trim() : '';
+      const listingId = listing?.id != null ? String(listing.id).trim() : '';
       if (!listingId) return;
 
       const {
@@ -883,273 +913,323 @@ function App() {
                 pointerEvents={
                   currentScreen === screenName.home ? 'auto' : 'none'
                 }>
-              <Home
-                isScreenActive={currentScreen === screenName.home}
-                eagerLoad={
-                  showSplashIntro && !showOnboarding && !showTermsGate
-                }
-                onInitialContentReady={() => setHomeIntroReady(true)}
-                carouselCategoryId={DEFAULT_HOME_CAROUSEL_CATEGORY_ID}
-                onOpenSelectedProjects={() =>
-                  setCurrentScreen(screenName.selectedProjects)
-                }
-                onOpenProfessionalsDirectory={() =>
-                  setCurrentScreen(screenName.professionalsDirectory)
-                }
-                onOpenSettings={() => setCurrentScreen(screenName.settings)}
-                onOpenTikTokFeed={async category => {
-                  setSelectedCategory(category);
-                  // Favorites "open user search" bumps tikTokUserSearchOpenTrigger; if we only reset
-                  // on unmount, that value stays >0 and the next feed mount runs the effect that opens
-                  // the search panel. Home category buttons must always land on default feed (pics), not
-                  // search or favorites.
-                  setTikTokUserSearchOpenTrigger(0);
-                  setTikTokFocusListingId(null);
-                  setTikTokReturnScreen(screenName.home);
-                  try {
-                    await AsyncStorage.setItem(
-                      TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                      DEFAULT_TIKTOK_TOP_FILTER,
-                    );
-                  } catch (_) {}
-                  setCurrentScreen(screenName.tikTokFeed);
-                }}
-                onOpenUserProfile={listing => {
-                  // Opened from Pi AI results — remember to reopen the search
-                  // (and restore its results) when we come back to home.
-                  setProfileReturnScreen(screenName.home);
-                  setPiAiReopen(true);
-                  setProfileUser(listing);
-                  setCurrentScreen(screenName.userProfile);
-                }}
-                onOpenFeatureListing={listing => {
-                  setProfileReturnScreen(screenName.home);
-                  setProfileUser(enrichListingForUserProfile(listing));
-                  setCurrentScreen(screenName.userProfile);
-                }}
-                onOpenStoryProfile={openUserProfileFromStoryRing}
-                reopenAi={piAiReopen}
-                aiSnapshot={piAiReopen ? piAiSnapshot : null}
-                onAiReopenConsumed={() => setPiAiReopen(false)}
-                onAiSnapshotChange={setPiAiSnapshot}
-                unreadChatCount={
-                  currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
-                }
-              />
-              {currentScreen === screenName.home &&
-              showSplashIntro &&
-              !showOnboarding &&
-              !showTermsGate ? (
-                <SplashHomeIntroOverlay
-                  readyToDismiss={homeIntroReady}
+                <Home
+                  isScreenActive={currentScreen === screenName.home}
+                  eagerLoad={
+                    showSplashIntro && !showOnboarding && !showTermsGate
+                  }
+                  onInitialContentReady={() => setHomeIntroReady(true)}
+                  showIntroModal={
+                    !hasShownHomeIntro && !showOnboarding && !showTermsGate
+                  }
+                  onIntroModalShown={() => setHasShownHomeIntro(true)}
+                  carouselCategoryId={DEFAULT_HOME_CAROUSEL_CATEGORY_ID}
+                  onOpenSelectedProjects={() =>
+                    setCurrentScreen(screenName.selectedProjects)
+                  }
+                  onOpenProfessionalsDirectory={() =>
+                    setCurrentScreen(screenName.professionalsDirectory)
+                  }
+                  onOpenSettings={() => setCurrentScreen(screenName.settings)}
+                  onOpenTikTokFeed={async category => {
+                    setSelectedCategory(category);
+                    // Favorites "open user search" bumps tikTokUserSearchOpenTrigger; if we only reset
+                    // on unmount, that value stays >0 and the next feed mount runs the effect that opens
+                    // the search panel. Home category buttons must always land on default feed (pics), not
+                    // search or favorites.
+                    setTikTokUserSearchOpenTrigger(0);
+                    setTikTokFocusListingId(null);
+                    setTikTokReturnScreen(screenName.home);
+                    try {
+                      await AsyncStorage.setItem(
+                        TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                        DEFAULT_TIKTOK_TOP_FILTER,
+                      );
+                    } catch (_) {}
+                    setCurrentScreen(screenName.tikTokFeed);
+                  }}
                   onComplete={() => {
                     setShowSplashIntro(false);
                     setHomeIntroReady(false);
                   }}
+                  onOpenUserProfile={listing => {
+                    // Opened from Pi AI results — remember to reopen the search
+                    // (and restore its results) when we come back to home.
+                    setProfileReturnScreen(screenName.home);
+                    setPiAiReopen(true);
+                    setProfileUser(listing);
+                    setCurrentScreen(screenName.userProfile);
+                  }}
+                  onOpenFeatureListing={listing => {
+                    setProfileReturnScreen(screenName.home);
+                    setProfileUser(enrichListingForUserProfile(listing));
+                    setCurrentScreen(screenName.userProfile);
+                  }}
+                  onOpenStoryProfile={openUserProfileFromStoryRing}
+                  reopenAi={piAiReopen}
+                  aiSnapshot={piAiReopen ? piAiSnapshot : null}
+                  onAiReopenConsumed={() => setPiAiReopen(false)}
+                  onAiSnapshotChange={setPiAiSnapshot}
+                  unreadChatCount={
+                    currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
+                  }
                 />
-              ) : null}
+                {/* {currentScreen === screenName.home &&
+                showSplashIntro &&
+                !showOnboarding &&
+                !showTermsGate ? (
+                  <SplashHomeIntroOverlay
+                    readyToDismiss={homeIntroReady}
+                    onComplete={() => {
+                      setShowSplashIntro(false);
+                      setHomeIntroReady(false);
+                    }}
+                    onOpenSettings={() => setCurrentScreen(screenName.settings)}
+                    onOpenTikTokFeed={async category => {
+                      setSelectedCategory(category);
+                      // Favorites "open user search" bumps tikTokUserSearchOpenTrigger; if we only reset
+                      // on unmount, that value stays >0 and the next feed mount runs the effect that opens
+                      // the search panel. Home category buttons must always land on default feed (pics), not
+                      // search or favorites.
+                      setTikTokUserSearchOpenTrigger(0);
+                      setTikTokFocusListingId(null);
+                      setTikTokReturnScreen(screenName.home);
+                      try {
+                        await AsyncStorage.setItem(
+                          TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                          DEFAULT_TIKTOK_TOP_FILTER,
+                        );
+                      } catch (_) {}
+                      setCurrentScreen(screenName.tikTokFeed);
+                    }}
+                    onOpenUserProfile={listing => {
+                      // Opened from Pi AI results — remember to reopen the search
+                      // (and restore its results) when we come back to home.
+                      setProfileReturnScreen(screenName.home);
+                      setPiAiReopen(true);
+                      setProfileUser(listing);
+                      setCurrentScreen(screenName.userProfile);
+                    }}
+                    onOpenFeatureListing={listing => {
+                      setProfileReturnScreen(screenName.home);
+                      setProfileUser(enrichListingForUserProfile(listing));
+                      setCurrentScreen(screenName.userProfile);
+                    }}
+                    onOpenStoryProfile={openUserProfileFromStoryRing}
+                    reopenAi={piAiReopen}
+                    aiSnapshot={piAiReopen ? piAiSnapshot : null}
+                    onAiReopenConsumed={() => setPiAiReopen(false)}
+                    onAiSnapshotChange={setPiAiSnapshot}
+                    unreadChatCount={
+                      currentUser
+                        ? unreadChatCount + (piWelcomeRead ? 0 : 1)
+                        : 0
+                    }
+                  />
+                ) : null} */}
               </View>
             )}
             {currentScreen === screenName.tikTokFeed && (
               <View style={styles.tikTokShell}>
-              <TikTokFeedScreen
-                key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
-                onClose={() => {
-                  setBnbPublishHostType(null);
-                  // Keep the selected bottom filters so they persist when the
-                  // user leaves TikTok and comes back.
-                  setTikTokUserSearchOpenTrigger(0);
-                  setTikTokFocusListingId(null);
-                  setTikTokProfilePostsScope(null);
-                  const returnTo = tikTokReturnScreen;
-                  setTikTokReturnScreen(screenName.home);
-                  // goBack pops this feed off history — setCurrentScreen(returnTo)
-                  // left tikTokFeed on the stack and caused profile ↔ post loops.
-                  goBack(returnTo);
-                }}
-                onOpenOfficeListing={(category, opts) => {
-                  if (category) setSelectedCategory(category);
-                  setBnbPublishHostType(opts?.bnbHostType ?? null);
-                  if (!currentUser) {
-                    setReturnToScreenAfterAuth('tikTokFeed');
-                    setCurrentScreen(screenName.userRegistration);
-                  } else {
-                    setCurrentScreen(screenName.adsForm);
-                  }
-                }}
-                onOpenEditPublishAdWithCategory={(category, opts) => {
-                  if (!currentUser) {
-                    setReturnToScreenAfterAuth('tikTokFeed');
-                    setCurrentScreen(screenName.userRegistration);
-                    return;
-                  }
-                  if (category != null) setSelectedCategory(String(category));
-                  setEditPublishSourceCategory(
-                    category != null ? Number(category) : null,
-                  );
-                  setBnbPublishHostType(opts?.bnbHostType ?? null);
-                  setCurrentScreen(screenName.editPublishAd);
-                }}
-                onOpenPostEditor={category => {
-                  if (!currentUser) {
-                    setReturnToScreenAfterAuth('tikTokFeed');
-                    setCurrentScreen(screenName.userRegistration);
-                    return;
-                  }
-                  const raw =
-                    category != null && String(category).trim() !== ''
-                      ? parseInt(String(category).trim(), 10)
-                      : NaN;
-                  const listingCat =
-                    Number.isFinite(raw) && raw > 0 ? raw : null;
-                  if (listingCat != null) {
-                    setSelectedCategory(String(listingCat));
-                  }
-                  setPostEditorConfig({
-                    publishTarget: 'post',
-                    returnScreen: screenName.tikTokFeed,
-                    listingCategoryId: listingCat,
-                  });
-                  setCurrentScreen(screenName.postEditor);
-                }}
-                onOpenCityFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.cityFilter);
-                }}
-                onOpenApartmentTypeFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.apartmentTypeFilter);
-                }}
-                onOpenTypeFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.typeFilter);
-                }}
-                onOpenOfficeFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.officeFilter);
-                }}
-                onOpenRoomsFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.roomsFilter);
-                }}
-                onOpenMeterFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.meterFilter);
-                }}
-                onOpenDonamFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.donamFilter);
-                }}
-                onOpenPreferencesFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.preferencesFilter);
-                }}
-                onOpenPriceFilter={() => {
-                  setScreenAfterFilter(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.priceFilter);
-                }}
-                onOpenUserProfile={user => {
-                  setProfileReturnScreen(screenName.tikTokFeed);
-                  // Clear App-level trigger so remounting the feed after profile back does not run
-                  // TikTokFeedScreen's userSearchOpenTrigger effect (e.g. after Favorites→feed search).
-                  // Without this, back from profile wrongly reopens the user-search panel instead of the feed you had.
-                  setTikTokUserSearchOpenTrigger(0);
-                  if (!user || typeof user !== 'object') {
-                    setProfileListingFocusKey('');
-                    setProfileUser(user);
-                    setCurrentScreen(screenName.userProfile);
-                    return;
-                  }
-                  const payload = {...user, _fromTikTokPost: true};
-                  const isFeedPost =
-                    payload.feed_post === true ||
-                    payload.isPostEntry === true ||
-                    String(
-                      payload.propertyTypeRaw || payload.propertyType || '',
-                    ).toLowerCase() === 'post';
-                  if (isAdsListingRecord(payload) && !isFeedPost) {
-                    openListingAdProfile(payload, {
+                <TikTokFeedScreen
+                  key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
+                  onClose={() => {
+                    setBnbPublishHostType(null);
+                    // Keep the selected bottom filters so they persist when the
+                    // user leaves TikTok and comes back.
+                    setTikTokUserSearchOpenTrigger(0);
+                    setTikTokFocusListingId(null);
+                    setTikTokProfilePostsScope(null);
+                    const returnTo = tikTokReturnScreen;
+                    setTikTokReturnScreen(screenName.home);
+                    // goBack pops this feed off history — setCurrentScreen(returnTo)
+                    // left tikTokFeed on the stack and caused profile ↔ post loops.
+                    goBack(returnTo);
+                  }}
+                  onOpenOfficeListing={(category, opts) => {
+                    if (category) setSelectedCategory(category);
+                    setBnbPublishHostType(opts?.bnbHostType ?? null);
+                    if (!currentUser) {
+                      setReturnToScreenAfterAuth('tikTokFeed');
+                      setCurrentScreen(screenName.userRegistration);
+                    } else {
+                      setCurrentScreen(screenName.adsForm);
+                    }
+                  }}
+                  onOpenEditPublishAdWithCategory={(category, opts) => {
+                    if (!currentUser) {
+                      setReturnToScreenAfterAuth('tikTokFeed');
+                      setCurrentScreen(screenName.userRegistration);
+                      return;
+                    }
+                    if (category != null) setSelectedCategory(String(category));
+                    setEditPublishSourceCategory(
+                      category != null ? Number(category) : null,
+                    );
+                    setBnbPublishHostType(opts?.bnbHostType ?? null);
+                    setCurrentScreen(screenName.editPublishAd);
+                  }}
+                  onOpenPostEditor={category => {
+                    if (!currentUser) {
+                      setReturnToScreenAfterAuth('tikTokFeed');
+                      setCurrentScreen(screenName.userRegistration);
+                      return;
+                    }
+                    const raw =
+                      category != null && String(category).trim() !== ''
+                        ? parseInt(String(category).trim(), 10)
+                        : NaN;
+                    const listingCat =
+                      Number.isFinite(raw) && raw > 0 ? raw : null;
+                    if (listingCat != null) {
+                      setSelectedCategory(String(listingCat));
+                    }
+                    setPostEditorConfig({
+                      publishTarget: 'post',
                       returnScreen: screenName.tikTokFeed,
-                      profileExtras: {_fromTikTokPost: true},
+                      listingCategoryId: listingCat,
                     });
-                    return;
-                  }
-                  setProfileListingFocusKey('');
-                  setProfileUser(enrichListingForUserProfile(payload));
-                  setCurrentScreen(screenName.userProfile);
-                }}
-                onOpenFavorites={categoryFromFeed => {
-                  if (!currentUser) {
+                    setCurrentScreen(screenName.postEditor);
+                  }}
+                  onOpenCityFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.cityFilter);
+                  }}
+                  onOpenApartmentTypeFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.apartmentTypeFilter);
+                  }}
+                  onOpenTypeFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.typeFilter);
+                  }}
+                  onOpenOfficeFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.officeFilter);
+                  }}
+                  onOpenRoomsFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.roomsFilter);
+                  }}
+                  onOpenMeterFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.meterFilter);
+                  }}
+                  onOpenDonamFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.donamFilter);
+                  }}
+                  onOpenPreferencesFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.preferencesFilter);
+                  }}
+                  onOpenPriceFilter={() => {
+                    setScreenAfterFilter(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.priceFilter);
+                  }}
+                  onOpenUserProfile={user => {
+                    setProfileReturnScreen(screenName.tikTokFeed);
+                    // Clear App-level trigger so remounting the feed after profile back does not run
+                    // TikTokFeedScreen's userSearchOpenTrigger effect (e.g. after Favorites→feed search).
+                    // Without this, back from profile wrongly reopens the user-search panel instead of the feed you had.
+                    setTikTokUserSearchOpenTrigger(0);
+                    if (!user || typeof user !== 'object') {
+                      setProfileListingFocusKey('');
+                      setProfileUser(user);
+                      setCurrentScreen(screenName.userProfile);
+                      return;
+                    }
+                    const payload = {...user, _fromTikTokPost: true};
+                    const isFeedPost =
+                      payload.feed_post === true ||
+                      payload.isPostEntry === true ||
+                      String(
+                        payload.propertyTypeRaw || payload.propertyType || '',
+                      ).toLowerCase() === 'post';
+                    if (isAdsListingRecord(payload) && !isFeedPost) {
+                      openListingAdProfile(payload, {
+                        returnScreen: screenName.tikTokFeed,
+                        profileExtras: {_fromTikTokPost: true},
+                      });
+                      return;
+                    }
+                    setProfileListingFocusKey('');
+                    setProfileUser(enrichListingForUserProfile(payload));
+                    setCurrentScreen(screenName.userProfile);
+                  }}
+                  onOpenFavorites={categoryFromFeed => {
+                    if (!currentUser) {
+                      setReturnToScreenAfterAuth('tikTokFeed');
+                      setCurrentScreen(screenName.userRegistration);
+                      return;
+                    }
+                    setFavoritesReturnScreen(screenName.tikTokFeed);
+                    const n =
+                      categoryFromFeed != null &&
+                      String(categoryFromFeed).trim() !== ''
+                        ? parseInt(String(categoryFromFeed), 10)
+                        : NaN;
+                    setFavoritesCategoryFilter(
+                      !Number.isNaN(n) && n > 0 ? n : null,
+                    );
+                    setCurrentScreen(screenName.favorites);
+                  }}
+                  onShareToConversation={(conv, post) => {
+                    if (!conv || !post) return;
+                    setSharedListingForChat(post);
+                    setSelectedConversation({
+                      id: conv.id || conv.otherUserEmail || null,
+                      otherUserEmail: conv.otherUserEmail || null,
+                      isGroup: conv.isGroup === true,
+                      name: conv.name || 'משתמש',
+                      preview: conv.preview || '',
+                      time: conv.time || '',
+                      profileImageUrl: conv.profileImageUrl || null,
+                      listingId: conv.listingId || null,
+                      listingCategoryLabel: conv.listingCategoryLabel || null,
+                    });
+                    setChatReturnScreen(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.chat);
+                  }}
+                  onOpenUserRegistration={() => {
                     setReturnToScreenAfterAuth('tikTokFeed');
                     setCurrentScreen(screenName.userRegistration);
-                    return;
+                  }}
+                  uploadedListings={uploadedListings}
+                  selectedCategory={selectedCategory}
+                  feedFilters={feedFilters}
+                  selectedSidebarFilter={
+                    selectedCategory != null
+                      ? (sidebarFiltersByCategory[String(selectedCategory)] ??
+                        null)
+                      : null
                   }
-                  setFavoritesReturnScreen(screenName.tikTokFeed);
-                  const n =
-                    categoryFromFeed != null &&
-                    String(categoryFromFeed).trim() !== ''
-                      ? parseInt(String(categoryFromFeed), 10)
-                      : NaN;
-                  setFavoritesCategoryFilter(
-                    !Number.isNaN(n) && n > 0 ? n : null,
-                  );
-                  setCurrentScreen(screenName.favorites);
-                }}
-                onShareToConversation={(conv, post) => {
-                  if (!conv || !post) return;
-                  setSharedListingForChat(post);
-                  setSelectedConversation({
-                    id: conv.id || conv.otherUserEmail || null,
-                    otherUserEmail: conv.otherUserEmail || null,
-                    isGroup: conv.isGroup === true,
-                    name: conv.name || 'משתמש',
-                    preview: conv.preview || '',
-                    time: conv.time || '',
-                    profileImageUrl: conv.profileImageUrl || null,
-                    listingId: conv.listingId || null,
-                    listingCategoryLabel: conv.listingCategoryLabel || null,
-                  });
-                  setChatReturnScreen(screenName.tikTokFeed);
-                  setCurrentScreen(screenName.chat);
-                }}
-                onOpenUserRegistration={() => {
-                  setReturnToScreenAfterAuth('tikTokFeed');
-                  setCurrentScreen(screenName.userRegistration);
-                }}
-                uploadedListings={uploadedListings}
-                selectedCategory={selectedCategory}
-                feedFilters={feedFilters}
-                selectedSidebarFilter={
-                  selectedCategory != null
-                    ? sidebarFiltersByCategory[String(selectedCategory)] ?? null
-                    : null
-                }
-                onSidebarFilterChange={filterId =>
-                  handleSidebarFilterChange(selectedCategory, filterId)
-                }
-                currentUser={currentUser}
-                userSearchOpenTrigger={tikTokUserSearchOpenTrigger}
-                onUserSearchBackToDefaultFeed={() =>
-                  setTikTokUserSearchOpenTrigger(0)
-                }
-                focusListingId={tikTokFocusListingId}
-                onFocusListingConsumed={() => setTikTokFocusListingId(null)}
-                profilePostsScope={tikTokProfilePostsScope}
-                onOpenPostInFeed={listing => {
-                  if (!listing?.id) return;
-                  const rawCat =
-                    listing.category != null
-                      ? parseInt(String(listing.category), 10)
-                      : NaN;
-                  if (Number.isFinite(rawCat) && rawCat > 0) {
-                    setSelectedCategory(String(rawCat));
+                  onSidebarFilterChange={filterId =>
+                    handleSidebarFilterChange(selectedCategory, filterId)
                   }
-                  setTikTokFocusListingId(String(listing.id).trim());
-                  setTikTokUserSearchOpenTrigger(0);
-                  setTikTokFeedRefreshKey(k => k + 1);
-                  setCurrentScreen(screenName.tikTokFeed);
-                }}
-              />
+                  currentUser={currentUser}
+                  userSearchOpenTrigger={tikTokUserSearchOpenTrigger}
+                  onUserSearchBackToDefaultFeed={() =>
+                    setTikTokUserSearchOpenTrigger(0)
+                  }
+                  focusListingId={tikTokFocusListingId}
+                  onFocusListingConsumed={() => setTikTokFocusListingId(null)}
+                  profilePostsScope={tikTokProfilePostsScope}
+                  onOpenPostInFeed={listing => {
+                    if (!listing?.id) return;
+                    const rawCat =
+                      listing.category != null
+                        ? parseInt(String(listing.category), 10)
+                        : NaN;
+                    if (Number.isFinite(rawCat) && rawCat > 0) {
+                      setSelectedCategory(String(rawCat));
+                    }
+                    setTikTokFocusListingId(String(listing.id).trim());
+                    setTikTokUserSearchOpenTrigger(0);
+                    setTikTokFeedRefreshKey(k => k + 1);
+                    setCurrentScreen(screenName.tikTokFeed);
+                  }}
+                />
               </View>
             )}
             {currentScreen === screenName.selectedProjects && (
@@ -1319,8 +1399,7 @@ function App() {
                         _fromCompanyProjects: true,
                         business_name:
                           listing.business_name || ctx?.name || null,
-                        creator_name:
-                          listing.creator_name || ctx?.name || null,
+                        creator_name: listing.creator_name || ctx?.name || null,
                         creator_profile_image_url: companyPic,
                         company_logo_url:
                           listing.company_logo_url || ctx?.logo_url || null,
@@ -1470,7 +1549,9 @@ function App() {
                   if (!subId) return;
                   setTikTokProfilePostsScope({
                     subscriptionId: subId,
-                    profileImageUrl: getUserProfileImageUrl(profileUser || listing),
+                    profileImageUrl: getUserProfileImageUrl(
+                      profileUser || listing,
+                    ),
                   });
                   setTikTokFocusListingId(String(listing.id).trim());
                   setTikTokUserSearchOpenTrigger(0);
@@ -1722,14 +1803,17 @@ function App() {
                     });
                   }
                   if (
-                    postEditorConfig.returnScreen === screenName.editPublishAd &&
+                    postEditorConfig.returnScreen ===
+                      screenName.editPublishAd &&
                     payload?.url &&
                     postEditorConfig.publishTarget === 'post'
                   ) {
                     const categoryRaw =
                       payload.category ?? postEditorConfig.listingCategoryId;
                     const categoryNum =
-                      categoryRaw != null ? parseInt(String(categoryRaw), 10) : NaN;
+                      categoryRaw != null
+                        ? parseInt(String(categoryRaw), 10)
+                        : NaN;
                     setUploadedListings(prev => [
                       ...prev,
                       {
@@ -2138,9 +2222,7 @@ function App() {
                   secretRecoveryTargetEmail ||
                   String(currentUser?.email || '').trim()
                 }
-                fromLogin={
-                  secretRecoveryReturnScreen === screenName.login
-                }
+                fromLogin={secretRecoveryReturnScreen === screenName.login}
                 onClose={() =>
                   setCurrentScreen(
                     secretRecoveryReturnScreen || screenName.settings,
@@ -2319,7 +2401,9 @@ function App() {
                   goBack(screenName.settings);
                 }}
                 onForgotPassword={forgotEmail => {
-                  setSecretRecoveryTargetEmail(String(forgotEmail || '').trim());
+                  setSecretRecoveryTargetEmail(
+                    String(forgotEmail || '').trim(),
+                  );
                   setSecretRecoveryReturnScreen(screenName.login);
                   setCurrentScreen(screenName.secretCodeRecovery);
                 }}
@@ -2342,16 +2426,12 @@ function App() {
                   setCurrentUser(user);
                   const back = returnToScreenAfterAuth;
                   setReturnToScreenAfterAuth(null);
-                  goBack(
-                    authReturnFallbackScreen(back, screenName.adsForm),
-                  );
+                  goBack(authReturnFallbackScreen(back, screenName.adsForm));
                 }}
                 onCancel={() => {
                   const back = returnToScreenAfterAuth;
                   setReturnToScreenAfterAuth(null);
-                  goBack(
-                    authReturnFallbackScreen(back, screenName.tikTokFeed),
-                  );
+                  goBack(authReturnFallbackScreen(back, screenName.tikTokFeed));
                 }}
                 onOpenLogin={() => setCurrentScreen(screenName.login)}
               />
@@ -2611,8 +2691,7 @@ function App() {
             )}
             {showOnboarding ? (
               <OnboardingFlow onComplete={handleOnboardingComplete} />
-            ) : null}
-            {!showOnboarding && showTermsGate ? (
+            ) : showTermsGate ? (
               <View style={styles.termsGateOverlay}>
                 <TermsOfUseScreen
                   mode="accept"

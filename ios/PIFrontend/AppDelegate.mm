@@ -18,7 +18,14 @@
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
 
-  return [super application:application didFinishLaunchingWithOptions:launchOptions];
+  BOOL result = [super application:application didFinishLaunchingWithOptions:launchOptions];
+
+  // Matches the splash screen background (#252525). Without this the window
+  // defaults to white, which flashes briefly when the splash overlay is
+  // removed (hideAsync) before React Native has painted any real content.
+  self.window.backgroundColor = [UIColor colorWithRed:0x25/255.0 green:0x25/255.0 blue:0x25/255.0 alpha:1.0];
+
+  return result;
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

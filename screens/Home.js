@@ -7,23 +7,31 @@ import {
   Platform,
   InteractionManager,
 } from 'react-native';
-import React, {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
+import HomeIntroModal from '../components/HomeIntroModal';
 import {TouchableOpacity} from 'react-native';
 import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
-import {
-  firstImageUrl,
-  firstVideoUrl,
-} from '../utils/listingGridCardFigma';
+import {firstImageUrl, firstVideoUrl} from '../utils/listingGridCardFigma';
 
-import {userCategories, DEFAULT_HOME_CAROUSEL_CATEGORY_ID} from '../utils/constant';
+import {
+  userCategories,
+  DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+} from '../utils/constant';
 import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
@@ -39,8 +47,9 @@ const pickRandomCompanyProjectListing = listings => {
   const candidates = (Array.isArray(listings) ? listings : []).filter(
     listing =>
       !isFeedPostListing(listing) &&
-      String(listing?.subscription_type || '').trim().toLowerCase() ===
-        'company' &&
+      String(listing?.subscription_type || '')
+        .trim()
+        .toLowerCase() === 'company' &&
       listingHasVideo(listing),
   );
   if (candidates.length === 0) return null;
@@ -246,8 +255,14 @@ const Home = ({
   eagerLoad = false,
   isScreenActive = true,
   onInitialContentReady,
+  onComplete,
+  showIntroModal = false,
+  onIntroModalShown,
 }) => {
   const insets = useSafeAreaInsets();
+  const logoImageRef = useRef(null);
+  const [logoRevealed, setLogoRevealed] = useState(!showIntroModal);
+  const [logoTargetLayout, setLogoTargetLayout] = useState(null);
   const [storyRings, setStoryRings] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(eagerLoad);
   const [viewerRing, setViewerRing] = useState(null);
@@ -271,9 +286,11 @@ const Home = ({
 
   // Consume the one-shot reopen flag once we've restored the flipped state.
   useEffect(() => {
+    onComplete?.();
     if (reopenAi) {
       onAiReopenConsumed?.();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -338,11 +355,7 @@ const Home = ({
     if (storiesLoading || featureMediaLoading) return;
     initialReadySentRef.current = true;
     onInitialContentReady();
-  }, [
-    storiesLoading,
-    featureMediaLoading,
-    onInitialContentReady,
-  ]);
+  }, [storiesLoading, featureMediaLoading, onInitialContentReady]);
 
   const featureMedia = featureListing
     ? resolveFeatureProjectVideoMedia(featureListing)
@@ -536,7 +549,23 @@ const Home = ({
         onPress={onLogoPress}
         accessibilityRole="button"
         accessibilityLabel="Pi AI">
-        <Image source={require('../assets/homeLogo.png')} style={styles.logo} />
+        <Image
+          ref={logoImageRef}
+          source={require('../assets/homeLogo.png')}
+          style={[styles.logo]}
+          onLayout={() => {
+            // measureInWindow gives absolute screen coords — needed so the
+            // intro modal (its own full-screen overlay layer) can animate
+            // its logo to land exactly here.
+            requestAnimationFrame(() => {
+              logoImageRef.current?.measureInWindow?.((x, y, width, height) => {
+                if (width > 0 && height > 0) {
+                  setLogoTargetLayout({x, y, width, height});
+                }
+              });
+            });
+          }}
+        />
       </TouchableOpacity>
 
       <View style={styles.content}>
@@ -576,10 +605,7 @@ const Home = ({
                 <>
                   <View style={styles.projectCardDim} pointerEvents="none" />
                   <LinearGradient
-                    colors={[
-                      'rgba(34,31,60,0.12)',
-                      'rgba(34,31,60,0.62)',
-                    ]}
+                    colors={['rgba(34,31,60,0.12)', 'rgba(34,31,60,0.62)']}
                     locations={[0.3, 1]}
                     style={styles.projectCardGradient}
                     pointerEvents="none"
@@ -690,7 +716,14 @@ const Home = ({
     : undefined;
 
   return (
-    <HomeBackground>
+    <>
+      <HomeIntroModal
+        visible={showIntroModal}
+        targetLayout={logoTargetLayout}
+        onShown={onIntroModalShown}
+        onHidden={() => setLogoRevealed(true)}
+      />
+      <HomeBackground>
       <View style={styles.backgroundClip}>
         <View
           style={[
@@ -742,7 +775,8 @@ const Home = ({
           />
         </View>
       </View>
-    </HomeBackground>
+      </HomeBackground>
+    </>
   );
 };
 
