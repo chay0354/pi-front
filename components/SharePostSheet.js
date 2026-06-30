@@ -25,6 +25,7 @@ import {
   sendGroupChatMessage,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {resolveAdVideoUri} from '../utils/videoPlayback';
 import {flexStart} from '../utils/rtlLayout';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
@@ -73,6 +74,8 @@ const firstImage = post => {
 
 const videoUrl = post => {
   if (!post) return null;
+  const playback = resolveAdVideoUri(post);
+  if (playback) return playback;
   if (post.video && typeof post.video === 'object') return pickUrl(post.video);
   return pickUrl(post.video) || pickUrl(post.video_url);
 };

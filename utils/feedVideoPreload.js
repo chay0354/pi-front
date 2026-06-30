@@ -1,4 +1,5 @@
 import {Platform} from 'react-native';
+import {resolveAdVideoUri} from './videoPlayback';
 
 const MAX_WEB_VIDEO_PREFETCH = 6;
 const MAX_NATIVE_VIDEO_PREFETCH = 8;
@@ -39,6 +40,14 @@ function isVideoUrl(raw) {
 
 export function resolveFeedVideoUri(item) {
   if (!item || item.type !== 'video') return '';
+
+  const playbackDirect =
+    item.video_playback_url != null ? String(item.video_playback_url).trim() : '';
+  if (playbackDirect) return playbackDirect;
+
+  const fromListing = resolveAdVideoUri(item);
+  if (fromListing) return fromListing;
+
   const raw =
     item.video && typeof item.video === 'object'
       ? item.video.uri || item.video.url

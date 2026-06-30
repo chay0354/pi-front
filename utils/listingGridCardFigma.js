@@ -3,6 +3,8 @@
  * (Pi AI search + "הנכסים שלי" / UserListings).
  */
 
+import {resolveAdVideoUri} from './videoPlayback';
+
 export const HEB_M2 = 'מ״ר';
 
 export const numOrNull = v => {
@@ -174,18 +176,7 @@ export const firstImageUrl = listing => {
   return listing?.main_image_url || listing?.image_url || null;
 };
 
-export const firstVideoUrl = listing => {
-  const videos = listing?.listing_videos;
-  if (Array.isArray(videos)) {
-    const main = videos.find(v => v?.video_type === 'main' && v?.video_url);
-    if (main?.video_url) return String(main.video_url).trim();
-    const any = videos.find(v => v?.video_url);
-    if (any?.video_url) return String(any.video_url).trim();
-  }
-  const direct = listing?.video_url;
-  if (typeof direct === 'string' && direct.trim()) return direct.trim();
-  return null;
-};
+export const firstVideoUrl = listing => resolveAdVideoUri(listing);
 
 const normalizeListingFeedDisplayPriority = listing => {
   const raw =

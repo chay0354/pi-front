@@ -19,6 +19,7 @@ import {
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
 } from './index';
+import {resolveStorySlideUri} from '../utils/videoPlayback';
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
@@ -36,7 +37,7 @@ function preloadRingImages(ring) {
 
 function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
   const webVideoRef = useRef(null);
-  const uri = slide?.media_url;
+  const uri = resolveStorySlideUri(slide);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -177,7 +178,7 @@ const StoryViewerModal = ({
         mediaReadyTimerRef.current = null;
       }
     };
-  }, [slideIndex, currentSlide?.media_url]);
+  }, [slideIndex, currentSlide ? resolveStorySlideUri(currentSlide) : null]);
 
   const handleMediaReady = useCallback(() => {
     if (mediaReadyTimerRef.current) {

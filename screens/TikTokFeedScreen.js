@@ -43,6 +43,7 @@ import {
   resolveFeedVideoUri,
   feedScrollFocusIndex,
 } from '../utils/feedVideoPreload';
+import {resolveAdVideoUri} from '../utils/videoPlayback';
 import FeedBottomBar from '../components/FeedBottomBar';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
 import {
@@ -2620,7 +2621,8 @@ const TikTokFeedScreen = ({
                 listing.description &&
                 String(listing.description).trim().length > 0;
 
-              const hasVideo = !!(video && video.video_url);
+              const playbackUri = resolveAdVideoUri(listing);
+              const hasVideo = !!playbackUri;
               const hasImages = imagesArray.length > 0;
               const feedPriority = normalizeListingFeedDisplayPriority(listing);
               const showVideoFirst =
@@ -2629,7 +2631,7 @@ const TikTokFeedScreen = ({
               const mediaUrls = [
                 mainImage?.image_url,
                 ...(additionalImages || []).map(img => img?.image_url),
-                video?.video_url,
+                playbackUri,
               ]
                 .filter(Boolean)
                 .map(u => String(u));
@@ -2658,7 +2660,10 @@ const TikTokFeedScreen = ({
                   null,
                 feed_post: isPostListing,
                 type: displayType,
-                video: video && video.video_url ? {uri: video.video_url} : null,
+                video_playback_url: listing.video_playback_url || playbackUri || null,
+                video_hls_url: listing.video_hls_url || video?.video_hls_url || null,
+                video_status: listing.video_status || video?.video_status || null,
+                video: playbackUri ? {uri: playbackUri} : null,
                 images:
                   imagesArray.length > 0
                     ? imagesArray
