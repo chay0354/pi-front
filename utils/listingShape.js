@@ -11,6 +11,10 @@ export function isAdsListingRecord(u) {
     (Array.isArray(u.images) && u.images.length > 0) ||
     u.price != null ||
     (typeof u.address === 'string' && u.address.trim() !== '') ||
-    (typeof u.video_url === 'string' && u.video_url.trim() !== '')
+    (typeof u.video_url === 'string' && u.video_url.trim() !== '') ||
+    (typeof u.video_hls_url === 'string' && u.video_hls_url.trim() !== '') ||
+    (typeof u.video_playback_url === 'string' &&
+      u.video_playback_url.trim() !== '') ||
+    (u.type === 'video' && u.video != null)
   );
 }

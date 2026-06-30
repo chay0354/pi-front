@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {View, Image, Platform, StyleSheet} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
+import {isHlsUri} from '../utils/videoPlayback';
 import {
   isFeedVideoReady,
   markFeedVideoReady,
@@ -10,16 +11,15 @@ const FEED_IMAGE_PROPS =
   Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
 
 /**
- * TikTok-style feed video. Adjacent items `prewarm` (play muted) so the next
- * swipe lands on an already-decoded frame — unmute only when `isActive`.
+ * TikTok-style feed video — Mux HLS only (.m3u8).
  */
 function FeedVideoPlayerInner({
   uri,
-  posterUri = '',
   isActive = false,
   prewarm = false,
   style,
   placeholderSource = null,
+  posterUri = '',
 }) {
   const videoRef = useRef(null);
   const webVideoRef = useRef(null);
@@ -27,14 +27,22 @@ function FeedVideoPlayerInner({
   const prewarmRef = useRef(prewarm);
   const [ready, setReady] = useState(() => isFeedVideoReady(uri));
 
-  const shouldPlay = isActive || prewarm;
+  const allowPrewarm = prewarm && !(Platform.OS === 'android' && isHlsUri(uri));
+  const shouldPlay = isActive || allowPrewarm;
   const isAudible = isActive;
 
   isActiveRef.current = isActive;
-  prewarmRef.current = prewarm;
+  prewarmRef.current = allowPrewarm;
 
   useEffect(() => {
     setReady(isFeedVideoReady(uri));
+  }, [uri]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    return () => {
+      videoRef.current?.unloadAsync?.().catch(() => {});
+    };
   }, [uri]);
 
   const markReady = useCallback(() => {
@@ -50,7 +58,7 @@ function FeedVideoPlayerInner({
         el.muted = false;
         const play = el.play?.();
         if (play && typeof play.catch === 'function') play.catch(() => {});
-      } else if (prewarm) {
+      } else if (allowPrewarm) {
         el.muted = true;
         const play = el.play?.();
         if (play && typeof play.catch === 'function') play.catch(() => {});
@@ -71,10 +79,17 @@ function FeedVideoPlayerInner({
       try {
         if (!shouldPlay) {
           await player.pauseAsync();
+          await player.setIsMutedAsync(true);
+        } else if (isActive) {
+          await player.setIsMutedAsync(false);
+          await player.playAsync();
+        } else if (allowPrewarm) {
+          await player.setIsMutedAsync(true);
+          await player.playAsync();
         }
       } catch (_) {}
     })();
-  }, [isActive, prewarm, ready, shouldPlay, uri]);
+  }, [allowPrewarm, isActive, ready, shouldPlay, uri]);
 
   const handleReadyForDisplay = useCallback(() => {
     markReady();
@@ -84,9 +99,23 @@ function FeedVideoPlayerInner({
     markReady();
   }, [markReady]);
 
-  const showPoster = Boolean(posterUri) && !ready && !isActive && !prewarm;
+  const showPoster = Boolean(posterUri) && !ready && !isActive && !allowPrewarm;
   const showPlaceholder =
-    !posterUri && !ready && !isActive && !prewarm && placeholderSource;
+    !posterUri && !ready && !isActive && !allowPrewarm && placeholderSource;
+
+  if (!uri) {
+    return (
+      <View style={[styles.root, style]}>
+        {placeholderSource ? (
+          <Image
+            source={placeholderSource}
+            style={styles.placeholder}
+            resizeMode="contain"
+          />
+        ) : null}
+      </View>
+    );
+  }
 
   if (Platform.OS === 'web') {
     return (
@@ -139,6 +168,7 @@ function FeedVideoPlayerInner({
         />
       ) : null}
       <Video
+        key={String(uri)}
         ref={videoRef}
         source={{uri}}
         style={styles.video}
@@ -149,7 +179,7 @@ function FeedVideoPlayerInner({
         volume={isAudible ? 1.0 : 0}
         useNativeControls={false}
         usePoster={false}
-        progressUpdateIntervalMillis={100}
+        progressUpdateIntervalMillis={250}
         onReadyForDisplay={handleReadyForDisplay}
         onLoad={handleLoad}
         onPlaybackStatusUpdate={status => {

@@ -86,12 +86,18 @@ const isVideoMediaUrl = url => {
 };
 
 const getListingVideoUrl = listing => {
-  const fromVideos = listing?.listing_videos?.[0]?.video_url;
-  if (fromVideos && String(fromVideos).trim()) {
+  const v0 = listing?.listing_videos?.[0];
+  const fromSource = v0?.source_video_url;
+  if (fromSource && String(fromSource).trim()) {
+    return String(fromSource).trim();
+  }
+  const fromVideos = v0?.video_url;
+  if (fromVideos && String(fromVideos).trim() && !/\.m3u8|stream\.mux\.com/i.test(fromVideos)) {
     return String(fromVideos).trim();
   }
   if (listing?.video_url && String(listing.video_url).trim()) {
-    return String(listing.video_url).trim();
+    const direct = String(listing.video_url).trim();
+    if (!/\.m3u8|stream\.mux\.com/i.test(direct)) return direct;
   }
   if (listing?.video?.uri && String(listing.video.uri).trim()) {
     return String(listing.video.uri).trim();

@@ -872,9 +872,19 @@ function App() {
                 </Text>
               </View>
             )}
-            {currentScreen === screenName.home ? (
-              <View style={styles.homeShell}>
+            {(currentScreen === screenName.home ||
+              currentScreen === screenName.tikTokFeed) && (
+              <View
+                style={[
+                  styles.homeShell,
+                  currentScreen === screenName.tikTokFeed &&
+                    styles.homeShellCached,
+                ]}
+                pointerEvents={
+                  currentScreen === screenName.home ? 'auto' : 'none'
+                }>
               <Home
+                isScreenActive={currentScreen === screenName.home}
                 eagerLoad={
                   showSplashIntro && !showOnboarding && !showTermsGate
                 }
@@ -926,7 +936,10 @@ function App() {
                   currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
                 }
               />
-              {showSplashIntro && !showOnboarding && !showTermsGate ? (
+              {currentScreen === screenName.home &&
+              showSplashIntro &&
+              !showOnboarding &&
+              !showTermsGate ? (
                 <SplashHomeIntroOverlay
                   readyToDismiss={homeIntroReady}
                   onComplete={() => {
@@ -936,8 +949,9 @@ function App() {
                 />
               ) : null}
               </View>
-            ) : null}
+            )}
             {currentScreen === screenName.tikTokFeed && (
+              <View style={styles.tikTokShell}>
               <TikTokFeedScreen
                 key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
                 onClose={() => {
@@ -1036,18 +1050,32 @@ function App() {
                 }}
                 onOpenUserProfile={user => {
                   setProfileReturnScreen(screenName.tikTokFeed);
-                  setProfileUser(
-                    user && typeof user === 'object'
-                      ? enrichListingForUserProfile({
-                          ...user,
-                          _fromTikTokPost: true,
-                        })
-                      : user,
-                  );
                   // Clear App-level trigger so remounting the feed after profile back does not run
                   // TikTokFeedScreen's userSearchOpenTrigger effect (e.g. after Favorites→feed search).
                   // Without this, back from profile wrongly reopens the user-search panel instead of the feed you had.
                   setTikTokUserSearchOpenTrigger(0);
+                  if (!user || typeof user !== 'object') {
+                    setProfileListingFocusKey('');
+                    setProfileUser(user);
+                    setCurrentScreen(screenName.userProfile);
+                    return;
+                  }
+                  const payload = {...user, _fromTikTokPost: true};
+                  const isFeedPost =
+                    payload.feed_post === true ||
+                    payload.isPostEntry === true ||
+                    String(
+                      payload.propertyTypeRaw || payload.propertyType || '',
+                    ).toLowerCase() === 'post';
+                  if (isAdsListingRecord(payload) && !isFeedPost) {
+                    openListingAdProfile(payload, {
+                      returnScreen: screenName.tikTokFeed,
+                      profileExtras: {_fromTikTokPost: true},
+                    });
+                    return;
+                  }
+                  setProfileListingFocusKey('');
+                  setProfileUser(enrichListingForUserProfile(payload));
                   setCurrentScreen(screenName.userProfile);
                 }}
                 onOpenFavorites={categoryFromFeed => {
@@ -1122,6 +1150,7 @@ function App() {
                   setCurrentScreen(screenName.tikTokFeed);
                 }}
               />
+              </View>
             )}
             {currentScreen === screenName.selectedProjects && (
               <SelectedProjectsScreen
@@ -2613,6 +2642,16 @@ const styles = StyleSheet.create({
   },
   homeShell: {
     flex: 1,
+  },
+  /** Home stays mounted under TikTok so back is instant (no refetch). */
+  homeShellCached: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
+    zIndex: 0,
+  },
+  tikTokShell: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   container: {
     flex: 1,

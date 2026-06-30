@@ -1503,11 +1503,15 @@ const UserProfileScreen = ({
   /** Post grid + profile-only TikTok feed — any profile with posts, not only own or TikTok-post entry. */
   const showProfilePostGrid =
     !isDedicatedListingAdProfile && recentPostGridImages.length > 0;
+  /** Opened on a specific feed ad (TikTok swipe / list) — show that ad, not the 6-post grid. */
+  const openedFromFeedAdListing = isListingFromFeed && !openedFromPost;
   const openedFromProfessionalsDirectory = Boolean(
     user?._fromProfessionalsDirectory,
   );
   const showProfilePostGridAtTop =
-    showProfilePostGrid && !openedFromProfessionalsDirectory;
+    showProfilePostGrid &&
+    !openedFromProfessionalsDirectory &&
+    !openedFromFeedAdListing;
   /** From בעלי מקצוע: always show 6-tile grid (empty placeholders when no posts). */
   const showProfilePostGridAfterBio =
     openedFromProfessionalsDirectory &&

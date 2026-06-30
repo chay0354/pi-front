@@ -8,6 +8,7 @@ const nativeVideoPrefetchKeys = [];
 const nativeVideoPrefetchSet = new Set();
 /** Native feed videos that already decoded at least one frame (survives FlatList remount). */
 const nativeFeedVideoReady = new Set();
+const MAX_NATIVE_FEED_VIDEO_READY = 24;
 
 export function isFeedVideoReady(uri) {
   const key = uri != null ? String(uri).trim() : '';
@@ -16,7 +17,14 @@ export function isFeedVideoReady(uri) {
 
 export function markFeedVideoReady(uri) {
   const key = uri != null ? String(uri).trim() : '';
-  if (key.length > 0) nativeFeedVideoReady.add(key);
+  if (key.length > 0) {
+    nativeFeedVideoReady.add(key);
+    while (nativeFeedVideoReady.size > MAX_NATIVE_FEED_VIDEO_READY) {
+      const oldest = nativeFeedVideoReady.values().next().value;
+      if (oldest == null) break;
+      nativeFeedVideoReady.delete(oldest);
+    }
+  }
 }
 
 /** Bias focus toward the next page so video/audio starts before snap finishes. */
@@ -40,10 +48,6 @@ function isVideoUrl(raw) {
 
 export function resolveFeedVideoUri(item) {
   if (!item || item.type !== 'video') return '';
-
-  const playbackDirect =
-    item.video_playback_url != null ? String(item.video_playback_url).trim() : '';
-  if (playbackDirect) return playbackDirect;
 
   const fromListing = resolveAdVideoUri(item);
   if (fromListing) return fromListing;

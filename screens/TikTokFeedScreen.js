@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   PanResponder,
   Animated,
+  Easing,
   TextInput,
   FlatList,
   useWindowDimensions,
@@ -1764,7 +1765,8 @@ const TikTokFeedScreen = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarPanActiveRef = useRef(false);
   const sidebarPanDidDragRef = useRef(false);
-  /** Pause feed photo auto-slideshow while the sidebar intro/drag runs. */
+  const sidebarPanStartYRef = useRef(0);
+  /** Pause feed photo crossfade only while the user drags the sidebar. */
   const [sidebarSlideshowPaused, setSidebarSlideshowPaused] = useState(false);
   /** True while finger is on profile / follow + — blocks sidebar pan from stealing the tap. */
   const sidebarBlockPanRef = useRef(false);
@@ -2158,6 +2160,8 @@ const TikTokFeedScreen = ({
   const sidebarIntroDone = useRef(false);
   const sidebarIntroHoldApplied = useRef(false);
   const sidebarIntroAnimStarted = useRef(false);
+  const sidebarIntroAnimationRef = useRef(null);
+  const sidebarIntroDragListenerRef = useRef(null);
   const sidebarIntroCategoryRef = useRef(categoryId);
   const sidebarIntroTargetsRef = useRef({
     profileHold: 0,
@@ -2166,11 +2170,10 @@ const TikTokFeedScreen = ({
   });
   const [sidebarIntroVisible, setSidebarIntroVisible] = useState(false);
   const [sidebarIntroFinished, setSidebarIntroFinished] = useState(false);
+  const [sidebarIntroEpoch, setSidebarIntroEpoch] = useState(0);
   /**
-   * Intro uses the NATIVE driver so the scroll stays smooth even while the JS
-   * thread is busy on open (fetching listings, decoding images). Geometry is
-   * deterministic, so layout updates never need to interrupt this animation.
-   * Native + web are unsupported, so fall back to the JS driver on web.
+   * Native driver keeps intro scroll smooth while JS is busy loading listings.
+   * Pan grant calls stopAnimation before manual setValue, so drag still works after.
    */
   const sidebarAnimUseNativeDriver = Platform.OS !== 'web';
 
@@ -2196,6 +2199,41 @@ const TikTokFeedScreen = ({
     sidebarDragY.setValue(clamped);
     sidebarDragOffset.current = clamped;
   }, [sidebarDragMaxDown, sidebarDragMaxUp, sidebarDragY]);
+
+  /** Stop native intro animation and hand translateY back to JS for manual drag. */
+  const stopSidebarIntroAnimation = useCallback(
+    (holdY = sidebarDragOffset.current) => {
+      sidebarIntroAnimationRef.current?.stop();
+      sidebarIntroAnimationRef.current = null;
+      if (sidebarIntroDragListenerRef.current != null) {
+        sidebarDragY.removeListener(sidebarIntroDragListenerRef.current);
+        sidebarIntroDragListenerRef.current = null;
+      }
+      sidebarDragY.stopAnimation(value => {
+        const raw = Number.isFinite(value) ? value : holdY;
+        const clamped = Math.max(
+          sidebarDragMaxUp,
+          Math.min(sidebarDragMaxDown, raw),
+        );
+        sidebarDragOffset.current = clamped;
+        sidebarDragY.setValue(clamped);
+      });
+    },
+    [sidebarDragMaxDown, sidebarDragMaxUp, sidebarDragY],
+  );
+
+  /** Interrupt intro because the feed moved — snap to final rest pose on every page. */
+  const finalizeSidebarIntroForFeedScroll = useCallback(() => {
+    if (sidebarIntroDone.current) return;
+    const yRest = sidebarIntroTargetsRef.current.topTwo;
+    sidebarIntroDone.current = true;
+    sidebarIntroAnimStarted.current = true;
+    sidebarIntroHoldApplied.current = true;
+    sidebarIntroFinishedRef.current = true;
+    stopSidebarIntroAnimation(yRest);
+    setSidebarIntroFinished(true);
+    setSidebarIntroEpoch(epoch => epoch + 1);
+  }, [stopSidebarIntroAnimation]);
 
   // Layout effect (runs before paint) so the sidebar is already parked at the
   // profile-only position on the first frame — no "loading" flash on open.
@@ -2227,8 +2265,6 @@ const TikTokFeedScreen = ({
       setSidebarIntroVisible(false);
     }
     if (sidebarIntroDone.current) {
-      sidebarDragY.setValue(sidebarIntroTopTwoOnlyDown);
-      sidebarDragOffset.current = sidebarIntroTopTwoOnlyDown;
       setSidebarIntroVisible(true);
       setSidebarIntroFinished(true);
       return;
@@ -2267,45 +2303,76 @@ const TikTokFeedScreen = ({
     sidebarIntroAnimStarted.current = true;
 
     let cancelled = false;
+    let dragListenerId = null;
     const scrollDuration = 900;
     const waitBetweenParts = 1000;
+    const introEasing = Easing.inOut(Easing.cubic);
 
-    const timer = setTimeout(() => {
-      if (cancelled) return;
+    // Snapshot targets once — avoid mid-flight geometry changes restarting the effect.
+    const yProfileOnly = sidebarIntroTargetsRef.current.profileHold;
+    const yAllIcons = sidebarIntroTargetsRef.current.allIcons;
+    const yTopTwo = sidebarIntroTargetsRef.current.topTwo;
 
-      // Deterministic targets (ordered): profileOnly > topTwo > allIcons.
-      const yProfileOnly = sidebarIntroTargetsRef.current.profileHold;
-      const yAllIcons = sidebarIntroTargetsRef.current.allIcons;
-      const yTopTwo = sidebarIntroTargetsRef.current.topTwo;
+    sidebarDragY.setValue(yProfileOnly);
+    sidebarDragOffset.current = yProfileOnly;
 
-      sidebarDragY.setValue(yProfileOnly);
-      sidebarDragOffset.current = yProfileOnly;
+    dragListenerId = sidebarDragY.addListener(({value}) => {
+      if (sidebarPanActiveRef.current) return;
+      if (Number.isFinite(value)) {
+        sidebarDragOffset.current = value;
+      }
+    });
+    sidebarIntroDragListenerRef.current = dragListenerId;
 
-      // 1) Profile only → 2) scroll up (reveal all filters through the last) → 3) scroll down (profile + 4 filters).
-      Animated.sequence([
-        Animated.timing(sidebarDragY, {
-          toValue: yAllIcons,
-          duration: scrollDuration,
-          useNativeDriver: sidebarAnimUseNativeDriver,
-        }),
-        Animated.delay(waitBetweenParts),
-        Animated.timing(sidebarDragY, {
-          toValue: yTopTwo,
-          duration: scrollDuration,
-          useNativeDriver: sidebarAnimUseNativeDriver,
-        }),
-      ]).start(({finished}) => {
-        if (cancelled || !finished) return;
-        sidebarIntroDone.current = true;
-        sidebarDragOffset.current = yTopTwo;
-        setSidebarIntroFinished(true);
-      });
-    }, SIDEBAR_INTRO_START_DELAY_MS);
+    const introAnimation = Animated.sequence([
+      Animated.delay(SIDEBAR_INTRO_START_DELAY_MS),
+      Animated.timing(sidebarDragY, {
+        toValue: yAllIcons,
+        duration: scrollDuration,
+        easing: introEasing,
+        useNativeDriver: sidebarAnimUseNativeDriver,
+      }),
+      Animated.delay(waitBetweenParts),
+      Animated.timing(sidebarDragY, {
+        toValue: yTopTwo,
+        duration: scrollDuration,
+        easing: introEasing,
+        useNativeDriver: sidebarAnimUseNativeDriver,
+      }),
+    ]);
+
+    sidebarIntroAnimationRef.current = introAnimation;
+    introAnimation.start(({finished}) => {
+      if (cancelled || !finished || sidebarIntroDone.current) return;
+      sidebarIntroDone.current = true;
+      sidebarDragOffset.current = yTopTwo;
+      sidebarDragY.setValue(yTopTwo);
+      setSidebarIntroFinished(true);
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
-      sidebarDragY.stopAnimation();
+      introAnimation.stop();
+      sidebarIntroAnimationRef.current = null;
+      if (dragListenerId != null) {
+        sidebarDragY.removeListener(dragListenerId);
+        if (sidebarIntroDragListenerRef.current === dragListenerId) {
+          sidebarIntroDragListenerRef.current = null;
+        }
+      }
+      if (!sidebarIntroDone.current) {
+        sidebarIntroAnimStarted.current = false;
+        sidebarDragY.stopAnimation(value => {
+          const raw = Number.isFinite(value) ? value : sidebarDragOffset.current;
+          const maxUp = sidebarIntroTargetsRef.current.allIcons;
+          const maxDown = sidebarIntroTargetsRef.current.profileHold;
+          const clamped = Math.max(maxUp, Math.min(maxDown, raw));
+          sidebarDragOffset.current = clamped;
+          sidebarDragY.setValue(clamped);
+        });
+      } else {
+        sidebarDragY.stopAnimation();
+      }
     };
   }, [
     selectedTopBarFilter,
@@ -2313,6 +2380,8 @@ const TikTokFeedScreen = ({
     sidebarAnimUseNativeDriver,
     isSidebarIntroAnimReady,
     sidebarIntroVisible,
+    isProfilePostsFeed,
+    categoryId,
   ]);
 
   /** Keep dragged sidebar position valid when viewport height changes. */
@@ -4598,12 +4667,18 @@ const TikTokFeedScreen = ({
     (index, animated = true) => {
       const clamped = Math.max(0, Math.min(index, videos.length - 1));
       if (!feedListRef.current || videos.length === 0) return;
+      if (
+        !sidebarIntroFinishedRef.current &&
+        clamped !== currentIndexRef.current
+      ) {
+        finalizeSidebarIntroForFeedScroll();
+      }
       const targetY = clamped * feedPageHeight;
       feedListRef.current.scrollToOffset({offset: targetY, animated});
       currentIndexRef.current = clamped;
       setCurrentIndex(clamped);
     },
-    [videos.length, feedPageHeight],
+    [videos.length, feedPageHeight, finalizeSidebarIntroForFeedScroll],
   );
 
   const handleNext = useCallback(() => {
@@ -4694,6 +4769,12 @@ const TikTokFeedScreen = ({
         feedPageHeight,
         videos.length - 1,
       );
+      if (
+        !sidebarIntroFinishedRef.current &&
+        idx !== currentIndexRef.current
+      ) {
+        finalizeSidebarIntroForFeedScroll();
+      }
       setScrollAnchorIndex(prev => {
         if (prev === idx) return prev;
         const start = Math.max(0, idx - FEED_PRELOAD_ABOVE_COUNT);
@@ -4706,8 +4787,13 @@ const TikTokFeedScreen = ({
         setCurrentIndex(idx);
       }
     },
-    [feedPageHeight, videos],
+    [feedPageHeight, videos, finalizeSidebarIntroForFeedScroll],
   );
+
+  const onFeedScrollBeginDrag = useCallback(() => {
+    if (sidebarIntroFinishedRef.current || sidebarPanActiveRef.current) return;
+    finalizeSidebarIntroForFeedScroll();
+  }, [finalizeSidebarIntroForFeedScroll]);
 
   const handleFeedScrollSettled = useCallback(
     event => {
@@ -4847,10 +4933,10 @@ const TikTokFeedScreen = ({
           Math.abs(dy) > Math.abs(dx) * 0.45
         );
       };
-      const clampSidebarDragY = dy =>
+      const clampSidebarDragY = (baseY, dy) =>
         Math.max(
           SIDEBAR_DRAG_MAX_UP,
-          Math.min(SIDEBAR_DRAG_MAX_DOWN, sidebarDragOffset.current + dy),
+          Math.min(SIDEBAR_DRAG_MAX_DOWN, baseY + dy),
         );
       const noteSidebarDragMove = gestureState => {
         if (!shouldSidebarDrag(gestureState)) return;
@@ -4873,29 +4959,46 @@ const TikTokFeedScreen = ({
           sidebarPanDidDragRef.current = false;
           setSidebarSlideshowPaused(true);
           lockFeedScrollForSidebar();
-          sidebarDragY.stopAnimation(value => {
+          if (!sidebarIntroDone.current) {
+            sidebarIntroDone.current = true;
+            sidebarIntroAnimStarted.current = true;
+            sidebarIntroHoldApplied.current = true;
+            sidebarIntroFinishedRef.current = true;
+            setSidebarIntroFinished(true);
+            stopSidebarIntroAnimation();
+          }
+          const syncPanStart = value => {
             const base = Number.isFinite(value)
               ? value
               : sidebarDragOffset.current;
-            sidebarDragOffset.current = base;
-            sidebarDragY.setValue(base);
-          });
-          if (!sidebarIntroDone.current) {
-            sidebarIntroDone.current = true;
-            setSidebarIntroFinished(true);
-          }
+            const clamped = Math.max(
+              SIDEBAR_DRAG_MAX_UP,
+              Math.min(SIDEBAR_DRAG_MAX_DOWN, base),
+            );
+            sidebarPanStartYRef.current = clamped;
+            sidebarDragOffset.current = clamped;
+            sidebarDragY.setValue(clamped);
+          };
+          syncPanStart(sidebarDragOffset.current);
+          sidebarDragY.stopAnimation(syncPanStart);
         },
         onPanResponderMove: (_, gestureState) => {
           noteSidebarDragMove(gestureState);
-          if (sidebarPanDidDragRef.current) {
-            sidebarDragY.setValue(clampSidebarDragY(gestureState.dy));
+          if (sidebarPanActiveRef.current) {
+            sidebarDragY.setValue(
+              clampSidebarDragY(sidebarPanStartYRef.current, gestureState.dy),
+            );
           }
         },
         onPanResponderRelease: (_, gestureState) => {
           noteSidebarDragMove(gestureState);
-          const next = clampSidebarDragY(gestureState.dy);
+          const next = clampSidebarDragY(
+            sidebarPanStartYRef.current,
+            gestureState.dy,
+          );
           sidebarDragOffset.current = next;
           sidebarDragY.setValue(next);
+          sidebarPanActiveRef.current = false;
           if (!sidebarPanDidDragRef.current) {
             flushSidebarPendingTapRef.current();
           }
@@ -4903,9 +5006,13 @@ const TikTokFeedScreen = ({
         },
         onPanResponderTerminate: (_, gestureState) => {
           noteSidebarDragMove(gestureState);
-          const next = clampSidebarDragY(gestureState.dy);
+          const next = clampSidebarDragY(
+            sidebarPanStartYRef.current,
+            gestureState.dy,
+          );
           sidebarDragOffset.current = next;
           sidebarDragY.setValue(next);
+          sidebarPanActiveRef.current = false;
           unlockFeedScrollForSidebar();
         },
       });
@@ -4916,6 +5023,7 @@ const TikTokFeedScreen = ({
       SIDEBAR_DRAG_MAX_UP,
       lockFeedScrollForSidebar,
       unlockFeedScrollForSidebar,
+      stopSidebarIntroAnimation,
     ],
   );
 
@@ -5977,66 +6085,179 @@ const TikTokFeedScreen = ({
 
   const renderFeedPageSidebar = (video, index) => {
     const isActivePage = index === currentIndex;
+    const introRunning = !isProfilePostsFeed && !sidebarIntroDone.current;
+    const yRest = sidebarIntroTopTwoOnlyDown;
     const pageProfileUrl =
       getUserProfileImageUrl(video) ||
       (isProfilePostsFeed ? profilePostsScope?.profileImageUrl : null);
-    const inactiveSidebarY = isProfilePostsFeed
-      ? sidebarIntroProfileOnlyDown
-      : sidebarIntroFinished
-        ? sidebarDragOffset.current
-        : sidebarIntroProfileOnlyDown;
-    if (isActivePage) {
-      activeSidebarVideoRef.current = video;
-    }
+    const sidebarDragMode = isActivePage && !isProfilePostsFeed;
 
-    return (
+    // Preloaded pages below the first: always draw the final 4-filter pose so
+    // swiping during the page-0 intro shows the sidebar instantly.
+    const renderStaticAtY = (translateY, {allowLayout = false} = {}) => (
       <View
         style={[
           styles.feedPageSidebar,
           styles.feedPageSidebarDrag,
           {bottom: feedChromeBottom},
         ]}
-        pointerEvents={isActivePage ? 'auto' : 'none'}
-        onTouchStart={isActivePage ? lockFeedScrollForSidebar : undefined}
-        onTouchEnd={isActivePage ? handleSidebarTouchEnd : undefined}
-        onTouchCancel={isActivePage ? handleSidebarTouchEnd : undefined}>
+        pointerEvents={isActivePage ? 'auto' : 'none'}>
         <View
           style={[
             styles.sidebarImageWrap,
-            isActivePage && {height: sidebarClipHeight, flex: 0},
+            {height: sidebarClipHeight, flex: 0},
             sidebarCollapsed && isActivePage && styles.sidebarImageWrapCollapsed,
-            isActivePage && !sidebarIntroVisible && styles.sidebarIntroHidden,
+          ]}>
+          <View
+            style={[
+              styles.sidebarDragContent,
+              {transform: [{translateY: translateY}]},
+            ]}>
+            {renderFeedPageSidebarContent(
+              video,
+              pageProfileUrl,
+              allowLayout,
+              false,
+            )}
+          </View>
+        </View>
+      </View>
+    );
+
+    if (introRunning && index > 0) {
+      return renderStaticAtY(yRest);
+    }
+
+    if (introRunning && index === 0) {
+      if (isActivePage) {
+        activeSidebarVideoRef.current = video;
+      }
+      return (
+        <View
+          style={[
+            styles.feedPageSidebar,
+            styles.feedPageSidebarDrag,
+            {bottom: feedChromeBottom},
           ]}
-          onLayout={
-            isActivePage
-              ? event => {
-                  const h = event?.nativeEvent?.layout?.height;
-                  if (h > 0) setSidebarViewportHeight(Math.round(h));
-                }
-              : undefined
-          }>
-          {isActivePage ? (
+          pointerEvents={isActivePage ? 'auto' : 'none'}
+          onTouchStart={isActivePage ? lockFeedScrollForSidebar : undefined}
+          onTouchEnd={isActivePage ? handleSidebarTouchEnd : undefined}
+          onTouchCancel={isActivePage ? handleSidebarTouchEnd : undefined}>
+          <View
+            style={[
+              styles.sidebarImageWrap,
+              {height: sidebarClipHeight, flex: 0},
+              sidebarCollapsed &&
+                isActivePage &&
+                styles.sidebarImageWrapCollapsed,
+              !sidebarIntroVisible && styles.sidebarIntroHidden,
+            ]}
+            onLayout={
+              isActivePage
+                ? event => {
+                    const h = event?.nativeEvent?.layout?.height;
+                    if (h > 0) setSidebarViewportHeight(Math.round(h));
+                  }
+                : undefined
+            }>
+            <Animated.View
+              style={[
+                styles.sidebarDragContent,
+                {transform: [{translateY: sidebarDragY}]},
+              ]}
+              {...(isActivePage && !isProfilePostsFeed
+                ? sidebarPanResponder.panHandlers
+                : {})}>
+              {renderFeedPageSidebarContent(
+                video,
+                pageProfileUrl,
+                isActivePage,
+                sidebarDragMode,
+              )}
+            </Animated.View>
+          </View>
+        </View>
+      );
+    }
+
+    const inactiveSidebarY = isProfilePostsFeed
+      ? sidebarIntroProfileOnlyDown
+      : sidebarDragOffset.current;
+
+    if (isActivePage) {
+      activeSidebarVideoRef.current = video;
+    }
+
+    if (isActivePage) {
+      return (
+        <View
+          style={[
+            styles.feedPageSidebar,
+            styles.feedPageSidebarDrag,
+            {bottom: feedChromeBottom},
+          ]}
+          pointerEvents="auto"
+          onTouchStart={lockFeedScrollForSidebar}
+          onTouchEnd={handleSidebarTouchEnd}
+          onTouchCancel={handleSidebarTouchEnd}>
+          <View
+            style={[
+              styles.sidebarImageWrap,
+              {height: sidebarClipHeight, flex: 0},
+              sidebarCollapsed && styles.sidebarImageWrapCollapsed,
+            ]}
+            onLayout={event => {
+              const h = event?.nativeEvent?.layout?.height;
+              if (h > 0) setSidebarViewportHeight(Math.round(h));
+            }}>
             <Animated.View
               style={[
                 styles.sidebarDragContent,
                 {transform: [{translateY: sidebarDragY}]},
               ]}
               {...(isProfilePostsFeed ? {} : sidebarPanResponder.panHandlers)}>
-              {renderFeedPageSidebarContent(video, pageProfileUrl, true, true)}
+              {renderFeedPageSidebarContent(
+                video,
+                pageProfileUrl,
+                true,
+                sidebarDragMode,
+              )}
             </Animated.View>
-          ) : (
-            <View
-              style={[
-                styles.sidebarDragContent,
-                {transform: [{translateY: inactiveSidebarY}]},
-              ]}>
-              {renderFeedPageSidebarContent(video, pageProfileUrl, false)}
-            </View>
-          )}
+          </View>
         </View>
-      </View>
+      );
+    }
+
+    return renderStaticAtY(
+      Number.isFinite(inactiveSidebarY) ? inactiveSidebarY : yRest,
     );
   };
+
+  /** Warm up final sidebar layout while listings load (invisible). */
+  const renderSidebarWarmupAtRest = () => (
+    <View
+      style={[
+        styles.feedPageSidebar,
+        styles.feedPageSidebarDrag,
+        styles.sidebarWarmupHidden,
+        {bottom: feedChromeBottom},
+      ]}
+      pointerEvents="none">
+      <View
+        style={[
+          styles.sidebarImageWrap,
+          {height: sidebarClipHeight, flex: 0},
+        ]}>
+        <View
+          style={[
+            styles.sidebarDragContent,
+            {transform: [{translateY: sidebarIntroTopTwoOnlyDown}]},
+          ]}>
+          {renderFeedPageSidebarContent(null, null, false, false)}
+        </View>
+      </View>
+    </View>
+  );
 
   const renderEmptyFeedSidebar = () => {
     activeSidebarVideoRef.current = null;
@@ -6494,7 +6715,9 @@ const TikTokFeedScreen = ({
     const isActiveFeedPage = index === currentIndex;
     const isActiveVideoPage = index === scrollAnchorIndex;
     const prewarmVideoPage =
-      index === scrollAnchorIndex + 1 || index === scrollAnchorIndex - 1;
+      Platform.OS === 'android'
+        ? index === scrollAnchorIndex + 1
+        : index === scrollAnchorIndex + 1 || index === scrollAnchorIndex - 1;
     if (video.isUploaded) {
       if (video.isTextOnlyPost && video.description) {
         return (
@@ -6561,9 +6784,7 @@ const TikTokFeedScreen = ({
               video={video}
               displayOption={displayMode}
               isActivePage={isActiveFeedPage}
-              pauseAutoAdvance={
-                !sidebarIntroFinished || sidebarSlideshowPaused
-              }
+              pauseAutoAdvance={sidebarSlideshowPaused}
             />
             {isPostWithOverlay ? (
               <View style={styles.postOverlayLtr} pointerEvents="none">
@@ -6599,8 +6820,24 @@ const TikTokFeedScreen = ({
   };
 
   const feedListExtraData = useMemo(
-    () => ({likedUiRevision, followUiRevision, scrollAnchorIndex, currentIndex}),
-    [likedUiRevision, followUiRevision, scrollAnchorIndex, currentIndex],
+    () => ({
+      likedUiRevision,
+      followUiRevision,
+      scrollAnchorIndex,
+      currentIndex,
+      sidebarIntroFinished,
+      sidebarIntroEpoch,
+      sidebarSlideshowPaused,
+    }),
+    [
+      likedUiRevision,
+      followUiRevision,
+      scrollAnchorIndex,
+      currentIndex,
+      sidebarIntroFinished,
+      sidebarIntroEpoch,
+      sidebarSlideshowPaused,
+    ],
   );
 
   const renderFeedItem = useCallback(
@@ -6612,6 +6849,9 @@ const TikTokFeedScreen = ({
       scrollAnchorIndex,
       sidebarIntroVisible,
       sidebarIntroFinished,
+      sidebarIntroEpoch,
+      sidebarIntroTopTwoOnlyDown,
+      sidebarSlideshowPaused,
       selectedSidebarFilter,
       feedIsEmpty,
       videos.length,
@@ -7324,32 +7564,46 @@ const TikTokFeedScreen = ({
             </TouchableOpacity>
           </View>
 
-          {showFeedLoading ? (
-            <View
-              style={[
-                styles.feedLoadingFullScreen,
-                {top: topBarHeight, bottom: bottomBarHeight},
-              ]}>
-              {renderFeedLoadingBody(
-                showDistanceFilterLoading
-                  ? distanceFilterLoadingText
-                  : 'טוען רשימות...',
-              )}
-            </View>
-          ) : feedIsEmpty ? (
-            <View
-              style={[
-                styles.feedViewport,
-                {top: topBarHeight, bottom: bottomBarHeight},
-              ]}
-              pointerEvents="box-none">
-              <View style={styles.feedEmptyInViewport}>
-                {renderEmptyCategoryBody()}
+          {feedIsEmpty ? (
+            showFeedLoading ? (
+              <View
+                style={[
+                  styles.feedViewport,
+                  {top: topBarHeight, bottom: bottomBarHeight},
+                ]}
+                pointerEvents="box-none">
+                <View
+                  style={[
+                    styles.feedLoadingFullScreen,
+                    {top: 0, bottom: 0},
+                  ]}>
+                  {renderFeedLoadingBody(
+                    showDistanceFilterLoading
+                      ? distanceFilterLoadingText
+                      : 'טוען רשימות...',
+                  )}
+                </View>
+                {!isProfilePostsFeed &&
+                selectedTopBarFilter !== 'list' &&
+                isSidebarProfileHoldReady
+                  ? renderSidebarWarmupAtRest()
+                  : null}
               </View>
-              <View style={styles.feedPageChrome} pointerEvents="box-none">
-                {renderEmptyFeedSidebar()}
+            ) : (
+              <View
+                style={[
+                  styles.feedViewport,
+                  {top: topBarHeight, bottom: bottomBarHeight},
+                ]}
+                pointerEvents="box-none">
+                <View style={styles.feedEmptyInViewport}>
+                  {renderEmptyCategoryBody()}
+                </View>
+                <View style={styles.feedPageChrome} pointerEvents="box-none">
+                  {renderEmptyFeedSidebar()}
+                </View>
               </View>
-            </View>
+            )
           ) : (
             <View
               style={[
@@ -7371,6 +7625,7 @@ const TikTokFeedScreen = ({
                   Platform.OS === 'web' && styles.feedScrollViewWeb,
                 ]}
                 scrollEventThrottle={16}
+                onScrollBeginDrag={onFeedScrollBeginDrag}
                 onScroll={onFeedScroll}
                 onMomentumScrollEnd={handleFeedScrollSettled}
                 onScrollEndDrag={handleFeedScrollSettled}
@@ -7391,6 +7646,20 @@ const TikTokFeedScreen = ({
                 removeClippedSubviews={false}
                 updateCellsBatchingPeriod={50}
               />
+              {showFeedLoading ? (
+                <View
+                  style={[
+                    styles.feedLoadingFullScreen,
+                    {top: 0, bottom: 0},
+                  ]}
+                  pointerEvents="box-none">
+                  {renderFeedLoadingBody(
+                    showDistanceFilterLoading
+                      ? distanceFilterLoadingText
+                      : 'טוען רשימות...',
+                  )}
+                </View>
+              ) : null}
             </View>
           )}
         </>
@@ -8609,6 +8878,13 @@ const styles = StyleSheet.create({
     android: {elevation: 25},
     default: {},
   }),
+  sidebarWarmupHidden: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    opacity: 0,
+    zIndex: -1,
+  },
   feedPageActions: {
     position: 'absolute',
     left: FEED_OVERLAY_LEFT_PX,

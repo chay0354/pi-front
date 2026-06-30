@@ -244,6 +244,7 @@ const Home = ({
   onAiSnapshotChange,
   unreadChatCount = 0,
   eagerLoad = false,
+  isScreenActive = true,
   onInitialContentReady,
 }) => {
   const insets = useSafeAreaInsets();
@@ -566,7 +567,7 @@ const Home = ({
               <FeatureHeroMedia
                 media={featureMedia}
                 loading={featureMediaLoading}
-                paused={flipped}
+                paused={flipped || !isScreenActive}
                 fallbackSource={FALLBACK_PROJECT_IMAGE}
                 isMuted={featureMuted}
                 onProgressChange={handleFeatureProgressChange}
