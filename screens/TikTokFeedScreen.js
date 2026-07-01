@@ -7171,38 +7171,15 @@ const TikTokFeedScreen = ({
       if (video.images && video.images.length > 0) {
         const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
         const displayMode = rawOpt === 'collage' ? 'collage' : 'slideshow';
-        const isPostWithOverlay =
-          isPostVideo(video) &&
-          hasMeaningfulPostDescription(video.description);
         return (
-          <>
-            <ImageSwiper
-              images={video.images}
-              screenHeight={feedPageHeight}
-              video={video}
-              displayOption={displayMode}
-              isActivePage={isActiveFeedPage}
-              pauseAutoAdvance={sidebarSlideshowPaused}
-            />
-            {isPostWithOverlay ? (
-              <View style={styles.postOverlayLtr} pointerEvents="none">
-                <View
-                  style={[
-                    styles.postDescriptionOverlay,
-                    {
-                      left: video.overlayX ?? 80,
-                      top: video.overlayY ?? 80,
-                    },
-                  ]}>
-                  <Text
-                    style={styles.postDescriptionOverlayText}
-                    numberOfLines={6}>
-                    {video.description}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-          </>
+          <ImageSwiper
+            images={video.images}
+            screenHeight={feedPageHeight}
+            video={video}
+            displayOption={displayMode}
+            isActivePage={isActiveFeedPage}
+            pauseAutoAdvance={sidebarSlideshowPaused}
+          />
         );
       }
     }

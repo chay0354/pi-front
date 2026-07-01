@@ -746,55 +746,118 @@ const PostEditorScreen = ({
       }
       setIsCapturing(true);
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
+      const listingDescription = (() => {
+        const lines = textBlocks
+          .map(b => String(b?.text || '').trim())
+          .filter(Boolean);
+        if (lines.length) return lines.join('\n');
+        const fallback = String(textModeOverlayText || textContent || '').trim();
+        return fallback || 'פוסט';
+      })();
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
-      const hasOverlays = postHasVisualOverlays(textBlocks, mediaImages);
+      const hasVisualOverlays = postHasVisualOverlays(textBlocks, mediaImages);
       const canUploadPhotoDirectly =
-        Boolean(backgroundImageUri) && !hasVideoBackground && !hasOverlays;
-      let payload;
-      let folder;
+        Boolean(backgroundImageUri) && !hasVideoBackground && !hasVisualOverlays;
 
-      if (hasVideoBackground) {
-        payload = {
-          uri: backgroundVideoAsset.uri,
-          type: backgroundVideoAsset.mimeType || 'video/mp4',
-          name:
-            backgroundVideoAsset.fileName ||
-            `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
-        };
-        folder =
-          publishTarget === 'story' ? 'stories/videos' : 'listings/videos';
+      const capturePreviewToFile = async () => {
+        await new Promise(resolve =>
+          InteractionManager.runAfterInteractions(() => resolve()),
+        );
+        await new Promise(resolve =>
+          setTimeout(resolve, Platform.OS === 'android' ? 300 : 120),
+        );
+        if (Platform.OS === 'web') {
+          const el = resolvePostPreviewDomNode(
+            postPreviewRef,
+            'post-editor-preview-root',
+          );
+          if (!el) {
+            throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
+          }
+          return capturePostPreviewToDataUrl(
+            el,
+            publishTarget === 'story'
+              ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
+              : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
+          );
+        }
+        return captureRef(postPreviewRef.current, {
+          format: 'jpg',
+          quality: publishTarget === 'story' ? 0.95 : 0.9,
+          result: 'tmpfile',
+        });
+      };
+
+      const uploadImagePayload = async (uri, folderPrefix) => {
+        const uploadResult = await uploadFile(
+          {
+            uri,
+            type: 'image/jpeg',
+            name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+          },
+          folderPrefix === 'story' ? 'stories/images' : 'listings/images',
+        );
+        const imageUrl = uploadResult?.url;
+        if (!imageUrl) {
+          throw new Error('העלאה הצליחה בלי כתובת קובץ');
+        }
+        return imageUrl;
+      };
+
+      let mainImageUrl = null;
+      let videoUrl = null;
+
+      if (hasVideoBackground && hasVisualOverlays) {
+        const captureUri = await capturePreviewToFile();
+        mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
+        const videoUpload = await uploadFile(
+          {
+            uri: backgroundVideoAsset.uri,
+            type: backgroundVideoAsset.mimeType || 'video/mp4',
+            name:
+              backgroundVideoAsset.fileName ||
+              `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
+          },
+          publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
+          {timeoutMs: 300000},
+        );
+        videoUrl = videoUpload?.url;
+        if (!videoUrl) {
+          throw new Error('העלאת הסרטון נכשלה');
+        }
+      } else if (hasVideoBackground) {
+        const videoUpload = await uploadFile(
+          {
+            uri: backgroundVideoAsset.uri,
+            type: backgroundVideoAsset.mimeType || 'video/mp4',
+            name:
+              backgroundVideoAsset.fileName ||
+              `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
+          },
+          publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
+          {timeoutMs: 300000},
+        );
+        videoUrl = videoUpload?.url;
+        if (!videoUrl) {
+          throw new Error('העלאת הסרטון נכשלה');
+        }
       } else if (canUploadPhotoDirectly) {
-        payload = {
-          uri: backgroundImageUri,
-          type: inferImageMimeFromUri(backgroundImageUri),
-          name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
-        };
-        folder =
-          publishTarget === 'story' ? 'stories/images' : 'listings/images';
+        const imageUpload = await uploadFile(
+          {
+            uri: backgroundImageUri,
+            type: inferImageMimeFromUri(backgroundImageUri),
+            name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+          },
+          publishTarget === 'story' ? 'stories/images' : 'listings/images',
+        );
+        mainImageUrl = imageUpload?.url;
+        if (!mainImageUrl) {
+          throw new Error('העלאה הצליחה בלי כתובת קובץ');
+        }
       } else {
         let captureUri;
         try {
-          if (Platform.OS === 'web') {
-            const el = resolvePostPreviewDomNode(
-              postPreviewRef,
-              'post-editor-preview-root',
-            );
-            if (!el) {
-              throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
-            }
-            captureUri = await capturePostPreviewToDataUrl(
-              el,
-              publishTarget === 'story'
-                ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
-                : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
-            );
-          } else {
-            captureUri = await captureRef(postPreviewRef.current, {
-              format: 'jpg',
-              quality: publishTarget === 'story' ? 0.95 : 0.9,
-              result: 'tmpfile',
-            });
-          }
+          captureUri = await capturePreviewToFile();
         } catch (captureError) {
           if (backgroundImageUri) {
             captureUri = backgroundImageUri;
@@ -802,22 +865,10 @@ const PostEditorScreen = ({
             throw captureError;
           }
         }
-
-        payload = {
-          uri: captureUri,
-          type: 'image/jpeg',
-          name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
-        };
-        folder =
-          publishTarget === 'story' ? 'stories/images' : 'listings/images';
+        mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
       }
 
-      const uploadResult = await uploadFile(
-        payload,
-        folder,
-        hasVideoBackground ? {timeoutMs: 300000} : undefined,
-      );
-      const url = uploadResult?.url;
+      const url = videoUrl || mainImageUrl;
       if (!url) {
         throw new Error('העלאה הצליחה בלי כתובת קובץ');
       }
@@ -834,16 +885,33 @@ const PostEditorScreen = ({
       let createdListing = null;
       if (publishTarget === 'story') {
         await createStory({subscription_id: subId, media_url: url});
-      } else if (hasVideoBackground) {
+      } else if (videoUrl && mainImageUrl && hasVisualOverlays) {
         createdListing = await createListing({
           category: resolvedPublishCategory,
           status: 'published',
           subscriptionId: subId,
           subscriptionType: currentUser?.subscription_type || null,
-          videoUrl: url,
+          mainImageUrl,
+          videoUrl,
+          hasVideo: true,
+          feedDisplayPriority: 'mainImage',
+          description: listingDescription,
+          feedPost: true,
+          feed_post: true,
+          propertyType: 'post',
+          price: 0,
+          hashtags,
+        });
+      } else if (videoUrl) {
+        createdListing = await createListing({
+          category: resolvedPublishCategory,
+          status: 'published',
+          subscriptionId: subId,
+          subscriptionType: currentUser?.subscription_type || null,
+          videoUrl,
           hasVideo: true,
           feedDisplayPriority: 'video',
-          description: 'פוסט',
+          description: listingDescription,
           feedPost: true,
           feed_post: true,
           propertyType: 'post',
@@ -856,8 +924,8 @@ const PostEditorScreen = ({
           status: 'published',
           subscriptionId: subId,
           subscriptionType: currentUser?.subscription_type || null,
-          mainImageUrl: url,
-          description: 'פוסט',
+          mainImageUrl,
+          description: listingDescription,
           feedPost: true,
           feed_post: true,
           propertyType: 'post',
@@ -1581,7 +1649,7 @@ const PostEditorScreen = ({
                     <TouchableOpacity
                       style={styles.doneBtn}
                       onPress={finishEditing}>
-                      <Text style={styles.doneBtnText}>נַעֲשָׂה</Text>
+                      <Text style={styles.doneBtnText}>בוצע</Text>
                     </TouchableOpacity>
                   )}
                   {activeTab !== TAB_CAMERA && (

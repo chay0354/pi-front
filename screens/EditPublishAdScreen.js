@@ -235,10 +235,6 @@ const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
 const getRightmostStripCategoryId = strip =>
   strip?.length ? strip[0].id : null;
 
-const scrollCategoryStripToPhysicalRight = scrollRef => {
-  scrollRef.current?.scrollTo({x: 0, animated: false});
-};
-
 const EditPublishAdScreen = ({
   onClose,
   uploadedListings = [],
@@ -295,17 +291,10 @@ const EditPublishAdScreen = ({
   const categorySweepAnim = useRef(new Animated.Value(0)).current;
   const didCategorySweepRef = useRef(false);
   const publishCategoriesStripRef = useRef([]);
-  const initialCategoryIdRef = useRef(initialCategoryId);
   const categoryStripScrollXRef = useRef(null);
-  initialCategoryIdRef.current = initialCategoryId;
 
   const runCategorySweep = () => {
     if (didCategorySweepRef.current) return;
-    const explicit = initialCategoryIdRef.current;
-    if (explicit != null && explicit !== '') {
-      didCategorySweepRef.current = true;
-      return;
-    }
     const contentW = categoryContentWidthRef.current;
     const viewportW = categoryViewportWidthRef.current;
     const maxScroll = Math.max(0, contentW - viewportW);
@@ -520,11 +509,6 @@ const EditPublishAdScreen = ({
         ? explicitUiId
         : getRightmostStripCategoryId(publishCategoriesStrip);
     setSelectedCategoryId(nextSelectedId);
-    if (explicitUiId != null) {
-      requestAnimationFrame(() => {
-        scrollCategoryStripToPhysicalRight(categoryScrollRef);
-      });
-    }
   }, [initialCategoryId, publishCategoriesStrip]);
 
   const showListingCreateInSheet = useMemo(
