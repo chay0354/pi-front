@@ -134,7 +134,7 @@ module.exports = {
           android: {
             // Only needed for local dev against http://localhost — never ship to production.
             usesCleartextTraffic: process.env.NODE_ENV !== 'production',
-            compileSdkVersion: 35,
+            compileSdkVersion: 34,
             targetSdkVersion: 35,
             minSdkVersion: 23,
             ndkVersion: '26.1.10909125',
