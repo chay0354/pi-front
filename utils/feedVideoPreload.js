@@ -31,7 +31,8 @@ export function markFeedVideoReady(uri) {
 export function feedScrollFocusIndex(y, pageHeight, maxIndex) {
   if (!Number.isFinite(y) || pageHeight <= 0) return 0;
   const cap = Math.max(0, maxIndex);
-  const biased = (y + pageHeight * 0.5) / pageHeight;
+  // Switch focus ~35% into the swipe (not 50%) so fast swipes start playback sooner.
+  const biased = (y + pageHeight * 0.65) / pageHeight;
   return Math.max(0, Math.min(cap, Math.floor(biased)));
 }
 

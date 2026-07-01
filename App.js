@@ -1610,7 +1610,7 @@ function App() {
             />
             {currentScreen === screenName.followHub && (
               <FollowHubScreen
-                onClose={() => setCurrentScreen(followHubReturnScreen)}
+                onClose={() => goBack(followHubReturnScreen)}
                 currentUser={currentUser}
                 profileUser={profileUser}
                 initialTab={followHubInitialTab}

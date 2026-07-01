@@ -23,6 +23,7 @@ import {
   FlatList,
   useWindowDimensions,
   InteractionManager,
+  Keyboard,
 } from 'react-native';
 import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,7 +45,7 @@ import {
   resolveFeedVideoUri,
   feedScrollFocusIndex,
 } from '../utils/feedVideoPreload';
-import {resolveAdVideoUri} from '../utils/videoPlayback';
+import {resolveAdVideoUri, isVideoProcessing} from '../utils/videoPlayback';
 import FeedBottomBar from '../components/FeedBottomBar';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
 import {
@@ -82,6 +83,7 @@ import {
   getCurrentUser,
   registerRegularUser,
   toSubscriptionId,
+  resolveSubscriptionId,
   getRecentUserSearches,
   recordUserSearch,
   clearRecentUserSearches,
@@ -359,7 +361,7 @@ function normalizePostComment(c) {
   const raw = c.comment_image_url ?? c.commentImageUrl ?? c.image_url ?? null;
   const u =
     raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
-  return {...c, comment_image_url: u};
+  return {...c, comment_image_url: u, is_publisher: c.is_publisher === true};
 }
 
 /** Server list is source of truth; same-id rows from local cache can still supply a missing image URL. */
@@ -398,6 +400,8 @@ function mergeServerAndLocalPostComments(serverList, localList) {
           n.my_reaction != null && n.my_reaction !== undefined
             ? n.my_reaction
             : existing.my_reaction,
+        is_publisher:
+          existing.is_publisher === true || n.is_publisher === true,
       });
     }
   }
@@ -408,14 +412,248 @@ function resolvePostPublisherId(post) {
   return (
     toSubscriptionId(post?.subscription_id) ||
     toSubscriptionId(post?.owner_id) ||
+    toSubscriptionId(post?.creator_subscription_id) ||
     null
   );
 }
 
-function isPostPublisherComment(comment, post) {
-  const publisherId = resolvePostPublisherId(post);
-  const commentUserId = toSubscriptionId(comment?.user_id);
-  return !!publisherId && !!commentUserId && publisherId === commentUserId;
+function collectPostPublisherIds(post) {
+  if (!post) return new Set();
+  const ids = new Set();
+  for (const raw of [
+    post?.subscription_id,
+    post?.owner_id,
+    post?.creator_subscription_id,
+    post?.creator_id,
+  ]) {
+    if (raw == null) continue;
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+    const id = toSubscriptionId(trimmed);
+    if (id) ids.add(id);
+    else ids.add(trimmed);
+  }
+  const single = resolvePostPublisherId(post);
+  if (single) ids.add(single);
+  return ids;
+}
+
+function resolveCommentUserId(viewer) {
+  return resolveSubscriptionId(viewer);
+}
+
+function resolveCommenterDisplayName(viewer) {
+  if (!viewer) return 'משתמש';
+  const subType = String(viewer.subscription_type || '').toLowerCase();
+  if (subType === 'company') {
+    return (
+      viewer.business_name ||
+      viewer.name ||
+      viewer.contact_person_name ||
+      'משתמש'
+    );
+  }
+  if (subType === 'broker') {
+    return (
+      viewer.broker_office_name ||
+      viewer.name ||
+      viewer.contact_person_name ||
+      viewer.business_name ||
+      'משתמש'
+    );
+  }
+  return (
+    viewer.name ||
+    viewer.contact_person_name ||
+    viewer.business_name ||
+    viewer.broker_office_name ||
+    'משתמש'
+  );
+}
+
+function commentUserIdMatchesPostPublisher(comment, post) {
+  const commentUid = String(
+    comment?.user_id ?? resolveSubscriptionId(comment) ?? '',
+  ).trim();
+  if (!commentUid || !post) return false;
+  for (const field of [
+    post.subscription_id,
+    post.owner_id,
+    post.creator_subscription_id,
+    post.creator_id,
+  ]) {
+    if (field == null) continue;
+    if (String(field).trim() === commentUid) return true;
+  }
+  return false;
+}
+
+function resolvePostPublisherDisplayNames(post) {
+  if (!post) return [];
+  return [
+    post?.creator_name,
+    post?.name,
+    post?.business_name,
+    post?.broker_office_name,
+    post?.contact_person_name,
+    post?.agent_name,
+  ]
+    .map(v => (v == null ? '' : String(v).trim()))
+    .filter(Boolean);
+}
+
+function collectViewerSubscriptionIds(viewer) {
+  const ids = new Set();
+  if (!viewer) return ids;
+  for (const raw of [
+    viewer.id,
+    viewer.user_id,
+    viewer.subscription_id,
+    viewer.owner_id,
+    viewer.subscriptionId,
+    viewer.ownerId,
+  ]) {
+    const id = toSubscriptionId(raw);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+function viewerOwnsPost(post, viewer) {
+  if (!post || !viewer) return false;
+  const viewerIds = collectViewerSubscriptionIds(viewer);
+  if (viewerIds.size === 0) return false;
+  const publisherIds = collectPostPublisherIds(post);
+  for (const vid of viewerIds) {
+    if (publisherIds.has(vid)) return true;
+  }
+  const viewerEmail = String(viewer.email || '')
+    .trim()
+    .toLowerCase();
+  const postEmail = String(post.creator_email || '')
+    .trim()
+    .toLowerCase();
+  if (viewerEmail && postEmail && viewerEmail === postEmail) return true;
+  const viewerNames = [
+    viewer.name,
+    viewer.contact_person_name,
+    viewer.business_name,
+    viewer.broker_office_name,
+  ]
+    .map(v => (v == null ? '' : String(v).trim()))
+    .filter(Boolean);
+  const postNames = resolvePostPublisherDisplayNames(post);
+  if (
+    viewerNames.length > 0 &&
+    postNames.length > 0 &&
+    postNames.some(pn => viewerNames.includes(pn))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function buildCommentsPostContext(
+  postId,
+  dbListings,
+  videos,
+  viewer = null,
+  options = {},
+) {
+  const {baseItem = null, scopedPublisherSubId = null} = options;
+  const listing = dbListings.find(l => l.id === postId);
+  const video = videos.find(v => v.id === postId);
+  if (!listing && !video && !baseItem) return null;
+  const merged = {
+    ...(video || {}),
+    ...(listing || {}),
+    ...(baseItem || {}),
+    id: postId,
+  };
+  let subscription_id =
+    merged.subscription_id ??
+    merged.owner_id ??
+    merged.creator_subscription_id ??
+    null;
+  let owner_id = merged.owner_id ?? merged.subscription_id ?? null;
+  const scopedPubId =
+    toSubscriptionId(scopedPublisherSubId) ||
+    (scopedPublisherSubId != null && String(scopedPublisherSubId).trim()
+      ? String(scopedPublisherSubId).trim()
+      : null);
+  const viewerId = resolveSubscriptionId(viewer);
+  if (scopedPubId) {
+    subscription_id = subscription_id || scopedPubId;
+    owner_id = owner_id || scopedPubId;
+  }
+  if (viewerId && scopedPubId && viewerId === toSubscriptionId(scopedPubId)) {
+    subscription_id = subscription_id || viewerId;
+    owner_id = owner_id || viewerId;
+  } else if (viewer && viewerOwnsPost(merged, viewer)) {
+    if (viewerId) {
+      subscription_id = subscription_id || viewerId;
+      owner_id = owner_id || viewerId;
+    }
+  }
+  return {
+    ...merged,
+    subscription_id,
+    owner_id,
+    creator_subscription_id:
+      merged.creator_subscription_id ?? subscription_id ?? null,
+    creator_name:
+      merged.creator_name ??
+      merged.name ??
+      merged.business_name ??
+      null,
+    name: merged.name ?? merged.creator_name ?? null,
+    business_name: merged.business_name ?? null,
+    broker_office_name: merged.broker_office_name ?? null,
+    contact_person_name: merged.contact_person_name ?? null,
+  };
+}
+
+function isPostPublisherComment(comment, post, viewer = null) {
+  if (!comment) return false;
+  if (comment.is_publisher === true) return true;
+  if (!post) return false;
+
+  if (commentUserIdMatchesPostPublisher(comment, post)) return true;
+
+  const publisherIds = collectPostPublisherIds(post);
+  const commentUserId =
+    toSubscriptionId(comment?.user_id) || resolveSubscriptionId(comment);
+  if (commentUserId && publisherIds.has(commentUserId)) return true;
+
+  const rawCommentUser = String(comment?.user_id || '').trim();
+  if (rawCommentUser) {
+    for (const pid of publisherIds) {
+      if (String(pid).trim() === rawCommentUser) return true;
+    }
+  }
+
+  if (viewer && commentUserId && viewerOwnsPost(post, viewer)) {
+    const viewerIds = collectViewerSubscriptionIds(viewer);
+    if (viewerIds.has(commentUserId)) return true;
+  }
+
+  const commentName = String(comment?.commenter_name || '').trim();
+  if (!commentName) return false;
+  return resolvePostPublisherDisplayNames(post).some(
+    name => name === commentName,
+  );
+}
+
+function annotatePostCommentsForPost(comments, post, viewer = null) {
+  if (!Array.isArray(comments)) return [];
+  if (!post) return comments.map(normalizePostComment);
+  return comments.map(c => {
+    const normalized = normalizePostComment(c);
+    return {
+      ...normalized,
+      is_publisher: isPostPublisherComment(normalized, post, viewer),
+    };
+  });
 }
 
 // Sidebar filter buttons: each filters ads by type (maps to API subscription_type / has_video)
@@ -687,6 +925,9 @@ const TIKTOK_OVERLAY_ICONS = {
 };
 
 const COMMENT_REACTIONS = ['😂', '😅', '😁', '🥰', '🥹', '😊'];
+/** Extra lift so the comment composer clears the soft keyboard comfortably. */
+const COMMENTS_COMPOSER_KEYBOARD_LIFT = 18;
+const COMMENTS_COMPOSER_SCROLL_PADDING = 210;
 
 /** Shared asset for sidebar rows with `id: 'new'` (חדשות / חדשים). */
 const NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new.png');
@@ -1325,15 +1566,30 @@ const ImageSwiper = ({
   useEffect(() => {
     const wasAuto = prevAutoSlideshowRef.current;
     prevAutoSlideshowRef.current = autoSlideshow;
-    if (!autoSlideshow || wasAuto) return;
-    fadeIndexA.current = currentImageIndex;
-    fadeIndexB.current = currentImageIndex;
-    setFadeIdxA(currentImageIndex);
-    setFadeIdxB(currentImageIndex);
-    fadeFrontRef.current = 'a';
-    fadeLayerA.setValue(1);
-    fadeLayerB.setValue(0);
-    fadeTransitionLock.current = false;
+    // Entering auto mode — start from the current slide on a single layer.
+    if (autoSlideshow && !wasAuto) {
+      fadeIndexA.current = currentImageIndex;
+      fadeIndexB.current = currentImageIndex;
+      setFadeIdxA(currentImageIndex);
+      setFadeIdxB(currentImageIndex);
+      fadeFrontRef.current = 'a';
+      fadeLayerA.setValue(1);
+      fadeLayerB.setValue(0);
+      fadeTransitionLock.current = false;
+      return;
+    }
+    // Leaving auto mode (e.g. swiped to next feed page mid-crossfade) — collapse
+    // to one visible layer so photos do not stay stacked.
+    if (!autoSlideshow && wasAuto) {
+      fadeIndexA.current = currentImageIndex;
+      fadeIndexB.current = currentImageIndex;
+      setFadeIdxA(currentImageIndex);
+      setFadeIdxB(currentImageIndex);
+      fadeFrontRef.current = 'a';
+      fadeLayerA.setValue(1);
+      fadeLayerB.setValue(0);
+      fadeTransitionLock.current = false;
+    }
   }, [autoSlideshow, currentImageIndex, fadeLayerA, fadeLayerB]);
 
   useEffect(() => {
@@ -1746,6 +2002,7 @@ const TikTokFeedScreen = ({
   const listingsFetchCacheRef = useRef(new Map());
   const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
   const currentIndexRef = useRef(0);
+  const feedVideoRefs = useRef(new Map());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const bottomSheetTranslateY = useRef(new Animated.Value(0)).current;
@@ -1850,11 +2107,13 @@ const TikTokFeedScreen = ({
   const [allUsersSearchListings, setAllUsersSearchListings] = useState([]);
   const [showCommentsSheet, setShowCommentsSheet] = useState(false);
   const [activeCommentsPostId, setActiveCommentsPostId] = useState(null);
+  const [activeCommentsPostItem, setActiveCommentsPostItem] = useState(null);
   const [commentsByPost, setCommentsByPost] = useState({});
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
   const [commentImageAsset, setCommentImageAsset] = useState(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentsKeyboardHeight, setCommentsKeyboardHeight] = useState(0);
   /** Prefetched with listings so sidebar + appears without per-slide delay. */
   const [followStatusByTargetId, setFollowStatusByTargetId] = useState({});
   const [sidebarSendingFollow, setSidebarSendingFollow] = useState(false);
@@ -2202,21 +2461,29 @@ const TikTokFeedScreen = ({
 
   /** Stop native intro animation and hand translateY back to JS for manual drag. */
   const stopSidebarIntroAnimation = useCallback(
-    (holdY = sidebarDragOffset.current) => {
+    (forceSnapY = null) => {
       sidebarIntroAnimationRef.current?.stop();
       sidebarIntroAnimationRef.current = null;
       if (sidebarIntroDragListenerRef.current != null) {
         sidebarDragY.removeListener(sidebarIntroDragListenerRef.current);
         sidebarIntroDragListenerRef.current = null;
       }
-      sidebarDragY.stopAnimation(value => {
-        const raw = Number.isFinite(value) ? value : holdY;
+      const applyValue = raw => {
+        const base = Number.isFinite(raw) ? raw : sidebarDragOffset.current;
         const clamped = Math.max(
           sidebarDragMaxUp,
-          Math.min(sidebarDragMaxDown, raw),
+          Math.min(sidebarDragMaxDown, base),
         );
         sidebarDragOffset.current = clamped;
         sidebarDragY.setValue(clamped);
+      };
+      if (Number.isFinite(forceSnapY)) {
+        sidebarDragY.stopAnimation();
+        applyValue(forceSnapY);
+        return;
+      }
+      sidebarDragY.stopAnimation(value => {
+        applyValue(Number.isFinite(value) ? value : sidebarDragOffset.current);
       });
     },
     [sidebarDragMaxDown, sidebarDragMaxUp, sidebarDragY],
@@ -2231,6 +2498,7 @@ const TikTokFeedScreen = ({
     sidebarIntroHoldApplied.current = true;
     sidebarIntroFinishedRef.current = true;
     stopSidebarIntroAnimation(yRest);
+    setSidebarIntroVisible(true);
     setSidebarIntroFinished(true);
     setSidebarIntroEpoch(epoch => epoch + 1);
   }, [stopSidebarIntroAnimation]);
@@ -2652,6 +2920,8 @@ const TikTokFeedScreen = ({
                 imagesArray = additionalImages
                   .filter(img => img.image_url)
                   .map(img => ({uri: img.image_url}));
+              } else if (listing.main_image_url) {
+                imagesArray = [{uri: String(listing.main_image_url).trim()}];
               }
 
               const listingCategory = parseInt(listing.category) || 1;
@@ -2682,16 +2952,25 @@ const TikTokFeedScreen = ({
                 private: 'בית פרטי',
               };
 
+              const playbackUri = resolveAdVideoUri(listing);
+              const rawVideoUrl = String(listing.video_url || '').trim();
               const isTextOnly =
                 imagesArray.length === 0 &&
                 !(
                   listing.listing_videos && listing.listing_videos.length > 0
                 ) &&
+                !playbackUri &&
+                !rawVideoUrl &&
                 listing.description &&
                 String(listing.description).trim().length > 0;
 
-              const playbackUri = resolveAdVideoUri(listing);
-              const hasVideo = !!playbackUri;
+              const videoProcessing =
+                Boolean(rawVideoUrl) &&
+                !playbackUri &&
+                (isVideoProcessing(listing) ||
+                  String(listing.video_status || '').toLowerCase() !==
+                    'failed');
+              const hasVideo = Boolean(playbackUri) || videoProcessing;
               const hasImages = imagesArray.length > 0;
               const feedPriority = normalizeListingFeedDisplayPriority(listing);
               const showVideoFirst =
@@ -2733,6 +3012,8 @@ const TikTokFeedScreen = ({
                 video_hls_url: listing.video_hls_url || video?.video_hls_url || null,
                 video_status: listing.video_status || video?.video_status || null,
                 video: playbackUri ? {uri: playbackUri} : null,
+                videoProcessing,
+                rawVideoUrl: rawVideoUrl || null,
                 images:
                   imagesArray.length > 0
                     ? imagesArray
@@ -3416,10 +3697,33 @@ const TikTokFeedScreen = ({
     }
     toggleAdLiked(item.id);
   };
+
+  useEffect(() => {
+    if (!showCommentsSheet) {
+      setCommentsKeyboardHeight(0);
+      return undefined;
+    }
+    const onShow = event => {
+      setCommentsKeyboardHeight(event?.endCoordinates?.height ?? 0);
+    };
+    const onHide = () => setCommentsKeyboardHeight(0);
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [showCommentsSheet]);
+
   const closeCommentsSheet = () => {
     setShowCommentsSheet(false);
     setNewCommentText('');
     setCommentImageAsset(null);
+    setCommentsKeyboardHeight(0);
   };
 
   const openCommentsForPost = async item => {
@@ -3436,9 +3740,20 @@ const TikTokFeedScreen = ({
       const comments = Array.isArray(result?.comments) ? result.comments : [];
       setCommentsByPost(prev => {
         const local = Array.isArray(prev[item.id]) ? prev[item.id] : [];
+        const postContext =
+          buildCommentsPostContext(
+            item.id,
+            dbListings,
+            videos,
+            currentUser,
+          ) || item;
         return {
           ...prev,
-          [item.id]: mergeServerAndLocalPostComments(comments, local),
+          [item.id]: annotatePostCommentsForPost(
+            mergeServerAndLocalPostComments(comments, local),
+            postContext,
+            currentUser,
+          ),
         };
       });
       setDbListings(prev =>
@@ -3519,6 +3834,12 @@ const TikTokFeedScreen = ({
       uploadedImageUrl ||
       (commentImageAsset && !userId ? commentImageAsset.uri : null);
 
+    const postForPublisher =
+      buildCommentsPostContext(postId, dbListings, videos, currentUser) ||
+      dbListings.find(l => l.id === postId) ||
+      videos.find(v => v.id === postId) ||
+      null;
+
     const optimistic = {
       id: `local-${Date.now()}`,
       user_id: userId,
@@ -3538,6 +3859,18 @@ const TikTokFeedScreen = ({
       dislikes_count: 0,
       my_reaction: null,
       is_local_only: !userId,
+      is_publisher: isPostPublisherComment(
+        {
+          user_id: userId,
+          commenter_name:
+            currentUser?.name ||
+            currentUser?.contact_person_name ||
+            currentUser?.business_name ||
+            'משתמש',
+        },
+        postForPublisher,
+        currentUser,
+      ),
     };
     setNewCommentText('');
     setCommentImageAsset(null);
@@ -3566,13 +3899,21 @@ const TikTokFeedScreen = ({
           ...prev,
           [postId]: (prev[postId] || []).map(c => {
             if (c.id !== optimistic.id) return c;
-            return {
+            const merged = {
               ...c,
               ...s,
               id: s.id,
               comment_image_url: s.comment_image_url || c.comment_image_url,
               commenter_image_url:
                 s.commenter_image_url || c.commenter_image_url,
+            };
+            return {
+              ...merged,
+              is_publisher: isPostPublisherComment(
+                merged,
+                postForPublisher,
+                currentUser,
+              ),
             };
           }),
         }));
@@ -4647,6 +4988,27 @@ const TikTokFeedScreen = ({
     );
   }, [currentIndex, videos]);
 
+  const activateFeedVideoAt = useCallback(index => {
+    feedVideoRefs.current.forEach((player, i) => {
+      if (i === index) {
+        player?.play?.();
+      } else {
+        player?.pause?.();
+      }
+    });
+  }, []);
+
+  const bindFeedVideoRef = useCallback((index, node) => {
+    if (node) {
+      feedVideoRefs.current.set(index, node);
+      if (index === currentIndexRef.current) {
+        node.play?.();
+      }
+    } else {
+      feedVideoRefs.current.delete(index);
+    }
+  }, []);
+
   // Define feed scroll handlers before any early return (hooks must run every render)
   const syncFeedIndexFromOffset = useCallback(
     y => {
@@ -4659,8 +5021,10 @@ const TikTokFeedScreen = ({
       if (nextIndex === currentIndexRef.current) return;
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
+      setScrollAnchorIndex(nextIndex);
+      activateFeedVideoAt(nextIndex);
     },
-    [feedPageHeight, videos.length],
+    [feedPageHeight, videos.length, activateFeedVideoAt],
   );
 
   const scrollToIndex = useCallback(
@@ -4677,8 +5041,15 @@ const TikTokFeedScreen = ({
       feedListRef.current.scrollToOffset({offset: targetY, animated});
       currentIndexRef.current = clamped;
       setCurrentIndex(clamped);
+      setScrollAnchorIndex(clamped);
+      activateFeedVideoAt(clamped);
     },
-    [videos.length, feedPageHeight, finalizeSidebarIntroForFeedScroll],
+    [
+      videos.length,
+      feedPageHeight,
+      finalizeSidebarIntroForFeedScroll,
+      activateFeedVideoAt,
+    ],
   );
 
   const handleNext = useCallback(() => {
@@ -4775,24 +5146,31 @@ const TikTokFeedScreen = ({
       ) {
         finalizeSidebarIntroForFeedScroll();
       }
-      setScrollAnchorIndex(prev => {
-        if (prev === idx) return prev;
-        const start = Math.max(0, idx - FEED_PRELOAD_ABOVE_COUNT);
-        const end = Math.min(videos.length - 1, idx + FEED_PRELOAD_BELOW_COUNT);
-        prefetchFeedWindowMedia(videos, start, end - start + 1, Image);
-        return idx;
-      });
       if (idx !== currentIndexRef.current) {
         currentIndexRef.current = idx;
         setCurrentIndex(idx);
+        setScrollAnchorIndex(idx);
+        activateFeedVideoAt(idx);
+        const start = Math.max(0, idx - FEED_PRELOAD_ABOVE_COUNT);
+        const end = Math.min(videos.length - 1, idx + FEED_PRELOAD_BELOW_COUNT);
+        prefetchFeedWindowMedia(videos, start, end - start + 1, Image);
+        return;
       }
+      setScrollAnchorIndex(prev => (prev === idx ? prev : idx));
     },
-    [feedPageHeight, videos, finalizeSidebarIntroForFeedScroll],
+    [
+      feedPageHeight,
+      videos,
+      finalizeSidebarIntroForFeedScroll,
+      activateFeedVideoAt,
+    ],
   );
 
   const onFeedScrollBeginDrag = useCallback(() => {
-    if (sidebarIntroFinishedRef.current || sidebarPanActiveRef.current) return;
-    finalizeSidebarIntroForFeedScroll();
+    if (!sidebarIntroFinishedRef.current) {
+      finalizeSidebarIntroForFeedScroll();
+    }
+    if (sidebarPanActiveRef.current) return;
   }, [finalizeSidebarIntroForFeedScroll]);
 
   const handleFeedScrollSettled = useCallback(
@@ -4804,14 +5182,17 @@ const TikTokFeedScreen = ({
         feedPageHeight,
         videos.length - 1,
       );
+      currentIndexRef.current = idx;
+      setCurrentIndex(idx);
       setScrollAnchorIndex(idx);
+      activateFeedVideoAt(idx);
       if (Platform.OS !== 'web') return;
       const snappedY = Math.round(y / feedPageHeight) * feedPageHeight;
       if (Math.abs(y - snappedY) > 2 && feedListRef.current) {
         feedListRef.current.scrollToOffset({offset: snappedY, animated: true});
       }
     },
-    [syncFeedIndexFromOffset, feedPageHeight, videos.length],
+    [syncFeedIndexFromOffset, feedPageHeight, videos.length, activateFeedVideoAt],
   );
 
   const getFeedItemLayout = useCallback(
@@ -5515,11 +5896,19 @@ const TikTokFeedScreen = ({
     companyApartmentsCount,
   } = getVideoOverlayMeta(currentVideo);
 
-  const currentComments = (commentsByPost[activeCommentsPostId] || []).map(
-    normalizePostComment,
+  const activeCommentsVideo = activeCommentsPostId
+    ? buildCommentsPostContext(
+        activeCommentsPostId,
+        dbListings,
+        videos,
+        currentUser,
+      )
+    : null;
+  const currentComments = annotatePostCommentsForPost(
+    commentsByPost[activeCommentsPostId] || [],
+    activeCommentsVideo,
+    currentUser,
   );
-  const activeCommentsVideo =
-    videos.find(v => v.id === activeCommentsPostId) || null;
   const getDisplayedCommentCount = listing => {
     if (!listing?.id) return 0;
     const serverCount = Number(listing.comment_count || 0);
@@ -6713,23 +7102,10 @@ const TikTokFeedScreen = ({
 
   const renderFeedMedia = (video, index) => {
     const isActiveFeedPage = index === currentIndex;
-    const isActiveVideoPage = index === scrollAnchorIndex;
+    const isActiveVideoPage = index === currentIndex;
     const prewarmVideoPage =
-      Platform.OS === 'android'
-        ? index === scrollAnchorIndex + 1
-        : index === scrollAnchorIndex + 1 || index === scrollAnchorIndex - 1;
+      index === currentIndex + 1 || index === currentIndex - 1;
     if (video.isUploaded) {
-      if (video.isTextOnlyPost && video.description) {
-        return (
-          <LinearGradient
-            colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
-            style={styles.textPostCardGradient}>
-            <Text style={styles.textPostCardDescription} numberOfLines={10}>
-              {video.description}
-            </Text>
-          </LinearGradient>
-        );
-      }
       const feedVideoUri = resolveFeedVideoUri(video);
       if (video.type === 'video' && feedVideoUri) {
         const inPreloadWindow = [currentIndex, scrollAnchorIndex].some(
@@ -6737,7 +7113,9 @@ const TikTokFeedScreen = ({
             index >= anchor - FEED_PRELOAD_ABOVE_COUNT &&
             index <= anchor + FEED_PRELOAD_BELOW_COUNT,
         );
-        if (!inPreloadWindow) {
+        const mustMountVideoPlayer =
+          inPreloadWindow || isActiveVideoPage || prewarmVideoPage;
+        if (!mustMountVideoPlayer) {
           const posterUri = resolveFeedVideoPosterUri(video);
           if (posterUri) {
             return (
@@ -6761,6 +7139,7 @@ const TikTokFeedScreen = ({
         }
         return (
           <FeedVideoPlayer
+            ref={node => bindFeedVideoRef(index, node)}
             uri={feedVideoUri}
             posterUri={resolveFeedVideoPosterUri(video)}
             isActive={isActiveVideoPage}
@@ -6768,6 +7147,25 @@ const TikTokFeedScreen = ({
             style={styles.feedVideoPlayer}
             placeholderSource={getTikImage(video.image ?? video.category)}
           />
+        );
+      }
+      if (video.type === 'video' && video.videoProcessing && !feedVideoUri) {
+        return (
+          <View style={[styles.feedVideoPlayer, styles.videoProcessingWrap]}>
+            <ActivityIndicator color="#FFC40A" size="large" />
+            <Text style={styles.videoProcessingText}>מעבד סרטון...</Text>
+          </View>
+        );
+      }
+      if (video.isTextOnlyPost && video.description) {
+        return (
+          <LinearGradient
+            colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
+            style={styles.textPostCardGradient}>
+            <Text style={styles.textPostCardDescription} numberOfLines={10}>
+              {video.description}
+            </Text>
+          </LinearGradient>
         );
       }
       if (video.images && video.images.length > 0) {
@@ -6858,6 +7256,7 @@ const TikTokFeedScreen = ({
       likedUiRevision,
       followUiRevision,
       sidebarSendingFollow,
+      bindFeedVideoRef,
     ],
   );
 
@@ -7644,7 +8043,7 @@ const TikTokFeedScreen = ({
                 maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
                 windowSize={FEED_FLATLIST_WINDOW_SIZE}
                 removeClippedSubviews={false}
-                updateCellsBatchingPeriod={50}
+                updateCellsBatchingPeriod={16}
               />
               {showFeedLoading ? (
                 <View
@@ -7746,7 +8145,8 @@ const TikTokFeedScreen = ({
             activeOpacity={1}
             onPress={closeCommentsSheet}
           />
-          <View style={[styles.commentsSheet, {height: screenHeight * 0.8}]}>
+          <View
+            style={[styles.commentsSheet, {height: screenHeight * 0.8}]}>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={closeCommentsSheet}
@@ -7763,25 +8163,21 @@ const TikTokFeedScreen = ({
               <ScrollView
                 keyboardShouldPersistTaps="handled"
                 style={styles.commentsList}
-                contentContainerStyle={styles.commentsListContent}
+                contentContainerStyle={[
+                  styles.commentsListContent,
+                  {paddingBottom: COMMENTS_COMPOSER_SCROLL_PADDING},
+                ]}
                 showsVerticalScrollIndicator={false}>
                 {commentsLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  currentComments.map(comment => {
-                    const isPublisherComment = isPostPublisherComment(
-                      comment,
-                      activeCommentsVideo,
-                    );
-                    return (
+                  currentComments.map(comment => (
                     <View key={String(comment.id)} style={styles.commentCard}>
                       <View style={styles.commentHeader}>
                         <View style={styles.commentAuthorWrap}>
-                          {isPublisherComment ? (
-                            <Text style={styles.commentPublisherBadge}>
-                              מפרסם:
-                            </Text>
-                          ) : null}
+                          <Text style={styles.commentPublisherBadge}>
+                            מפרסם:
+                          </Text>
                           <Text style={styles.commentAuthorText}>
                             {comment.commenter_name || 'משתמש'}
                           </Text>
@@ -7893,108 +8289,120 @@ const TikTokFeedScreen = ({
                         </View>
                       </View>
                     </View>
-                    );
-                  })
+                  ))
                 )}
               </ScrollView>
             </View>
-            <View style={styles.commentsBottomSection}>
-              <View style={styles.reactionsRow}>
-                {COMMENT_REACTIONS.map(emoji => (
-                  <TouchableOpacity
-                    key={emoji}
-                    style={styles.reactionBtn}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      setNewCommentText(prev => `${prev || ''}${emoji}`)
-                    }
-                    disabled={commentSubmitting}>
-                    <Text style={styles.reactionText}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {commentImageAsset ? (
-                <View style={styles.commentImagePreviewRow}>
-                  <View style={styles.commentImagePreviewInner}>
-                    <Image
-                      source={{uri: commentImageAsset.uri}}
-                      style={styles.commentImagePreviewImg}
-                      resizeMode="cover"
-                    />
-                    <TouchableOpacity
-                      onPress={() => setCommentImageAsset(null)}
-                      style={styles.commentImageRemoveBtn}
-                      hitSlop={8}
-                      disabled={commentSubmitting}
-                      activeOpacity={0.85}>
-                      <MaterialCommunityIcons
-                        name="close-circle"
-                        size={24}
-                        color="rgba(255,255,255,0.85)"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.commentImagePreviewHint}>
-                    {commentSubmitting ? 'מעלה...' : 'יישלח עם התגובה'}
-                  </Text>
-                </View>
-              ) : null}
-              <View style={styles.commentInputRow}>
+          </View>
+          <View
+            style={[
+              styles.commentsBottomSection,
+              {
+                bottom:
+                  commentsKeyboardHeight > 0
+                    ? commentsKeyboardHeight + COMMENTS_COMPOSER_KEYBOARD_LIFT
+                    : 0,
+                paddingBottom:
+                  commentsKeyboardHeight > 0
+                    ? 8
+                    : Math.max(insets.bottom, 10),
+              },
+            ]}>
+            <View style={styles.reactionsRow}>
+              {COMMENT_REACTIONS.map(emoji => (
                 <TouchableOpacity
-                  style={[
-                    styles.cameraBtn,
-                    commentSubmitting && styles.commentSendDisabled,
-                  ]}
-                  activeOpacity={0.85}
-                  onPress={pickImageForComment}
-                  disabled={commentSubmitting}
-                  hitSlop={4}>
-                  <Image
-                    source={TIKTOK_OVERLAY_ICONS.commentsCamera}
-                    style={styles.cameraIcon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-                <TextInput
-                  value={newCommentText}
-                  onChangeText={setNewCommentText}
-                  placeholder={
-                    commentImageAsset
-                      ? 'כתוב ליד התמונה (אופציונלי)'
-                      : 'כתוב הודעה'
+                  key={emoji}
+                  style={styles.reactionBtn}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    setNewCommentText(prev => `${prev || ''}${emoji}`)
                   }
-                  placeholderTextColor="rgba(255,255,255,0.35)"
-                  style={styles.commentInput}
-                  textAlign="right"
-                  writingDirection="rtl"
-                  returnKeyType="send"
-                  onSubmitEditing={submitPostComment}
-                  editable={!commentSubmitting}
-                />
-                <TouchableOpacity
-                  onPress={submitPostComment}
-                  style={styles.commentSendBtn}
-                  activeOpacity={0.85}
-                  disabled={
-                    commentSubmitting ||
-                    (!String(newCommentText || '').trim() && !commentImageAsset)
-                  }>
-                  {commentSubmitting ? (
-                    <ActivityIndicator size="small" color="#FFC40A" />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="send"
-                      size={22}
-                      color={
-                        !String(newCommentText || '').trim() &&
-                        !commentImageAsset
-                          ? 'rgba(255,255,255,0.25)'
-                          : '#FFC40A'
-                      }
-                    />
-                  )}
+                  disabled={commentSubmitting}>
+                  <Text style={styles.reactionText}>{emoji}</Text>
                 </TouchableOpacity>
+              ))}
+            </View>
+            {commentImageAsset ? (
+              <View style={styles.commentImagePreviewRow}>
+                <View style={styles.commentImagePreviewInner}>
+                  <Image
+                    source={{uri: commentImageAsset.uri}}
+                    style={styles.commentImagePreviewImg}
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setCommentImageAsset(null)}
+                    style={styles.commentImageRemoveBtn}
+                    hitSlop={8}
+                    disabled={commentSubmitting}
+                    activeOpacity={0.85}>
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={24}
+                      color="rgba(255,255,255,0.85)"
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.commentImagePreviewHint}>
+                  {commentSubmitting ? 'מעלה...' : 'יישלח עם התגובה'}
+                </Text>
               </View>
+            ) : null}
+            <View style={styles.commentInputRow}>
+              <TouchableOpacity
+                style={[
+                  styles.cameraBtn,
+                  commentSubmitting && styles.commentSendDisabled,
+                ]}
+                activeOpacity={0.85}
+                onPress={pickImageForComment}
+                disabled={commentSubmitting}
+                hitSlop={4}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.commentsCamera}
+                  style={styles.cameraIcon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <TextInput
+                value={newCommentText}
+                onChangeText={setNewCommentText}
+                placeholder={
+                  commentImageAsset
+                    ? 'כתוב ליד התמונה (אופציונלי)'
+                    : 'כתוב הודעה'
+                }
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                style={styles.commentInput}
+                textAlign="right"
+                writingDirection="rtl"
+                returnKeyType="send"
+                onSubmitEditing={submitPostComment}
+                editable={!commentSubmitting}
+              />
+              <TouchableOpacity
+                onPress={submitPostComment}
+                style={styles.commentSendBtn}
+                activeOpacity={0.85}
+                disabled={
+                  commentSubmitting ||
+                  (!String(newCommentText || '').trim() && !commentImageAsset)
+                }>
+                {commentSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFC40A" />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="send"
+                    size={22}
+                    color={
+                      !String(newCommentText || '').trim() &&
+                      !commentImageAsset
+                        ? 'rgba(255,255,255,0.25)'
+                        : '#FFC40A'
+                    }
+                  />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -9587,6 +9995,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 500,
     justifyContent: 'flex-end',
+    overflow: 'visible',
   },
   commentsBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -9601,6 +10010,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 12,
     overflow: 'hidden',
     alignSelf: 'center',
+    flexDirection: 'column',
   },
   commentsTopHeader: {
     height: 37,
@@ -9638,7 +10048,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     alignSelf: 'center',
-    marginBottom: 220,
   },
   commentsListContent: {
     paddingBottom: 16,
@@ -9669,13 +10078,14 @@ const styles = StyleSheet.create({
   },
   commentPublisherBadge: {
     color: Colors.yellowIcons,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
     fontFamily: 'Rubik-Medium',
-    letterSpacing: 0.35,
-    marginBottom: 3,
-    textAlign: 'right',
+    letterSpacing: 0.25,
+    marginBottom: 4,
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   commentAuthorText: {
     color: '#F7F3E6',
@@ -9796,36 +10206,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   commentsBottomSection: {
-    width: '100%',
-    minHeight: 171,
-    backgroundColor: '#1E1D27',
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingBottom: 10,
+    width: '100%',
+    maxWidth: 414,
+    alignSelf: 'center',
+    backgroundColor: '#1E1D27',
+    zIndex: 510,
+    ...Platform.select({
+      android: {elevation: 12},
+      default: {},
+    }),
   },
   reactionsRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingTop: 18,
+    paddingBottom: 12,
     borderTopWidth: 0.5,
     borderTopColor: '#373548',
+    overflow: 'visible',
   },
   reactionBtn: {
-    padding: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   reactionText: {
-    fontSize: 32,
-    lineHeight: 34,
+    fontSize: 30,
+    lineHeight: 36,
     color: '#fff',
     letterSpacing: 0.32,
+    textAlign: 'center',
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      default: {},
+    }),
   },
   commentInputRow: {
     flexDirection: 'row-reverse',
@@ -10034,6 +10457,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#000',
+  },
+  videoProcessingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  videoProcessingText: {
+    color: '#FFC40A',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   imageSwiper: {
     width: '100%',

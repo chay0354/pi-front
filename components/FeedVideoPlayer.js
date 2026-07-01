@@ -1,4 +1,10 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import {View, Image, Platform, StyleSheet} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
 import {isHlsUri} from '../utils/videoPlayback';
@@ -13,14 +19,17 @@ const FEED_IMAGE_PROPS =
 /**
  * TikTok-style feed video — Mux HLS only (.m3u8).
  */
-function FeedVideoPlayerInner({
-  uri,
-  isActive = false,
-  prewarm = false,
-  style,
-  placeholderSource = null,
-  posterUri = '',
-}) {
+const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
+  {
+    uri,
+    isActive = false,
+    prewarm = false,
+    style,
+    placeholderSource = null,
+    posterUri = '',
+  },
+  ref,
+) {
   const videoRef = useRef(null);
   const webVideoRef = useRef(null);
   const isActiveRef = useRef(isActive);
@@ -33,6 +42,55 @@ function FeedVideoPlayerInner({
 
   isActiveRef.current = isActive;
   prewarmRef.current = allowPrewarm;
+
+  const playNow = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      const el = webVideoRef.current;
+      if (!el) return;
+      el.muted = !isActiveRef.current;
+      const play = el.play?.();
+      if (play && typeof play.catch === 'function') play.catch(() => {});
+      return;
+    }
+    const player = videoRef.current;
+    if (!player) return;
+    try {
+      if (isActiveRef.current) {
+        await player.setIsMutedAsync(false);
+      } else if (prewarmRef.current) {
+        await player.setIsMutedAsync(true);
+      }
+      await player.playAsync();
+    } catch (_) {}
+  }, []);
+
+  const pauseNow = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      const el = webVideoRef.current;
+      if (!el) return;
+      el.pause?.();
+      el.muted = true;
+      try {
+        el.currentTime = 0;
+      } catch (_) {}
+      return;
+    }
+    const player = videoRef.current;
+    if (!player) return;
+    try {
+      await player.pauseAsync();
+      await player.setIsMutedAsync(true);
+    } catch (_) {}
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      play: playNow,
+      pause: pauseNow,
+    }),
+    [pauseNow, playNow],
+  );
 
   useEffect(() => {
     setReady(isFeedVideoReady(uri));
@@ -50,56 +108,31 @@ function FeedVideoPlayerInner({
     markFeedVideoReady(uri);
   }, [uri]);
 
+  // Start/stop immediately when focus changes — do not wait for decode/ready.
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const el = webVideoRef.current;
-      if (!el || !ready) return;
-      if (isActive) {
-        el.muted = false;
-        const play = el.play?.();
-        if (play && typeof play.catch === 'function') play.catch(() => {});
-      } else if (allowPrewarm) {
-        el.muted = true;
-        const play = el.play?.();
-        if (play && typeof play.catch === 'function') play.catch(() => {});
-      } else {
-        el.pause?.();
-        el.muted = true;
-        try {
-          el.currentTime = 0;
-        } catch (_) {}
-      }
-      return;
+    if (shouldPlay) {
+      playNow();
+    } else {
+      pauseNow();
     }
-
-    const player = videoRef.current;
-    if (!player) return;
-
-    (async () => {
-      try {
-        if (!shouldPlay) {
-          await player.pauseAsync();
-          await player.setIsMutedAsync(true);
-        } else if (isActive) {
-          await player.setIsMutedAsync(false);
-          await player.playAsync();
-        } else if (allowPrewarm) {
-          await player.setIsMutedAsync(true);
-          await player.playAsync();
-        }
-      } catch (_) {}
-    })();
-  }, [allowPrewarm, isActive, ready, shouldPlay, uri]);
+  }, [shouldPlay, isActive, allowPrewarm, uri, playNow, pauseNow]);
 
   const handleReadyForDisplay = useCallback(() => {
     markReady();
-  }, [markReady]);
+    if (isActiveRef.current || prewarmRef.current) {
+      playNow();
+    }
+  }, [markReady, playNow]);
 
   const handleLoad = useCallback(() => {
     markReady();
-  }, [markReady]);
+    if (isActiveRef.current || prewarmRef.current) {
+      playNow();
+    }
+  }, [markReady, playNow]);
 
-  const showPoster = Boolean(posterUri) && !ready && !isActive && !allowPrewarm;
+  const showPoster =
+    Boolean(posterUri) && !ready && !isActive && !allowPrewarm;
   const showPlaceholder =
     !posterUri && !ready && !isActive && !allowPrewarm && placeholderSource;
 
@@ -138,7 +171,7 @@ function FeedVideoPlayerInner({
         <video
           ref={webVideoRef}
           src={uri}
-          style={[styles.webVideo, {opacity: ready ? 1 : 0}]}
+          style={[styles.webVideo, {opacity: ready || isActive ? 1 : 0}]}
           preload="auto"
           playsInline
           loop
@@ -185,13 +218,13 @@ function FeedVideoPlayerInner({
         onPlaybackStatusUpdate={status => {
           if (!status?.isLoaded || status.isPlaying) return;
           if (isActiveRef.current || prewarmRef.current) {
-            videoRef.current?.playAsync().catch(() => {});
+            playNow();
           }
         }}
       />
     </View>
   );
-}
+});
 
 export const FeedVideoPlayer = React.memo(FeedVideoPlayerInner);
 

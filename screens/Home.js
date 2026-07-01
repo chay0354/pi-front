@@ -26,7 +26,7 @@ import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
-import {firstImageUrl, firstVideoUrl} from '../utils/listingGridCardFigma';
+import {firstVideoUrl} from '../utils/listingGridCardFigma';
 
 import {
   userCategories,
@@ -60,8 +60,7 @@ const resolveFeatureProjectVideoMedia = listing => {
   if (!listing) return null;
   const videoUri = firstVideoUrl(listing);
   if (!videoUri) return null;
-  const imageUri = firstImageUrl(listing);
-  return {type: 'video', uri: videoUri, posterUri: imageUri || null};
+  return {type: 'video', uri: videoUri};
 };
 
 const getFeatureProjectName = listing => {
@@ -75,8 +74,6 @@ const getFeatureProjectName = listing => {
   ).trim();
 };
 
-const FEED_IMAGE_PROPS =
-  Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
 
 const FeatureHeroMedia = memo(function FeatureHeroMedia({
   media,
@@ -149,16 +146,15 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   }
 
   if (media?.type === 'video' && media.uri) {
-    const showPoster = Boolean(media.posterUri) && !videoReady;
-
     if (Platform.OS === 'web') {
       return (
         <View style={styles.projectImage}>
-          {showPoster ? (
-            <Image
-              source={{uri: media.posterUri}}
-              style={StyleSheet.absoluteFillObject}
-              resizeMode="cover"
+          {!videoReady ? (
+            <View
+              style={[
+                StyleSheet.absoluteFillObject,
+                styles.projectImagePlaceholder,
+              ]}
             />
           ) : null}
           <video
@@ -185,19 +181,22 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
 
     return (
       <View style={styles.projectImage}>
-        {showPoster ? (
-          <Image
-            source={{uri: media.posterUri}}
-            {...FEED_IMAGE_PROPS}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
+        {!videoReady ? (
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              styles.projectImagePlaceholder,
+            ]}
           />
         ) : null}
         <Video
           ref={videoRef}
           key={media.uri}
           source={{uri: media.uri}}
-          style={StyleSheet.absoluteFillObject}
+          style={[
+            StyleSheet.absoluteFillObject,
+            {opacity: videoReady ? 1 : 0},
+          ]}
           resizeMode={ResizeMode.COVER}
           shouldPlay={!paused}
           isMuted={isMuted}

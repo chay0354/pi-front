@@ -142,6 +142,19 @@ const inferVideoExtension = asset => {
   return '.mp4';
 };
 
+const inferImageMimeFromUri = uri => {
+  const lower = String(uri || '').toLowerCase();
+  if (lower.includes('.png')) return 'image/png';
+  if (lower.includes('.webp')) return 'image/webp';
+  if (lower.includes('.heic') || lower.includes('.heif')) return 'image/heic';
+  return 'image/jpeg';
+};
+
+const postHasVisualOverlays = (textBlocks, mediaImages) =>
+  (Array.isArray(textBlocks) &&
+    textBlocks.some(b => String(b?.text || '').trim().length > 0)) ||
+  (Array.isArray(mediaImages) && mediaImages.length > 0);
+
 const lightenColor = (hex, amount = 0.8) => {
   if (typeof hex !== 'string') return hex;
   let h = hex.trim();
@@ -726,9 +739,17 @@ const PostEditorScreen = ({
 
     try {
       setPublishing(true);
+      Keyboard.dismiss();
+      if (editingTextBlockId) {
+        finishEditing();
+        await new Promise(resolve => setTimeout(resolve, 120));
+      }
       setIsCapturing(true);
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
+      const hasOverlays = postHasVisualOverlays(textBlocks, mediaImages);
+      const canUploadPhotoDirectly =
+        Boolean(backgroundImageUri) && !hasVideoBackground && !hasOverlays;
       let payload;
       let folder;
 
@@ -742,28 +763,44 @@ const PostEditorScreen = ({
         };
         folder =
           publishTarget === 'story' ? 'stories/videos' : 'listings/videos';
+      } else if (canUploadPhotoDirectly) {
+        payload = {
+          uri: backgroundImageUri,
+          type: inferImageMimeFromUri(backgroundImageUri),
+          name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+        };
+        folder =
+          publishTarget === 'story' ? 'stories/images' : 'listings/images';
       } else {
         let captureUri;
-        if (Platform.OS === 'web') {
-          const el = resolvePostPreviewDomNode(
-            postPreviewRef,
-            'post-editor-preview-root',
-          );
-          if (!el) {
-            throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
+        try {
+          if (Platform.OS === 'web') {
+            const el = resolvePostPreviewDomNode(
+              postPreviewRef,
+              'post-editor-preview-root',
+            );
+            if (!el) {
+              throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
+            }
+            captureUri = await capturePostPreviewToDataUrl(
+              el,
+              publishTarget === 'story'
+                ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
+                : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
+            );
+          } else {
+            captureUri = await captureRef(postPreviewRef.current, {
+              format: 'jpg',
+              quality: publishTarget === 'story' ? 0.95 : 0.9,
+              result: 'tmpfile',
+            });
           }
-          captureUri = await capturePostPreviewToDataUrl(
-            el,
-            publishTarget === 'story'
-              ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
-              : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
-          );
-        } else {
-          captureUri = await captureRef(postPreviewRef.current, {
-            format: 'jpg',
-            quality: publishTarget === 'story' ? 0.95 : 0.9,
-            result: 'tmpfile',
-          });
+        } catch (captureError) {
+          if (backgroundImageUri) {
+            captureUri = backgroundImageUri;
+          } else {
+            throw captureError;
+          }
         }
 
         payload = {
@@ -775,7 +812,11 @@ const PostEditorScreen = ({
           publishTarget === 'story' ? 'stories/images' : 'listings/images';
       }
 
-      const uploadResult = await uploadFile(payload, folder);
+      const uploadResult = await uploadFile(
+        payload,
+        folder,
+        hasVideoBackground ? {timeoutMs: 300000} : undefined,
+      );
       const url = uploadResult?.url;
       if (!url) {
         throw new Error('העלאה הצליחה בלי כתובת קובץ');
@@ -1192,6 +1233,7 @@ const PostEditorScreen = ({
 
   const applyCameraCaptureAsset = asset => {
     if (!asset?.uri) return;
+    switchToCameraTab();
     if (isVideoAsset(asset)) {
       applyBackgroundVideo(asset);
       return;
@@ -1461,7 +1503,7 @@ const PostEditorScreen = ({
         nativeID="post-editor-preview-root"
         collapsable={false}
         style={styles.backgroundContainer}>
-        {activeTab === TAB_CAMERA && backgroundVideoAsset?.uri ? (
+        {backgroundVideoAsset?.uri ? (
           <Video
             source={{uri: backgroundVideoAsset.uri}}
             style={styles.backgroundVideo}
@@ -1472,7 +1514,7 @@ const PostEditorScreen = ({
             volume={1.0}
             useNativeControls={Platform.OS === 'web'}
           />
-        ) : activeTab === TAB_CAMERA && backgroundImageUri ? (
+        ) : backgroundImageUri ? (
           <Image
             source={{uri: backgroundImageUri}}
             style={styles.backgroundImage}

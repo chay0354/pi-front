@@ -48,7 +48,7 @@ module.exports = {
   expo: {
     name: 'pi 2701',
     slug: 'pi-frontend',
-    version: '1.0.3',
+    version: '1.0.5',
     scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/app-icon/icon.png',
@@ -87,7 +87,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 17,
+      versionCode: 19,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {

@@ -2723,6 +2723,8 @@ export function resolveSubscriptionId(userOrId) {
   }
   const candidates = [
     userOrId.id,
+    userOrId.user_id,
+    userOrId.userId,
     userOrId.subscription_id,
     userOrId.subscriptionId,
     userOrId.owner_id,

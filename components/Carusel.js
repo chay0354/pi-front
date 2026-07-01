@@ -68,6 +68,9 @@ const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
 const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
 const SNAP_POSITION_EPSILON = 3;
 const LOOP_EDGE_BUFFER_ITEMS = 1.5;
+/** Delay before the invisible copy-rebase; must exceed the OS animated scrollTo
+ *  glide so the soft landing is never cut short. */
+const SNAP_SETTLE_MS = 380;
 
 function positiveMod(value, modulus) {
   if (modulus <= 0) return 0;
@@ -378,6 +381,7 @@ const Carusel = ({
   const isDraggingRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
   const isSnappingRef = useRef(false);
+  const snapSettleTimerRef = useRef(null);
   const previousScrollXRef = useRef(0);
   const lastScrollSampleRef = useRef({x: 0, t: 0});
   const virtualCenterIndexRef = useRef(0);
@@ -480,60 +484,112 @@ const Carusel = ({
       }
       isSnappingRef.current = true;
 
-      let closestVirtualIndex;
-      let snapScrollX;
-
+      // Web keeps the original instant normalize + jump (no drift on desktop).
       if (Platform.OS === 'web') {
-        closestVirtualIndex = webCarouselClosestIndex(
+        const closestWeb = webCarouselClosestIndex(
           scrollPosition,
           itemWidth,
           contentWidth,
           viewportWidth,
           totalItems,
         );
-        snapScrollX = webCarouselSnapScrollX(
-          closestVirtualIndex,
+        const snapWeb = webCarouselSnapScrollX(
+          closestWeb,
           itemWidth,
           contentWidth,
           viewportWidth,
         );
-      } else {
-        closestVirtualIndex = nativeCarouselClosestIndex(
-          scrollPosition,
-          itemWidth,
-          viewportWidth,
-          totalItems,
+        const normalizedWeb = infiniteLoop
+          ? normalizeInfiniteCarouselPosition(
+              closestWeb,
+              snapWeb,
+              listLength,
+              itemWidth,
+            )
+          : {virtualIndex: closestWeb, scrollX: snapWeb};
+        tickIfLogicalChange(
+          virtualCenterIndexRef.current,
+          normalizedWeb.virtualIndex,
         );
-        snapScrollX = nativeCarouselSnapScrollX(closestVirtualIndex, itemWidth);
+        virtualCenterIndexRef.current = normalizedWeb.virtualIndex;
+        setVirtualCenterIndex(normalizedWeb.virtualIndex);
+        if (
+          scrollViewRef.current &&
+          Math.abs(scrollPosition - normalizedWeb.scrollX) >
+            SNAP_POSITION_EPSILON
+        ) {
+          jumpToScrollX(normalizedWeb.scrollX, false);
+        }
+        requestAnimationFrame(() => {
+          isSnappingRef.current = false;
+        });
+        return;
       }
 
-      const normalized = infiniteLoop
-        ? normalizeInfiniteCarouselPosition(
-            closestVirtualIndex,
-            snapScrollX,
-            listLength,
-            itemWidth,
-          )
-        : {virtualIndex: closestVirtualIndex, scrollX: snapScrollX};
-
-      tickIfLogicalChange(
-        virtualCenterIndexRef.current,
-        normalized.virtualIndex,
+      // Native: gentle "roulette" landing. The OS momentum has already coasted
+      // and slowed; here we only ease the last fraction of a slot so it settles
+      // softly onto center instead of snapping in one tick.
+      const closestVirtualIndex = nativeCarouselClosestIndex(
+        scrollPosition,
+        itemWidth,
+        viewportWidth,
+        totalItems,
       );
-      virtualCenterIndexRef.current = normalized.virtualIndex;
-      setVirtualCenterIndex(normalized.virtualIndex);
+      const snapScrollX = nativeCarouselSnapScrollX(
+        closestVirtualIndex,
+        itemWidth,
+      );
 
-      const targetScrollX = normalized.scrollX;
-      if (
-        scrollViewRef.current &&
-        Math.abs(scrollPosition - targetScrollX) > SNAP_POSITION_EPSILON
-      ) {
-        jumpToScrollX(targetScrollX, false);
+      // Light up / haptic-tick the category we're landing on (current copy) so
+      // the on-screen centered item is the one that reads as selected.
+      tickIfLogicalChange(virtualCenterIndexRef.current, closestVirtualIndex);
+      virtualCenterIndexRef.current = closestVirtualIndex;
+      setVirtualCenterIndex(closestVirtualIndex);
+
+      const needsSettle =
+        Math.abs(scrollPosition - snapScrollX) > SNAP_POSITION_EPSILON;
+
+      if (needsSettle && scrollViewRef.current) {
+        // Animated glide → scrollAnim follows on the native thread, so scale +
+        // crossfade ease in together for a soft stop.
+        scrollViewRef.current.scrollTo({x: snapScrollX, animated: true});
       }
+      lastScrollPositionRef.current = snapScrollX;
+      previousScrollXRef.current = snapScrollX;
 
-      requestAnimationFrame(() => {
-        isSnappingRef.current = false;
-      });
+      // After the soft landing, silently rebase to the middle copy so the
+      // infinite loop always has runway. Invisible: same logical item, same
+      // on-screen position.
+      if (snapSettleTimerRef.current) {
+        clearTimeout(snapSettleTimerRef.current);
+      }
+      snapSettleTimerRef.current = setTimeout(
+        () => {
+          snapSettleTimerRef.current = null;
+          if (infiniteLoop && listLength > 1 && scrollViewRef.current) {
+            const logical = positiveMod(closestVirtualIndex, listLength);
+            const middleVirtual = middleCopyStart(listLength) + logical;
+            const rebaseX = nativeCarouselSnapScrollX(middleVirtual, itemWidth);
+            if (
+              Math.abs(rebaseX - lastScrollPositionRef.current) >
+              SNAP_POSITION_EPSILON
+            ) {
+              isProgrammaticScrollRef.current = true;
+              scrollViewRef.current.scrollTo({x: rebaseX, animated: false});
+              scrollAnimRef.current.setValue(rebaseX);
+              lastScrollPositionRef.current = rebaseX;
+              previousScrollXRef.current = rebaseX;
+              virtualCenterIndexRef.current = middleVirtual;
+              setVirtualCenterIndex(middleVirtual);
+              requestAnimationFrame(() => {
+                isProgrammaticScrollRef.current = false;
+              });
+            }
+          }
+          isSnappingRef.current = false;
+        },
+        (needsSettle ? SNAP_SETTLE_MS : 0) + 24,
+      );
     },
     [
       viewportWidth,
@@ -722,6 +778,13 @@ const Carusel = ({
   );
 
   const handleScrollBeginDrag = useCallback(() => {
+    // Re-grabbing mid-settle: cancel the pending soft-landing/rebase so the new
+    // gesture takes over immediately (feels like grabbing a spinning wheel).
+    if (snapSettleTimerRef.current) {
+      clearTimeout(snapSettleTimerRef.current);
+      snapSettleTimerRef.current = null;
+    }
+    isSnappingRef.current = false;
     isDraggingRef.current = true;
     androidScrollNextEmitRef.current = 0;
     previousScrollXRef.current = lastScrollPositionRef.current;
@@ -838,6 +901,16 @@ const Carusel = ({
     return () => cancelAnimationFrame(frame);
   }, [viewportWidth, scrollToInitialCenter]);
 
+  useEffect(
+    () => () => {
+      if (snapSettleTimerRef.current) {
+        clearTimeout(snapSettleTimerRef.current);
+        snapSettleTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
   const listRef = useRef(list);
   listRef.current = list;
 
@@ -909,7 +982,7 @@ const Carusel = ({
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate={Platform.OS === 'ios' ? 0.992 : 'normal'}
+        decelerationRate={Platform.OS === 'ios' ? 0.994 : 0.99}
         bounces={false}
         pagingEnabled={false}
         onScroll={animatedScrollHandler}

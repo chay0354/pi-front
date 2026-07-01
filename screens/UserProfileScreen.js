@@ -432,6 +432,7 @@ const UserProfileScreen = ({
           p => p != null && String(p).trim(),
         );
         setResolvedCreator({
+          id: creatorId,
           name: name || null,
           email: s.email || null,
           business_address:
@@ -799,6 +800,7 @@ const UserProfileScreen = ({
     resolvedCreator?.id ||
       user?.subscription_id ||
       user?.owner_id ||
+      creatorId ||
       (!isListingFromFeed && !isAdsListingRecord(user) ? profile?.id : null),
   );
   const currentSubscriptionId = toSubscriptionId(
@@ -1395,6 +1397,37 @@ const UserProfileScreen = ({
   const followingCount = followStats.following;
   const formatStatCount = value =>
     followStatsLoading || value == null ? '—' : String(value);
+  const renderProfileStatsRow = () => (
+    <View style={styles.statsRow}>
+      <TouchableOpacity
+        style={styles.stat}
+        activeOpacity={0.8}
+        onPress={() =>
+          typeof onOpenFollowHub === 'function' && onOpenFollowHub('likes')
+        }>
+        <Text style={styles.statNumber}>{formatStatCount(likesCount)}</Text>
+        <Text style={styles.statLabel}>לייקים</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.stat}
+        activeOpacity={0.8}
+        onPress={() =>
+          typeof onOpenFollowHub === 'function' && onOpenFollowHub('followers')
+        }>
+        <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
+        <Text style={styles.statLabel}>עוקבים</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.stat}
+        activeOpacity={0.8}
+        onPress={() =>
+          typeof onOpenFollowHub === 'function' && onOpenFollowHub('following')
+        }>
+        <Text style={styles.statNumber}>{formatStatCount(followingCount)}</Text>
+        <Text style={styles.statLabel}>עוקב</Text>
+      </TouchableOpacity>
+    </View>
+  );
   const viewerLoggedIn = !!(
     currentUser && String(currentUser.email || '').trim()
   );
@@ -2103,46 +2136,7 @@ const UserProfileScreen = ({
               {displayEmail != null && displayEmail !== '' ? (
                 <Text style={styles.userEmail}>{displayEmail}</Text>
               ) : null}
-              {!isDedicatedListingAdProfile ? (
-                <View style={styles.statsRow}>
-                  <TouchableOpacity
-                    style={styles.stat}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      typeof onOpenFollowHub === 'function' &&
-                      onOpenFollowHub('requests')
-                    }>
-                    <Text style={styles.statNumber}>
-                      {formatStatCount(likesCount)}
-                    </Text>
-                    <Text style={styles.statLabel}>לייקים</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.stat}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      typeof onOpenFollowHub === 'function' &&
-                      onOpenFollowHub('followers')
-                    }>
-                    <Text style={styles.statNumber}>
-                      {formatStatCount(followersCount)}
-                    </Text>
-                    <Text style={styles.statLabel}>עוקבים</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.stat}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      typeof onOpenFollowHub === 'function' &&
-                      onOpenFollowHub('following')
-                    }>
-                    <Text style={styles.statNumber}>
-                      {formatStatCount(followingCount)}
-                    </Text>
-                    <Text style={styles.statLabel}>עוקב</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+              {renderProfileStatsRow()}
             </View>
           )}
 
