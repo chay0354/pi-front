@@ -39,6 +39,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
 import {FeedVideoPlayer} from '../components/FeedVideoPlayer';
+import PostTextOverlays from '../components/PostTextOverlays';
 import {
   prefetchFeedWindowMedia,
   resolveFeedVideoPosterUri,
@@ -46,6 +47,7 @@ import {
   feedScrollFocusIndex,
 } from '../utils/feedVideoPreload';
 import {resolveAdVideoUri, isVideoProcessing} from '../utils/videoPlayback';
+import {parsePostTextOverlayPayload} from '../utils/postTextOverlay';
 import FeedBottomBar from '../components/FeedBottomBar';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
 import {
@@ -3139,6 +3141,7 @@ const TikTokFeedScreen = ({
                   listing.overlay_x != null ? Number(listing.overlay_x) : 80,
                 overlayY:
                   listing.overlay_y != null ? Number(listing.overlay_y) : 80,
+                postTextOverlay: parsePostTextOverlayPayload(listing),
                 view_count:
                   listing.view_count != null ? Number(listing.view_count) : 0,
                 like_count:
@@ -3496,6 +3499,20 @@ const TikTokFeedScreen = ({
     if (!text) return false;
     const normalized = text.toLowerCase();
     return normalized !== 'פוסט' && normalized !== 'post';
+  };
+  /** Text overlay for video posts — only when explicit overlay data was saved. */
+  const renderPostTextOverlays = video => {
+    const payload = video?.postTextOverlay;
+    if (!payload) return null;
+    return (
+      <PostTextOverlays
+        overlays={payload.overlays}
+        stageWidth={payload.stageWidth}
+        stageHeight={payload.stageHeight}
+        feedWidth={Math.min(screenWidth, FEED_PAGE_MAX_WIDTH)}
+        feedHeight={feedPageHeight}
+      />
+    );
   };
   const formatCommentTime = iso => {
     if (!iso) return 'לפני רגע';
@@ -7119,42 +7136,54 @@ const TikTokFeedScreen = ({
           const posterUri = resolveFeedVideoPosterUri(video);
           if (posterUri) {
             return (
-              <Image
-                source={{uri: posterUri}}
-                {...FEED_IMAGE_PROPS}
-                style={styles.feedVideoPlayer}
-                resizeMode="cover"
-              />
+              <>
+                <Image
+                  source={{uri: posterUri}}
+                  {...FEED_IMAGE_PROPS}
+                  style={styles.feedVideoPlayer}
+                  resizeMode="cover"
+                />
+                {renderPostTextOverlays(video)}
+              </>
             );
           }
           return (
-            <View style={styles.feedVideoPlayer}>
-              <Image
-                source={getTikImage(video.image ?? video.category)}
-                style={styles.videoImage}
-                resizeMode="contain"
-              />
-            </View>
+            <>
+              <View style={styles.feedVideoPlayer}>
+                <Image
+                  source={getTikImage(video.image ?? video.category)}
+                  style={styles.videoImage}
+                  resizeMode="contain"
+                />
+              </View>
+              {renderPostTextOverlays(video)}
+            </>
           );
         }
         return (
-          <FeedVideoPlayer
-            ref={node => bindFeedVideoRef(index, node)}
-            uri={feedVideoUri}
-            posterUri={resolveFeedVideoPosterUri(video)}
-            isActive={isActiveVideoPage}
-            prewarm={prewarmVideoPage && !isActiveVideoPage}
-            style={styles.feedVideoPlayer}
-            placeholderSource={getTikImage(video.image ?? video.category)}
-          />
+          <>
+            <FeedVideoPlayer
+              ref={node => bindFeedVideoRef(index, node)}
+              uri={feedVideoUri}
+              posterUri={resolveFeedVideoPosterUri(video)}
+              isActive={isActiveVideoPage}
+              prewarm={prewarmVideoPage && !isActiveVideoPage}
+              style={styles.feedVideoPlayer}
+              placeholderSource={getTikImage(video.image ?? video.category)}
+            />
+            {renderPostTextOverlays(video)}
+          </>
         );
       }
       if (video.type === 'video' && video.videoProcessing && !feedVideoUri) {
         return (
-          <View style={[styles.feedVideoPlayer, styles.videoProcessingWrap]}>
-            <ActivityIndicator color="#FFC40A" size="large" />
-            <Text style={styles.videoProcessingText}>מעבד סרטון...</Text>
-          </View>
+          <>
+            <View style={[styles.feedVideoPlayer, styles.videoProcessingWrap]}>
+              <ActivityIndicator color="#FFC40A" size="large" />
+              <Text style={styles.videoProcessingText}>מעבד סרטון...</Text>
+            </View>
+            {renderPostTextOverlays(video)}
+          </>
         );
       }
       if (video.isTextOnlyPost && video.description) {

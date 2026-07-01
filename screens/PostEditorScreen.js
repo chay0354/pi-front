@@ -42,6 +42,10 @@ import {
   resolveSubscriptionId,
 } from '../utils/api';
 import {forceLtrStyle} from '../utils/rtlLayout';
+import {
+  buildPostTextGeneralDetails,
+  serializePostTextOverlays,
+} from '../utils/postTextOverlay';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const TAB_TEXT = 'טקסט';
@@ -746,14 +750,11 @@ const PostEditorScreen = ({
       }
       setIsCapturing(true);
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
-      const listingDescription = (() => {
-        const lines = textBlocks
-          .map(b => String(b?.text || '').trim())
-          .filter(Boolean);
-        if (lines.length) return lines.join('\n');
-        const fallback = String(textModeOverlayText || textContent || '').trim();
-        return fallback || 'פוסט';
-      })();
+      const postTextMeta = serializePostTextOverlays(textBlocks, stageLayout, {
+        textModeOverlayText,
+        textContent,
+      });
+      const listingDescription = postTextMeta.description || 'פוסט';
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
       const hasVisualOverlays = postHasVisualOverlays(textBlocks, mediaImages);
       const canUploadPhotoDirectly =
@@ -807,25 +808,10 @@ const PostEditorScreen = ({
       let mainImageUrl = null;
       let videoUrl = null;
 
-      if (hasVideoBackground && hasVisualOverlays) {
-        const captureUri = await capturePreviewToFile();
-        mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
-        const videoUpload = await uploadFile(
-          {
-            uri: backgroundVideoAsset.uri,
-            type: backgroundVideoAsset.mimeType || 'video/mp4',
-            name:
-              backgroundVideoAsset.fileName ||
-              `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
-          },
-          publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
-          {timeoutMs: 300000},
-        );
-        videoUrl = videoUpload?.url;
-        if (!videoUrl) {
-          throw new Error('העלאת הסרטון נכשלה');
-        }
-      } else if (hasVideoBackground) {
+      if (hasVideoBackground) {
+        // Video posts keep playing the video; text is drawn as an overlay in
+        // the feed (see general_details.post_text_overlays below), matching the
+        // editor. We never flatten the video into a static image.
         const videoUpload = await uploadFile(
           {
             uri: backgroundVideoAsset.uri,
@@ -882,26 +868,16 @@ const PostEditorScreen = ({
         return;
       }
 
+      // Overlay layout is only persisted for video posts (text drawn on top in
+      // the feed). Photo posts already have the text baked into the image.
+      const videoOverlayGeneralDetails =
+        videoUrl && postTextMeta.hasText
+          ? buildPostTextGeneralDetails(postTextMeta)
+          : null;
+
       let createdListing = null;
       if (publishTarget === 'story') {
         await createStory({subscription_id: subId, media_url: url});
-      } else if (videoUrl && mainImageUrl && hasVisualOverlays) {
-        createdListing = await createListing({
-          category: resolvedPublishCategory,
-          status: 'published',
-          subscriptionId: subId,
-          subscriptionType: currentUser?.subscription_type || null,
-          mainImageUrl,
-          videoUrl,
-          hasVideo: true,
-          feedDisplayPriority: 'mainImage',
-          description: listingDescription,
-          feedPost: true,
-          feed_post: true,
-          propertyType: 'post',
-          price: 0,
-          hashtags,
-        });
       } else if (videoUrl) {
         createdListing = await createListing({
           category: resolvedPublishCategory,
@@ -917,6 +893,9 @@ const PostEditorScreen = ({
           propertyType: 'post',
           price: 0,
           hashtags,
+          ...(videoOverlayGeneralDetails
+            ? {generalDetails: videoOverlayGeneralDetails}
+            : {}),
         });
       } else {
         createdListing = await createListing({
