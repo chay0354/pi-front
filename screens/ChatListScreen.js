@@ -458,11 +458,7 @@ function SwipeableConversationRow({
           const finalX = dragBaseRef.current + g.dx;
           const isTap = Math.abs(g.dx) < 8 && Math.abs(g.dy) < 8;
           if (isTap) {
-            if (openRef.current) {
-              snapTo(false);
-              return;
-            }
-            if (typeof onPress === 'function') onPress();
+            if (openRef.current) snapTo(false);
             return;
           }
           snapTo(shouldSnapOpen(finalX));
@@ -523,7 +519,17 @@ function SwipeableConversationRow({
         ]}
         pointerEvents={isOpen ? 'none' : 'auto'}
         {...panResponder.panHandlers}>
-        {children}
+        <Pressable
+          onPress={() => {
+            if (openRef.current) {
+              snapTo(false);
+              return;
+            }
+            if (typeof onPress === 'function') onPress();
+          }}
+          style={({pressed}) => [pressed && styles.rowPressed]}>
+          {children}
+        </Pressable>
       </Animated.View>
     </View>
   );
