@@ -87,7 +87,13 @@ function directVideoFromStorySlide(slide) {
 }
 
 export function resolveStorySlideUri(slide) {
-  return hlsFromStorySlide(slide) || directVideoFromStorySlide(slide);
+  if (!slide) return null;
+  const videoUri = hlsFromStorySlide(slide) || directVideoFromStorySlide(slide);
+  if (videoUri) return videoUri;
+  // Images and other non-video story slides use the original media_url directly.
+  const mediaUrl =
+    slide.media_url != null ? String(slide.media_url).trim() : '';
+  return mediaUrl || null;
 }
 
 export function isVideoProcessing(item) {

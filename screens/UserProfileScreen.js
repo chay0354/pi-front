@@ -1670,14 +1670,9 @@ const UserProfileScreen = ({
     onOpenUserRegistration,
   ]);
   const hideCompanyPostSpecialtiesBlock = user?._fromTikTokPost && isCompany;
-  /** Company: show פרוייקטים נבחרים after אודות (strip is between bio and פרטי התקשרות) when from companies directory or TikTok company post. */
-  const showCompanySelectedProjectsStrip =
-    isCompany &&
-    (openedFromCompaniesDirectory || (user?._fromTikTokPost && openedFromPost));
+  /** Company: show הפרויקטים שלנו carousel (same idea as broker הנכסים שלי). */
   // Professionals: no listings section on other users' profiles; always show on own profile.
-  const hideMyPropertiesSection = isOwnProfile
-    ? false
-    : isProfessional || (isCompany && !showCompanySelectedProjectsStrip);
+  const hideMyPropertiesSection = isOwnProfile ? false : isProfessional;
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -2881,7 +2876,7 @@ const UserProfileScreen = ({
             <View style={styles.myPropertiesSection}>
               <View style={styles.myPropertiesHeader}>
                 <Text style={styles.myPropertiesTitle}>
-                  {isCompany ? 'פרוייקטים נבחרים' : 'הנכסים שלי'}
+                  {isCompany ? 'הפרויקטים שלנו' : 'הנכסים שלי'}
                 </Text>
                 {isCompany ? (
                   <TouchableOpacity
@@ -2923,7 +2918,7 @@ const UserProfileScreen = ({
               ) : userListings.length === 0 ? (
                 <View style={styles.myPropertiesListPlaceholder}>
                   <Text style={styles.myPropertiesPlaceholderText}>
-                    אין נכסים להצגה
+                    {isCompany ? 'אין פרויקטים להצגה' : 'אין נכסים להצגה'}
                   </Text>
                 </View>
               ) : (

@@ -316,6 +316,35 @@ const getDefaultTextBlockY = (stageH, blockH = 40) => {
   return Math.max(STAGE_TEXT_PAD_Y, (sh - bh) / 2);
 };
 
+const measurePostStageMapping = (previewRef, stageRef) =>
+  new Promise(resolve => {
+    const previewNode = previewRef?.current;
+    const stageNode = stageRef?.current;
+    if (
+      !previewNode?.measureInWindow ||
+      !stageNode?.measureInWindow
+    ) {
+      resolve(null);
+      return;
+    }
+    previewNode.measureInWindow((px, py, pw, ph) => {
+      stageNode.measureInWindow((sx, sy, sw, sh) => {
+        if (!(pw > 0) || !(ph > 0) || !(sw > 0) || !(sh > 0)) {
+          resolve(null);
+          return;
+        }
+        resolve({
+          stageOffsetX: sx - px,
+          stageOffsetY: sy - py,
+          previewWidth: pw,
+          previewHeight: ph,
+          stageWidth: sw,
+          stageHeight: sh,
+        });
+      });
+    });
+  });
+
 const DraggableTextBlock = React.memo(
   ({
     block,
@@ -678,6 +707,7 @@ const PostEditorScreen = ({
   const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
+  const stageRef = useRef(null);
   const editingInputRef = useRef(null);
   const editingFieldLayoutRef = useRef(null);
   const editingTextDraftRef = useRef('');
@@ -750,9 +780,14 @@ const PostEditorScreen = ({
       }
       setIsCapturing(true);
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
+      const stageMapping = await measurePostStageMapping(
+        postPreviewRef,
+        stageRef,
+      );
       const postTextMeta = serializePostTextOverlays(textBlocks, stageLayout, {
         textModeOverlayText,
         textContent,
+        stageMapping,
       });
       const listingDescription = postTextMeta.description || 'פוסט';
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
@@ -1660,6 +1695,7 @@ const PostEditorScreen = ({
                 },
               ]}>
               <View
+                ref={stageRef}
                 style={styles.stage}
                 onLayout={e => {
                   const layout = e.nativeEvent.layout;

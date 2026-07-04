@@ -1505,8 +1505,12 @@ function App() {
                   setCurrentScreen(screenName.userListings)
                 }
                 onOpenCompanyProjects={() => {
-                  const sid =
-                    profileUser?.subscription_id || profileUser?.owner_id;
+                  const sid = String(
+                    profileUser?.subscription_id ||
+                      profileUser?.owner_id ||
+                      profileUser?.id ||
+                      '',
+                  ).trim();
                   if (!sid) return;
                   const name =
                     profileUser?.business_name ||

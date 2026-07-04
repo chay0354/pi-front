@@ -1,5 +1,6 @@
 import React from 'react';
 import {View, Text, StyleSheet} from 'react-native';
+import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   getPostTextVisualStyle,
   POST_TEXT_STYLE_FONTS,
@@ -13,22 +14,24 @@ import {
  */
 const PostTextOverlays = ({
   overlays,
-  stageWidth = 0,
-  stageHeight = 0,
+  previewWidth = 0,
+  previewHeight = 0,
+  coordsSpace = 'preview',
   feedWidth,
   feedHeight,
 }) => {
   if (!Array.isArray(overlays) || overlays.length === 0) return null;
 
   return (
-    <View style={styles.root} pointerEvents="none">
+    <View style={[styles.root, forceLtrStyle]} pointerEvents="none">
       {overlays.map((block, index) => {
         const visual = getPostTextVisualStyle(block.color, block.bgMode);
         const layout = scalePostTextOverlayBlock(block, {
-          stageWidth,
-          stageHeight,
+          previewWidth,
+          previewHeight,
           feedWidth,
           feedHeight,
+          coordsSpace,
         });
         const fontFamily =
           POST_TEXT_STYLE_FONTS[block.textStyleIndex ?? 0] ||
@@ -41,7 +44,16 @@ const PostTextOverlays = ({
             key={`${index}-${String(block.text || '').slice(0, 12)}`}
             style={[
               styles.blockWrap,
-              {left: layout.left, top: layout.top, maxWidth: layout.maxWidth},
+              {
+                left: 0,
+                top: 0,
+                width: layout.width,
+                maxWidth: layout.width,
+                transform: [
+                  {translateX: layout.translateX},
+                  {translateY: layout.translateY},
+                ],
+              },
             ]}>
             <Text
               style={[
@@ -59,12 +71,7 @@ const PostTextOverlays = ({
                   paddingHorizontal: 10,
                   paddingVertical: 4,
                   borderRadius: 8,
-                  alignSelf:
-                    align === 'left'
-                      ? 'flex-start'
-                      : align === 'right'
-                        ? 'flex-end'
-                        : 'center',
+                  alignSelf: 'center',
                 },
               ]}>
               {block.text}
@@ -79,10 +86,10 @@ const PostTextOverlays = ({
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    direction: 'ltr',
   },
   blockWrap: {
     position: 'absolute',
+    justifyContent: 'center',
   },
   text: {
     flexShrink: 1,

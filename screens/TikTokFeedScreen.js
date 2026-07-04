@@ -3507,9 +3507,10 @@ const TikTokFeedScreen = ({
     return (
       <PostTextOverlays
         overlays={payload.overlays}
-        stageWidth={payload.stageWidth}
-        stageHeight={payload.stageHeight}
-        feedWidth={Math.min(screenWidth, FEED_PAGE_MAX_WIDTH)}
+        previewWidth={payload.previewWidth}
+        previewHeight={payload.previewHeight}
+        coordsSpace={payload.coordsSpace}
+        feedWidth={screenWidth}
         feedHeight={feedPageHeight}
       />
     );
