@@ -2551,12 +2551,22 @@ export const getListingPreview = async (listingId) => {
   }
 };
 
-export const getChatMessages = async (myEmail, otherUserEmail) => {
-  if (!myEmail || !otherUserEmail) return { success: true, messages: [] };
+export const getChatMessages = async (
+  myEmail,
+  otherUserEmail,
+  conversationId = null,
+) => {
+  if (!myEmail) return { success: true, messages: [] };
+  const convId =
+    conversationId != null ? String(conversationId).trim() : '';
+  const otherRef =
+    otherUserEmail != null ? String(otherUserEmail).trim().toLowerCase() : '';
+  if (!convId && !otherRef) return { success: true, messages: [] };
   const params = new URLSearchParams({
     user_email: String(myEmail).trim().toLowerCase(),
-    other_user_email: String(otherUserEmail).trim().toLowerCase(),
   });
+  if (convId) params.set('conversation_id', convId);
+  if (otherRef) params.set('other_user_email', otherRef);
   const response = await apiFetch(`${apiBase()}/api/chat/messages?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to load messages');

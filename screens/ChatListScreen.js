@@ -953,6 +953,7 @@ const ChatListScreen = ({
         const list = res.conversations || [];
         const asConv = list.map(c => ({
           id: c.otherUserEmail || c.id,
+          conversationId: c.id,
           otherUserEmail: c.otherUserEmail || null,
           isGroup: c.isGroup === true,
           name: c.name || 'משתמש',

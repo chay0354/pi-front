@@ -172,18 +172,16 @@ const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
   return cid ? {...meta, conversationId: cid} : {...meta};
 };
 
-/** Prefer API otherUserEmail; else id if it looks like an email, not a conversation UUID. */
+/** Prefer API otherUserEmail (email or subscription UUID peer ref). */
 const resolveOtherPartyEmail = conv => {
-  if (!conv) return null;
+  if (!conv || conv.isGroup === true) return null;
   const fromApi =
     conv.otherUserEmail != null ? String(conv.otherUserEmail).trim() : '';
+  if (fromApi) return fromApi.toLowerCase();
   const fromId = conv.id != null ? String(conv.id).trim() : '';
-  const pick = s => {
-    if (!s) return null;
-    if (CHAT_PEER_UUID_RE.test(s)) return null;
-    return s.toLowerCase();
-  };
-  return pick(fromApi) || pick(fromId);
+  if (!fromId || fromId === '1') return null;
+  if (fromId.includes('@')) return fromId.toLowerCase();
+  return null;
 };
 const resolveOtherPartyRef = conv => {
   if (!conv) return null;
@@ -286,8 +284,15 @@ const ChatScreen = ({
     isGroupThread && conversation?.id != null
       ? String(conversation.id).trim()
       : null;
+  const directConversationId =
+    !isGroupThread && conversation?.conversationId != null
+      ? String(conversation.conversationId).trim()
+      : null;
   const isDirectPeer =
-    isUser && !isWelcome && !isGroupThread && !!otherUserEmail;
+    isUser &&
+    !isWelcome &&
+    !isGroupThread &&
+    (!!otherUserEmail || !!directConversationId);
   const isBrokerUser = useMemo(() => {
     const t1 =
       currentUser?.subscription_type != null
@@ -636,17 +641,18 @@ const ChatScreen = ({
         });
       return;
     }
-    if (!isDirectPeer || !otherUserEmail) {
+    if (!isDirectPeer || (!otherUserEmail && !directConversationId)) {
       console.warn(
-        '[ChatScreen.fetchMessages] aborting: not directPeer or missing otherUserEmail',
+        '[ChatScreen.fetchMessages] aborting: not directPeer or missing peer/conversation ref',
         {
           isDirectPeer,
           otherUserEmail,
+          directConversationId,
         },
       );
       return;
     }
-    getChatMessages(myEmail, otherUserEmail)
+    getChatMessages(myEmail, otherUserEmail, directConversationId)
       .then(res => {
         if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (res.conversation_id) setConversationId(res.conversation_id);
@@ -680,6 +686,7 @@ const ChatScreen = ({
     isDirectPeer,
     myEmail,
     otherUserEmail,
+    directConversationId,
   ]);
 
   const fetchMessagesRef = useRef(fetchMessages);
@@ -768,7 +775,7 @@ const ChatScreen = ({
       if (isGroupThread && groupConversationId) {
         return getGroupChatMessages(myEmail, groupConversationId);
       }
-      return getChatMessages(myEmail, otherUserEmail);
+      return getChatMessages(myEmail, otherUserEmail, directConversationId);
     };
     load()
       .then(res => {
@@ -814,6 +821,7 @@ const ChatScreen = ({
     groupConversationId,
     myEmail,
     otherUserEmail,
+    directConversationId,
   ]);
 
   useEffect(() => {
@@ -1894,7 +1902,7 @@ const ChatScreen = ({
         </Text>
       );
     }
-    if (!isWelcome && !isGroupThread && isUser && !otherUserEmail) {
+    if (!isWelcome && !isGroupThread && isUser && !otherUserEmail && !directConversationId) {
       return (
         <Text style={styles.emptyChatText}>
           לא ניתן לטעון את השיחה. חזור/י לרשימת השיחות ונסה/י שוב.
