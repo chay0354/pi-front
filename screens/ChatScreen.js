@@ -500,7 +500,9 @@ const ChatScreen = ({
     if (!isGroupThread || groupMembersList.length === 0) return;
     let cancelled = false;
     const run = async () => {
-      for (const member of groupMembersList) {
+      const missing = groupMembersList.filter(member => {
+        const existing = normalizeAvatarUrl(getUserProfileImageUrl(member));
+        if (existing) return false;
         const refRaw =
           member?.email != null && String(member.email).trim()
             ? String(member.email).trim()
@@ -509,43 +511,44 @@ const ChatScreen = ({
               : member?.id != null && String(member.id).trim()
                 ? String(member.id).trim()
                 : null;
-        if (!refRaw) continue;
-        const ref = refRaw.toLowerCase();
-        const existing = normalizeAvatarUrl(getUserProfileImageUrl(member));
-        const overrideExisting = normalizeAvatarUrl(
-          groupMemberAvatarOverrides[ref] || null,
-        );
-        if (existing || overrideExisting) continue;
-        try {
-          const res = await getChatParticipantDisplay(refRaw);
-          const resolved = normalizeAvatarUrl(
-            getUserProfileImageUrl(res) ||
-              res?.profileImageUrl ||
-              res?.profile_picture_url ||
-              null,
-          );
-          logProfilePic(`ChatScreen.groupMember.lookup.${ref}`, {
-            memberRef: refRaw,
-            success: !!res?.success,
-            apiProfileImageUrl: res?.profileImageUrl ?? null,
-            apiProfile_picture_url: res?.profile_picture_url ?? null,
-            resolved,
-          });
-          if (!cancelled && resolved) {
-            setGroupMemberAvatarOverrides(prev =>
-              prev[ref] === resolved ? prev : {...prev, [ref]: resolved},
+        return !!refRaw;
+      });
+      await Promise.all(
+        missing.map(async member => {
+          const refRaw =
+            member?.email != null && String(member.email).trim()
+              ? String(member.email).trim()
+              : member?.user_id != null && String(member.user_id).trim()
+                ? String(member.user_id).trim()
+                : member?.id != null && String(member.id).trim()
+                  ? String(member.id).trim()
+                  : null;
+          if (!refRaw) return;
+          const ref = refRaw.toLowerCase();
+          try {
+            const res = await getChatParticipantDisplay(refRaw);
+            const resolved = normalizeAvatarUrl(
+              getUserProfileImageUrl(res) ||
+                res?.profileImageUrl ||
+                res?.profile_picture_url ||
+                null,
             );
+            if (!cancelled && resolved) {
+              setGroupMemberAvatarOverrides(prev =>
+                prev[ref] === resolved ? prev : {...prev, [ref]: resolved},
+              );
+            }
+          } catch (_) {
+            // best-effort avatar lookup
           }
-        } catch (_) {
-          // best-effort avatar lookup
-        }
-      }
+        }),
+      );
     };
     run();
     return () => {
       cancelled = true;
     };
-  }, [isGroupThread, groupMembersList, groupMemberAvatarOverrides]);
+  }, [isGroupThread, groupMembersList]);
 
   useEffect(() => {
     if (
@@ -683,8 +686,26 @@ const ChatScreen = ({
   fetchMessagesRef.current = fetchMessages;
 
   useEffect(() => {
-    setResolvedDisplay(null);
-  }, [otherUserRef]);
+    if (!isUser || !otherUserRef) {
+      setResolvedDisplay(null);
+      return;
+    }
+    const seedName =
+      conversation?.name != null && String(conversation.name).trim() !== ''
+        ? String(conversation.name).trim()
+        : null;
+    const seedPic = getUserProfileImageUrl(conversation) || null;
+    if (seedName || seedPic) {
+      setResolvedDisplay({
+        name: seedName,
+        profileImageUrl: seedPic,
+        phone: null,
+        subscriptionType: null,
+      });
+    } else {
+      setResolvedDisplay(null);
+    }
+  }, [isUser, otherUserRef, conversation?.name, conversation?.profileImageUrl]);
 
   useEffect(() => {
     if (!isUser || !otherUserRef) return;
@@ -709,12 +730,13 @@ const ChatScreen = ({
             ? String(res.phone).trim()
             : null;
         if (name || profileImageUrl || phone || res.subscription_type) {
-          setResolvedDisplay({
-            name,
-            profileImageUrl,
-            phone,
-            subscriptionType: res.subscription_type || null,
-          });
+          setResolvedDisplay(prev => ({
+            name: name || prev?.name || null,
+            profileImageUrl: profileImageUrl || prev?.profileImageUrl || null,
+            phone: phone || prev?.phone || null,
+            subscriptionType:
+              res.subscription_type || prev?.subscriptionType || null,
+          }));
         }
       })
       .catch(() => {});
@@ -739,6 +761,8 @@ const ChatScreen = ({
       return;
     }
     let cancelled = false;
+    setMessages([]);
+    setConversationId(null);
     setLoading(true);
     const load = () => {
       if (isGroupThread && groupConversationId) {
@@ -781,41 +805,8 @@ const ChatScreen = ({
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    const t = setTimeout(() => {
-      if (
-        !cancelled &&
-        myEmail &&
-        (isGroupThread ? groupConversationId : otherUserEmail)
-      ) {
-        load()
-          .then(res => {
-            if (!cancelled && res.messages && res.messages.length > 0) {
-              setMessages(res.messages.map(normalizeChatMessage));
-              if (res.conversation_id) setConversationId(res.conversation_id);
-              if (isGroupThread) {
-                if (res.group) setGroupDetail(res.group);
-                if (Array.isArray(res.members))
-                  setGroupMembersList(res.members);
-              }
-              if (!isGroupThread && res.exclusiveOffer !== undefined) {
-                const cid =
-                  res.conversation_id != null
-                    ? String(res.conversation_id).trim()
-                    : '';
-                setExclusiveOfferMeta(
-                  res.exclusiveOffer
-                    ? enrichExclusiveOfferMeta(res.exclusiveOffer, cid)
-                    : null,
-                );
-              }
-            }
-          })
-          .catch(() => {});
-      }
-    }, 800);
     return () => {
       cancelled = true;
-      clearTimeout(t);
     };
   }, [
     isDirectPeer,
@@ -1104,7 +1095,7 @@ const ChatScreen = ({
   useEffect(() => {
     if (!myEmail) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
-    const POLL_MS = 3500;
+    const POLL_MS = 12000;
     const interval = setInterval(() => fetchMessagesRef.current(), POLL_MS);
     return () => clearInterval(interval);
   }, [isDirectPeer, isGroupThread, groupConversationId, myEmail]);
@@ -1888,7 +1879,7 @@ const ChatScreen = ({
         </View>
       );
     }
-    if (loading) {
+    if (loading && messages.length === 0) {
       return (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="small" color={TEXT_LIGHT} />

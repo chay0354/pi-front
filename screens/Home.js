@@ -568,14 +568,12 @@ const Home = ({
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <View style={styles.carouselWrap}>
-          <Carusel
-            categoriesList={userCategories}
-            initialCategoryId={carouselCategoryId}
-            onCategorySelect={handleCategorySelect}
-          />
-        </View>
-        <View style={styles.projectsSectionHeader}>
+        <Carusel
+          categoriesList={userCategories}
+          initialCategoryId={carouselCategoryId}
+          onCategorySelect={handleCategorySelect}
+        />
+        <View style={[styles.profileBarHeader, {marginTop: 8}]}>
           <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           <TouchableOpacity
             onPress={() => onOpenSelectedProjects?.()}
@@ -781,8 +779,6 @@ const Home = ({
 
 export default memo(Home);
 
-const PROJECT_CARD_EXTRA_HEIGHT = 28;
-
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -837,18 +833,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  carouselWrap: {
-    marginBottom: -PROJECT_CARD_EXTRA_HEIGHT,
-  },
-  projectsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 4,
-    marginBottom: 8,
-    zIndex: 2,
   },
   projectCardSlot: {
     flex: 1,

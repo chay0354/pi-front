@@ -18,59 +18,24 @@ import {
   Animated,
   Vibration,
 } from 'react-native';
-import {
-  userCategories,
-  DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
-} from '../utils/constant';
+import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
+import {userCategories} from '../utils/constant';
 
-const TICK_MIN_GAP_MS = 10;
-/** Short pulse so rapid category ticks don't queue/block on Android during fast swipes. */
-const CAROUSEL_HAPTIC_PULSE_MS = 18;
-const CAROUSEL_HAPTIC_BURST_GAP_MS = 10;
-const CAROUSEL_HAPTIC_BURST_MAX = 5;
-
-function logicalStepsCrossed(prevLogical, nextLogical, listLength) {
-  if (prevLogical === nextLogical || listLength <= 1) return 0;
-  const forward = (nextLogical - prevLogical + listLength) % listLength;
-  const backward = (prevLogical - nextLogical + listLength) % listLength;
-  return Math.min(forward, backward) || 1;
-}
-
-function fireCarouselHaptic(crossed = 1) {
-  if (Platform.OS === 'web') return;
-  const count = Math.min(Math.max(1, crossed), CAROUSEL_HAPTIC_BURST_MAX);
-
-  if (Platform.OS === 'android') {
-    Vibration.cancel();
-    if (count > 1) {
-      const pattern = [0];
-      for (let i = 0; i < count; i += 1) {
-        pattern.push(CAROUSEL_HAPTIC_PULSE_MS);
-        if (i < count - 1) {
-          pattern.push(CAROUSEL_HAPTIC_BURST_GAP_MS);
-        }
-      }
-      Vibration.vibrate(pattern);
-      return;
-    }
-  }
-
-  Vibration.vibrate(CAROUSEL_HAPTIC_PULSE_MS);
-}
+const TICK_SOUND = require('../assets/sounds/carousel-tick.wav');
+const TICK_MIN_GAP_MS = 45;
+const TICK_VOLUME = 0.85;
+const TICK_POOL_SIZE = 4;
 
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
-/** Side slots stay at this scale; only the centered item renders at 1.0. */
-const CATEGORY_SIDE_SCALE = 0.64;
+const CATEGORY_SIDE_SCALE_X = 0.64;
+const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
 
 const LOOP_COPIES = 7;
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
 const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
 const SNAP_POSITION_EPSILON = 3;
 const LOOP_EDGE_BUFFER_ITEMS = 1.5;
-/** Delay before the invisible copy-rebase; must exceed the OS animated scrollTo
- *  glide so the soft landing is never cut short. */
-const SNAP_SETTLE_MS = 380;
 
 function positiveMod(value, modulus) {
   if (modulus <= 0) return 0;
@@ -272,18 +237,15 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
     // offset > 0: item is to the right of viewport center; < 0: to the left
     const offset = Animated.subtract(staticOffset, scrollAnim);
     const iW = itemWidth;
-
-    // Step scale: sides fixed at CATEGORY_SIDE_SCALE, full size only at center
-    // (no gradual grow/shrink while scrolling between slots).
     const scale = offset.interpolate({
-      inputRange: [-iW, -0.06 * iW, 0, 0.06 * iW, iW],
-      outputRange: [
-        CATEGORY_SIDE_SCALE,
-        CATEGORY_SIDE_SCALE,
-        1,
-        CATEGORY_SIDE_SCALE,
-        CATEGORY_SIDE_SCALE,
-      ],
+      inputRange: [-2 * iW, -iW, 0, iW, 2 * iW],
+      outputRange: [CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X, 1, CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X],
+      extrapolate: 'clamp',
+    });
+
+    const translateY = offset.interpolate({
+      inputRange: [-iW, 0, iW],
+      outputRange: [0, -2, 0],
       extrapolate: 'clamp',
     });
 
@@ -316,7 +278,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
     });
 
     return {
-      wrapperStyle: {transform: [{scale}], opacity: overallOpacity},
+      wrapperStyle: {transform: [{scale}, {translateY}], opacity: overallOpacity},
       centerOpacity: centerOp,
       leftOpacity: leftOp,
       rightOpacity: rightOp,
@@ -381,7 +343,6 @@ const Carusel = ({
   const isDraggingRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
   const isSnappingRef = useRef(false);
-  const snapSettleTimerRef = useRef(null);
   const previousScrollXRef = useRef(0);
   const lastScrollSampleRef = useRef({x: 0, t: 0});
   const virtualCenterIndexRef = useRef(0);
@@ -394,10 +355,6 @@ const Carusel = ({
       const idx = list.findIndex(c => Number(c.id) === target);
       if (idx >= 0) return idx;
     }
-    const defaultIdx = list.findIndex(
-      c => Number(c.id) === DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
-    );
-    if (defaultIdx >= 0) return defaultIdx;
     return Math.min(2, Math.max(0, listLength - 1));
   }, [list, listLength, initialCategoryId]);
   const initialVirtualIndex = infiniteLoop
@@ -419,28 +376,95 @@ const Carusel = ({
     onCategorySelectRef.current?.(id);
   }, []);
 
+  const tickPoolRef = useRef([]);
+  const tickPoolCursorRef = useRef(0);
   const lastTickAtRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return undefined;
+    }
+    let mounted = true;
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+        const pool = await Promise.all(
+          Array.from({length: TICK_POOL_SIZE}, async () => {
+            const {sound} = await Audio.Sound.createAsync(TICK_SOUND, {
+              volume: TICK_VOLUME,
+              shouldPlay: false,
+            });
+            return sound;
+          }),
+        );
+        if (mounted) {
+          tickPoolRef.current = pool;
+        } else {
+          await Promise.all(pool.map(s => s.unloadAsync().catch(() => {})));
+        }
+      } catch {
+        /* tick is optional UX polish */
+      }
+    })();
+    return () => {
+      mounted = false;
+      const pool = tickPoolRef.current;
+      tickPoolRef.current = [];
+      Promise.all(pool.map(s => s.unloadAsync().catch(() => {}))).catch(
+        () => {},
+      );
+    };
+  }, []);
+
+  const playTick = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
+      return;
+    }
+    lastTickAtRef.current = now;
+    const pool = tickPoolRef.current;
+    if (!pool.length) {
+      return;
+    }
+    const sound = pool[tickPoolCursorRef.current % pool.length];
+    tickPoolCursorRef.current += 1;
+    (async () => {
+      try {
+        const status = await sound.getStatusAsync();
+        if (!status.isLoaded) return;
+        if (status.isPlaying) await sound.stopAsync();
+        await sound.setPositionAsync(0);
+        await sound.playAsync();
+      } catch {
+        /* ignore overlapping tick races */
+      }
+    })();
+  }, []);
 
   const tickIfLogicalChange = useCallback(
     (prevVirtualIndex, nextVirtualIndex) => {
-      if (listLength <= 1) {
-        return;
+      if (
+        listLength > 1 &&
+        positiveMod(nextVirtualIndex, listLength) !==
+          positiveMod(prevVirtualIndex, listLength)
+      ) {
+        playTick();
+        // Short haptic pulse on each category change — 20ms is subtle on Android,
+        // iOS uses its system haptics pattern for short durations.
+        if (Platform.OS !== 'web') {
+          Vibration.vibrate(20);
+        }
       }
-      const prevLogical = positiveMod(prevVirtualIndex, listLength);
-      const nextLogical = positiveMod(nextVirtualIndex, listLength);
-      const crossed = logicalStepsCrossed(prevLogical, nextLogical, listLength);
-      if (crossed === 0) {
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
-        return;
-      }
-      lastTickAtRef.current = now;
-      fireCarouselHaptic(crossed);
     },
-    [listLength],
+    [listLength, playTick],
   );
 
   const categoryIdsKey = list.map(c => c.id).join(',');
@@ -484,112 +508,60 @@ const Carusel = ({
       }
       isSnappingRef.current = true;
 
-      // Web keeps the original instant normalize + jump (no drift on desktop).
+      let closestVirtualIndex;
+      let snapScrollX;
+
       if (Platform.OS === 'web') {
-        const closestWeb = webCarouselClosestIndex(
+        closestVirtualIndex = webCarouselClosestIndex(
           scrollPosition,
           itemWidth,
           contentWidth,
           viewportWidth,
           totalItems,
         );
-        const snapWeb = webCarouselSnapScrollX(
-          closestWeb,
+        snapScrollX = webCarouselSnapScrollX(
+          closestVirtualIndex,
           itemWidth,
           contentWidth,
           viewportWidth,
         );
-        const normalizedWeb = infiniteLoop
-          ? normalizeInfiniteCarouselPosition(
-              closestWeb,
-              snapWeb,
-              listLength,
-              itemWidth,
-            )
-          : {virtualIndex: closestWeb, scrollX: snapWeb};
-        tickIfLogicalChange(
-          virtualCenterIndexRef.current,
-          normalizedWeb.virtualIndex,
+      } else {
+        closestVirtualIndex = nativeCarouselClosestIndex(
+          scrollPosition,
+          itemWidth,
+          viewportWidth,
+          totalItems,
         );
-        virtualCenterIndexRef.current = normalizedWeb.virtualIndex;
-        setVirtualCenterIndex(normalizedWeb.virtualIndex);
-        if (
-          scrollViewRef.current &&
-          Math.abs(scrollPosition - normalizedWeb.scrollX) >
-            SNAP_POSITION_EPSILON
-        ) {
-          jumpToScrollX(normalizedWeb.scrollX, false);
-        }
-        requestAnimationFrame(() => {
-          isSnappingRef.current = false;
-        });
-        return;
+        snapScrollX = nativeCarouselSnapScrollX(closestVirtualIndex, itemWidth);
       }
 
-      // Native: gentle "roulette" landing. The OS momentum has already coasted
-      // and slowed; here we only ease the last fraction of a slot so it settles
-      // softly onto center instead of snapping in one tick.
-      const closestVirtualIndex = nativeCarouselClosestIndex(
-        scrollPosition,
-        itemWidth,
-        viewportWidth,
-        totalItems,
+      const normalized = infiniteLoop
+        ? normalizeInfiniteCarouselPosition(
+            closestVirtualIndex,
+            snapScrollX,
+            listLength,
+            itemWidth,
+          )
+        : {virtualIndex: closestVirtualIndex, scrollX: snapScrollX};
+
+      tickIfLogicalChange(
+        virtualCenterIndexRef.current,
+        normalized.virtualIndex,
       );
-      const snapScrollX = nativeCarouselSnapScrollX(
-        closestVirtualIndex,
-        itemWidth,
-      );
+      virtualCenterIndexRef.current = normalized.virtualIndex;
+      setVirtualCenterIndex(normalized.virtualIndex);
 
-      // Light up / haptic-tick the category we're landing on (current copy) so
-      // the on-screen centered item is the one that reads as selected.
-      tickIfLogicalChange(virtualCenterIndexRef.current, closestVirtualIndex);
-      virtualCenterIndexRef.current = closestVirtualIndex;
-      setVirtualCenterIndex(closestVirtualIndex);
-
-      const needsSettle =
-        Math.abs(scrollPosition - snapScrollX) > SNAP_POSITION_EPSILON;
-
-      if (needsSettle && scrollViewRef.current) {
-        // Animated glide → scrollAnim follows on the native thread, so scale +
-        // crossfade ease in together for a soft stop.
-        scrollViewRef.current.scrollTo({x: snapScrollX, animated: true});
+      const targetScrollX = normalized.scrollX;
+      if (
+        scrollViewRef.current &&
+        Math.abs(scrollPosition - targetScrollX) > SNAP_POSITION_EPSILON
+      ) {
+        jumpToScrollX(targetScrollX, false);
       }
-      lastScrollPositionRef.current = snapScrollX;
-      previousScrollXRef.current = snapScrollX;
 
-      // After the soft landing, silently rebase to the middle copy so the
-      // infinite loop always has runway. Invisible: same logical item, same
-      // on-screen position.
-      if (snapSettleTimerRef.current) {
-        clearTimeout(snapSettleTimerRef.current);
-      }
-      snapSettleTimerRef.current = setTimeout(
-        () => {
-          snapSettleTimerRef.current = null;
-          if (infiniteLoop && listLength > 1 && scrollViewRef.current) {
-            const logical = positiveMod(closestVirtualIndex, listLength);
-            const middleVirtual = middleCopyStart(listLength) + logical;
-            const rebaseX = nativeCarouselSnapScrollX(middleVirtual, itemWidth);
-            if (
-              Math.abs(rebaseX - lastScrollPositionRef.current) >
-              SNAP_POSITION_EPSILON
-            ) {
-              isProgrammaticScrollRef.current = true;
-              scrollViewRef.current.scrollTo({x: rebaseX, animated: false});
-              scrollAnimRef.current.setValue(rebaseX);
-              lastScrollPositionRef.current = rebaseX;
-              previousScrollXRef.current = rebaseX;
-              virtualCenterIndexRef.current = middleVirtual;
-              setVirtualCenterIndex(middleVirtual);
-              requestAnimationFrame(() => {
-                isProgrammaticScrollRef.current = false;
-              });
-            }
-          }
-          isSnappingRef.current = false;
-        },
-        (needsSettle ? SNAP_SETTLE_MS : 0) + 24,
-      );
+      requestAnimationFrame(() => {
+        isSnappingRef.current = false;
+      });
     },
     [
       viewportWidth,
@@ -778,13 +750,6 @@ const Carusel = ({
   );
 
   const handleScrollBeginDrag = useCallback(() => {
-    // Re-grabbing mid-settle: cancel the pending soft-landing/rebase so the new
-    // gesture takes over immediately (feels like grabbing a spinning wheel).
-    if (snapSettleTimerRef.current) {
-      clearTimeout(snapSettleTimerRef.current);
-      snapSettleTimerRef.current = null;
-    }
-    isSnappingRef.current = false;
     isDraggingRef.current = true;
     androidScrollNextEmitRef.current = 0;
     previousScrollXRef.current = lastScrollPositionRef.current;
@@ -901,16 +866,6 @@ const Carusel = ({
     return () => cancelAnimationFrame(frame);
   }, [viewportWidth, scrollToInitialCenter]);
 
-  useEffect(
-    () => () => {
-      if (snapSettleTimerRef.current) {
-        clearTimeout(snapSettleTimerRef.current);
-        snapSettleTimerRef.current = null;
-      }
-    },
-    [],
-  );
-
   const listRef = useRef(list);
   listRef.current = list;
 
@@ -982,7 +937,7 @@ const Carusel = ({
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate={Platform.OS === 'ios' ? 0.994 : 0.99}
+        decelerationRate={Platform.OS === 'ios' ? 0.992 : 'normal'}
         bounces={false}
         pagingEnabled={false}
         onScroll={animatedScrollHandler}
