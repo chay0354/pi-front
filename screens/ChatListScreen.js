@@ -26,7 +26,10 @@ import {
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {getConversationWithWelcomeMessage} from '../utils/chatDefaults';
+import {
+  getConversationWithWelcomeMessage,
+  normalizeConversationForOpen,
+} from '../utils/chatDefaults';
 import {
   getChatConversations,
   searchBrokers,
@@ -845,6 +848,7 @@ const ChatListScreen = ({
       resetGroupFlowState();
       onOpenChat?.({
         id: conv.id,
+        conversationId: conv.id,
         isGroup: true,
         otherUserEmail: null,
         name: conv.name || conv.title || title,
@@ -951,34 +955,36 @@ const ChatListScreen = ({
       try {
         const res = await getChatConversations(myEmail);
         const list = res.conversations || [];
-        const asConv = list.map(c => ({
-          id: c.otherUserEmail || c.id,
-          conversationId: c.id,
-          otherUserEmail: c.otherUserEmail || null,
-          isGroup: c.isGroup === true,
-          name: c.name || 'משתמש',
-          profileImageUrl:
-            getUserProfileImageUrl(c) ||
-            (c.groupImageUrl != null && String(c.groupImageUrl).trim()
-              ? String(c.groupImageUrl).trim()
-              : null) ||
-            (c.group_image_url != null && String(c.group_image_url).trim()
-              ? String(c.group_image_url).trim()
-              : null) ||
-            null,
-          preview: c.preview || '',
-          time: c.time || '',
-          lastMessageAt: c.lastMessageAt || null,
-          listingId: c.listingId || null,
-          listingDisplayNumber:
-            c.listingDisplayNumber != null
-              ? Number(c.listingDisplayNumber)
-              : null,
-          listingCategoryLabel: c.listingCategoryLabel || null,
-          exclusiveOfferStatus: c.exclusiveOfferStatus || null,
-          unreadCount:
-            typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
-        }));
+        const asConv = list.map(c =>
+          normalizeConversationForOpen({
+            id: c.otherUserEmail || c.id,
+            conversationId: c.id,
+            otherUserEmail: c.otherUserEmail || null,
+            isGroup: c.isGroup === true,
+            name: c.name || 'משתמש',
+            profileImageUrl:
+              getUserProfileImageUrl(c) ||
+              (c.groupImageUrl != null && String(c.groupImageUrl).trim()
+                ? String(c.groupImageUrl).trim()
+                : null) ||
+              (c.group_image_url != null && String(c.group_image_url).trim()
+                ? String(c.group_image_url).trim()
+                : null) ||
+              null,
+            preview: c.preview || '',
+            time: c.time || '',
+            lastMessageAt: c.lastMessageAt || null,
+            listingId: c.listingId || null,
+            listingDisplayNumber:
+              c.listingDisplayNumber != null
+                ? Number(c.listingDisplayNumber)
+                : null,
+            listingCategoryLabel: c.listingCategoryLabel || null,
+            exclusiveOfferStatus: c.exclusiveOfferStatus || null,
+            unreadCount:
+              typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
+          }),
+        );
         const cu = currentUserRef.current;
         logProfilePic('ChatListScreen.fetchConversations', {
           myEmail,

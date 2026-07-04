@@ -96,6 +96,7 @@ import {
   normalizeUserProfileAliases,
 } from './utils/userProfileImage';
 import {getChatListingCategoryLabel} from './utils/chatListingCategory';
+import {normalizeConversationForOpen} from './utils/chatDefaults';
 import {isAdsListingRecord} from './utils/listingShape';
 import {enrichListingForUserProfile} from './utils/enrichListingForUserProfile';
 import {
@@ -1178,7 +1179,8 @@ function App() {
                     if (!conv || !post) return;
                     setSharedListingForChat(post);
                     setSelectedConversation({
-                      id: conv.id || conv.otherUserEmail || null,
+                      id: conv.otherUserEmail || conv.id || null,
+                      conversationId: conv.conversationId || conv.id || null,
                       otherUserEmail: conv.otherUserEmail || null,
                       isGroup: conv.isGroup === true,
                       name: conv.name || 'משתמש',
@@ -1291,6 +1293,12 @@ function App() {
                   const otherEmail =
                     (u?.creator_email || u?.email || '').trim().toLowerCase() ||
                     null;
+                  const otherPeerRef =
+                    otherEmail ||
+                    (u?.subscription_id != null
+                      ? String(u.subscription_id).trim().toLowerCase()
+                      : null) ||
+                    (u?.id != null ? String(u.id).trim().toLowerCase() : null);
                   const fromFeedListing = isAdsListingRecord(u);
                   const listingId = fromFeedListing
                     ? String(u.id).trim()
@@ -1299,7 +1307,8 @@ function App() {
                     ? getChatListingCategoryLabel(u?.category)
                     : null;
                   const conversation = {
-                    id: otherEmail || u?.subscription_id || u?.id || 'profile',
+                    id: otherPeerRef || 'profile',
+                    otherUserEmail: otherPeerRef,
                     name: displayName,
                     preview: '',
                     time: '',
@@ -1339,6 +1348,12 @@ function App() {
                   const otherEmail =
                     (u?.creator_email || u?.email || '').trim().toLowerCase() ||
                     null;
+                  const otherPeerRef =
+                    otherEmail ||
+                    (u?.subscription_id != null
+                      ? String(u.subscription_id).trim().toLowerCase()
+                      : null) ||
+                    (u?.id != null ? String(u.id).trim().toLowerCase() : null);
                   const fromFeedListing = isAdsListingRecord(u);
                   const listingId = fromFeedListing
                     ? String(u.id).trim()
@@ -1347,7 +1362,8 @@ function App() {
                     ? getChatListingCategoryLabel(u?.category)
                     : null;
                   const conversation = {
-                    id: otherEmail || u?.subscription_id || u?.id || 'profile',
+                    id: otherPeerRef || 'profile',
+                    otherUserEmail: otherPeerRef,
                     name: displayName,
                     preview: '',
                     time: '',
@@ -1466,6 +1482,12 @@ function App() {
                   const otherEmail =
                     (u?.creator_email || u?.email || '').trim().toLowerCase() ||
                     null;
+                  const otherPeerRef =
+                    otherEmail ||
+                    (u?.subscription_id != null
+                      ? String(u.subscription_id).trim().toLowerCase()
+                      : null) ||
+                    (u?.id != null ? String(u.id).trim().toLowerCase() : null);
                   const fromFeedListing = isAdsListingRecord(u);
                   const listingId = fromFeedListing
                     ? String(u.id).trim()
@@ -1474,7 +1496,8 @@ function App() {
                     ? getChatListingCategoryLabel(u?.category)
                     : null;
                   const conversation = {
-                    id: otherEmail || u?.subscription_id || u?.id || 'profile',
+                    id: otherPeerRef || 'profile',
+                    otherUserEmail: otherPeerRef,
                     name: displayName,
                     preview: '',
                     time: '',
@@ -2351,7 +2374,7 @@ function App() {
                 refreshKey={chatListRefreshKey}
                 piWelcomeRead={piWelcomeRead}
                 onOpenChat={conv => {
-                  setSelectedConversation(conv);
+                  setSelectedConversation(normalizeConversationForOpen(conv));
                   setChatReturnScreen(screenName.chatList);
                   setCurrentScreen(screenName.chat);
                 }}
