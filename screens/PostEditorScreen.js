@@ -38,6 +38,7 @@ import {
 import {
   uploadFile,
   createListing,
+  updateListing,
   createStory,
   resolveSubscriptionId,
 } from '../utils/api';
@@ -45,6 +46,10 @@ import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   buildPostTextGeneralDetails,
   serializePostTextOverlays,
+  parsePostTextOverlayPayload,
+  extractPostListingMediaUrls,
+  parseListingHashtagsForEditor,
+  hydratePostEditorBlocksFromOverlays,
 } from '../utils/postTextOverlay';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
@@ -56,27 +61,150 @@ const MAX_FONT_SIZE = 50;
 const DEFAULT_FONT_SIZE = 20;
 const POLYGON_TRACK_HEIGHT = 200;
 const POLYGON_KNOB_SIZE = 20;
+const POLYGON_FONT_SIZE_TRAVEL = POLYGON_TRACK_HEIGHT - POLYGON_KNOB_SIZE;
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const fontSizeToSliderOffset = size => {
+  const normalized = clamp(
+    (size - MIN_FONT_SIZE) / (MAX_FONT_SIZE - MIN_FONT_SIZE),
+    0,
+    1,
+  );
+  return Math.round((1 - normalized) * POLYGON_FONT_SIZE_TRAVEL);
+};
+
+const sliderPageYToFontSize = (pageY, trackPageY) => {
+  const relativeY = pageY - trackPageY;
+  const offset = clamp(
+    relativeY - POLYGON_KNOB_SIZE / 2,
+    0,
+    Math.max(POLYGON_FONT_SIZE_TRAVEL, 1),
+  );
+  const normalized = 1 - offset / Math.max(POLYGON_FONT_SIZE_TRAVEL, 1);
+  return Math.round(
+    MIN_FONT_SIZE + normalized * (MAX_FONT_SIZE - MIN_FONT_SIZE),
+  );
+};
+
+/**
+ * Vertical font-size control used while editing text.
+ * Uses pageY (not locationY) and refuses gesture termination so parent
+ * re-renders from live fontSize updates cannot steal the drag.
+ */
+const FontSizeSlider = React.memo(({value, onChange}) => {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const trackRef = useRef(null);
+  const trackPageYRef = useRef(0);
+  const draggingRef = useRef(false);
+  const [displaySize, setDisplaySize] = useState(
+    value ?? DEFAULT_FONT_SIZE,
+  );
+
+  useEffect(() => {
+    if (!draggingRef.current) {
+      setDisplaySize(value ?? DEFAULT_FONT_SIZE);
+    }
+  }, [value]);
+
+  const measureTrack = callback => {
+    const node = trackRef.current;
+    if (!node?.measureInWindow) {
+      callback?.();
+      return;
+    }
+    node.measureInWindow((_x, y) => {
+      if (typeof y === 'number' && Number.isFinite(y)) {
+        trackPageYRef.current = y;
+      }
+      callback?.();
+    });
+  };
+
+  const applyPageY = pageY => {
+    if (!Number.isFinite(pageY)) return;
+    const nextSize = sliderPageYToFontSize(pageY, trackPageYRef.current);
+    setDisplaySize(nextSize);
+    onChangeRef.current?.(nextSize);
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+      onPanResponderGrant: evt => {
+        draggingRef.current = true;
+        const pageY = evt?.nativeEvent?.pageY;
+        measureTrack(() => applyPageY(pageY));
+      },
+      onPanResponderMove: evt => {
+        applyPageY(evt?.nativeEvent?.pageY);
+      },
+      onPanResponderRelease: () => {
+        draggingRef.current = false;
+      },
+      onPanResponderTerminate: () => {
+        draggingRef.current = false;
+      },
+    }),
+  ).current;
+
+  return (
+    <View
+      style={styles.polygonSliderContainer}
+      pointerEvents="auto"
+      {...panResponder.panHandlers}>
+      <View
+        ref={trackRef}
+        collapsable={false}
+        style={styles.polygonTrack}
+        onLayout={() => measureTrack()}>
+        <Image
+          source={require('../assets/editors/polygon.png')}
+          style={styles.polygonIndicator}
+          pointerEvents="none"
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.polygonKnob,
+            {top: fontSizeToSliderOffset(displaySize)},
+          ]}
+        />
+      </View>
+    </View>
+  );
+});
+
+/** Figma 35:293454 — exact post text style fonts (סטייל 1–6). */
 const TEXT_STYLES = [
-  {label: 'סטייל 1', textStyle: {fontFamily: 'Rubik-Bold'}},
-  {
-    label: 'סטייל 2',
-    textStyle: {fontFamily: 'Rubik-SemiBold'},
-  },
-  {
-    label: 'סטייל 3',
-    textStyle: {fontFamily: 'Rubik-Medium'},
-  },
-  {
-    label: 'סטייל 4',
-    textStyle: {fontFamily: 'Rubik-Regular'},
-  },
-  {
-    label: 'סטייל 5',
-    textStyle: {fontFamily: 'Rubik-Light'},
-  },
+  {label: 'סטייל 1', textStyle: {fontFamily: 'SecularOne-Regular'}},
+  {label: 'סטייל 2', textStyle: {fontFamily: 'IBMPlexSansHebrew-Bold'}},
+  {label: 'סטייל 3', textStyle: {fontFamily: 'Rubik-ExtraBold'}},
+  {label: 'סטייל 4', textStyle: {fontFamily: 'Rubik-Regular'}},
+  {label: 'סטייל 5', textStyle: {fontFamily: 'Alef-Regular'}},
+  {label: 'סטייל 6', textStyle: {fontFamily: 'NotoSans-Regular'}},
 ];
 
+const DEFAULT_TEXT_COLOR = '#FFFFFF';
+
 const COLOR_PAGES = [
+  [
+    '#FFFFFF',
+    '#DBDBDB',
+    '#C7C7C7',
+    '#B2B2B2',
+    '#999999',
+    '#7C7C7C',
+    '#666666',
+    '#353535',
+    '#000000',
+  ],
   [
     '#CC001E',
     '#FF3250',
@@ -99,18 +227,15 @@ const COLOR_PAGES = [
     '#730003',
     '#470C0D',
   ],
-  [
-    '#000000',
-    '#353535',
-    '#666666',
-    '#7C7C7C',
-    '#999999',
-    '#B2B2B2',
-    '#C7C7C7',
-    '#DBDBDB',
-    '#FFFFFF',
-  ],
 ];
+
+const getColorPageIndexForColor = color => {
+  const target = String(color || DEFAULT_TEXT_COLOR).toUpperCase();
+  const pageIndex = COLOR_PAGES.findIndex(page =>
+    page.some(c => String(c).toUpperCase() === target),
+  );
+  return pageIndex >= 0 ? pageIndex : 0;
+};
 
 const BACKGROUND_GRADIENTS = [
   ['#2B2A39', '#5149C4'],
@@ -123,7 +248,6 @@ const BACKGROUND_GRADIENTS = [
 const createTextBlockId = () =>
   `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const VIDEO_EXT_REGEX = /\.(mp4|mov|m4v|webm|ogg|ogv)$/i;
 
 const isVideoAsset = asset => {
@@ -363,6 +487,8 @@ const DraggableTextBlock = React.memo(
     onUpdatePositionRef.current = onUpdatePosition;
     const onBringToFrontRef = useRef(onBringToFront);
     onBringToFrontRef.current = onBringToFront;
+    const isBeingEditedRef = useRef(isBeingEdited);
+    isBeingEditedRef.current = isBeingEdited;
 
     const touchStartTime = useRef(0);
     const hasMoved = useRef(false);
@@ -410,9 +536,10 @@ const DraggableTextBlock = React.memo(
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => !isBeingEditedRef.current,
+        onMoveShouldSetPanResponder: () => !isBeingEditedRef.current,
         onPanResponderGrant: () => {
+          if (isBeingEditedRef.current) return;
           onBringToFrontRef.current?.(block.id);
           touchStartTime.current = Date.now();
           hasMoved.current = false;
@@ -423,6 +550,7 @@ const DraggableTextBlock = React.memo(
           position.setValue({x: 0, y: 0});
         },
         onPanResponderMove: (_, g) => {
+          if (isBeingEditedRef.current) return;
           if (Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5) {
             hasMoved.current = true;
           }
@@ -431,6 +559,7 @@ const DraggableTextBlock = React.memo(
           }
         },
         onPanResponderRelease: () => {
+          if (isBeingEditedRef.current) return;
           position.flattenOffset();
           const elapsed = Date.now() - touchStartTime.current;
           if (!hasMoved.current && elapsed < 400) {
@@ -496,10 +625,14 @@ const DraggableTextBlock = React.memo(
     return (
       <Animated.View
         onLayout={handleLayout}
+        pointerEvents={isBeingEdited ? 'none' : 'auto'}
         style={[
           styles.centerTextWrapper,
           {
             zIndex,
+            // Android video SurfaceView ignores RN zIndex — elevation keeps
+            // text overlays tappable and visible above a playing background.
+            elevation: Platform.OS === 'android' ? Math.max(8, zIndex + 8) : 0,
             left: 0,
             top: 0,
             width: boxWidth,
@@ -508,7 +641,7 @@ const DraggableTextBlock = React.memo(
             transform: position.getTranslateTransform(),
           },
         ]}
-        {...panResponder.panHandlers}>
+        {...(isBeingEdited ? {} : panResponder.panHandlers)}>
         <Text
           style={[
             styles.centerText,
@@ -676,6 +809,8 @@ const PostEditorScreen = ({
   /** Explicit listing category for this editor session (from navigation); overrides stale global feed category */
   publishCategoryId = null,
   publishTarget = 'post',
+  /** When set, editor opens in edit mode for an existing feed post. */
+  initialListing = null,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
@@ -692,7 +827,7 @@ const PostEditorScreen = ({
   const [textAlignMode, setTextAlignMode] = useState('center');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
   const [colorPageIndex, setColorPageIndex] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(COLOR_PAGES[0][0]);
+  const [selectedColor, setSelectedColor] = useState(DEFAULT_TEXT_COLOR);
   const [selectedBackgroundGradientIndex, setSelectedBackgroundGradientIndex] =
     useState(0);
   const [colorsPagerWidth, setColorsPagerWidth] = useState(0);
@@ -711,7 +846,12 @@ const PostEditorScreen = ({
   const editingInputRef = useRef(null);
   const editingFieldLayoutRef = useRef(null);
   const editingTextDraftRef = useRef('');
+  // Where the block sat before edit mode — restored on finish so the
+  // temporary "above keyboard" edit slot never becomes the saved position.
+  const editingOriginRef = useRef({x: null, y: null});
   const isFinishingEditRef = useRef(false);
+  const editingTextBlockIdRef = useRef(null);
+  const suppressBlurFinishRef = useRef(false);
   const stageLayoutRef = useRef({width: 0, height: 0});
   // Track the largest stage height ever observed (i.e. with the keyboard
   // closed). New text blocks are positioned relative to this so they don't
@@ -719,7 +859,16 @@ const PostEditorScreen = ({
   const maxStageHeightRef = useRef(0);
   const activeTabRef = useRef(activeTab);
   const nextStackOrderRef = useRef(1);
-  const fontSizeTravel = POLYGON_TRACK_HEIGHT - POLYGON_KNOB_SIZE;
+  const editingListingId =
+    initialListing?.id != null ? String(initialListing.id).trim() : '';
+  const isEditMode = Boolean(editingListingId);
+  const originalVideoUrlRef = useRef(null);
+  const originalMainImageUrlRef = useRef(null);
+  const didHydrateListingRef = useRef(false);
+  const didHydrateOverlaysRef = useRef(false);
+
+  const isRemoteMediaUri = uri =>
+    /^https?:\/\//i.test(String(uri || '').trim());
 
   const stylePresets = useMemo(
     () => [
@@ -760,6 +909,54 @@ const PostEditorScreen = ({
     hasTextBlockContent ||
     Boolean((textModeOverlayText || '').trim()) ||
     Boolean((textContent || '').trim());
+
+  useEffect(() => {
+    if (!initialListing || didHydrateListingRef.current) return;
+    didHydrateListingRef.current = true;
+    const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
+    originalVideoUrlRef.current = videoUrl;
+    originalMainImageUrlRef.current = mainImageUrl;
+    setHashtags(parseListingHashtagsForEditor(initialListing));
+    if (videoUrl) {
+      setBackgroundVideoAsset({
+        uri: videoUrl,
+        mimeType: 'video/mp4',
+        fileName: null,
+      });
+      setBackgroundImageUri(null);
+      setMediaImages([]);
+      activeTabRef.current = TAB_CAMERA;
+      setActiveTab(TAB_CAMERA);
+      return;
+    }
+    if (mainImageUrl) {
+      setBackgroundImageUri(mainImageUrl);
+      setBackgroundVideoAsset(null);
+      activeTabRef.current = TAB_CAMERA;
+      setActiveTab(TAB_CAMERA);
+      return;
+    }
+    const desc = String(initialListing.description || '').trim();
+    if (desc && desc !== 'פוסט' && desc.toLowerCase() !== 'post') {
+      setTextContent(desc);
+      activeTabRef.current = TAB_TEXT;
+      setActiveTab(TAB_TEXT);
+    }
+  }, [initialListing]);
+
+  useEffect(() => {
+    if (!initialListing || didHydrateOverlaysRef.current) return;
+    if (!(stageLayout.width > 0 && stageLayout.height > 0)) return;
+    const payload = parsePostTextOverlayPayload(initialListing);
+    if (!payload?.overlays?.length) return;
+    const blocks = hydratePostEditorBlocksFromOverlays(payload, stageLayout);
+    if (!blocks.length) return;
+    didHydrateOverlaysRef.current = true;
+    nextStackOrderRef.current = blocks.length + 1;
+    setTextBlocks(blocks);
+    activeTabRef.current = TAB_CAMERA;
+    setActiveTab(TAB_CAMERA);
+  }, [initialListing, stageLayout.width, stageLayout.height]);
 
   const handlePublish = async () => {
     if (publishing) return;
@@ -844,36 +1041,47 @@ const PostEditorScreen = ({
       let videoUrl = null;
 
       if (hasVideoBackground) {
-        // Video posts keep playing the video; text is drawn as an overlay in
-        // the feed (see general_details.post_text_overlays below), matching the
-        // editor. We never flatten the video into a static image.
-        const videoUpload = await uploadFile(
-          {
-            uri: backgroundVideoAsset.uri,
-            type: backgroundVideoAsset.mimeType || 'video/mp4',
-            name:
-              backgroundVideoAsset.fileName ||
-              `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
-          },
-          publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
-          {timeoutMs: 300000},
-        );
-        videoUrl = videoUpload?.url;
-        if (!videoUrl) {
-          throw new Error('העלאת הסרטון נכשלה');
+        const sameVideo =
+          isRemoteMediaUri(backgroundVideoAsset.uri) &&
+          backgroundVideoAsset.uri === originalVideoUrlRef.current;
+        if (sameVideo && originalVideoUrlRef.current) {
+          videoUrl = originalVideoUrlRef.current;
+        } else {
+          const videoUpload = await uploadFile(
+            {
+              uri: backgroundVideoAsset.uri,
+              type: backgroundVideoAsset.mimeType || 'video/mp4',
+              name:
+                backgroundVideoAsset.fileName ||
+                `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
+            },
+            publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
+            {timeoutMs: 300000},
+          );
+          videoUrl = videoUpload?.url;
+          if (!videoUrl) {
+            throw new Error('העלאת הסרטון נכשלה');
+          }
         }
       } else if (canUploadPhotoDirectly) {
-        const imageUpload = await uploadFile(
-          {
-            uri: backgroundImageUri,
-            type: inferImageMimeFromUri(backgroundImageUri),
-            name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
-          },
-          publishTarget === 'story' ? 'stories/images' : 'listings/images',
-        );
-        mainImageUrl = imageUpload?.url;
-        if (!mainImageUrl) {
-          throw new Error('העלאה הצליחה בלי כתובת קובץ');
+        const sameImage =
+          isRemoteMediaUri(backgroundImageUri) &&
+          backgroundImageUri === originalMainImageUrlRef.current;
+        if (sameImage && originalMainImageUrlRef.current) {
+          mainImageUrl = originalMainImageUrlRef.current;
+        } else {
+          const imageUpload = await uploadFile(
+            {
+              uri: backgroundImageUri,
+              type: inferImageMimeFromUri(backgroundImageUri),
+              name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+            },
+            publishTarget === 'story' ? 'stories/images' : 'listings/images',
+          );
+          mainImageUrl = imageUpload?.url;
+          if (!mainImageUrl) {
+            throw new Error('העלאה הצליחה בלי כתובת קובץ');
+          }
         }
       } else {
         let captureUri;
@@ -911,8 +1119,43 @@ const PostEditorScreen = ({
           : null;
 
       let createdListing = null;
+      let updatedListing = null;
       if (publishTarget === 'story') {
         await createStory({subscription_id: subId, media_url: url});
+      } else if (isEditMode) {
+        const updatePayload = videoUrl
+          ? {
+              category: resolvedPublishCategory,
+              status: 'published',
+              subscriptionId: subId,
+              subscriptionType: currentUser?.subscription_type || null,
+              videoUrl,
+              hasVideo: true,
+              feedDisplayPriority: 'video',
+              description: listingDescription,
+              feedPost: true,
+              feed_post: true,
+              propertyType: 'post',
+              price: 0,
+              hashtags,
+              ...(videoOverlayGeneralDetails
+                ? {generalDetails: videoOverlayGeneralDetails}
+                : {}),
+            }
+          : {
+              category: resolvedPublishCategory,
+              status: 'published',
+              subscriptionId: subId,
+              subscriptionType: currentUser?.subscription_type || null,
+              mainImageUrl,
+              description: listingDescription,
+              feedPost: true,
+              feed_post: true,
+              propertyType: 'post',
+              price: 0,
+              hashtags,
+            };
+        updatedListing = await updateListing(editingListingId, updatePayload);
       } else if (videoUrl) {
         createdListing = await createListing({
           category: resolvedPublishCategory,
@@ -953,11 +1196,20 @@ const PostEditorScreen = ({
         publishTarget,
         isVideo: hasVideoBackground,
         category: resolvedPublishCategory,
-        id: createdListing?.id ?? createdListing?.listing?.id ?? null,
+        id:
+          updatedListing?.id ??
+          updatedListing?.listing?.id ??
+          createdListing?.id ??
+          createdListing?.listing?.id ??
+          (isEditMode ? editingListingId : null),
+        isEdit: isEditMode,
       });
       onClose?.();
     } catch (error) {
-      Alert.alert('שגיאה', error?.message || 'הפרסום נכשל');
+      Alert.alert(
+        'שגיאה',
+        error?.message || (isEditMode ? 'העדכון נכשל' : 'הפרסום נכשל'),
+      );
     } finally {
       setIsCapturing(false);
       setPublishing(false);
@@ -974,11 +1226,10 @@ const PostEditorScreen = ({
     [textBlocks, editingTextBlockId],
   );
 
-  // RN Web often never fires Keyboard show/hide; still show the format bar while editing text.
+  // Show format tools whenever a text block is being edited — don't depend on
+  // keyboard visibility alone (video focus / Android SurfaceView can flicker it).
   const showTextFormatToolbar =
-    Boolean(editingTextBlockId) &&
-    !isCapturing &&
-    (isKeyboardVisible || Platform.OS === 'web');
+    Boolean(editingTextBlockId) && !isCapturing;
 
   const webToolbarInputMarginBottom = useMemo(() => {
     if (Platform.OS !== 'web' || !editingTextBlockId || isCapturing) {
@@ -993,28 +1244,33 @@ const PostEditorScreen = ({
     return 88;
   }, [selectedFormat, editingTextBlockId, isCapturing]);
 
-  /** Space above the format toolbar so the inline editor is not covered. */
-  const editingInputMarginBottom = useMemo(() => {
-    if (Platform.OS === 'web') {
-      return webToolbarInputMarginBottom;
-    }
+  /**
+   * Fixed edit slot: sit just above the format toolbar + keyboard so the
+   * soft keyboard never covers the text being typed.
+   */
+  const editingInputBottom = useMemo(() => {
     if (!editingTextBlockId || isCapturing) {
-      return 0;
+      return 12;
     }
-    if (!isKeyboardVisible) {
-      return Math.max(formatToolbarHeight, 72) + 8;
+    const toolbarH = Math.max(formatToolbarHeight, 72);
+    if (Platform.OS === 'web') {
+      return Math.max(toolbarH, webToolbarInputMarginBottom) + 12;
     }
-    return Math.max(formatToolbarHeight, 72) + 12;
+    return toolbarH + Math.max(keyboardInset, 0) + 12;
   }, [
-    webToolbarInputMarginBottom,
     editingTextBlockId,
     isCapturing,
-    isKeyboardVisible,
     formatToolbarHeight,
+    keyboardInset,
+    webToolbarInputMarginBottom,
   ]);
 
   /** Safe-area padding under the format bar (keyboard lift uses `bottom` on Android). */
   const formatToolbarSafeBottom = Math.max(bottom, 8);
+
+  useEffect(() => {
+    editingTextBlockIdRef.current = editingTextBlockId;
+  }, [editingTextBlockId]);
 
   useEffect(() => {
     const onShow = () => {
@@ -1022,7 +1278,11 @@ const PostEditorScreen = ({
     };
     const onHide = () => {
       setIsKeyboardVisible(false);
-      setSelectedFormat(null);
+      // Don't clear format tools mid-edit — video/audio focus can hide the
+      // keyboard briefly without the user intending to leave edit mode.
+      if (!editingTextBlockIdRef.current) {
+        setSelectedFormat(null);
+      }
     };
 
     const showEvent =
@@ -1058,9 +1318,16 @@ const PostEditorScreen = ({
 
   useEffect(() => {
     if (!editingTextBlockId) return;
+    // Give the keyboard/input a moment after opening edit — video pause and
+    // Android focus fights can fire spurious blur/keyboard events.
+    suppressBlurFinishRef.current = true;
+    const t = setTimeout(() => {
+      suppressBlurFinishRef.current = false;
+    }, 450);
     requestAnimationFrame(() => {
       if (editingInputRef.current?.focus) editingInputRef.current.focus();
     });
+    return () => clearTimeout(t);
   }, [editingTextBlockId]);
 
   useEffect(() => {
@@ -1108,13 +1375,16 @@ const PostEditorScreen = ({
 
     isFinishingEditRef.current = true;
 
-    // Use the live stage size (keyboard still up) so Y matches where the user typed.
+    // Always clamp against the full (keyboard-closed) stage so finishing
+    // edit does not pin the block to the temporary above-keyboard slot.
     const stageHForFinish =
-      stageLayoutRef.current.height > 0
-        ? stageLayoutRef.current.height
-        : stageLayout.height > 0
-          ? stageLayout.height
-          : 300;
+      maxStageHeightRef.current > 0
+        ? maxStageHeightRef.current
+        : stageLayoutRef.current.height > 0
+          ? stageLayoutRef.current.height
+          : stageLayout.height > 0
+            ? stageLayout.height
+            : 300;
 
     const stageW =
       stageLayoutRef.current.width > 0
@@ -1125,9 +1395,14 @@ const PostEditorScreen = ({
     const boxW = getTextBlockBoxWidth(stageW);
     const fieldLayout = editingFieldLayoutRef.current;
     const inputH = fieldLayout?.height ?? 90;
-    const targetY =
-      fieldLayout?.y != null
-        ? fieldLayout.y
+    const origin = editingOriginRef.current || {x: null, y: null};
+    const restoreX =
+      origin.x != null && origin.x !== undefined
+        ? origin.x
+        : STAGE_TEXT_PAD_LEFT;
+    const restoreY =
+      origin.y != null && origin.y !== undefined
+        ? origin.y
         : getDefaultTextBlockY(stageHForFinish, inputH);
 
     setTextBlocks(prev => {
@@ -1136,11 +1411,9 @@ const PostEditorScreen = ({
       if (!text) {
         return prev.filter(b => b.id !== blockId);
       }
-      const isNew = cur?.x === null || cur?.x === undefined;
-      const hadY = cur?.y != null && cur?.y !== undefined;
       const nextPos = clampTextBlockPosition(
-        isNew ? STAGE_TEXT_PAD_LEFT : (cur?.x ?? STAGE_TEXT_PAD_LEFT),
-        hadY ? cur.y : targetY,
+        restoreX,
+        restoreY,
         boxW,
         inputH,
         stageW,
@@ -1151,7 +1424,7 @@ const PostEditorScreen = ({
           ? {
               ...b,
               text,
-              color: selectedColor,
+              color: selectedColor || DEFAULT_TEXT_COLOR,
               textStyleIndex: selectedTextStyleIndex,
               align: textAlignMode,
               x: nextPos.x,
@@ -1162,6 +1435,7 @@ const PostEditorScreen = ({
     });
 
     editingFieldLayoutRef.current = null;
+    editingOriginRef.current = {x: null, y: null};
     editingTextDraftRef.current = '';
     setEditingTextBlockId(null);
     isFinishingEditRef.current = false;
@@ -1169,37 +1443,18 @@ const PostEditorScreen = ({
     Keyboard.dismiss();
   };
 
-  const getSliderOffsetFromSize = size => {
-    const normalized = clamp(
-      (size - MIN_FONT_SIZE) / (MAX_FONT_SIZE - MIN_FONT_SIZE),
-      0,
-      1,
-    );
-    return Math.round((1 - normalized) * fontSizeTravel);
-  };
-
-  const updateFontSizeFromSliderY = locationY => {
-    if (!editingTextBlockId) return;
-    const offset = clamp(
-      locationY - POLYGON_KNOB_SIZE / 2,
-      0,
-      Math.max(fontSizeTravel, 1),
-    );
-    const normalized = 1 - offset / Math.max(fontSizeTravel, 1);
-    const nextSize = Math.round(
-      MIN_FONT_SIZE + normalized * (MAX_FONT_SIZE - MIN_FONT_SIZE),
-    );
-    syncEditingToBlock({fontSize: nextSize});
-  };
-
   const beginEditTextBlock = id => {
     const block = textBlocks.find(b => b.id === id);
     if (!block) return;
     const initialText = block.text ?? '';
     editingTextDraftRef.current = initialText;
+    editingOriginRef.current = {
+      x: block.x != null ? block.x : null,
+      y: block.y != null ? block.y : null,
+    };
     setEditingTextBlockId(id);
     setSelectedTextStyleIndex(block.textStyleIndex ?? 0);
-    setSelectedColor(block.color ?? COLOR_PAGES[0][0]);
+    setSelectedColor(block.color ?? DEFAULT_TEXT_COLOR);
     setTextAlignMode(block.align ?? 'center');
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
@@ -1250,10 +1505,11 @@ const PostEditorScreen = ({
   const addTextBlock = () => {
     const id = createTextBlockId();
     setTextAlignMode('center');
+    setSelectedColor(DEFAULT_TEXT_COLOR);
     const newBlock = {
       id,
       text: '',
-      color: selectedColor,
+      color: DEFAULT_TEXT_COLOR,
       textStyleIndex: selectedTextStyleIndex,
       fontSize: DEFAULT_FONT_SIZE,
       align: 'center',
@@ -1263,6 +1519,8 @@ const PostEditorScreen = ({
     };
     setTextBlocks(prev => [...prev, newBlock]);
     editingTextDraftRef.current = '';
+    // New text has no saved spot yet — finishEditing will place it at stage center.
+    editingOriginRef.current = {x: null, y: null};
     setEditingTextBlockId(id);
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
@@ -1480,8 +1738,11 @@ const PostEditorScreen = ({
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
     editingFieldLayoutRef.current = null;
+    editingOriginRef.current = {x: null, y: null};
     isFinishingEditRef.current = false;
     setSelectedFormat(null);
+    setSelectedColor(DEFAULT_TEXT_COLOR);
+    setColorPageIndex(0);
     setTextModeOverlayText('');
     setTextContent('');
     setTextAlignMode('center');
@@ -1519,14 +1780,8 @@ const PostEditorScreen = ({
         applyBackgroundVideo(asset);
         return;
       }
-      setMediaImages(prev => [
-        ...prev,
-        {
-          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-          uri: asset.uri,
-          stackOrder: nextStackOrderRef.current++,
-        },
-      ]);
+      // Gallery button: replace the stage background (not an overlay sticker).
+      applyBackgroundImage(asset.uri);
     } catch (e) {}
   };
 
@@ -1568,7 +1823,7 @@ const PostEditorScreen = ({
           onPress={handlePublish}
           disabled={publishing}
           accessibilityRole="button"
-          accessibilityLabel="פרסם והעלה"
+          accessibilityLabel={isEditMode ? 'עדכן פוסט' : 'פרסם והעלה'}
           style={[
             styles.publishBtn,
             !canPublish && !publishing && styles.publishBtnMuted,
@@ -1585,31 +1840,41 @@ const PostEditorScreen = ({
         nativeID="post-editor-preview-root"
         collapsable={false}
         style={styles.backgroundContainer}>
-        {backgroundVideoAsset?.uri ? (
-          <Video
-            source={{uri: backgroundVideoAsset.uri}}
-            style={styles.backgroundVideo}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay
-            isLooping
-            isMuted={false}
-            volume={1.0}
-            useNativeControls={Platform.OS === 'web'}
-          />
-        ) : backgroundImageUri ? (
-          <Image
-            source={{uri: backgroundImageUri}}
-            style={styles.backgroundImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <LinearGradient
-            colors={selectedBackgroundGradient}
-            start={{x: 0, y: 0.5}}
-            end={{x: 1, y: 0.5}}
-            style={styles.backgroundGradient}
-          />
-        )}
+        <View
+          pointerEvents="none"
+          collapsable={false}
+          style={styles.backgroundMediaLayer}>
+          {backgroundVideoAsset?.uri ? (
+            <Video
+              source={{uri: backgroundVideoAsset.uri}}
+              style={styles.backgroundVideo}
+              resizeMode={ResizeMode.COVER}
+              // Pause while editing text so the video surface / audio focus
+              // cannot steal touches or dismiss the keyboard mid-type.
+              shouldPlay={!editingTextBlockId}
+              isLooping
+              isMuted={Boolean(editingTextBlockId)}
+              volume={editingTextBlockId ? 0 : 1.0}
+              useNativeControls={false}
+              pointerEvents="none"
+            />
+          ) : backgroundImageUri ? (
+            <Image
+              source={{uri: backgroundImageUri}}
+              style={styles.backgroundImage}
+              resizeMode="cover"
+              pointerEvents="none"
+            />
+          ) : (
+            <LinearGradient
+              colors={selectedBackgroundGradient}
+              start={{x: 0, y: 0.5}}
+              end={{x: 1, y: 0.5}}
+              style={styles.backgroundGradient}
+              pointerEvents="none"
+            />
+          )}
+        </View>
         <KeyboardAvoidingView
           style={styles.editorKeyboardAvoid}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1666,10 +1931,18 @@ const PostEditorScreen = ({
                       <Text style={styles.doneBtnText}>בוצע</Text>
                     </TouchableOpacity>
                   )}
-                  {activeTab !== TAB_CAMERA && (
+                  {(activeTab !== TAB_CAMERA ||
+                    backgroundImageUri ||
+                    backgroundVideoAsset?.uri) && (
                     <TouchableOpacity
                       style={styles.colorToggleButton}
                       onPress={() => {
+                        // If a photo/video is the stage background, restore the color gradient.
+                        if (backgroundImageUri || backgroundVideoAsset?.uri) {
+                          setBackgroundImageUri(null);
+                          setBackgroundVideoAsset(null);
+                          return;
+                        }
                         setSelectedBackgroundGradientIndex(prev => {
                           const next = (prev + 1) % BACKGROUND_GRADIENTS.length;
                           return Number.isFinite(next) ? next : 0;
@@ -1686,14 +1959,7 @@ const PostEditorScreen = ({
                 </View>
               </View>
             )}
-            <View
-              style={[
-                styles.stageColumn,
-                showTextFormatToolbar && {
-                  paddingBottom:
-                    formatToolbarHeight + (keyboardInset > 0 ? keyboardInset : 0),
-                },
-              ]}>
+            <View style={styles.stageColumn}>
               <View
                 ref={stageRef}
                 style={styles.stage}
@@ -1750,40 +2016,12 @@ const PostEditorScreen = ({
                           editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
                         return (
                           <>
-                            <View
-                              style={styles.polygonSliderContainer}
-                              pointerEvents="box-none">
-                              <View
-                                style={styles.polygonTrack}
-                                onStartShouldSetResponder={() => true}
-                                onMoveShouldSetResponder={() => true}
-                                onResponderGrant={e =>
-                                  updateFontSizeFromSliderY(
-                                    e.nativeEvent.locationY,
-                                  )
-                                }
-                                onResponderMove={e =>
-                                  updateFontSizeFromSliderY(
-                                    e.nativeEvent.locationY,
-                                  )
-                                }>
-                                <Image
-                                  source={require('../assets/editors/polygon.png')}
-                                  style={styles.polygonIndicator}
-                                />
-                                <View
-                                  pointerEvents="none"
-                                  style={[
-                                    styles.polygonKnob,
-                                    {
-                                      top: getSliderOffsetFromSize(
-                                        editingFontSize,
-                                      ),
-                                    },
-                                  ]}
-                                />
-                              </View>
-                            </View>
+                            <FontSizeSlider
+                              value={editingFontSize}
+                              onChange={nextSize =>
+                                syncEditingToBlock({fontSize: nextSize})
+                              }
+                            />
                             <View
                               onLayout={e => {
                                 editingFieldLayoutRef.current =
@@ -1791,7 +2029,7 @@ const PostEditorScreen = ({
                               }}
                               style={[
                                 styles.editingInputRow,
-                                {marginBottom: editingInputMarginBottom},
+                                {bottom: editingInputBottom},
                               ]}>
                               <EditingTextBox
                                 key={editingTextBlockId}
@@ -1830,13 +2068,10 @@ const PostEditorScreen = ({
                                 }}
                                 onEndEditing={() => {
                                   syncEditingDraftFromInput();
-                                  // Multiline keyboard "Done" on Android/iOS usually blurs
-                                  // without firing onSubmitEditing — commit on blur instead.
-                                  if (Platform.OS !== 'web') {
-                                    requestAnimationFrame(() =>
-                                      finishEditing(),
-                                    );
-                                  }
+                                  // Do NOT auto-finish on blur: background video
+                                  // (Android SurfaceView / audio focus) and format
+                                  // toolbar taps can blur the field. Commit via
+                                  // בוצע / keyboard Done (onSubmitEditing) only.
                                 }}
                               />
                             </View>
@@ -1869,7 +2104,12 @@ const PostEditorScreen = ({
                   },
                 ]}>
                 {selectedFormat === 'aa' && (
-                  <View style={styles.textStylesRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.textStylesScroll}
+                    contentContainerStyle={styles.textStylesRow}
+                    keyboardShouldPersistTaps="always">
                     {TEXT_STYLES.map((styleItem, index) => (
                       <TouchableOpacity
                         key={styleItem.label}
@@ -1883,6 +2123,9 @@ const PostEditorScreen = ({
                           syncEditingToBlock({textStyleIndex: index});
                         }}>
                         <Text
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
                           style={[
                             styles.textStylePillText,
                             styleItem.textStyle,
@@ -1893,7 +2136,7 @@ const PostEditorScreen = ({
                         </Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
+                  </ScrollView>
                 )}
 
                 {selectedFormat === 'color' && (
@@ -1939,22 +2182,36 @@ const PostEditorScreen = ({
                             styles.colorsListPage,
                             colorsPagerWidth > 0 && {width: colorsPagerWidth},
                           ]}>
-                          {pageColors.map(color => (
-                            <TouchableOpacity
-                              key={color}
-                              style={[
-                                styles.colorSwatchOuter,
-                                {
-                                  backgroundColor: color,
-                                  borderWidth: selectedColor === color ? 2 : 1,
-                                },
-                              ]}
-                              onPress={() => {
-                                setSelectedColor(color);
-                                syncEditingToBlock({color});
-                              }}
-                            />
-                          ))}
+                          {pageColors.map(color => {
+                            const isSelected =
+                              String(selectedColor || DEFAULT_TEXT_COLOR)
+                                .toUpperCase() === String(color).toUpperCase();
+                            const isLightSwatch =
+                              String(color).toUpperCase() === '#FFFFFF' ||
+                              String(color).toUpperCase() === '#DBDBDB' ||
+                              String(color).toUpperCase() === '#C7C7C7';
+                            return (
+                              <TouchableOpacity
+                                key={color}
+                                style={[
+                                  styles.colorSwatchOuter,
+                                  {
+                                    backgroundColor: color,
+                                    borderWidth: isSelected ? 2 : 1,
+                                    borderColor: isSelected
+                                      ? '#FEE787'
+                                      : isLightSwatch
+                                        ? '#9A9A9A'
+                                        : '#FFFFFF',
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSelectedColor(color);
+                                  syncEditingToBlock({color});
+                                }}
+                              />
+                            );
+                          })}
                         </View>
                       ))}
                     </ScrollView>
@@ -2010,10 +2267,15 @@ const PostEditorScreen = ({
 
                   <TouchableOpacity
                     onPress={() => {
-                      setSelectedFormat(prev =>
-                        prev === 'color' ? null : 'color',
-                      );
-                      setColorPageIndex(0);
+                      setSelectedFormat(prev => {
+                        const next = prev === 'color' ? null : 'color';
+                        if (next === 'color') {
+                          setColorPageIndex(
+                            getColorPageIndexForColor(selectedColor),
+                          );
+                        }
+                        return next;
+                      });
                     }}
                     style={styles.bottomBarItem}>
                     {selectedFormat === 'color' ? (
@@ -2279,8 +2541,16 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
+  backgroundMediaLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    elevation: 0,
+  },
   editorKeyboardAvoid: {
     flex: 1,
+    zIndex: 2,
+    // Keep editor UI (text + inputs) above Android video SurfaceView.
+    elevation: Platform.OS === 'android' ? 12 : 0,
   },
   editorRoot: {
     flex: 1,
@@ -2347,6 +2617,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 22,
     paddingTop: 15,
     minHeight: 55,
+    zIndex: 20,
+    elevation: Platform.OS === 'android' ? 20 : 0,
   },
   closeIconContainer: {
     width: 40,
@@ -2403,6 +2675,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 10,
     marginHorizontal: 22,
+    zIndex: 10,
+    elevation: Platform.OS === 'android' ? 10 : 0,
   },
   centerTextLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -2423,36 +2697,41 @@ const styles = StyleSheet.create({
   editingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'stretch',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 8,
     zIndex: 999999,
-    elevation: 999999,
+    elevation: Platform.OS === 'android' ? 24 : 999999,
   },
   polygonSliderContainer: {
     position: 'absolute',
     left: 0,
     top: 4,
-    width: 40,
-    height: POLYGON_TRACK_HEIGHT,
+    width: 56,
+    height: POLYGON_TRACK_HEIGHT + 16,
+    paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000000,
-    elevation: 1000000,
+    zIndex: 1000002,
+    elevation: Platform.OS === 'android' ? 40 : 1000002,
   },
   polygonTrack: {
-    width: 32,
+    width: 40,
     height: POLYGON_TRACK_HEIGHT,
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
   editingInputRow: {
-    width: '100%',
+    position: 'absolute',
+    // Keep a left gutter clear so the growing text field never covers the size slider.
+    left: 56,
+    right: 0,
     paddingLeft: STAGE_TEXT_PAD_LEFT,
     paddingRight: STAGE_TEXT_PAD_RIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'stretch',
+    zIndex: 1000001,
+    elevation: Platform.OS === 'android' ? 30 : 0,
   },
   polygonIndicator: {
     width: 28,
@@ -2495,7 +2774,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexShrink: 0,
     zIndex: 100,
-    elevation: 24,
+    elevation: Platform.OS === 'android' ? 32 : 24,
     backgroundColor:
       Platform.OS === 'web' ? '#1a1926' : 'rgba(30, 29, 39, 0.98)',
   },
@@ -2532,12 +2811,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
   },
-  textStylesRow: {
-    marginHorizontal: 22,
+  textStylesScroll: {
     marginBottom: 15,
+    maxHeight: 38,
+  },
+  textStylesRow: {
+    paddingHorizontal: 22,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
   },
   colorsRow: {
     marginHorizontal: 22,
@@ -2602,19 +2884,22 @@ const styles = StyleSheet.create({
   textStylePill: {
     paddingHorizontal: 10,
     height: 38,
+    minWidth: 69,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
     backgroundColor: '#27262F66',
-    marginHorizontal: 2,
   },
   textStylePillActive: {
     backgroundColor: '#FFFFFF',
   },
   textStylePillText: {
     fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.5447,
     color: '#FFFFFF',
-    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   textStylePillTextActive: {
     color: '#1E1D27',
@@ -2679,7 +2964,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'red',
+    backgroundColor: 'transparent',
   },
   backgroundBtn: {
     width: 24,

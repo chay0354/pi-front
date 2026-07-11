@@ -1,10 +1,9 @@
-import React from 'react';
+import React, {useRef} from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import {Colors} from '../../constants/styles';
@@ -33,21 +32,37 @@ export const CounterStepper = ({
     inputWidth != null
       ? inputWidth
       : Math.max(20, String(value ?? '').length * 11);
+  const lastPressAtRef = useRef(0);
+
+  const runStep = handler => {
+    if (typeof handler !== 'function') return;
+    const now = Date.now();
+    // Ignore accidental double-fires from overlapping touch handlers.
+    if (now - lastPressAtRef.current < 40) return;
+    lastPressAtRef.current = now;
+    handler();
+  };
 
   return (
     <View style={[styles.pill, forceLtrStyle, style]}>
-      <TouchableOpacity
-        style={styles.sideButton}
-        onPress={onIncrement}
+      <Pressable
+        style={({pressed}) => [
+          styles.sideButton,
+          pressed && styles.sideButtonPressed,
+        ]}
+        onPress={() => runStep(onIncrement)}
+        hitSlop={{top: 10, bottom: 10, left: 8, right: 4}}
+        delayPressIn={0}
+        android_disableSound={false}
         accessibilityRole="button"
         accessibilityLabel="Increase">
         <Text style={styles.plusIcon}>+</Text>
-      </TouchableOpacity>
+      </Pressable>
 
       <Pressable
         style={styles.center}
         onPress={() => editable && inputRef?.current?.focus?.()}>
-        <View style={styles.valueRow}>
+        <View style={styles.valueRow} pointerEvents="box-none">
           {!suffixAfter && suffix ? (
             <Text style={[styles.suffix, suffixStyle]}>{suffix}</Text>
           ) : null}
@@ -73,13 +88,19 @@ export const CounterStepper = ({
         </View>
       </Pressable>
 
-      <TouchableOpacity
-        style={styles.sideButton}
-        onPress={onDecrement}
+      <Pressable
+        style={({pressed}) => [
+          styles.sideButton,
+          pressed && styles.sideButtonPressed,
+        ]}
+        onPress={() => runStep(onDecrement)}
+        hitSlop={{top: 10, bottom: 10, left: 4, right: 8}}
+        delayPressIn={0}
+        android_disableSound={false}
         accessibilityRole="button"
         accessibilityLabel="Decrease">
         <Text style={styles.minusIcon}>−</Text>
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 };
@@ -102,6 +123,11 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 48,
+  },
+  sideButtonPressed: {
+    opacity: 0.55,
+    backgroundColor: 'rgba(140, 133, 179, 0.18)',
   },
   center: {
     flex: 1,

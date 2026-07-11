@@ -15,7 +15,9 @@ export const MultiImageWithVideo = ({
   additionalImages,
   handleAdditionalImageUpload,
   handleAdditionalImageChange,
+  onAdditionalImageWebChange,
   additionalImageInputRefs,
+  additionalImageInputRef,
   hasVideo,
   setHasVideo,
   videoFile,
@@ -31,6 +33,10 @@ export const MultiImageWithVideo = ({
   handleProfilePictureChange,
   profilePictureInputRef,
 }) => {
+  const resolvedAdditionalImageChange =
+    handleAdditionalImageChange || onAdditionalImageWebChange;
+  const resolvedAdditionalImageInputRefs =
+    additionalImageInputRefs || additionalImageInputRef;
   const showProfilePic =
     setProfilePicture &&
     handleProfilePictureUpload &&
@@ -59,9 +65,9 @@ export const MultiImageWithVideo = ({
         handleMainImageUpload={handleMainImageUpload}
         handleMainImageChange={handleMainImageChange}
         handleAdditionalImageUpload={handleAdditionalImageUpload}
-        handleAdditionalImageChange={handleAdditionalImageChange}
+        handleAdditionalImageChange={resolvedAdditionalImageChange}
         mainImageInputRef={mainImageInputRef}
-        additionalImageInputRefs={additionalImageInputRefs}
+        additionalImageInputRefs={resolvedAdditionalImageInputRefs}
       />
       <Divider style={styles.divider} />
       <VideoUpload

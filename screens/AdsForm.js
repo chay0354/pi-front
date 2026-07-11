@@ -2700,7 +2700,7 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
           {paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 24},
         ]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         keyboardDismissMode="on-drag"
         onScroll={onScroll}
         scrollEventThrottle={16}>

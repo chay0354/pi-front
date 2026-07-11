@@ -1,3 +1,8 @@
+import {
+  resolveSubscriptionType,
+  shouldShowProfileGoldRing,
+} from './constant';
+
 /** @type {Map<string, string>} */
 const profilePicLogLastSig = new Map();
 
@@ -101,6 +106,64 @@ export function getUserCompanyLogoUrl(entity) {
     entity.subscription?.company_logo_url,
     entity.subscription?.companyLogoUrl,
   ]);
+}
+
+const parseListingGeneralDetails = raw => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+/** BnB category 5: `private` | `business` from general_details.bnb_host_type. */
+export function getBnbHostType(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  const direct = listing.bnb_host_type ?? listing.bnbHostType;
+  if (direct === 'private' || direct === 'business') return direct;
+  const gd = parseListingGeneralDetails(listing.general_details);
+  const fromGd = gd?.bnb_host_type ?? gd?.bnbHostType;
+  return fromGd === 'private' || fromGd === 'business' ? fromGd : null;
+}
+
+export function isBnbBusinessListing(listing) {
+  return Number(listing?.category) === 5 && getBnbHostType(listing) === 'business';
+}
+
+/** Gold ring for BnB business ads even when publisher is a regular user. */
+export function shouldForceGoldRingForListing(listing) {
+  if (!listing || typeof listing !== 'object') return false;
+  if (shouldShowProfileGoldRing(resolveSubscriptionType(listing))) return true;
+  return isBnbBusinessListing(listing);
+}
+
+/**
+ * Feed/list avatar: BnB business ads use the publisher's profile photo (not the
+ * business logo) with a gold ring; other listings keep getUserProfileImageUrl.
+ */
+export function getListingFeedAvatarUrl(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  if (isBnbBusinessListing(listing)) {
+    return (
+      getUserProfilePhotoUrl(listing) ||
+      pickFirstValidImageUrl([
+        listing.creator_profile_image_url,
+        listing.creatorProfileImageUrl,
+        listing.profile_image_url,
+        listing.profileImageUrl,
+      ])
+    );
+  }
+  return getUserProfileImageUrl(listing);
 }
 
 /**

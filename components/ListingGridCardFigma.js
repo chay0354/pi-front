@@ -14,7 +14,11 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors, BorderRadius} from '../constants/styles';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {
+  getBnbHostType,
+  getListingFeedAvatarUrl,
+  shouldForceGoldRingForListing,
+} from '../utils/userProfileImage';
 import ProfileAvatar from './ProfileAvatar';
 import {
   HEB_M2,
@@ -32,6 +36,9 @@ import {
   shouldShowCommercialLogoBadge,
   getCompanyLogoUrlFromListing,
   subscriptionTypeFromListing,
+  isPartnersListing as checkIsPartnersListing,
+  isBnbListing as checkIsBnbListing,
+  shouldHideListingCardStats,
 } from '../utils/listingGridCardFigma';
 import {flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
 
@@ -55,6 +62,7 @@ const ListingGridCardFigma = ({
   liked,
   onToggleLike,
   displayPi,
+  selectedCategory = null,
   style,
 }) => {
   const {
@@ -73,6 +81,10 @@ const ListingGridCardFigma = ({
     buildingsStat,
     floorsStat,
     apartmentsStat,
+    isPartnersListing,
+    hideCardStats,
+    showCardAvatar,
+    forceGoldAvatarRing,
   } = useMemo(() => {
     const galleryRaw = listingImageUrls(listing);
     const primary = galleryRaw[0] || firstImageUrl(listing);
@@ -84,7 +96,13 @@ const ListingGridCardFigma = ({
     const priceLabel = company
       ? String(listing?.project_name || '').trim() || formatPriceHe(listing)
       : formatPriceHe(listing);
-    const pUri = getUserProfileImageUrl(listing);
+    const pUri = getListingFeedAvatarUrl(listing);
+    const bnbHost = getBnbHostType(listing);
+    const bnbListing = checkIsBnbListing(listing, selectedCategory);
+    const partnersListing = checkIsPartnersListing(listing, selectedCategory);
+    const hideStats = shouldHideListingCardStats(listing, selectedCategory);
+    const businessBnb = bnbListing && bnbHost === 'business';
+    const showAvatar = businessBnb || Boolean(pUri);
     const showCommercialLogo = shouldShowCommercialLogoBadge(listing);
     const commercialLogoUrl = showCommercialLogo
       ? getCompanyLogoUrlFromListing(listing)
@@ -101,6 +119,10 @@ const ListingGridCardFigma = ({
       addr: a,
       stats: st,
       isCompany: company,
+      isPartnersListing: partnersListing,
+      hideCardStats: hideStats,
+      showCardAvatar: showAvatar,
+      forceGoldAvatarRing: shouldForceGoldRingForListing(listing),
       showPreSaleBadge: preSale,
       cardPriceLabel: priceLabel,
       profileUri: pUri,
@@ -113,7 +135,7 @@ const ListingGridCardFigma = ({
       floorsStat: f,
       apartmentsStat: ap,
     };
-  }, [listing, displayPi]);
+  }, [listing, displayPi, selectedCategory]);
 
   const renderGridStat = s =>
     s ? (
@@ -204,7 +226,7 @@ const ListingGridCardFigma = ({
             {cardPriceLabel}
           </Text>
         </View>
-        {profileUri ? (
+        {showCardAvatar ? (
           <View
             style={styles.gridCardAvatarWrap}
             accessible
@@ -214,6 +236,7 @@ const ListingGridCardFigma = ({
               uri={profileUri}
               size={38}
               subscriptionType={listing}
+              forceGoldRing={forceGoldAvatarRing}
               imageStyle={
                 Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
               }
@@ -277,13 +300,18 @@ const ListingGridCardFigma = ({
                 resizeMode="contain"
               />
             ) : (
-              <View style={[styles.purposeChip, styles.gridCardPurposeChip]}>
+              <View
+                style={[
+                  styles.purposeChip,
+                  styles.gridCardPurposeChip,
+                  isPartnersListing && styles.gridCardPartnersPurposeChip,
+                ]}>
                 <Text
                   style={[
                     styles.purposeChipText,
                     styles.gridCardPurposeChipText,
                   ]}>
-                  {purposeLabel(listing)}
+                  {purposeLabel(listing, selectedCategory)}
                 </Text>
               </View>
             )}
@@ -328,6 +356,7 @@ const ListingGridCardFigma = ({
           </Text>
         </View>
 
+        {!hideCardStats ? (
         <View style={[styles.gridCardStatsRowFigma, gridRtlDirection]}>
           {isCompany ? (
             <>
@@ -347,6 +376,7 @@ const ListingGridCardFigma = ({
             </>
           )}
         </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -546,6 +576,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     letterSpacing: 0.35,
+  },
+  gridCardPartnersPurposeChip: {
+    paddingHorizontal: 8,
+    minWidth: 92,
   },
   gridCardHeartWrap: {
     width: 24,

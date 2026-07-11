@@ -753,7 +753,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       </View>
 
       <ScrollView
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
@@ -763,7 +763,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
             בחר קטגוריה<Text style={styles.required}>*</Text>
           </Text>
           <ScrollView
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryScrollView}>

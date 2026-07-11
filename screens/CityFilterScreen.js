@@ -29,11 +29,39 @@ const INPUT_BORDER = '#8C85B3';
 const TEXT_SECONDARY = '#D2D0DC';
 const TEXT_CLUE = 'rgba(255,255,255,0.35)';
 
-const DISTANCE_OPTIONS = [100, 80, 60, 40, 20];
+const DISTANCE_SNAP_VALUES = [null, 0.5, 1, 2, 3, 4];
+const CUSTOM_MARKER_PERCENT = 100;
+const SNAP_MARKER_COUNT = DISTANCE_SNAP_VALUES.length;
 const KNOB_SIZE = 22;
 const DOT_SIZE = 4;
-const MARKER_CELL_WIDTH = 44;
+const MARKER_CELL_WIDTH = 38;
+const UNLIMITED_MARKER_WIDTH = 54;
+const CUSTOM_MARKER_INPUT_WIDTH = 44;
 const IS_WEB = Platform.OS === 'web';
+
+function parseInitialDistanceState(km) {
+  if (km == null || km === '') {
+    return {distanceKm: null, customInput: ''};
+  }
+  const n = Number(km);
+  if (!Number.isFinite(n) || n <= 0) {
+    return {distanceKm: null, customInput: ''};
+  }
+  const isPreset = DISTANCE_SNAP_VALUES.includes(n);
+  return {
+    distanceKm: n,
+    customInput: isPreset ? '' : String(km).trim(),
+  };
+}
+
+function formatSnapMarkerLabel(value) {
+  if (value == null) return 'ללא הגבלה';
+  return String(value);
+}
+
+function snapIndexToPercent(index) {
+  return (index / SNAP_MARKER_COUNT) * CUSTOM_MARKER_PERCENT;
+}
 
 /**
  * Same RTL-visual technique as PriceFilterScreen: the app forces RTL +
@@ -42,7 +70,7 @@ const IS_WEB = Platform.OS === 'web';
  * the thumb, dots and markers mirror identically and stay aligned. Touch X is
  * physical-LTR, so we flip it to value% (see touchPercentToValuePercent).
  *
- * valuePercent: 0% = 20 km (physical right) … 100% = 100+ km (physical left).
+ * valuePercent: 0% = ללא הגבלה (physical right) … 100% = custom km (physical left).
  */
 function sliderPosStyle(percent, size) {
   const p = Math.max(0, Math.min(100, Number(percent) || 0));
@@ -51,17 +79,20 @@ function sliderPosStyle(percent, size) {
     : {left: `${p}%`, marginLeft: -size / 2};
 }
 
-/** Gold fill anchored at the 20 km (physical right) end, growing toward the thumb. */
+/** Gold fill anchored at the ללא הגבלה (physical right) end, growing toward the thumb. */
 function distanceFillStyle(percent) {
   const w = Math.max(0, Math.min(100, Number(percent) || 0));
   return IS_WEB ? {right: '0%', width: `${w}%`} : {left: '0%', width: `${w}%`};
 }
 
-/** km → valuePercent (20→0 … 100→100). */
-function distanceKmToPercent(km) {
-  const idx = Math.max(0, DISTANCE_OPTIONS.indexOf(km));
-  const steps = DISTANCE_OPTIONS.length - 1;
-  return ((steps - idx) / steps) * 100;
+/** km value → valuePercent (ללא הגבלה→0 … custom→100). */
+function distanceValueToPercent(value) {
+  if (value != null && !DISTANCE_SNAP_VALUES.includes(value)) {
+    return CUSTOM_MARKER_PERCENT;
+  }
+  const idx =
+    value == null ? 0 : Math.max(0, DISTANCE_SNAP_VALUES.indexOf(value));
+  return snapIndexToPercent(idx);
 }
 
 const SLIDER_IS_RTL_VISUAL = IS_WEB || I18nManager.isRTL;
@@ -76,13 +107,27 @@ const BNB_REGIONS = [
   {id: 'west', label: 'מערב'},
 ];
 
-/** valuePercent → km (0%→20, 100%→100). */
-function percentToDistanceKm(percent) {
-  const steps = DISTANCE_OPTIONS.length - 1;
-  const fromSmall = Math.round(
-    (Math.max(0, Math.min(100, percent)) / 100) * steps,
-  );
-  return DISTANCE_OPTIONS[steps - fromSmall];
+/** valuePercent → km (0%→ללא הגבלה … max snap→4, custom at 100% when input has a value). */
+function parseCustomDistanceKm(input) {
+  const trimmed = String(input || '')
+    .trim()
+    .replace(',', '.');
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  if (Number.isFinite(n) && n > 0) return n;
+  return null;
+}
+
+function percentToDistanceValue(percent, customInput = '') {
+  const p = Math.max(0, Math.min(CUSTOM_MARKER_PERCENT, percent));
+  const customKm = parseCustomDistanceKm(customInput);
+  const slotCount = customKm != null ? SNAP_MARKER_COUNT + 1 : SNAP_MARKER_COUNT;
+  const idx = Math.round((p / CUSTOM_MARKER_PERCENT) * (slotCount - 1));
+  if (customKm != null && idx >= SNAP_MARKER_COUNT) {
+    return customKm;
+  }
+  const clampedIdx = Math.min(Math.max(0, idx), SNAP_MARKER_COUNT - 1);
+  return DISTANCE_SNAP_VALUES[clampedIdx];
 }
 
 // Figma assets for node 12:74885
@@ -112,7 +157,11 @@ const CityFilterScreen = ({
   const [country, setCountry] = useState(initialFilter?.country ?? '');
   const [city, setCity] = useState(initialFilter?.city ?? '');
   const [street, setStreet] = useState(initialFilter?.street ?? '');
-  const [distanceKm, setDistanceKm] = useState(initialFilter?.distanceKm ?? 20);
+  const initialDistance = parseInitialDistanceState(initialFilter?.distanceKm);
+  const [distanceKm, setDistanceKm] = useState(initialDistance.distanceKm);
+  const [customDistanceInput, setCustomDistanceInput] = useState(
+    initialDistance.customInput,
+  );
   const [regions, setRegions] = useState(() => {
     const initial = initialFilter?.regions;
     return Array.isArray(initial)
@@ -126,11 +175,15 @@ const CityFilterScreen = ({
   const sliderWidthRef = useRef(1);
   const sliderWindowXRef = useRef(0);
   const sliderRef = useRef(null);
+  const customDistanceInputRef = useRef(null);
+  const [customInputFocused, setCustomInputFocused] = useState(false);
 
-  const thumbPercent = useMemo(
-    () => distanceKmToPercent(distanceKm),
-    [distanceKm],
-  );
+  const thumbPercent = useMemo(() => {
+    if (customInputFocused) {
+      return CUSTOM_MARKER_PERCENT;
+    }
+    return distanceValueToPercent(distanceKm);
+  }, [customInputFocused, distanceKm]);
 
   const syncSliderMeasure = useCallback(() => {
     const node = sliderRef.current;
@@ -172,8 +225,59 @@ const CityFilterScreen = ({
   );
 
   const applyDistanceFromPercent = useCallback(percent => {
-    setDistanceKm(percentToDistanceKm(percent));
-  }, []);
+    setDistanceKm(percentToDistanceValue(percent, customDistanceInput));
+    setCustomInputFocused(false);
+    customDistanceInputRef.current?.blur?.();
+  }, [customDistanceInput]);
+
+  const handleCustomDistanceFocus = useCallback(() => {
+    setCustomInputFocused(true);
+    const trimmed = String(customDistanceInput || '')
+      .trim()
+      .replace(',', '.');
+    if (trimmed === '') return;
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n > 0) {
+      setDistanceKm(n);
+    }
+  }, [customDistanceInput]);
+
+  const handleCustomDistanceChange = useCallback(text => {
+    setCustomDistanceInput(text);
+    const trimmed = String(text || '')
+      .trim()
+      .replace(',', '.');
+    if (trimmed === '') {
+      if (!customInputFocused) {
+        setDistanceKm(null);
+      }
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n > 0) {
+      setDistanceKm(n);
+    }
+  }, [customInputFocused]);
+
+  const resolveDistanceKmForSave = useCallback(() => distanceKm, [distanceKm]);
+
+  /** Swipe למכירה ↔ להשכרה on the pill track (row-reverse: sale left, rent right). */
+  const purposePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, g) =>
+          Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.1,
+        onMoveShouldSetPanResponderCapture: (_, g) =>
+          Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.25,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderRelease: (_, g) => {
+          if (Math.abs(g.dx) < 16 || Math.abs(g.dx) <= Math.abs(g.dy)) return;
+          setPurpose(g.dx > 0 ? 'rent' : 'sale');
+        },
+      }),
+    [],
+  );
 
   const panResponder = useMemo(
     () =>
@@ -214,7 +318,7 @@ const CityFilterScreen = ({
         country: isGlobal && trimmedCountry ? trimmedCountry : null,
         city: trimmedCity || null,
         street: trimmedStreet || null,
-        distanceKm: isGlobal || isBnb ? null : distanceKm,
+        distanceKm: isGlobal || isBnb ? null : resolveDistanceKmForSave(),
         regions: isBnb && regions.length > 0 ? regions : null,
         immediateEntry: isGlobal || isBnb || isLand ? null : immediateEntry,
       });
@@ -257,7 +361,10 @@ const CityFilterScreen = ({
 
         {!hidePurpose && (
           <>
-            <View style={styles.purposeToggleTrack}>
+            <View
+              style={styles.purposeToggleTrack}
+              {...purposePanResponder.panHandlers}
+              collapsable={false}>
               <TouchableOpacity
                 style={styles.purposeSegment}
                 activeOpacity={0.9}
@@ -348,30 +455,85 @@ const CityFilterScreen = ({
         </View>
         <View style={styles.divider} />
 
+        {!isBnb && !isGlobal && !isLand && (
+          <>
+            <TouchableOpacity
+              style={styles.checkRow}
+              onPress={() => setImmediateEntry(!immediateEntry)}
+              activeOpacity={0.8}>
+              <Text style={styles.checkLabel}>כניסה מיידית</Text>
+              <View style={styles.checkboxImageWrap}>
+                <CheckCircle checked={immediateEntry} />
+              </View>
+            </TouchableOpacity>
+            <View style={styles.divider} />
+          </>
+        )}
+
         {!isGlobal && !isBnb && (
         <><View style={styles.fieldWrap}>
-          <Text style={styles.label}>מרחק ממני (ק"מ)</Text>
+          <Text style={styles.label}>מרחק ממני</Text>
           <View
             ref={sliderRef}
             style={styles.sliderTrackWrap}
             onLayout={syncSliderMeasure}
-            {...panResponder.panHandlers}
             collapsable={false}>
-            <View style={styles.sliderMarkers}>
-              {DISTANCE_OPTIONS.map(km => (
+            <View style={styles.sliderMarkers} pointerEvents="box-none">
+              {DISTANCE_SNAP_VALUES.map((value, index) => (
                 <View
-                  key={km}
+                  key={value == null ? 'unlimited' : String(value)}
+                  pointerEvents="none"
                   style={[
                     styles.sliderMarkerCell,
-                    sliderPosStyle(distanceKmToPercent(km), MARKER_CELL_WIDTH),
+                    value == null && styles.sliderMarkerCellWide,
+                    sliderPosStyle(
+                      snapIndexToPercent(index),
+                      value == null ? UNLIMITED_MARKER_WIDTH : MARKER_CELL_WIDTH,
+                    ),
                   ]}>
-                  <Text style={styles.sliderMarkerText} numberOfLines={1}>
-                    {km === 100 ? '\u200E100+' : String(km)}
+                  <Text
+                    style={[
+                      styles.sliderMarkerText,
+                      value == null && styles.sliderMarkerTextSmall,
+                    ]}
+                    numberOfLines={1}>
+                    {formatSnapMarkerLabel(value)}
                   </Text>
                 </View>
               ))}
+              <View
+                style={[
+                  styles.sliderMarkerCell,
+                  styles.sliderMarkerCustomCell,
+                  sliderPosStyle(
+                    CUSTOM_MARKER_PERCENT,
+                    CUSTOM_MARKER_INPUT_WIDTH,
+                  ),
+                ]}>
+                <TextInput
+                  ref={customDistanceInputRef}
+                  style={styles.sliderMarkerInput}
+                  placeholder="…"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={customDistanceInput}
+                  onChangeText={handleCustomDistanceChange}
+                  onFocus={handleCustomDistanceFocus}
+                  onBlur={() => {
+                    setCustomInputFocused(false);
+                    if (String(customDistanceInput || '').trim() === '') {
+                      setDistanceKm(null);
+                    }
+                  }}
+                  keyboardType="decimal-pad"
+                  textAlign="center"
+                  returnKeyType="done"
+                />
+              </View>
             </View>
-            <View style={styles.sliderRow}>
+            <View
+              style={styles.sliderRow}
+              {...panResponder.panHandlers}
+              collapsable={false}>
               <View style={styles.sliderTrack} />
               <LinearGradient
                 colors={['#FEE787', '#BD9947', '#9C6522']}
@@ -380,14 +542,16 @@ const CityFilterScreen = ({
                 end={{x: 0.5, y: 1}}
                 style={[styles.sliderTrackFill, distanceFillStyle(thumbPercent)]}
               />
-              {DISTANCE_OPTIONS.map(km => {
-                if (km === 20 || km === 100) return null;
+              {DISTANCE_SNAP_VALUES.map((value, index) => {
+                if (index === 0 || index === 1 || index === SNAP_MARKER_COUNT - 1) {
+                  return null;
+                }
                 return (
                   <View
-                    key={`dot-${km}`}
+                    key={`dot-${value}`}
                     style={[
                       styles.sliderDot,
-                      sliderPosStyle(distanceKmToPercent(km), DOT_SIZE),
+                      sliderPosStyle(snapIndexToPercent(index), DOT_SIZE),
                     ]}
                   />
                 );
@@ -423,18 +587,6 @@ const CityFilterScreen = ({
             </View>
             <View style={styles.divider} />
           </>
-        )}
-
-        {!isBnb && !isGlobal && !isLand && (
-          <TouchableOpacity
-            style={styles.checkRow}
-            onPress={() => setImmediateEntry(!immediateEntry)}
-            activeOpacity={0.8}>
-            <Text style={styles.checkLabel}>כניסה מיידית</Text>
-            <View style={styles.checkboxImageWrap}>
-              <CheckCircle checked={immediateEntry} />
-            </View>
-          </TouchableOpacity>
         )}
       </ScrollView>
 
@@ -567,7 +719,7 @@ const styles = StyleSheet.create({
   },
   sliderMarkers: {
     position: 'relative',
-    height: 22,
+    height: 32,
     marginBottom: 14,
   },
   sliderMarkerCell: {
@@ -577,6 +729,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sliderMarkerCellWide: {
+    width: UNLIMITED_MARKER_WIDTH,
+  },
+  sliderMarkerCustomCell: {
+    zIndex: 4,
+    elevation: 4,
+  },
   sliderMarkerText: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -584,6 +743,25 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
     writingDirection: 'ltr',
+  },
+  sliderMarkerTextSmall: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  sliderMarkerInput: {
+    width: CUSTOM_MARKER_INPUT_WIDTH,
+    height: 32,
+    borderWidth: 1,
+    borderColor: INPUT_BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    writingDirection: 'ltr',
+    backgroundColor: BG,
   },
   sliderRow: {
     height: KNOB_SIZE,

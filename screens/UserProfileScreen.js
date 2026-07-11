@@ -28,6 +28,8 @@ import {
   getFollowStatus,
   getFollowStats,
   sendFollowRequest,
+  cancelFollowRequest,
+  unfollowUser,
   toSubscriptionId,
   likeListing,
   unlikeListing,
@@ -44,6 +46,7 @@ import {Divider} from '../components';
 import LocationMap from '../components/LocationMap';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {isAdsListingRecord} from '../utils/listingShape';
+import {pickTopViewedListingForProfile} from '../utils/pickTopViewedListingForProfile';
 import {
   formatCompanyApartmentsLabel,
   formatCompanyBuildingsLabel,
@@ -61,6 +64,7 @@ import {
   HERO_NAV_SHARE_XML,
 } from '../utils/heroNavFigmaIcons';
 import ProfileAvatar from '../components/ProfileAvatar';
+import {FollowPlusBadge} from '../components/FollowPlusBadge';
 import BnbListingProfileContent from '../components/BnbListingProfileContent';
 import PartnersListingProfileContent from '../components/PartnersListingProfileContent';
 import CompanyLandListingProfileContent from '../components/CompanyLandListingProfileContent';
@@ -829,6 +833,14 @@ const UserProfileScreen = ({
   const isOwnProfile =
     subscriptionIdsMatch &&
     (!viewedProfileEmail || !currentProfileEmail || profileEmailsMatch);
+  const ownProfileSubscriptionTypeEarly = String(
+    user?.subscription_type ||
+      currentUser?.subscription_type ||
+      resolvedCreator?.subscription_type ||
+      '',
+  ).toLowerCase();
+  const isOwnBrokerProfile =
+    isOwnProfile && ownProfileSubscriptionTypeEarly === 'broker';
 
   const copyContactDetails = async () => {
     const lines = [...contactPhones, contactEmail].filter(Boolean);
@@ -919,12 +931,20 @@ const UserProfileScreen = ({
     // });
   }
 
-  // Last ad: when opened from feed, the current listing is the "last ad"; else prefer first full listing from userListings (has project_offers), then profile.properties[0]
+  // Last ad: when opened from feed, the current listing is the "last ad"; else prefer ads from userListings (own profile: top viewed ad, not posts).
   const lastAd = (() => {
-    if (isListingFromFeed) return user;
+    if (isListingFromFeed) {
+      if (isOwnProfile && isPostListingRecord(user)) {
+        // Own profile should never hero a post when ads exist — resolved below from userListings.
+      } else {
+        return user;
+      }
+    }
     const adsOnly = userListings.filter(l => !isPostListingRecord(l));
     if (adsOnly.length > 0) {
-      const L = adsOnly[0];
+      const L = isOwnProfile
+        ? pickTopViewedListingForProfile(adsOnly) || adsOnly[0]
+        : adsOnly[0];
       const images =
         L.listing_images && L.listing_images.length > 0
           ? L.listing_images.map(img =>
@@ -1318,6 +1338,7 @@ const UserProfileScreen = ({
   });
   const [followStatsLoading, setFollowStatsLoading] = useState(true);
   const [sendingFollowRequest, setSendingFollowRequest] = useState(false);
+  const [followPlusAnimating, setFollowPlusAnimating] = useState(false);
   const [lastAdHeroImageFailed, setLastAdHeroImageFailed] = useState(false);
 
   useEffect(() => {
@@ -1397,6 +1418,8 @@ const UserProfileScreen = ({
   const followingCount = followStats.following;
   const formatStatCount = value =>
     followStatsLoading || value == null ? '—' : String(value);
+  const hasPendingFollowRequests =
+    isOwnProfile && !followStatsLoading && followStats.pendingRequests > 0;
   const renderProfileStatsRow = () => (
     <View style={styles.statsRow}>
       <TouchableOpacity
@@ -1411,11 +1434,20 @@ const UserProfileScreen = ({
       <TouchableOpacity
         style={styles.stat}
         activeOpacity={0.8}
-        onPress={() =>
-          typeof onOpenFollowHub === 'function' && onOpenFollowHub('followers')
-        }>
+        onPress={() => {
+          if (typeof onOpenFollowHub !== 'function') return;
+          onOpenFollowHub(hasPendingFollowRequests ? 'requests' : 'followers');
+        }}>
         <Text style={styles.statNumber}>{formatStatCount(followersCount)}</Text>
-        <Text style={styles.statLabel}>עוקבים</Text>
+        <View style={styles.statLabelRow}>
+          {hasPendingFollowRequests ? (
+            <View
+              style={styles.pendingFollowRequestDot}
+              accessibilityLabel="בקשות מעקב ממתינות לאישור"
+            />
+          ) : null}
+          <Text style={styles.statLabel}>עוקבים</Text>
+        </View>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.stat}
@@ -1443,22 +1475,23 @@ const UserProfileScreen = ({
   const shouldShowFollowPlus =
     !!viewedSubscriptionId &&
     !isOwnProfile &&
-    (viewerLoggedIn
-      ? !followStatusLoading &&
-        !!currentSubscriptionId &&
-        !followStatus.isFollowing &&
-        !followStatus.hasPendingRequest
-      : true);
+    (followPlusAnimating ||
+      (viewerLoggedIn
+        ? !followStatusLoading &&
+          !!currentSubscriptionId &&
+          !followStatus.isFollowing &&
+          !followStatus.hasPendingRequest
+        : true));
 
   const handleSendFollowRequest = async () => {
     if (!viewerLoggedIn) {
       if (typeof onOpenUserRegistration === 'function') {
         onOpenUserRegistration();
       }
-      return;
+      return false;
     }
     if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest)
-      return;
+      return false;
     setSendingFollowRequest(true);
     try {
       await sendFollowRequest(currentSubscriptionId, viewedSubscriptionId);
@@ -1469,11 +1502,133 @@ const UserProfileScreen = ({
           ? prev.pendingRequests
           : prev.pendingRequests + 1,
       }));
+      return true;
     } catch (e) {
       Alert.alert('', e?.message || 'לא הצלחנו לשלוח בקשת מעקב');
+      return false;
     } finally {
       setSendingFollowRequest(false);
     }
+  };
+
+  const handleCancelFollowRequest = async () => {
+    if (!viewerLoggedIn) return;
+    if (!currentSubscriptionId || !viewedSubscriptionId || sendingFollowRequest)
+      return;
+    setSendingFollowRequest(true);
+    try {
+      await cancelFollowRequest(currentSubscriptionId, viewedSubscriptionId);
+      setFollowStatus(prev => ({...prev, hasPendingRequest: false}));
+    } catch (e) {
+      Alert.alert('', e?.message || 'לא הצלחנו לבטל את בקשת המעקב');
+    } finally {
+      setSendingFollowRequest(false);
+    }
+  };
+
+  const handleCompanyFeedUnfollowPress = () => {
+    if (!viewerLoggedIn || !currentSubscriptionId || !viewedSubscriptionId) {
+      return;
+    }
+    Alert.alert(
+      'ביטול מעקב',
+      `להפסיק לעקוב אחרי ${displayName || 'המשתמש'}?`,
+      [
+        {text: 'ביטול', style: 'cancel'},
+        {
+          text: 'הפסק מעקב',
+          style: 'destructive',
+          onPress: async () => {
+            if (sendingFollowRequest) return;
+            setSendingFollowRequest(true);
+            try {
+              await unfollowUser(currentSubscriptionId, viewedSubscriptionId);
+              setFollowStatus(prev => ({...prev, isFollowing: false}));
+              setFollowStats(prev => ({
+                ...prev,
+                followers: Math.max(0, prev.followers - 1),
+              }));
+            } catch (e) {
+              Alert.alert('', e?.message || 'לא הצלחנו לבטל מעקב');
+            } finally {
+              setSendingFollowRequest(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const renderCompanyFeedFollowAction = () => {
+    if (!viewedSubscriptionId) return null;
+    const busy = sendingFollowRequest;
+    const loading = viewerLoggedIn && followStatusLoading;
+
+    if (followStatus.isFollowing) {
+      return (
+        <TouchableOpacity
+          onPress={handleCompanyFeedUnfollowPress}
+          disabled={busy || loading}
+          style={[
+            styles.companyFeedFollowBtn,
+            styles.companyFeedFollowBtnFollowing,
+          ]}
+          activeOpacity={0.8}>
+          <Text style={styles.companyFeedFollowBtnText}>
+            {busy ? '...' : 'עוקב'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    if (followStatus.hasPendingRequest) {
+      return (
+        <View style={styles.companyFeedFollowCluster}>
+          <View
+            style={[
+              styles.companyFeedFollowBtn,
+              styles.companyFeedFollowBtnPending,
+            ]}>
+            <Text
+              style={styles.companyFeedFollowBtnPendingText}
+              numberOfLines={1}>
+              ממתין לאישור
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleCancelFollowRequest}
+            disabled={busy || loading}
+            style={styles.companyFeedFollowCancelBtn}
+            activeOpacity={0.8}
+            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+            <MaterialCommunityIcons
+              name="close"
+              size={16}
+              color="rgba(255,255,255,0.92)"
+            />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        onPress={handleSendFollowRequest}
+        disabled={busy || loading}
+        activeOpacity={0.85}
+        style={styles.companyFeedFollowGoldWrap}>
+        <LinearGradient
+          colors={['#FEE787', '#BD9947', '#9C6522']}
+          locations={[0.0456, 0.5076, 0.8831]}
+          start={{x: 0, y: 0}}
+          end={{x: 1, y: 1}}
+          style={styles.companyFeedFollowGoldGradient}>
+          <Text style={styles.companyFeedFollowGoldText}>
+            {busy ? '...' : 'עקוב'}
+          </Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
   };
 
   // Broker profile card data (real user details with fallbacks)
@@ -1536,20 +1691,37 @@ const UserProfileScreen = ({
   /** Post grid + profile-only TikTok feed — any profile with posts, not only own or TikTok-post entry. */
   const showProfilePostGrid =
     !isDedicatedListingAdProfile && recentPostGridImages.length > 0;
+  const ownProfileAdCount = userListings.filter(
+    l => !isPostListingRecord(l),
+  ).length;
+  const ownProfileHasPosts = recentPostGridImages.length > 0;
+  /** Own profile: broker always gets 6-post grid at top; others — posts grid or empty grid when no ads. */
+  const showOwnProfilePostGridAtTop =
+    isOwnProfile &&
+    !isDedicatedListingAdProfile &&
+    (isOwnBrokerProfile ||
+      ownProfileHasPosts ||
+      (!userListingsLoading && ownProfileAdCount === 0));
   /** Opened on a specific feed ad (TikTok swipe / list) — show that ad, not the 6-post grid. */
   const openedFromFeedAdListing = isListingFromFeed && !openedFromPost;
   const openedFromProfessionalsDirectory = Boolean(
     user?._fromProfessionalsDirectory,
   );
-  const showProfilePostGridAtTop =
-    showProfilePostGrid &&
-    !openedFromProfessionalsDirectory &&
-    !openedFromFeedAdListing;
+  const showProfilePostGridAtTop = isOwnProfile
+    ? showOwnProfilePostGridAtTop
+    : showProfilePostGrid &&
+      !openedFromProfessionalsDirectory &&
+      !openedFromFeedAdListing;
   /** From בעלי מקצוע: always show 6-tile grid (empty placeholders when no posts). */
   const showProfilePostGridAfterBio =
     openedFromProfessionalsDirectory &&
     isProfessional &&
     !isDedicatedListingAdProfile;
+  const showPiAiSmartInfoBlock =
+    !openedFromPost &&
+    !isProfessional &&
+    !isDedicatedListingAdProfile &&
+    !(isOwnBrokerProfile && showProfilePostGridAtTop);
   const showLandProfileContactAndReviews = isLandListingAdProfile;
   const showListingContactAndReviews =
     !isDedicatedListingAdProfile || showLandProfileContactAndReviews;
@@ -1573,18 +1745,22 @@ const UserProfileScreen = ({
   const showLocationMap =
     isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile;
   const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
+  /** Own profile (and TikTok pro entry) use the standard avatar/stats header — not the feed listing hero shell. */
+  const showStandardProfileHeader =
+    !isProfessional || showTikTokProfessionalHeader || isOwnProfile;
   /** Company profile opened from Selected Projects (פרויקטים נבחרים) → company listing → profile. */
   const openedFromCompaniesDirectory = Boolean(user?._fromCompanyProjects);
   /** Same flow + listing record (hero nav, favorite on listing id). */
   const fromCompanyProjects = Boolean(
     isListingFromFeed && openedFromCompaniesDirectory,
   );
-  /** Company ad from TikTok or פרויקטים נבחרים — fixed back / share / like top bar (not posts). */
+  /** Company ad from TikTok or פרויקטים נבחרים — fixed back / share / like top bar (not posts). Never on your own profile. */
   const showCompanyFeedHeroTop = Boolean(
     isCompany &&
     isListingFromFeed &&
     lastAd &&
     !openedFromPost &&
+    !isOwnProfile &&
     (fromCompanyProjects || user?._fromTikTokPost),
   );
   const companyListingId =
@@ -1670,9 +1846,8 @@ const UserProfileScreen = ({
     onOpenUserRegistration,
   ]);
   const hideCompanyPostSpecialtiesBlock = user?._fromTikTokPost && isCompany;
-  /** Company: show הפרויקטים שלנו carousel (same idea as broker הנכסים שלי). */
-  // Professionals: no listings section on other users' profiles; always show on own profile.
-  const hideMyPropertiesSection = isOwnProfile ? false : isProfessional;
+  // Professionals: no listings on other profiles; also hide on your own pro profile.
+  const hideMyPropertiesSection = isProfessional;
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -1980,11 +2155,13 @@ const UserProfileScreen = ({
     lastAd &&
     isProfessional &&
     !showTikTokProfessionalHeader &&
-    !showCompanyFeedHeroTop,
+    !showCompanyFeedHeroTop &&
+    !isOwnProfile,
   );
   const showFixedBackOnly = Boolean(
     isListingFromFeed &&
     !showCompanyFeedHeroTop &&
+    !isOwnProfile &&
     (!isProfessional || showTikTokProfessionalHeader) &&
     !showFixedProHero,
   );
@@ -2078,7 +2255,7 @@ const UserProfileScreen = ({
           {paddingBottom: Math.max(bottom + 10)},
         ]}
         showsVerticalScrollIndicator={false}>
-        {(!isProfessional || showTikTokProfessionalHeader) &&
+        {showStandardProfileHeader &&
           !showCompanyFeedHeroTop &&
           !useFixedListingTopNav && (
             <TouchableOpacity
@@ -2093,7 +2270,7 @@ const UserProfileScreen = ({
             </TouchableOpacity>
           )}
 
-        {(!isProfessional || showTikTokProfessionalHeader) &&
+        {showStandardProfileHeader &&
           !showCompanyFeedHeroTop && (
             <View style={styles.profileBlock}>
               <View style={styles.avatarWrap}>
@@ -2107,21 +2284,23 @@ const UserProfileScreen = ({
                   }
                 />
                 {shouldShowFollowPlus ? (
-                  <TouchableOpacity
+                  <FollowPlusBadge
                     onPress={handleSendFollowRequest}
+                    beforePress={() => {
+                      if (!viewerLoggedIn) {
+                        if (typeof onOpenUserRegistration === 'function') {
+                          onOpenUserRegistration();
+                        }
+                        return false;
+                      }
+                      setFollowPlusAnimating(true);
+                      return true;
+                    }}
+                    onAnimationComplete={() => setFollowPlusAnimating(false)}
                     style={styles.avatarBadge}
                     disabled={sendingFollowRequest}
-                    activeOpacity={0.8}>
-                    {sendingFollowRequest ? (
-                      <Text style={styles.avatarBadgeSending}>...</Text>
-                    ) : (
-                      <MaterialCommunityIcons
-                        name="plus"
-                        size={18}
-                        color="#FFFFFF"
-                      />
-                    )}
-                  </TouchableOpacity>
+                    iconSize={18}
+                  />
                 ) : null}
               </View>
               <Text style={styles.userName}>{displayName}</Text>
@@ -2135,7 +2314,7 @@ const UserProfileScreen = ({
             </View>
           )}
 
-        {(!isProfessional || showTikTokProfessionalHeader) &&
+        {showStandardProfileHeader &&
           !showCompanyFeedHeroTop &&
           !isOwnProfile && (
             <View style={styles.actionRow}>
@@ -2253,6 +2432,7 @@ const UserProfileScreen = ({
             </View>
 
             {!openedFromPost &&
+              lastAd &&
               (isDedicatedListingAdProfile || !isProfessional) && (
                 <View style={styles.lastAdBody}>
                   {isBnbListingAdProfile ? (
@@ -2414,31 +2594,41 @@ const UserProfileScreen = ({
                             <Text style={styles.lastAdPostedByLabel}>
                               פורסם ע"י
                             </Text>
-                            <View style={styles.brokerCardBottomLocation}>
-                              {lastAd.profileImageUrl || displayImage ? (
-                                <Image
-                                  source={{
-                                    uri: lastAd.profileImageUrl || displayImage,
-                                  }}
-                                  style={styles.lastAdPostedByAvatar}
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <View
-                                  style={[
-                                    styles.lastAdPostedByAvatar,
-                                    styles.lastAdPostedByAvatarPlaceholder,
-                                  ]}>
-                                  <MaterialCommunityIcons
-                                    name="account"
-                                    size={14}
-                                    color="#fff"
+                            <View style={styles.lastAdPostedByRow}>
+                              <View
+                                style={[
+                                  styles.brokerCardBottomLocation,
+                                  styles.lastAdPostedByPublisher,
+                                ]}>
+                                {lastAd.profileImageUrl || displayImage ? (
+                                  <Image
+                                    source={{
+                                      uri:
+                                        lastAd.profileImageUrl || displayImage,
+                                    }}
+                                    style={styles.lastAdPostedByAvatar}
+                                    resizeMode="cover"
                                   />
-                                </View>
-                              )}
-                              <Text style={styles.lastAdPostedByName}>
-                                {displayName}
-                              </Text>
+                                ) : (
+                                  <View
+                                    style={[
+                                      styles.lastAdPostedByAvatar,
+                                      styles.lastAdPostedByAvatarPlaceholder,
+                                    ]}>
+                                    <MaterialCommunityIcons
+                                      name="account"
+                                      size={14}
+                                      color="#fff"
+                                    />
+                                  </View>
+                                )}
+                                <Text style={styles.lastAdPostedByName}>
+                                  {displayName}
+                                </Text>
+                              </View>
+                              {showCompanyFeedHeroTop && !isOwnProfile
+                                ? renderCompanyFeedFollowAction()
+                                : null}
                             </View>
                           </View>
                           <Text
@@ -2708,7 +2898,7 @@ const UserProfileScreen = ({
           </View>
         )}
 
-        {!openedFromPost && !isProfessional && !isDedicatedListingAdProfile && (
+        {showPiAiSmartInfoBlock && (
           <>
             <View style={styles.profileDivider} />
             {/* PiAi smart info at bottom: logo, intro text, 8 buttons (PNGs from ai except image.png) */}
@@ -3462,7 +3652,7 @@ const styles = StyleSheet.create({
   avatarBadge: {
     position: 'absolute',
     bottom: -5,
-    right: -5,
+    ...(Platform.OS === 'web' ? {right: -5} : {left: -5}),
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -3497,6 +3687,18 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   stat: {alignItems: 'center'},
+  statLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  pendingFollowRequestDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.categoriesApartments,
+  },
   statNumber: {
     color: '#F7F3E6',
     fontSize: 18,
@@ -4483,6 +4685,86 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     width: '100%',
     ...forceRtlStyle,
+  },
+  lastAdPostedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 10,
+    ...forceRtlStyle,
+  },
+  lastAdPostedByPublisher: {
+    flex: 1,
+    minWidth: 0,
+  },
+  companyFeedFollowCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  companyFeedFollowGoldWrap: {
+    borderRadius: 1000,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  companyFeedFollowGoldGradient: {
+    minWidth: 58,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  companyFeedFollowGoldText: {
+    color: '#1E1D27',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Medium',
+  },
+  companyFeedFollowBtn: {
+    backgroundColor: '#4d4966',
+    borderRadius: 1000,
+    minWidth: 58,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  companyFeedFollowBtnFollowing: {
+    opacity: 1,
+  },
+  companyFeedFollowBtnPending: {
+    minWidth: 118,
+    maxWidth: 140,
+    paddingHorizontal: 8,
+    opacity: 0.7,
+  },
+  companyFeedFollowBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 16,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Regular',
+  },
+  companyFeedFollowBtnPendingText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  companyFeedFollowCancelBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    flexShrink: 0,
   },
   lastAdPostedByLabel: {
     color: '#D2D0DC',

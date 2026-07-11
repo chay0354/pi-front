@@ -102,6 +102,7 @@ import {enrichListingForUserProfile} from './utils/enrichListingForUserProfile';
 import {
   pickTopViewedListingForProfile,
   mergeHubRowIntoListingPayload,
+  isPostListingRecord,
 } from './utils/pickTopViewedListingForProfile';
 import {useFonts, loadAsync as loadFontsAsync} from 'expo-font';
 import {criticalFonts, deferredFonts} from './utils/fonts';
@@ -438,7 +439,10 @@ function App() {
     returnScreen: screenName.tikTokFeed,
     /** DB listing category for the next publish; null = fall back to selectedCategory in PostEditor */
     listingCategoryId: null,
+    /** Existing feed post when editing from EditPublishAdScreen. */
+    editingListing: null,
   }));
+  const [editPublishRefreshKey, setEditPublishRefreshKey] = useState(0);
   /** Sales image composed in PostEditor before returning to AdsForm. */
   const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] =
     useState(null);
@@ -962,9 +966,10 @@ function App() {
                     setCurrentScreen(screenName.userProfile);
                   }}
                   onOpenFeatureListing={listing => {
-                    setProfileReturnScreen(screenName.home);
-                    setProfileUser(enrichListingForUserProfile(listing));
-                    setCurrentScreen(screenName.userProfile);
+                    openListingAdProfile(listing, {
+                      returnScreen: screenName.home,
+                      profileExtras: {_fromTikTokPost: true},
+                    });
                   }}
                   onOpenStoryProfile={openUserProfileFromStoryRing}
                   reopenAi={piAiReopen}
@@ -1012,9 +1017,10 @@ function App() {
                       setCurrentScreen(screenName.userProfile);
                     }}
                     onOpenFeatureListing={listing => {
-                      setProfileReturnScreen(screenName.home);
-                      setProfileUser(enrichListingForUserProfile(listing));
-                      setCurrentScreen(screenName.userProfile);
+                      openListingAdProfile(listing, {
+                        returnScreen: screenName.home,
+                        profileExtras: {_fromTikTokPost: true},
+                      });
                     }}
                     onOpenStoryProfile={openUserProfileFromStoryRing}
                     reopenAi={piAiReopen}
@@ -1085,11 +1091,12 @@ function App() {
                     if (listingCat != null) {
                       setSelectedCategory(String(listingCat));
                     }
-                    setPostEditorConfig({
-                      publishTarget: 'post',
-                      returnScreen: screenName.tikTokFeed,
-                      listingCategoryId: listingCat,
-                    });
+                  setPostEditorConfig({
+                    publishTarget: 'post',
+                    returnScreen: screenName.tikTokFeed,
+                    listingCategoryId: listingCat,
+                    editingListing: null,
+                  });
                     setCurrentScreen(screenName.postEditor);
                   }}
                   onOpenCityFilter={() => {
@@ -1668,13 +1675,13 @@ function App() {
               <CityFilterScreen
                 initialFilter={feedFilters.city}
                 selectedCategory={selectedCategory}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilters(prev => ({
                     ...prev,
                     city: normalizeCityFeedFilter(filter),
                   }));
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1682,7 +1689,7 @@ function App() {
               <ApartmentTypeFilterScreen
                 initialFilter={feedFilters.apartmentType}
                 selectedCategory={selectedCategory}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   const raw = filter?.apartmentType;
                   const next =
@@ -1692,7 +1699,7 @@ function App() {
                       ? null
                       : raw;
                   setFeedFilters(prev => ({...prev, apartmentType: next}));
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1700,13 +1707,13 @@ function App() {
               <RoomsFilterScreen
                 initialFilter={feedFilters.rooms}
                 selectedCategory={selectedCategory}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilters(prev => ({
                     ...prev,
                     rooms: normalizeRoomsFeedFilter(filter),
                   }));
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1714,10 +1721,10 @@ function App() {
               <PriceFilterScreen
                 initialFilter={feedFilters.price}
                 selectedCategory={selectedCategory}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('price', filter);
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1725,10 +1732,10 @@ function App() {
               <TypeFilterScreen
                 initialFilter={feedFilters.type}
                 selectedCategory={selectedCategory}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('type', filter?.type ?? null);
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1765,11 +1772,11 @@ function App() {
                   }
                   return null;
                 })()}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('office', filter ?? null);
                   setFeedFilterKey('meter', null);
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1778,17 +1785,17 @@ function App() {
                 initialFilter={
                   feedFilters.meter != null ? {meter: feedFilters.meter} : null
                 }
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('meter', filter?.meter ?? null);
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
             {currentScreen === screenName.donamFilter && (
               <DonamFilterScreen
                 initialFilter={feedFilters.donam}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey(
                     'donam',
@@ -1797,17 +1804,17 @@ function App() {
                       ? filter
                       : null,
                   );
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
             {currentScreen === screenName.preferencesFilter && (
               <PreferencesFilterScreen
                 initialFilter={feedFilters.preferences}
-                onClose={() => setCurrentScreen(screenAfterFilter)}
+                onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('preferences', filter ?? null);
-                  setCurrentScreen(screenAfterFilter);
+                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1816,8 +1823,12 @@ function App() {
                 publishTarget={postEditorConfig.publishTarget}
                 selectedCategory={selectedCategory}
                 publishCategoryId={postEditorConfig.listingCategoryId}
+                initialListing={postEditorConfig.editingListing}
                 currentUser={currentUser}
-                onClose={() => setCurrentScreen(postEditorConfig.returnScreen)}
+                onClose={() => {
+                  setPostEditorConfig(prev => ({...prev, editingListing: null}));
+                  setCurrentScreen(postEditorConfig.returnScreen);
+                }}
                 onPublish={payload => {
                   if (
                     postEditorConfig.returnScreen === screenName.adsForm &&
@@ -1828,6 +1839,14 @@ function App() {
                       storyAlreadyCreated:
                         postEditorConfig.publishTarget === 'story',
                     });
+                  }
+                  if (payload?.isEdit) {
+                    setEditPublishRefreshKey(k => k + 1);
+                    setPostEditorConfig(prev => ({...prev, editingListing: null}));
+                    setTimeout(() => {
+                      setTikTokFeedRefreshKey(prev => prev + 1);
+                    }, 800);
+                    return;
                   }
                   if (
                     postEditorConfig.returnScreen ===
@@ -2068,75 +2087,16 @@ function App() {
                 }}
                 onOpenOwnProfile={() => {
                   if (!currentUser) return;
-                  const openOwnProfile = async () => {
-                    let profilePayload = currentUser;
-                    try {
-                      const mySubId = currentUser?.id
-                        ? String(currentUser.id).trim()
-                        : '';
-                      if (mySubId) {
-                        const res = await getListings({
-                          status: 'published',
-                          subscription_id: mySubId,
-                        });
-                        const myListings = Array.isArray(res?.listings)
-                          ? res.listings.filter(
-                              item =>
-                                String(item?.subscription_id || '').trim() ===
-                                mySubId,
-                            )
-                          : [];
-                        const top = pickTopViewedListingForProfile(myListings);
-                        if (top) {
-                          const base = {
-                            ...top,
-                            subscription_id: top.subscription_id || mySubId,
-                            owner_id: top.owner_id || mySubId,
-                            creator_name:
-                              top.creator_name ||
-                              currentUser?.name ||
-                              currentUser?.contact_person_name ||
-                              currentUser?.business_name ||
-                              currentUser?.broker_office_name ||
-                              null,
-                            creator_email:
-                              top.creator_email ||
-                              (currentUser?.email
-                                ? String(currentUser.email).trim().toLowerCase()
-                                : null),
-                            creator_profile_image_url:
-                              top.creator_profile_image_url ||
-                              currentUser?.profile_picture_url ||
-                              currentUser?.company_logo_url ||
-                              null,
-                            profile_picture_url:
-                              top.profile_picture_url ||
-                              currentUser?.profile_picture_url ||
-                              currentUser?.company_logo_url ||
-                              null,
-                            company_logo_url:
-                              top.company_logo_url ||
-                              currentUser?.company_logo_url ||
-                              null,
-                            subscription_type:
-                              top.subscription_type ||
-                              currentUser?.subscription_type ||
-                              null,
-                          };
-                          profilePayload = {
-                            ...enrichListingForUserProfile(base),
-                            _fromTikTokPost: true,
-                          };
-                        }
-                      }
-                    } catch (_) {
-                      // Fallback to currentUser payload if listings request fails.
-                    }
-                    setProfileReturnScreen(screenName.settings);
-                    setProfileUser(profilePayload);
-                    setCurrentScreen(screenName.userProfile);
-                  };
-                  openOwnProfile();
+                  const mySubId = currentUser?.id
+                    ? String(currentUser.id).trim()
+                    : '';
+                  setProfileReturnScreen(screenName.settings);
+                  setProfileUser({
+                    ...currentUser,
+                    subscription_id: mySubId || currentUser.subscription_id,
+                    owner_id: mySubId || currentUser.owner_id,
+                  });
+                  setCurrentScreen(screenName.userProfile);
                 }}
               />
             )}
@@ -2279,6 +2239,7 @@ function App() {
             )}
             {currentScreen === screenName.editPublishAd && (
               <EditPublishAdScreen
+                refreshKey={editPublishRefreshKey}
                 onClose={() => {
                   setBnbPublishHostType(null);
                   setEditPublishSourceCategory(null);
@@ -2291,9 +2252,14 @@ function App() {
                     ? Number(editPublishSourceCategory)
                     : null
                 }
-                onOpenListingAnalysis={() =>
-                  setCurrentScreen(screenName.listingAnalysis)
-                }
+                onOpenListingAnalysis={() => {
+                  const t = String(
+                    currentUser?.subscription_type || '',
+                  ).trim().toLowerCase();
+                  if (t === 'company' || t === 'broker') {
+                    setCurrentScreen(screenName.listingAnalysis);
+                  }
+                }}
                 onCreateAd={(categoryId, opts) => {
                   setSelectedCategory(String(categoryId));
                   setEditPublishSourceCategory(Number(categoryId));
@@ -2313,6 +2279,24 @@ function App() {
                     publishTarget: 'post',
                     returnScreen: screenName.editPublishAd,
                     listingCategoryId: listingCat,
+                    editingListing: null,
+                  });
+                  setCurrentScreen(screenName.postEditor);
+                }}
+                onEditPost={listing => {
+                  const n =
+                    listing?.category != null
+                      ? parseInt(String(listing.category).trim(), 10)
+                      : NaN;
+                  const listingCat = Number.isFinite(n) && n > 0 ? n : null;
+                  if (listingCat != null) {
+                    setSelectedCategory(String(listingCat));
+                  }
+                  setPostEditorConfig({
+                    publishTarget: 'post',
+                    returnScreen: screenName.editPublishAd,
+                    listingCategoryId: listingCat,
+                    editingListing: listing ?? null,
                   });
                   setCurrentScreen(screenName.postEditor);
                 }}

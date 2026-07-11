@@ -29,23 +29,40 @@ export const PriceCount = ({
 }) => {
   const rowEndAlign = 'flex-start';
   const inputRef = useRef(null);
+  const isFocusedRef = useRef(false);
   const [draftPrice, setDraftPrice] = useState(() =>
     formatPriceInputDisplay(price),
   );
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
 
   useEffect(() => {
-    setDraftPrice(formatPriceInputDisplay(price));
+    if (isFocusedRef.current) return;
+    const display = formatPriceInputDisplay(price);
+    setDraftPrice(prev => (prev === display ? prev : display));
   }, [price]);
 
   const handleDraftChange = text => {
+    isFocusedRef.current = true;
     setDraftPrice(formatPriceInputDraft(text));
   };
 
   const commitDraftPrice = () => {
-    const nextPrice = parsePriceInputNumber(draftPrice);
-    setPrice(nextPrice);
-    setDraftPrice(formatPriceInputDisplay(nextPrice));
+    isFocusedRef.current = false;
+    setDraftPrice(prev => {
+      const nextPrice = parsePriceInputNumber(prev);
+      setPrice(nextPrice);
+      return formatPriceInputDisplay(nextPrice);
+    });
+  };
+
+  const stepPriceBy = delta => {
+    // Step from the visible draft so +/- works while typing / keyboard open.
+    setDraftPrice(prev => {
+      const base = parsePriceInputNumber(prev);
+      const nextPrice = Math.max(0, Number(base || 0) + delta);
+      setPrice(nextPrice);
+      return formatPriceInputDisplay(nextPrice);
+    });
   };
 
   return (
@@ -57,10 +74,8 @@ export const PriceCount = ({
         onChangeText={handleDraftChange}
         onBlur={commitDraftPrice}
         onSubmitEditing={commitDraftPrice}
-        onIncrement={() => setPrice(Number(price || 0) + counterStep)}
-        onDecrement={() =>
-          setPrice(Math.max(0, Number(price || 0) - counterStep))
-        }
+        onIncrement={() => stepPriceBy(counterStep)}
+        onDecrement={() => stepPriceBy(-counterStep)}
         suffix="₪"
         suffixAfter
         suffixStyle={styles.currencySuffix}

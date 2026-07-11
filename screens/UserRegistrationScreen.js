@@ -14,10 +14,13 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser} from '../utils/api';
 import {flexStart} from '../utils/rtlLayout';
+import {ProfileAvatar} from '../components';
+import CircleImageCropModal from '../components/CircleImageCropModal';
 
 const UserRegistrationScreen = ({
   onSuccess,
@@ -39,8 +42,9 @@ const UserRegistrationScreen = ({
   const [googleTrigger, setGoogleTrigger] = useState(0);
   const [GoogleAuthComponent, setGoogleAuthComponent] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [cropUri, setCropUri] = useState(null);
+  const [cropVisible, setCropVisible] = useState(false);
   const MIN_PASSWORD_LENGTH = 8;
-  const PROFILE_PLACEHOLDER = require('../assets/add-image-1.png');
   const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
   const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
 
@@ -105,6 +109,31 @@ const UserRegistrationScreen = ({
     requestMediaPermission();
   }, []);
 
+  const openProfileCropper = uri => {
+    if (!uri) return;
+    setCropUri(uri);
+    setCropVisible(true);
+  };
+
+  const handleProfileCropConfirm = result => {
+    if (result?.uri) {
+      setProfileImage({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `profile-${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+        fileName: `profile-${Date.now()}.jpg`,
+      });
+    }
+    setCropVisible(false);
+    setCropUri(null);
+  };
+
+  const handleProfileCropCancel = () => {
+    setCropVisible(false);
+    setCropUri(null);
+  };
+
   const pickProfileImage = async () => {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
@@ -113,14 +142,7 @@ const UserRegistrationScreen = ({
       input.onchange = e => {
         const file = e.target.files?.[0];
         if (file) {
-          setProfileImage({
-            uri: URL.createObjectURL(file),
-            type: file.type,
-            name: file.name,
-            mimeType: file.type,
-            fileName: file.name,
-            file,
-          });
+          openProfileCropper(URL.createObjectURL(file));
         }
       };
       input.click();
@@ -128,22 +150,15 @@ const UserRegistrationScreen = ({
     }
 
     try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 1,
       });
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setProfileImage({
-          uri: asset.uri,
-          type: asset.type || asset.mimeType || 'image/jpeg',
-          name: asset.fileName || asset.filename || 'profile.jpg',
-          mimeType: asset.mimeType || asset.type || 'image/jpeg',
-          fileName: asset.fileName || asset.filename || 'profile.jpg',
-          file: asset,
-        });
+        openProfileCropper(result.assets[0].uri);
       }
     } catch (err) {
       Alert.alert('שגיאה', 'לא ניתן לבחור תמונה. נסה שוב.');
@@ -288,6 +303,35 @@ const UserRegistrationScreen = ({
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.mainContent}>
+            <View style={styles.profileSection}>
+              <TouchableOpacity
+                onPress={pickProfileImage}
+                activeOpacity={0.85}
+                style={styles.avatarWrap}
+                accessibilityRole="button"
+                accessibilityLabel="בחר תמונת פרופיל">
+                <ProfileAvatar
+                  uri={profileImage?.uri || null}
+                  name={fullName}
+                  size={82}
+                  subscriptionType={subscriptionTypes.user}
+                  imageStyle={
+                    Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                  }
+                />
+                {!profileImage ? (
+                  <View style={styles.avatarAddBadge}>
+                    <MaterialCommunityIcons
+                      name="plus"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+              <Text style={styles.profileLabel}>תמונת פרופיל</Text>
+            </View>
+
             <View style={styles.headerBlock}>
               <Text style={styles.title}>הירשם ופרסם מודעה</Text>
               <Text style={styles.subtitle}>
@@ -296,27 +340,6 @@ const UserRegistrationScreen = ({
             </View>
 
             <View style={styles.formBlock}>
-              <View style={styles.profileSection}>
-                <TouchableOpacity
-                  style={styles.profileCircle}
-                  onPress={pickProfileImage}
-                  activeOpacity={0.85}>
-                  <Image
-                    source={
-                      profileImage
-                        ? {uri: profileImage.uri}
-                        : PROFILE_PLACEHOLDER
-                    }
-                    style={[
-                      styles.profileImage,
-                      !profileImage && styles.profilePlaceholderImage,
-                    ]}
-                    resizeMode={profileImage ? 'cover' : 'contain'}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.profileLabel}>תמונת פרופיל</Text>
-              </View>
-
               {errorMessage ? (
                 <View style={styles.errorContainer}>
                   <Text style={styles.errorText}>{errorMessage}</Text>
@@ -506,6 +529,13 @@ const UserRegistrationScreen = ({
           onSuccess={reg => finishAuthWithSubscription(reg)}
         />
       ) : null}
+      <CircleImageCropModal
+        visible={cropVisible}
+        imageUri={cropUri}
+        onCancel={handleProfileCropCancel}
+        onConfirm={handleProfileCropConfirm}
+        title="חתוך את תמונת הפרופיל"
+      />
     </View>
   );
 };
@@ -580,20 +610,21 @@ const styles = StyleSheet.create({
   profileSection: {
     alignItems: 'center',
     gap: 12,
+    marginBottom: 4,
   },
-  profileCircle: {
-    width: 80,
-    height: 80,
+  avatarWrap: {
+    position: 'relative',
+  },
+  avatarAddBadge: {
+    position: 'absolute',
+    bottom: -5,
+    ...(Platform.OS === 'web' ? {right: -5} : {left: -5}),
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E1D27',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 40,
-  },
-  profilePlaceholderImage: {
-    borderRadius: 0,
   },
   profileLabel: {
     fontSize: 14,

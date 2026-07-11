@@ -16,7 +16,7 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
-import {getCompaniesDirectory} from '../utils/api';
+import {getCompaniesDirectory, getListings} from '../utils/api';
 import {flexEnd} from '../utils/rtlLayout';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
@@ -29,6 +29,48 @@ const LOGO_DIAMETER = CELL_W * 0.86;
 const SEARCH_ACCENT = 'rgba(140, 133, 179, 1)';
 const SEARCH_BORDER = SEARCH_ACCENT;
 const SEARCH_ICON_MUTED = SEARCH_ACCENT;
+
+const isPostListingRecord = item => {
+  if (!item) return false;
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  const description = String(item.description || item.desc || '').trim();
+  const descLower = description.toLowerCase();
+  if (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post') ||
+    descLower === 'post' ||
+    descLower.includes('פוסט') ||
+    descLower.includes('post') ||
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/** Count published company projects (exclude feed posts), keyed by subscription id. */
+const buildPublishedProjectCounts = listings => {
+  const counts = {};
+  (listings || []).forEach(listing => {
+    if (!listing || isPostListingRecord(listing)) return;
+    const sid = listing.subscription_id || listing.subscriptionId;
+    if (!sid) return;
+    const key = String(sid);
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+};
 
 const topSectionElevation = Platform.select({
   web: {
@@ -57,8 +99,35 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getCompaniesDirectory();
-      setCompanies(Array.isArray(res?.companies) ? res.companies : []);
+      const [dirRes, listingsRes] = await Promise.all([
+        getCompaniesDirectory(),
+        getListings({
+          status: 'published',
+          subscription_type: 'company',
+        }).catch(() => null),
+      ]);
+      const companiesList = Array.isArray(dirRes?.companies)
+        ? dirRes.companies
+        : [];
+      const listingsOk =
+        listingsRes?.success && Array.isArray(listingsRes.listings);
+      const publishedCounts = listingsOk
+        ? buildPublishedProjectCounts(listingsRes.listings)
+        : null;
+      // Prefer live published-project counts so posts / drafts are not included.
+      setCompanies(
+        companiesList.map(c => {
+          const key = c?.id != null ? String(c.id) : '';
+          const projectCount =
+            publishedCounts != null
+              ? publishedCounts[key] || 0
+              : Number(c.project_count) || 0;
+          return {
+            ...c,
+            project_count: projectCount,
+          };
+        }),
+      );
     } catch (e) {
       setError(e.message || 'טעינה נכשלה');
       setCompanies([]);

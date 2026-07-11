@@ -348,27 +348,32 @@ const FollowHubScreen = ({
       return <View style={styles.rowActionPlaceholder} />;
     }
 
-    /** Own hub only — "עוקבים": only X to remove this user from your followers. */
+    /** Own hub only — "עוקבים": remove this user from your followers. */
     if (isOwnProfile && activeTab === TAB_FOLLOWERS) {
       return (
         <TouchableOpacity
           onPress={() => handleRemoveFollower(row)}
           disabled={busy}
-          style={styles.rowActionXBtn}
-          activeOpacity={0.8}
-          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-          <MaterialCommunityIcons
-            name="close"
-            size={18}
-            color="rgba(255,255,255,0.92)"
-          />
+          style={[
+            styles.rowActionBtn,
+            styles.rowActionBtnGhost,
+            styles.rowActionBtnRemoveFollowerWide,
+          ]}
+          activeOpacity={0.8}>
+          <Text
+            style={styles.rowActionTextRemoveFollower}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}>
+            {busy ? '...' : 'הסר מהעוקבים שלך'}
+          </Text>
         </TouchableOpacity>
       );
     }
 
     /**
-     * Own hub only — "עוקב": if request still pending, ממתין לאישור + X to cancel;
-     * if they accepted and you follow, only X (unfollow). Otherwise עקוב.
+     * Own hub only — "עוקב": if request still pending, ממתין לאישור + בטל בקשת מעקב;
+     * if they accepted and you follow, בטל מעקב. Otherwise עקוב.
      */
     if (isOwnProfile && activeTab === TAB_FOLLOWING) {
       if (row?.has_pending_request_by_viewer) {
@@ -387,14 +392,15 @@ const FollowHubScreen = ({
             <TouchableOpacity
               onPress={() => handleCancelOutgoingRequest(row)}
               disabled={busy}
-              style={styles.rowActionXBtn}
-              activeOpacity={0.8}
-              hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-              <MaterialCommunityIcons
-                name="close"
-                size={18}
-                color="rgba(255,255,255,0.92)"
-              />
+              style={[
+                styles.rowActionBtn,
+                styles.rowActionBtnGhost,
+                styles.rowActionBtnCancelWide,
+              ]}
+              activeOpacity={0.8}>
+              <Text style={styles.rowActionTextCancel} numberOfLines={1}>
+                {busy ? '...' : 'בטל בקשת מעקב'}
+              </Text>
             </TouchableOpacity>
           </View>
         );
@@ -404,14 +410,11 @@ const FollowHubScreen = ({
           <TouchableOpacity
             onPress={() => handleUnfollow(row)}
             disabled={busy}
-            style={styles.rowActionXBtn}
-            activeOpacity={0.8}
-            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-            <MaterialCommunityIcons
-              name="close"
-              size={18}
-              color="rgba(255,255,255,0.92)"
-            />
+            style={[styles.rowActionBtn, styles.rowActionBtnGhost]}
+            activeOpacity={0.8}>
+            <Text style={styles.rowActionText}>
+              {busy ? '...' : 'בטל מעקב'}
+            </Text>
           </TouchableOpacity>
         );
       }
@@ -837,6 +840,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
   },
+  rowActionBtnCancelWide: {
+    minWidth: 108,
+    maxWidth: 132,
+    paddingHorizontal: 8,
+  },
+  rowActionBtnRemoveFollowerWide: {
+    minWidth: 148,
+    maxWidth: 172,
+    paddingHorizontal: 8,
+  },
+  rowActionTextRemoveFollower: {
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  rowActionTextCancel: {
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.2,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
   rowActionBtnFollowing: {
     opacity: 1,
   },
@@ -868,14 +897,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     maxWidth: 220,
-  },
-  rowActionXBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   rowActionFollowBackBtn: {
     minWidth: 100,

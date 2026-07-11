@@ -23,36 +23,64 @@ export const CountUpdate = ({
   const safeSetCount = typeof setCount === 'function' ? setCount : () => {};
   const minVal = typeof min === 'number' ? min : 0;
   const inputRef = useRef(null);
+  const isFocusedRef = useRef(false);
   const [draft, setDraft] = useState(
     String(Math.max(minVal, Number(count ?? 0))),
   );
   const inputWidth = Math.max(20, String(draft || '').length * 11);
 
   useEffect(() => {
-    setDraft(String(Math.max(minVal, Number(count ?? 0))));
+    // Don't overwrite what the user is typing / mid-step while focused.
+    if (isFocusedRef.current) return;
+    const fromProp = Math.max(minVal, Number(count ?? 0) || 0);
+    setDraft(prev => {
+      const digitsOnly = String(prev || '').replace(/[^\d]/g, '');
+      const prevNum = Number.parseInt(digitsOnly || String(minVal), 10);
+      if (!Number.isNaN(prevNum) && prevNum === fromProp) return prev;
+      return String(fromProp);
+    });
   }, [count, minVal]);
 
-  const commitDraft = () => {
-    const digitsOnly = String(draft || '').replace(/[^\d]/g, '');
+  const parseDraftNumber = text => {
+    const digitsOnly = String(text || '').replace(/[^\d]/g, '');
     const nextVal = Number.parseInt(digitsOnly || String(minVal), 10);
     if (Number.isNaN(nextVal)) {
-      setDraft(String(Math.max(minVal, Number(count ?? 0))));
-      return;
+      return Math.max(minVal, Number(count ?? 0) || 0);
     }
-    const clamped = Math.max(minVal, nextVal);
-    safeSetCount(clamped);
-    setDraft(String(clamped));
+    return Math.max(minVal, nextVal);
+  };
+
+  const commitDraft = () => {
+    isFocusedRef.current = false;
+    setDraft(prev => {
+      const clamped = parseDraftNumber(prev);
+      safeSetCount(clamped);
+      return String(clamped);
+    });
+  };
+
+  const stepBy = delta => {
+    // Always step from the visible draft (not a stale committed prop),
+    // so +/- still works while the keyboard is open / draft is uncommitted.
+    setDraft(prev => {
+      const next = Math.max(minVal, parseDraftNumber(prev) + delta);
+      safeSetCount(next);
+      return String(next);
+    });
   };
 
   const counterPill = (
     <CounterStepper
       inputRef={inputRef}
       value={draft}
-      onChangeText={setDraft}
+      onChangeText={text => {
+        isFocusedRef.current = true;
+        setDraft(text);
+      }}
       onBlur={commitDraft}
       onSubmitEditing={commitDraft}
-      onIncrement={() => safeSetCount((count ?? 0) + 1)}
-      onDecrement={() => safeSetCount(Math.max(minVal, (count ?? 0) - 1))}
+      onIncrement={() => stepBy(1)}
+      onDecrement={() => stepBy(-1)}
       suffix={isArea ? 'מ"ר' : undefined}
       suffixAfter
       inputWidth={inputWidth}

@@ -145,7 +145,50 @@ export const formatPriceHe = listing => {
   return `₪${Math.round(n).toLocaleString('he-IL')}`;
 };
 
-export const purposeLabel = listing => {
+export const isPartnersListing = (listing, selectedCategory = null) => {
+  if (selectedCategory != null && Number(selectedCategory) === 3) {
+    return true;
+  }
+  if (Number(listing?.category) === 3) {
+    return true;
+  }
+  const sp = String(
+    listing?.search_purpose || listing?.searchPurposeKey || '',
+  )
+    .trim()
+    .toLowerCase();
+  return sp === 'enter' || sp === 'bring_in' || sp === 'partner';
+};
+
+export const isBnbListing = (listing, selectedCategory = null) => {
+  if (selectedCategory != null && Number(selectedCategory) === 5) {
+    return true;
+  }
+  return Number(listing?.category) === 5;
+};
+
+/** List/grid cards: hide חדרים / מ״ר / קומה for שותפים and BnB. */
+export const shouldHideListingCardStats = (listing, selectedCategory = null) =>
+  isPartnersListing(listing, selectedCategory) ||
+  isBnbListing(listing, selectedCategory);
+
+const PARTNERS_SEARCH_PURPOSE_LABELS = {
+  enter: 'מחפש להכנס',
+  bring_in: 'מחפש להכניס',
+  partner: 'מחפש להכניס',
+};
+
+export const purposeLabel = (listing, selectedCategory = null) => {
+  if (isPartnersListing(listing, selectedCategory)) {
+    const fromUi = String(listing?.searchPurpose || '').trim();
+    if (fromUi) return fromUi;
+    const key = String(
+      listing?.search_purpose || listing?.searchPurposeKey || '',
+    )
+      .trim()
+      .toLowerCase();
+    return PARTNERS_SEARCH_PURPOSE_LABELS[key] || 'מחפש להכניס';
+  }
   const raw = String(listing?.purpose || '').toLowerCase();
   return raw === 'rent' || raw === 'להשכרה' ? 'להשכרה' : 'למכירה';
 };

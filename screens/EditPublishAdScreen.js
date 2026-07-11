@@ -22,6 +22,7 @@ import {Octicons} from '@expo/vector-icons';
 import {
   brokerCategories,
   canShowListingAdInCreateSheet,
+  canAccessListingAnalysis,
   getCreateSheetListingIcon,
   getPublishCategoriesStrip,
   resolveListingCategoryFromEditProfileUi,
@@ -211,9 +212,66 @@ const isPostListingRecord = item => {
   return urls.some(u => /post_\d/i.test(String(u)));
 };
 
+const getListingCreatedTs = listing => {
+  const raw =
+    listing?.created_at ||
+    listing?.createdAt ||
+    listing?.uploaded_at ||
+    listing?.uploadedAt ||
+    listing?.inserted_at ||
+    null;
+  if (raw) {
+    const ts = new Date(raw).getTime();
+    if (Number.isFinite(ts)) return ts;
+  }
+  const idNum = Number(listing?.id ?? listing?.ad_number);
+  return Number.isFinite(idNum) ? idNum : 0;
+};
+
+const listingStableKey = listing =>
+  String(listing?.id ?? listing?.ad_number ?? '');
+
+/**
+ * Oldest post / ad = 1, then count up by created_at.
+ * Posts and ads are numbered in separate sequences.
+ */
+const buildOldestFirstOrdinalMap = listings => {
+  const posts = [];
+  const ads = [];
+  (listings || []).forEach(listing => {
+    if (!listing) return;
+    if (isPostListingRecord(listing)) posts.push(listing);
+    else ads.push(listing);
+  });
+  const byOldest = (a, b) => {
+    const diff = getListingCreatedTs(a) - getListingCreatedTs(b);
+    if (diff !== 0) return diff;
+    return listingStableKey(a).localeCompare(listingStableKey(b));
+  };
+  posts.sort(byOldest);
+  ads.sort(byOldest);
+  const map = new Map();
+  posts.forEach((listing, index) => {
+    const key = listingStableKey(listing);
+    if (key) map.set(key, index + 1);
+  });
+  ads.forEach((listing, index) => {
+    const key = listingStableKey(listing);
+    if (key) map.set(key, index + 1);
+  });
+  return map;
+};
+
 const isCompanyUser = user =>
   String(user?.subscription_type || '').trim().toLowerCase() ===
   subscriptionTypes.company;
+
+const isBrokerUser = user =>
+  String(user?.subscription_type || '').trim().toLowerCase() ===
+  subscriptionTypes.broker;
+
+const canOpenListingAnalysis = user =>
+  canAccessListingAnalysis(user?.subscription_type);
 
 /** White badge on ad cards: land → קרקע; company → פרויקט; else נכס. */
 const getListingTypeBadgeLabel = (listing, currentUser) => {
@@ -240,6 +298,7 @@ const EditPublishAdScreen = ({
   uploadedListings = [],
   currentUser = null,
   initialCategoryId = null,
+  refreshKey = 0,
   onCreateAd,
   onEditAd,
   /** Optional: edit handler for feed posts (plain listings); if omitted, posts show without pencil edit */
@@ -465,7 +524,7 @@ const EditPublishAdScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, refreshKey]);
 
   const mergedListings = (() => {
     const byId = new Map();
@@ -537,6 +596,12 @@ const EditPublishAdScreen = ({
     selectedCategoryId,
     selectedListingCategoryId,
   ]);
+
+  // פוסט/מודעה מס׳ 1 = oldest upload; separate counters for posts vs ads.
+  const listingOrdinalById = useMemo(
+    () => buildOldestFirstOrdinalMap(mergedListings),
+    [mergedListings],
+  );
 
   const getFirstImage = listing => {
     if (listing.images && listing.images.length > 0) {
@@ -873,6 +938,8 @@ const EditPublishAdScreen = ({
   const renderGridAdCard = ({item: listing, index}) => {
     const postRecord = isPostListingRecord(listing);
     const exposure = computeExposureLevel(listing);
+    const ordinal =
+      listingOrdinalById.get(listingStableKey(listing)) ?? index + 1;
 
     return (
       <View style={styles.adCard}>
@@ -897,7 +964,7 @@ const EditPublishAdScreen = ({
           </View>
           <View style={styles.advertisementNo}>
             <Text style={styles.advertisementNoText}>
-              {postRecord ? `פוסט מס׳ ${index + 1}` : `מודעה מס׳ ${index + 1}`}
+              {postRecord ? `פוסט מס׳ ${ordinal}` : `מודעה מס׳ ${ordinal}`}
             </Text>
           </View>
         </View>
@@ -1016,18 +1083,22 @@ const EditPublishAdScreen = ({
           <MaterialCommunityIcons name="chevron-left" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>ערוך/פרסם מודעה</Text>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => onOpenListingAnalysis && onOpenListingAnalysis()}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-          accessibilityRole="button"
-          accessibilityLabel="ניתוח מודעות">
-          <Image
-            source={require('../assets/action_icons.png')}
-            style={styles.actionImage}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+        {canOpenListingAnalysis(currentUser) ? (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => onOpenListingAnalysis && onOpenListingAnalysis()}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            accessibilityRole="button"
+            accessibilityLabel="ניתוח מודעות">
+            <Image
+              source={require('../assets/action_icons.png')}
+              style={styles.actionImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerBtn} />
+        )}
       </View>
 
       <ScrollView

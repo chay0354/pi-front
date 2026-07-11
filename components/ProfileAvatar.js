@@ -11,27 +11,22 @@ import {resolveSubscriptionType, shouldShowProfileGoldRing} from '../utils/const
 import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 
 /**
- * Single source of truth for user profile photos with the gold gradient ring.
+ * Single source of truth for user profile photos with a subscription-type ring.
  *
  *   <ProfileAvatar uri={profileUrl} fallbackUri={companyLogoUrl} size={60} />
  *
- * Order: profile photo → fallbackUri (e.g. company logo) → default no-profile image.
+ * Ring colors: gold gradient for broker / company / professional; teal gradient
+ * for regular users (same thickness and gap as gold).
  *
- * Implementation notes:
- * - The gold gradient ring is drawn with an SVG <Circle stroke="url(#...)">.
- *   That creates a true donut shape, so the gap between the ring and the photo
- *   is genuinely transparent and reveals whatever is behind the avatar.
- * - Ratios scale automatically with `size` so the same component looks
- *   consistent at any size.
- * - Use `ringColors` to override the gradient if a screen ever needs a
- *   different ring.
- * - Optional `placeholderImage` overrides the default no-profile image when there is no
- *   `uri` or the remote image failed.
+ * Order: profile photo → fallbackUri (e.g. company logo) → default no-profile image.
  */
-const RING_RATIO = 3.5 / 82; // gold band thickness
+const RING_RATIO = 3.5 / 82; // ring band thickness
 const GAP_RATIO = 2 / 82; // transparent space between ring and photo
 export const PROFILE_RING_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
 export const PROFILE_RING_LOCATIONS = [0.0456, 0.5076, 0.8831];
+/** Regular users — matches Edit Profile camera badge teal (`#5EEAD4`). */
+export const PROFILE_USER_RING_COLORS = ['#99F6E4', '#5EEAD4', '#0D9488'];
+export const PROFILE_USER_RING_LOCATIONS = PROFILE_RING_LOCATIONS;
 const DEFAULT_RING_COLORS = PROFILE_RING_COLORS;
 const DEFAULT_RING_LOCATIONS = PROFILE_RING_LOCATIONS;
 
@@ -47,6 +42,7 @@ export const ProfileAvatar = ({
   ringColors = DEFAULT_RING_COLORS,
   ringLocations = DEFAULT_RING_LOCATIONS,
   subscriptionType,
+  forceGoldRing = false,
   showRing = true,
   style,
   imageStyle,
@@ -80,12 +76,14 @@ export const ProfileAvatar = ({
   const displayUri = showPrimary ? uri : showFallback ? fallbackUri : null;
   const displayResizeMode = showPrimary ? 'cover' : fallbackResizeMode;
   const resolvedType = resolveSubscriptionType(subscriptionType);
-  const effectiveShowRing =
-    showRing === false
-      ? false
-      : resolvedType !== ''
-        ? shouldShowProfileGoldRing(resolvedType)
-        : showRing;
+  const useGoldRing =
+    forceGoldRing === true ||
+    (resolvedType !== '' && shouldShowProfileGoldRing(resolvedType));
+  const effectiveShowRing = showRing !== false;
+  const effectiveRingColors = useGoldRing ? ringColors : PROFILE_USER_RING_COLORS;
+  const effectiveRingLocations = useGoldRing
+    ? ringLocations
+    : PROFILE_USER_RING_LOCATIONS;
 
   const Photo = displayUri ? (
     <Image
@@ -156,10 +154,13 @@ export const ProfileAvatar = ({
             y1="0"
             x2="1"
             y2="1">
-            {ringColors.map((color, i) => (
+            {effectiveRingColors.map((color, i) => (
               <Stop
                 key={`${gradientId}-${i}`}
-                offset={ringLocations[i] ?? i / Math.max(1, ringColors.length - 1)}
+                offset={
+                  effectiveRingLocations[i] ??
+                  i / Math.max(1, effectiveRingColors.length - 1)
+                }
                 stopColor={color}
               />
             ))}

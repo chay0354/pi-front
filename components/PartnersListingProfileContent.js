@@ -33,7 +33,7 @@ const REPORT_BG = '#4D4966';
 const SEARCH_PURPOSE_LABELS = {
   enter: 'מחפש להיכנס',
   bring_in: 'מחפש להכניס',
-  partner: 'מחפש שותף',
+  partner: 'מחפש להכניס',
 };
 
 const PREFERENCE_META = [

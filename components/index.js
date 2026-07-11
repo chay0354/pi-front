@@ -2,9 +2,12 @@ export {
   default as ProfileAvatar,
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
+  PROFILE_USER_RING_COLORS,
+  PROFILE_USER_RING_LOCATIONS,
 } from './ProfileAvatar';
 export {TikTokHeartIcon} from './TikTokHeartIcon';
 export {PostFeedLikeIcon} from './PostFeedLikeIcon';
+export {FollowPlusBadge, FOLLOW_CHECK_COLOR} from './FollowPlusBadge';
 export {default as SharePostSheet} from './SharePostSheet';
 export {Title} from './FormsElement/Title';
 export {MultiPicturesUpload} from './FormsElement/MultiPicturesUpload';

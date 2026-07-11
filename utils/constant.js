@@ -32,7 +32,7 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
-/** Gold profile ring: company, broker, professional only — not regular `user`. */
+/** Gold profile ring: company, broker, professional. Regular `user` uses teal ring in ProfileAvatar. */
 export const shouldShowProfileGoldRing = subscriptionType => {
   const t = resolveSubscriptionType(subscriptionType);
   return (
@@ -174,8 +174,13 @@ export function orderPublishCategoriesStrip(strip) {
   ];
 }
 
-/** Categories on EditPublishAd carousel + ListingAnalysis — filtered by user type, same order. */
-export function getPublishCategoriesStrip(subscriptionType) {
+/** Categories on EditPublishAd carousel — all tabs for every user; ad create sheet still uses `canShowListingAdInCreateSheet`. */
+export function getPublishCategoriesStrip(_subscriptionType) {
+  return orderPublishCategoriesStrip(categoriesEditProfile);
+}
+
+/** ניתוח מודעות: only categories where this user may publish ads (not post-only tabs). */
+export function getAnalysisCategoriesStrip(subscriptionType) {
   const filtered = categoriesEditProfile.filter(cat =>
     canShowListingAdInCreateSheet(
       subscriptionType,
@@ -183,6 +188,12 @@ export function getPublishCategoriesStrip(subscriptionType) {
     ),
   );
   return orderPublishCategoriesStrip(filtered);
+}
+
+/** All subscription types except professional may open ניתוח מודעות. */
+export function canAccessListingAnalysis(subscriptionType) {
+  const sub = String(subscriptionType ?? '').trim().toLowerCase();
+  return sub !== subscriptionTypes.professional;
 }
 
 /** Default residential/global strip icon (חדש מקבלן for non–regular-user accounts). */

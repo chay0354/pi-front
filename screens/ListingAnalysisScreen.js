@@ -15,10 +15,14 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   brokerCategories,
   DEFAULT_MONTHLY_LISTING_QUOTA,
-  getPublishCategoriesStrip,
+  getAnalysisCategoriesStrip,
+  canAccessListingAnalysis,
   resolveListingCategoryFromEditProfileUi,
+  resolveSubscriptionType,
+  subscriptionTypes,
 } from '../utils/constant';
 import {getListings} from '../utils/api';
+import {isPostListingRecord} from '../utils/pickTopViewedListingForProfile';
 import {flexStart} from '../utils/rtlLayout';
 const inverseTextAlign = 'right';
 
@@ -40,23 +44,11 @@ const ANALYSIS_ICON_BORDER_RADIUS = Math.round(
 
 const DEFAULT_LISTING_QUOTA = DEFAULT_MONTHLY_LISTING_QUOTA;
 
-/** Resolves subscription type from user + nested subscription (API shapes vary). */
-function getUserSubscriptionTypeLower(user) {
-  if (!user || typeof user !== 'object') return '';
-  const subObj =
-    user.subscription && typeof user.subscription === 'object'
-      ? user.subscription
-      : null;
-  const raw =
-    user.subscription_type ??
-    user.subscriptionType ??
-    user.type ??
-    subObj?.subscription_type ??
-    subObj?.subscriptionType ??
-    subObj?.type ??
-    '';
-  return String(raw).trim().toLowerCase();
-}
+/** Company → projects; regular users + brokers → properties. */
+const getPublishedCountLabel = subscriptionType =>
+  subscriptionType === subscriptionTypes.company
+    ? 'מספר פרויקטים מפורסמים'
+    : 'מספר נכסים מפורסמים';
 
 const categoryMeta = listingCategoryId =>
   brokerCategories.find(c => c.id === listingCategoryId) || null;
@@ -100,25 +92,43 @@ const CroppedCategoryImage = ({source, categoryId}) => {
 
 const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
 
+const isListingAd = l => !isPostListingRecord(l);
+
 const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Only brokers have the monthly publish limit; everyone else publishes freely,
-  // so the quota summary card is hidden for non-broker accounts.
-  const isBrokerUser = getUserSubscriptionTypeLower(currentUser) === 'broker';
+  const subscriptionType = resolveSubscriptionType(currentUser);
+  const isBrokerUser = subscriptionType === subscriptionTypes.broker;
+  const isRegularUser = subscriptionType === subscriptionTypes.user;
+  const canAccessAnalysis = canAccessListingAnalysis(subscriptionType);
+  const publishedCountLabel = getPublishedCountLabel(subscriptionType);
 
-  const subscriptionType = getUserSubscriptionTypeLower(currentUser);
+  useEffect(() => {
+    if (!canAccessAnalysis && typeof onClose === 'function') {
+      onClose();
+    }
+  }, [canAccessAnalysis, onClose]);
 
   const analysisRows = useMemo(
     () =>
-      getPublishCategoriesStrip(subscriptionType).map(cat => ({
+      getAnalysisCategoriesStrip(subscriptionType).map(cat => ({
         uiCategoryId: cat.id,
         listingCategoryId: resolveListingCategoryFromEditProfileUi(cat.id),
         label: cat.name,
       })),
     [subscriptionType],
+  );
+
+  const allowedListingCategoryIds = useMemo(
+    () =>
+      new Set(
+        analysisRows
+          .map(r => r.listingCategoryId)
+          .filter(id => id != null && Number.isFinite(Number(id))),
+      ),
+    [analysisRows],
   );
 
   const quota =
@@ -154,27 +164,35 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   }, [currentUser?.id]);
 
   const {countsByCategory, activeTotal} = useMemo(() => {
-    const active = listings.filter(l => !isListingFrozen(l));
     const byCat = {};
     analysisRows.forEach(r => {
       if (r.listingCategoryId != null) {
         byCat[r.listingCategoryId] = 0;
       }
     });
-    active.forEach(l => {
+    let total = 0;
+    listings.forEach(l => {
+      if (isListingFrozen(l) || !isListingAd(l)) return;
       const cid = l.category != null ? parseInt(String(l.category), 10) : NaN;
       if (
-        !Number.isNaN(cid) &&
-        Object.prototype.hasOwnProperty.call(byCat, cid)
+        Number.isNaN(cid) ||
+        !allowedListingCategoryIds.has(cid) ||
+        !Object.prototype.hasOwnProperty.call(byCat, cid)
       ) {
-        byCat[cid] += 1;
+        return;
       }
+      byCat[cid] += 1;
+      total += 1;
     });
-    return {countsByCategory: byCat, activeTotal: active.length};
-  }, [listings, analysisRows]);
+    return {countsByCategory: byCat, activeTotal: total};
+  }, [listings, analysisRows, allowedListingCategoryIds]);
 
   const remaining = Math.max(0, quota - activeTotal);
   const progress = quota > 0 ? Math.min(1, activeTotal / quota) : 0;
+
+  if (!canAccessAnalysis) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -262,12 +280,18 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
                   </View>
                   <View style={styles.rowLeft}>
                     <View style={styles.rowSubtextCol}>
-                      <Text style={styles.rowSubtextTitle}>
-                        מספר נכסים מפורסמים
+                      <Text
+                        style={styles.rowSubtextTitle}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.8}>
+                        {publishedCountLabel}
                       </Text>
-                      <Text style={styles.rowSubtextNote}>
-                        לא כולל בית פתוח ופוסטים
-                      </Text>
+                      {!isRegularUser ? (
+                        <Text style={styles.rowSubtextNote}>
+                          לא כולל בית פתוח ופוסטים
+                        </Text>
+                      ) : null}
                     </View>
                     <Text style={styles.rowCount}>{count}</Text>
                   </View>
@@ -435,12 +459,13 @@ const styles = StyleSheet.create({
   },
   rowSubtextCol: {
     flexShrink: 1,
+    minWidth: 0,
     alignItems: flexStart,
   },
   rowSubtextTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 14,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     textAlign: 'left',

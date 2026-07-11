@@ -37,7 +37,13 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {Video, ResizeMode, Audio} from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {ProfileAvatar, SharePostSheet, TikTokHeartIcon, PostFeedLikeIcon} from '../components';
+import {
+  ProfileAvatar,
+  SharePostSheet,
+  TikTokHeartIcon,
+  PostFeedLikeIcon,
+  FollowPlusBadge,
+} from '../components';
 import {FeedVideoPlayer} from '../components/FeedVideoPlayer';
 import PostTextOverlays from '../components/PostTextOverlays';
 import {
@@ -92,7 +98,7 @@ import {
   uploadFile,
   measureDistancesBatchWithGemini,
 } from '../utils/api';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {getUserProfileImageUrl, getListingFeedAvatarUrl, shouldForceGoldRingForListing} from '../utils/userProfileImage';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {
@@ -338,6 +344,49 @@ const isFeedPost = item => {
   if (description === 'post' || description === 'פוסט') return true;
   return item.isPostEntry === true;
 };
+
+/** Listing row marked חדש / new (regular-user ads in חדשות filter). */
+const isNewConditionListing = listing => {
+  const c = String(listing?.condition ?? '').trim();
+  if (!c) return false;
+  const lower = c.toLowerCase();
+  return lower === 'new' || c === 'חדש';
+};
+
+const isRegularUserListing = listing =>
+  String(listing?.subscription_type || '').toLowerCase() === 'user';
+
+/** חדשות sidebar: company ads in active category + all cat-1 ads + regular-user “new” ads (any category). */
+const isNewsSidebarListing = (listing, currentCategoryId) => {
+  if (!listing || isFeedPost(listing)) return false;
+  const cat = parseInt(listing.category, 10) || 0;
+  if (cat === 1) return true;
+  if (isRegularUserListing(listing) && isNewConditionListing(listing)) {
+    return true;
+  }
+  const cur = parseInt(currentCategoryId, 10);
+  if (Number.isFinite(cur) && cat === cur) {
+    return String(listing.subscription_type || '').toLowerCase() === 'company';
+  }
+  return false;
+};
+
+const mergeListingRows = (target, rows) => {
+  const seen = new Set(
+    target.map(l => String(l?.id ?? '')).filter(Boolean),
+  );
+  for (const row of rows) {
+    const id = String(row?.id ?? '');
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      target.push(row);
+    }
+  }
+  return target;
+};
+
+const isNewsSidebarFilterDef = filter =>
+  filter?.id === 'new' && filter?.ads_only === true;
 
 /** Company ads: `construction_status` from DB may be English keys or Hebrew labels from the form. */
 function companyConstructionStatusMatches(listing, target) {
@@ -926,7 +975,7 @@ const TIKTOK_OVERLAY_ICONS = {
   ratingFiveStars: require('../assets/tiktok/5stars.png'),
 };
 
-const COMMENT_REACTIONS = ['😂', '😅', '😁', '🥰', '🥹', '😊'];
+const COMMENT_REACTIONS = ['😂', '🙏', '😀', '👍', '😉', '👌'];
 /** Extra lift so the comment composer clears the soft keyboard comfortably. */
 const COMMENTS_COMPOSER_KEYBOARD_LIFT = 18;
 const COMMENTS_COMPOSER_SCROLL_PADDING = 210;
@@ -937,7 +986,7 @@ const NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new.png');
 const OFFICE_NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new-2.png');
 
 /**
- * חדש מקבלן (category 1) only — הדמיות first, then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
+ * חדש מקבלן (category 1) only — הדמיות first (company ads with video only), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
  * Do not use as the default for דירות / גלובל / other feeds.
  */
 const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
@@ -945,6 +994,8 @@ const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
     id: 'renderings',
     label: 'הדמיות',
     has_video: true,
+    subscription_type: 'company',
+    ads_only: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1006,6 +1057,8 @@ const APARTMENTS_SIDEBAR_FILTERS = [
     id: 'renderings',
     label: 'הדמיות',
     has_video: true,
+    subscription_type: 'company',
+    ads_only: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1058,6 +1111,8 @@ const OFFICE_SIDEBAR_FILTERS = [
     id: 'renderings',
     label: 'הדמיות',
     has_video: true,
+    subscription_type: 'company',
+    ads_only: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1139,6 +1194,8 @@ const COMMERCIAL_SIDEBAR_FILTERS = [
     id: 'renderings',
     label: 'הדמיות',
     has_video: true,
+    subscription_type: 'company',
+    ads_only: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -2119,6 +2176,8 @@ const TikTokFeedScreen = ({
   /** Prefetched with listings so sidebar + appears without per-slide delay. */
   const [followStatusByTargetId, setFollowStatusByTargetId] = useState({});
   const [sidebarSendingFollow, setSidebarSendingFollow] = useState(false);
+  /** Keep + badge mounted while Instagram-style check animation plays. */
+  const [followPlusAnimatingIds, setFollowPlusAnimatingIds] = useState({});
   const lastViewedListingIdRef = useRef(null); // avoid recording same view twice
   const [dimensions, setDimensions] = useState({
     height: Dimensions.get('window').height,
@@ -2702,7 +2761,7 @@ const TikTokFeedScreen = ({
         let landFilter = null;
         let commercialFilter = null;
         let legacySidebarFilter = null;
-        let apartmentsNewsIncludesNewFromDeveloper = false;
+        let newsSidebarFilterActive = false;
 
         if (isProfilePostsFeed) {
           result = await getListings({
@@ -2775,6 +2834,16 @@ const TikTokFeedScreen = ({
           newFromDeveloperSidebarFilter ??
           apartmentsLegacyFilter ??
           standardLegacySidebarFilter;
+        const activeSidebarFilter =
+          partnersFilter ??
+          bnbFilter ??
+          officeFilter ??
+          landFilter ??
+          commercialFilter ??
+          legacySidebarFilter;
+        newsSidebarFilterActive =
+          selectedSidebarFilter === 'new' &&
+          isNewsSidebarFilterDef(activeSidebarFilter);
         const subscriptionType =
           partnersFilter?.subscription_type ??
           bnbFilter?.subscription_type ??
@@ -2787,8 +2856,7 @@ const TikTokFeedScreen = ({
           officeFilter?.condition ??
           commercialFilter?.condition ??
           landFilter?.condition;
-        // API has_video only from sidebar (e.g. “הדמיות”). Top-bar "video" filters client-side
-        // so we keep both ad videos and post videos that expose video on the row.
+        // API has_video only from sidebar (e.g. “הדמיות” = company ads with video, no posts).
         const hasVideoFromSidebar =
           officeFilter?.has_video === true ||
           landFilter?.has_video === true ||
@@ -2796,17 +2864,16 @@ const TikTokFeedScreen = ({
           legacySidebarFilter?.has_video === true;
         const hasVideo = hasVideoFromSidebar;
 
-        apartmentsNewsIncludesNewFromDeveloper =
-          categoryToFetch === 10 && selectedSidebarFilter === 'new';
-
         const sharedListingFetchParams = {
           status: 'published',
-          ...(subscriptionType != null && {
-            subscription_type: subscriptionType,
-          }),
+          ...(subscriptionType != null &&
+            !newsSidebarFilterActive && {
+              subscription_type: subscriptionType,
+            }),
           ...(hasVideo && {has_video: true}),
           ...(sidebarCondition != null &&
-            String(sidebarCondition).trim() !== '' && {
+            String(sidebarCondition).trim() !== '' &&
+            !newsSidebarFilterActive && {
               condition: String(sidebarCondition).trim().toLowerCase(),
             }),
           ...(partnersFilter?.search_purpose && {
@@ -2831,6 +2898,39 @@ const TikTokFeedScreen = ({
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         };
 
+        if (newsSidebarFilterActive && categoryToFetch != null) {
+          result = await getListings({
+            category: categoryToFetch,
+            status: 'published',
+            subscription_type: 'company',
+            ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+          });
+          mergedListings = Array.isArray(result?.listings)
+            ? [...result.listings]
+            : [];
+          if (result.success && !result.offline) {
+            const cat1Result = await getListings({
+              category: 1,
+              status: 'published',
+              ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+            });
+            if (cat1Result.success && Array.isArray(cat1Result.listings)) {
+              mergeListingRows(mergedListings, cat1Result.listings);
+            }
+            const regularNewResult = await getListings({
+              status: 'published',
+              subscription_type: 'user',
+              condition: 'new',
+              ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+            });
+            if (
+              regularNewResult.success &&
+              Array.isArray(regularNewResult.listings)
+            ) {
+              mergeListingRows(mergedListings, regularNewResult.listings);
+            }
+          }
+        } else {
         result = await getListings({
           category: categoryToFetch,
           ...sharedListingFetchParams,
@@ -2839,30 +2939,6 @@ const TikTokFeedScreen = ({
         mergedListings = Array.isArray(result?.listings)
           ? [...result.listings]
           : [];
-
-        if (
-          apartmentsNewsIncludesNewFromDeveloper &&
-          result.success &&
-          !result.offline
-        ) {
-          const cat1Result = await getListings({
-            category: 1,
-            status: 'published',
-            subscription_type: 'company',
-            ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
-          });
-          if (cat1Result.success && Array.isArray(cat1Result.listings)) {
-            const seen = new Set(
-              mergedListings.map(l => String(l?.id ?? '')).filter(Boolean),
-            );
-            for (const row of cat1Result.listings) {
-              const id = String(row?.id ?? '');
-              if (id && !seen.has(id)) {
-                seen.add(id);
-                mergedListings.push(row);
-              }
-            }
-          }
         }
         }
 
@@ -2940,9 +3016,9 @@ const TikTokFeedScreen = ({
 
               // Category 3 specific fields
               const searchPurposeLabels = {
-                enter: 'מחפש להיכנס',
+                enter: 'מחפש להכנס',
                 bring_in: 'מחפש להכניס',
-                partner: 'מחפש שותף',
+                partner: 'מחפש להכניס',
               };
 
               const apartmentTypeLabels = {
@@ -3196,6 +3272,15 @@ const TikTokFeedScreen = ({
                     : null,
                 construction_status: listing.construction_status || null,
                 general_details: parseListingGeneralDetails(listing.general_details),
+                bnb_business_logo_url:
+                  listing.bnb_business_logo_url != null
+                    ? String(listing.bnb_business_logo_url).trim() || null
+                    : null,
+                bnb_host_type: (() => {
+                  const gd = parseListingGeneralDetails(listing.general_details);
+                  const t = gd?.bnb_host_type ?? gd?.bnbHostType;
+                  return t === 'private' || t === 'business' ? t : null;
+                })(),
                 hashtags: getListingHashtags(listing),
                 hospitality_nature:
                   listing.hospitality_nature != null
@@ -3238,14 +3323,8 @@ const TikTokFeedScreen = ({
             ? afterTopBar
             : Number.isFinite(selectedCatNum)
               ? afterTopBar.filter(listing => {
-                  if (
-                    apartmentsNewsIncludesNewFromDeveloper &&
-                    listing.category === 1 &&
-                    String(listing.subscription_type || '').toLowerCase() ===
-                      'company' &&
-                    !isFeedPost(listing)
-                  ) {
-                    return true;
+                  if (newsSidebarFilterActive) {
+                    return isNewsSidebarListing(listing, selectedCatNum);
                   }
                   return listing.category === selectedCatNum;
                 })
@@ -3286,12 +3365,7 @@ const TikTokFeedScreen = ({
               commercialFilter?.ads_only === true ||
               landFilter?.ads_only === true);
 
-          const isNewConditionRow = l => {
-            const c = String(l?.condition ?? '').trim();
-            if (!c) return false;
-            const lower = c.toLowerCase();
-            return lower === 'new' || c === 'חדש';
-          };
+          const isNewConditionRow = isNewConditionListing;
           const sidebarWantsNewAds =
             !isProfilePostsFeed &&
             ((legacySidebarFilter?.id === 'new' &&
@@ -3319,17 +3393,8 @@ const TikTokFeedScreen = ({
                 'professional',
             );
           }
-          if (sidebarWantsNewAds) {
-            displayListings = displayListings.filter(l => {
-              if (
-                apartmentsNewsIncludesNewFromDeveloper &&
-                l.category === 1 &&
-                isCompany(l)
-              ) {
-                return true;
-              }
-              return isNewConditionRow(l);
-            });
+          if (sidebarWantsNewAds && !newsSidebarFilterActive) {
+            displayListings = displayListings.filter(l => isNewConditionRow(l));
           }
           if (legacySidebarFilter?.id === 'presale') {
             displayListings = displayListings.filter(
@@ -3347,6 +3412,18 @@ const TikTokFeedScreen = ({
                   l,
                   'beginning_of_construction',
                 ),
+            );
+          } else if (
+            !isProfilePostsFeed &&
+            selectedSidebarFilter === 'renderings'
+          ) {
+            displayListings = displayListings.filter(
+              l =>
+                !isFeedPost(l) &&
+                isCompany(l) &&
+                (listingHasPlayableVideo(l) ||
+                  l.videoProcessing === true ||
+                  Boolean(String(l.rawVideoUrl || '').trim())),
             );
           }
           if (landFilter?.land_in_mortgage) {
@@ -5427,7 +5504,7 @@ const TikTokFeedScreen = ({
   );
 
   const currentVideo = videos[currentIndex] || null;
-  const sidebarProfileUrl = getUserProfileImageUrl(currentVideo);
+  const sidebarProfileUrl = getListingFeedAvatarUrl(currentVideo);
   const sidebarViewerSubId = resolveFollowUuid(
     currentUser?.subscription_id,
     currentUser?.owner_id,
@@ -5556,14 +5633,14 @@ const TikTokFeedScreen = ({
 
   const handleSidebarFollowRequest = useCallback(
     async video => {
-      if (sidebarSendingFollow) return;
-      if (!video) return;
-      if (!isFollowableListing(video)) return;
+      if (sidebarSendingFollow) return false;
+      if (!video) return false;
+      if (!isFollowableListing(video)) return false;
       if (!currentUser || !String(currentUser?.email || '').trim()) {
         if (typeof onOpenUserRegistration === 'function') {
           onOpenUserRegistration();
         }
-        return;
+        return false;
       }
 
       const targetSubId = resolveListingFollowTargetId(video);
@@ -5571,12 +5648,12 @@ const TikTokFeedScreen = ({
         ? String(video.creator_email).trim().toLowerCase()
         : '';
 
-        setFollowStatusByTargetId(prev =>
-          patchFollowStatusForVideo(prev, video, {
-            is_following: false,
-            has_pending_request: true,
-          }),
-        );
+      setFollowStatusByTargetId(prev =>
+        patchFollowStatusForVideo(prev, video, {
+          is_following: false,
+          has_pending_request: true,
+        }),
+      );
       bumpFollowUiRevision();
 
       setSidebarSendingFollow(true);
@@ -5623,6 +5700,7 @@ const TikTokFeedScreen = ({
           ),
         );
         bumpFollowUiRevision();
+        return true;
       } catch (err) {
         setFollowStatusByTargetId(prev =>
           patchFollowStatusForVideo(prev, video, defaultFollowStatusEntry()),
@@ -5634,6 +5712,7 @@ const TikTokFeedScreen = ({
             err?.message || err,
           );
         }
+        return false;
       } finally {
         setSidebarSendingFollow(false);
       }
@@ -5736,7 +5815,7 @@ const TikTokFeedScreen = ({
         brokerLocationText: 'מיקום לא זמין',
         companyLandLocationText: 'מיקום לא זמין',
         brokerPriceText: '₪0',
-        partnersPurposeText: 'מחפש שותף',
+        partnersPurposeText: 'מחפש להכניס',
         partnersDisplayName: 'משתמש',
         bnbTypeTagText: 'וילה',
         bnbTitleText: 'ללא תיאור',
@@ -5799,7 +5878,7 @@ const TikTokFeedScreen = ({
       return '₪0';
     })();
     const partnersPurposeText = String(
-      video?.searchPurpose || 'מחפש שותף',
+      video?.searchPurpose || 'מחפש להכניס',
     ).trim();
     const partnersDisplayName = String(
       video?.creator_name ||
@@ -6329,6 +6408,7 @@ const TikTokFeedScreen = ({
               uri={pageProfileUrl}
               size={60}
               subscriptionType={video}
+              forceGoldRing={shouldForceGoldRingForListing(video)}
             />
           </View>
         ) : (
@@ -6352,24 +6432,55 @@ const TikTokFeedScreen = ({
               uri={pageProfileUrl}
               size={60}
               subscriptionType={video}
+              forceGoldRing={shouldForceGoldRingForListing(video)}
             />
           </TouchableOpacity>
         )}
-        {shouldShowFollowPlusForVideo(video) ? (
-          <TouchableOpacity
+        {shouldShowFollowPlusForVideo(video) ||
+        (resolveListingFollowTargetId(video) &&
+          followPlusAnimatingIds[
+            String(resolveListingFollowTargetId(video))
+          ]) ? (
+          <FollowPlusBadge
             style={styles.sidebarFollowBadge}
+            iconSize={16}
             onPressIn={() => {
               sidebarBlockPanRef.current = true;
             }}
             onPressOut={() => {
               sidebarBlockPanRef.current = false;
             }}
+            beforePress={() => {
+              if (!currentUser || !String(currentUser?.email || '').trim()) {
+                if (typeof onOpenUserRegistration === 'function') {
+                  onOpenUserRegistration();
+                }
+                return false;
+              }
+              const targetId = resolveListingFollowTargetId(video);
+              if (targetId) {
+                setFollowPlusAnimatingIds(prev => ({
+                  ...prev,
+                  [String(targetId)]: true,
+                }));
+                bumpFollowUiRevision();
+              }
+              return true;
+            }}
             onPress={() => handleSidebarFollowRequest(video)}
+            onAnimationComplete={() => {
+              const targetId = resolveListingFollowTargetId(video);
+              if (!targetId) return;
+              setFollowPlusAnimatingIds(prev => {
+                const next = {...prev};
+                delete next[String(targetId)];
+                return next;
+              });
+              bumpFollowUiRevision();
+            }}
             disabled={!video || sidebarSendingFollow}
-            activeOpacity={0.8}
-            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
-            <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+          />
         ) : null}
       </View>
       {!isProfilePostsFeed ? (
@@ -6495,7 +6606,7 @@ const TikTokFeedScreen = ({
     const introRunning = !isProfilePostsFeed && !sidebarIntroDone.current;
     const yRest = sidebarIntroTopTwoOnlyDown;
     const pageProfileUrl =
-      getUserProfileImageUrl(video) ||
+      getListingFeedAvatarUrl(video) ||
       (isProfilePostsFeed ? profilePostsScope?.profileImageUrl : null);
     const sidebarDragMode = isActivePage && !isProfilePostsFeed;
 
@@ -7926,6 +8037,7 @@ const TikTokFeedScreen = ({
                   <ListingGridCardFigma
                     key={listing.id}
                     listing={listing}
+                    selectedCategory={selectedCategory}
                     onPress={() => {
                       if (typeof onOpenUserProfile === 'function') {
                         onOpenUserProfile(listing);
@@ -8356,21 +8468,6 @@ const TikTokFeedScreen = ({
               </View>
             ) : null}
             <View style={styles.commentInputRow}>
-              <TouchableOpacity
-                style={[
-                  styles.cameraBtn,
-                  commentSubmitting && styles.commentSendDisabled,
-                ]}
-                activeOpacity={0.85}
-                onPress={pickImageForComment}
-                disabled={commentSubmitting}
-                hitSlop={4}>
-                <Image
-                  source={TIKTOK_OVERLAY_ICONS.commentsCamera}
-                  style={styles.cameraIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
               <TextInput
                 value={newCommentText}
                 onChangeText={setNewCommentText}

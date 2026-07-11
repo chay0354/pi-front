@@ -13,6 +13,7 @@ import {
   Platform,
   I18nManager,
   KeyboardAvoidingView,
+  PanResponder,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -32,6 +33,7 @@ import {
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
+import CircleImageCropModal from '../components/CircleImageCropModal';
 
 /**
  * SubscriptionFormScreen Component
@@ -77,11 +79,30 @@ const SubscriptionFormScreen = ({
 
   // Image state (profile pic is chosen on this screen; uploaded to bucket when you press Next/Submit)
   const [profilePicture, setProfilePicture] = useState(null);
-  const [additionalImages, setAdditionalImages] = useState([]);
   const [companyLogo, setCompanyLogo] = useState(null);
   const [video, setVideo] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [logoCropUri, setLogoCropUri] = useState(null);
+  const [logoCropVisible, setLogoCropVisible] = useState(false);
   const profileVideoPreviewRef = useRef(null);
+
+  /** Swipe תמונה ↔ סרטון on the pill track (row-reverse: image left, video right). */
+  const mediaTabPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, g) =>
+          Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.1,
+        onMoveShouldSetPanResponderCapture: (_, g) =>
+          Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.25,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderRelease: (_, g) => {
+          if (Math.abs(g.dx) < 16 || Math.abs(g.dx) <= Math.abs(g.dy)) return;
+          setActiveTab(g.dx > 0 ? 'video' : 'images');
+        },
+      }),
+    [],
+  );
 
   const types = PROFESSIONAL_FILTER_TYPES;
 
@@ -219,52 +240,47 @@ const SubscriptionFormScreen = ({
     }
   };
 
-  // Pick additional image
-  const pickAdditionalImage = async index => {
-    if (Platform.OS === 'web') {
-      openWebImagePicker(fileObj => {
-        const newImages = [...additionalImages];
-        newImages[index] = fileObj;
-        setAdditionalImages(newImages);
-      });
-      return;
-    }
+  const openLogoCropper = uri => {
+    if (!uri) return;
+    setLogoCropUri(uri);
+    setLogoCropVisible(true);
+  };
 
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+  const handleLogoCropConfirm = result => {
+    if (result?.uri) {
+      setCompanyLogo({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `logo-${Date.now()}.jpg`,
       });
-
-      if (!result.canceled && result.assets?.[0]) {
-        const newImages = [...additionalImages];
-        newImages[index] = buildPickedImageFile(result.assets[0]);
-        setAdditionalImages(newImages);
-      }
-    } catch (error) {
-      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`);
     }
+    setLogoCropVisible(false);
+    setLogoCropUri(null);
+  };
+
+  const handleLogoCropCancel = () => {
+    setLogoCropVisible(false);
+    setLogoCropUri(null);
   };
 
   // Pick company logo
   const pickCompanyLogo = async () => {
     if (Platform.OS === 'web') {
-      openWebImagePicker(fileObj => setCompanyLogo(fileObj));
+      openWebImagePicker(fileObj => openLogoCropper(fileObj.uri));
       return;
     }
 
     try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setCompanyLogo(buildPickedImageFile(result.assets[0], 'logo'));
+        openLogoCropper(result.assets[0].uri);
       }
     } catch (error) {
       Alert.alert('שגיאה', `לא ניתן לבחור לוגו: ${error.message}`);
@@ -328,14 +344,26 @@ const SubscriptionFormScreen = ({
           if (!agentName) missingFields.push('שם הסוכן');
           if (!email) missingFields.push('כתובת מייל');
           if (!phone1) missingFields.push('מספר טלפון');
-          if (!profilePicture) missingFields.push('תמונת פרופיל');
+          if (activeTab === 'images' && !profilePicture) {
+            missingFields.push('תמונת פרופיל');
+          }
+          if (activeTab === 'video' && !video) missingFields.push('סרטון');
+          if (activeTab === 'video' && !companyLogo) {
+            missingFields.push('לוגו חברה');
+          }
         } else {
           // Professional validation (keep existing)
           if (!businessName) missingFields.push('שם העסק');
           if (!businessAddress) missingFields.push('כתובת בית העסק');
           if (!email) missingFields.push('כתובת מייל');
           if (!phone1) missingFields.push('מספר טלפון');
-          if (!profilePicture) missingFields.push('תמונת פרופיל');
+          if (activeTab === 'images' && !profilePicture) {
+            missingFields.push('תמונת פרופיל');
+          }
+          if (activeTab === 'video' && !video) missingFields.push('סרטון');
+          if (activeTab === 'video' && !companyLogo) {
+            missingFields.push('לוגו חברה');
+          }
         }
       }
 
@@ -397,34 +425,39 @@ const SubscriptionFormScreen = ({
         profilePicture?.uri &&
         (profilePicture.uri.startsWith('http://') ||
           profilePicture.uri.startsWith('https://'));
-      if (profilePicIsUrl) {
-        formData.profile_picture_url = profilePicture.uri;
-      } else if (profilePicture) {
-        files.profilePicture = profilePicture;
-      }
-
-      const hasProfileImage = !!profilePicIsUrl || !!files.profilePicture;
-
-      if (additionalImages.length > 0)
-        files.additionalImages = additionalImages.filter(img => img !== null);
-
       const companyLogoIsUrl =
         companyLogo?.uri &&
         (companyLogo.uri.startsWith('http://') ||
           companyLogo.uri.startsWith('https://'));
-      if (companyLogoIsUrl) {
-        formData.company_logo_url = companyLogo.uri;
-      } else if (companyLogo) {
-        files.companyLogo = companyLogo;
+
+      if (activeTab === 'video') {
+        if (companyLogoIsUrl) {
+          formData.profile_picture_url = companyLogo.uri;
+          formData.company_logo_url = companyLogo.uri;
+        } else if (companyLogo) {
+          files.profilePicture = companyLogo;
+          files.companyLogo = companyLogo;
+        }
+        if (video) files.video = video;
+      } else {
+        if (profilePicIsUrl) {
+          formData.profile_picture_url = profilePicture.uri;
+        } else if (profilePicture) {
+          files.profilePicture = profilePicture;
+        }
+        if (companyLogoIsUrl) {
+          formData.company_logo_url = companyLogo.uri;
+        } else if (companyLogo) {
+          files.companyLogo = companyLogo;
+        }
       }
-      if (video && activeTab === 'video') files.video = video;
 
       const userEmail =
         subscriptionType === subscriptionTypes.company ? companyEmail : email;
       const localProfileImage =
-        (companyLogo && companyLogo.uri) ||
-        (profilePicture && profilePicture.uri) ||
-        null;
+        activeTab === 'video'
+          ? (companyLogo?.uri || null)
+          : (profilePicture?.uri || null);
 
       // Defer API submit until step 2 "שלח קוד אימות" — avoids email on screen open.
       if (onNext) {
@@ -454,19 +487,21 @@ const SubscriptionFormScreen = ({
     contactPersonName.trim() &&
     officePhone.trim() &&
     companyEmail.trim();
+  const brokerMediaOk =
+    activeTab === 'video' ? !!video && !!companyLogo : !!profilePicture;
   const brokerCanProceed =
     brokerageLicenseNumber.trim() &&
     brokerOfficeName.trim() &&
     agentName.trim() &&
     phone1.trim() &&
     email.trim() &&
-    !!profilePicture;
+    brokerMediaOk;
   const professionalCanProceed =
     businessName.trim() &&
     businessAddress.trim() &&
     phone1.trim() &&
     email.trim() &&
-    !!profilePicture;
+    brokerMediaOk;
 
   const renderCompanyLabel = (label, required = false) => (
     <View style={styles.companyLabelRow}>
@@ -476,6 +511,7 @@ const SubscriptionFormScreen = ({
   );
 
   return (
+    <>
     <ImageBackground
       source={require('../assets/subscription-background.png')}
       style={styles.container}
@@ -543,51 +579,57 @@ const SubscriptionFormScreen = ({
 
         {/* Tab Selector - Only for non-company */}
         {subscriptionType !== subscriptionTypes.company && (
-          <View style={styles.brokerTabContainer}>
+          <View style={styles.mediaTypeSection}>
+            <Text style={styles.mediaTypeSelectorTitle}>
+              בחר את סוג התצוגה של הפרופיל שלך
+            </Text>
+            <View
+              style={styles.brokerTabContainer}
+              {...mediaTabPanResponder.panHandlers}
+              collapsable={false}>
             <TouchableOpacity
               style={styles.brokerTabPill}
+              activeOpacity={0.9}
               onPress={() => setActiveTab('images')}>
               {activeTab === 'images' ? (
                 <LinearGradient
                   colors={['#FEE787', '#BD9947', '#9C6522']}
                   locations={[0.0456, 0.5076, 0.8831]}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.brokerTabPillActiveGradient}>
-                  <Text
-                    style={[
-                      styles.brokerTabPillText,
-                      styles.brokerTabPillTextActive,
-                    ]}>
-                    תמונות
-                  </Text>
-                </LinearGradient>
-              ) : (
-                <Text style={styles.brokerTabPillText}>תמונות</Text>
-              )}
+                  start={{x: 0.5, y: 0}}
+                  end={{x: 0.5, y: 1}}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : null}
+              <Text
+                style={[
+                  styles.brokerTabPillText,
+                  activeTab === 'images' && styles.brokerTabPillTextActive,
+                ]}>
+                תמונה
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.brokerTabPill}
+              activeOpacity={0.9}
               onPress={() => setActiveTab('video')}>
               {activeTab === 'video' ? (
                 <LinearGradient
                   colors={['#FEE787', '#BD9947', '#9C6522']}
                   locations={[0.0456, 0.5076, 0.8831]}
-                  start={{x: 0, y: 0}}
-                  end={{x: 1, y: 1}}
-                  style={styles.brokerTabPillActiveGradient}>
-                  <Text
-                    style={[
-                      styles.brokerTabPillText,
-                      styles.brokerTabPillTextActive,
-                    ]}>
-                    סרטון
-                  </Text>
-                </LinearGradient>
-              ) : (
-                <Text style={styles.brokerTabPillText}>סרטון</Text>
-              )}
+                  start={{x: 0.5, y: 0}}
+                  end={{x: 0.5, y: 1}}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : null}
+              <Text
+                style={[
+                  styles.brokerTabPillText,
+                  activeTab === 'video' && styles.brokerTabPillTextActive,
+                ]}>
+                סרטון
+              </Text>
             </TouchableOpacity>
+          </View>
           </View>
         )}
 
@@ -597,9 +639,7 @@ const SubscriptionFormScreen = ({
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
                 <>
-                  <Text style={styles.brokerCardTitle}>
-                    תמונת פרופיל (חובה)
-                  </Text>
+                  <Text style={styles.brokerCardTitle}>תמונת פרופיל</Text>
                   <View style={styles.profileImageWrap}>
                     {profilePicture ? (
                       <>
@@ -648,66 +688,10 @@ const SubscriptionFormScreen = ({
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.brokerCardTitle}>תמונות נוספות</Text>
-                  <View style={styles.additionalImagesRows}>
-                    {[
-                      [0, 1],
-                      [2, 3],
-                    ].map((row, rowIndex) => (
-                      <View key={rowIndex} style={styles.additionalImageRow}>
-                        {row.map(index => (
-                          <View key={index} style={styles.additionalImageWrap}>
-                            {additionalImages[index] ? (
-                              <>
-                                <TouchableOpacity
-                                  activeOpacity={0.92}
-                                  style={styles.additionalImageFrame}
-                                  onPress={() => pickAdditionalImage(index)}>
-                                  <Image
-                                    source={{uri: additionalImages[index].uri}}
-                                    style={styles.uploadedImage}
-                                    resizeMode="cover"
-                                  />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  onPress={() => {
-                                    const next = [...additionalImages];
-                                    next[index] = null;
-                                    setAdditionalImages(next);
-                                  }}
-                                  style={styles.mediaRemoveButtonSmall}
-                                  accessibilityLabel="הסר תמונה"
-                                  hitSlop={{
-                                    top: 8,
-                                    bottom: 8,
-                                    left: 8,
-                                    right: 8,
-                                  }}>
-                                  <MaterialCommunityIcons
-                                    name="close"
-                                    size={14}
-                                    color={Colors.white100}
-                                  />
-                                </TouchableOpacity>
-                              </>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.additionalImagePlaceholder}
-                                onPress={() => pickAdditionalImage(index)}>
-                                <Text style={styles.additionalImagePlusIcon}>
-                                  +
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    ))}
-                  </View>
                 </>
               ) : (
                 <>
-                  <Text style={styles.brokerCardTitle}>סרטון (חובה)</Text>
+                  <Text style={styles.brokerCardTitle}>סרטון</Text>
                   {video ? (
                     <View style={styles.videoPreviewContainer}>
                       <TouchableOpacity
@@ -932,10 +916,10 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר עוסק / ח.פ')}
+                {renderCompanyLabel('מספר- ח.פ/עוסק/פטור')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר עוסק / ח.פ"
+                  placeholder="הזן מספר- ח.פ/עוסק/פטור"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={companyId}
                   onChangeText={setCompanyId}
@@ -1101,10 +1085,10 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר עוסק פטור')}
+                {renderCompanyLabel('מספר- ח.פ/עוסק/פטור')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר עוסק פטור (אופציונאלי)"
+                  placeholder="הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
@@ -1185,10 +1169,10 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר עוסק / ח.פ')}
+                {renderCompanyLabel('מספר- ח.פ/עוסק/פטור')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר עוסק פטור (אופציונאלי)"
+                  placeholder="הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={dealerNumber}
                   onChangeText={setDealerNumber}
@@ -1295,6 +1279,14 @@ const SubscriptionFormScreen = ({
       </ScrollView>
       </KeyboardAvoidingView>
     </ImageBackground>
+    <CircleImageCropModal
+      visible={logoCropVisible}
+      imageUri={logoCropUri}
+      onCancel={handleLogoCropCancel}
+      onConfirm={handleLogoCropConfirm}
+      title="חתוך את לוגו החברה"
+    />
+    </>
   );
 };
 
@@ -1886,16 +1878,32 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     writingDirection: 'rtl',
   },
+  mediaTypeSection: {
+    width: '100%',
+    paddingHorizontal: 24,
+    marginTop: 4,
+    marginBottom: 4,
+    gap: 10,
+  },
+  mediaTypeSelectorTitle: {
+    width: '100%',
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    color: Colors.textSecondary,
+    textAlign: 'left',
+  },
   brokerTabContainer: {
     width: '100%',
     maxWidth: 366,
     alignSelf: 'center',
     flexDirection: 'row-reverse',
-    backgroundColor: '#2b2a39',
+    alignItems: 'center',
+    backgroundColor: '#1e1d27',
     borderRadius: 1000,
     padding: 10,
-    marginTop: 4,
-    marginHorizontal: 24,
+    marginTop: 0,
+    marginHorizontal: 0,
+    marginBottom: 0,
   },
   brokerTabPill: {
     flex: 1,
@@ -1903,19 +1911,14 @@ const styles = StyleSheet.create({
     borderRadius: 1000,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  brokerTabPillActiveGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 1000,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
   },
   brokerTabPillText: {
     fontSize: 20,
     fontFamily: 'Rubik-Medium',
     color: 'rgba(255,255,255,0.4)',
     letterSpacing: 0.2,
+    textAlign: 'center',
   },
   brokerTabPillTextActive: {
     color: '#1e1d27',

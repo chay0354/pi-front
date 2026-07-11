@@ -2833,26 +2833,11 @@ export const createStory = async payload => {
 };
 
 /**
- * Profile intro videos saved on subscription.video_url appear in the home story ring.
- * Also inserts a stories row when the table is available (best-effort, non-blocking).
+ * Profile intro videos are shown from subscription.video_url in the home story ring.
+ * Do not mirror them into the stories table — that caused duplicate slides.
  */
-export async function syncSubscriptionProfileStory(subscription) {
-  const videoUrl =
-    subscription?.video_url != null
-      ? String(subscription.video_url).trim()
-      : '';
-  const subId =
-    subscription?.id != null ? String(subscription.id).trim() : '';
-  if (!videoUrl || !subId) return null;
-  try {
-    return await createStory({
-      subscription_id: subId,
-      media_url: videoUrl,
-    });
-  } catch (err) {
-    console.warn('[syncSubscriptionProfileStory]', err?.message || err);
-    return null;
-  }
+export async function syncSubscriptionProfileStory(_subscription) {
+  return null;
 }
 
 export const createListing = async listingData => {

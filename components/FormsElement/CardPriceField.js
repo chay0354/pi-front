@@ -18,23 +18,40 @@ export const CardPriceField = ({
   const safeSetPrice = typeof setPrice === 'function' ? setPrice : () => {};
   const step = counterStep;
   const inputRef = useRef(null);
+  const isFocusedRef = useRef(false);
   const [draftPrice, setDraftPrice] = useState(() =>
     formatPriceInputDisplay(price),
   );
   const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
 
   useEffect(() => {
-    setDraftPrice(formatPriceInputDisplay(price));
+    if (isFocusedRef.current) return;
+    const display = formatPriceInputDisplay(price);
+    setDraftPrice(prev => (prev === display ? prev : display));
   }, [price]);
 
   const handleDraftChange = text => {
+    isFocusedRef.current = true;
     setDraftPrice(formatPriceInputDraft(text));
   };
 
   const commitDraftPrice = () => {
-    const nextPrice = parsePriceInputNumber(draftPrice);
-    safeSetPrice(nextPrice);
-    setDraftPrice(formatPriceInputDisplay(nextPrice));
+    isFocusedRef.current = false;
+    setDraftPrice(prev => {
+      const nextPrice = parsePriceInputNumber(prev);
+      safeSetPrice(nextPrice);
+      return formatPriceInputDisplay(nextPrice);
+    });
+  };
+
+  const stepPriceBy = delta => {
+    // Step from the visible draft so +/- works while typing / keyboard open.
+    setDraftPrice(prev => {
+      const base = parsePriceInputNumber(prev);
+      const nextPrice = Math.max(0, Number(base || 0) + delta);
+      safeSetPrice(nextPrice);
+      return formatPriceInputDisplay(nextPrice);
+    });
   };
 
   return (
@@ -44,8 +61,8 @@ export const CardPriceField = ({
       onChangeText={handleDraftChange}
       onBlur={commitDraftPrice}
       onSubmitEditing={commitDraftPrice}
-      onIncrement={() => safeSetPrice((price || 0) + step)}
-      onDecrement={() => safeSetPrice(Math.max(0, (price || 0) - step))}
+      onIncrement={() => stepPriceBy(step)}
+      onDecrement={() => stepPriceBy(-step)}
       suffix="₪"
       suffixAfter
       suffixStyle={styles.currencySuffix}

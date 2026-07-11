@@ -13,8 +13,10 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
+import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory} from '../utils/api';
+import {resolveAdVideoUri} from '../utils/videoPlayback';
 import {
   PROFESSIONAL_FILTER_TYPES,
   getProfessionalSpecializationsForTypes,
@@ -71,6 +73,17 @@ const collectTags = professional =>
     .filter(Boolean)
     .slice(0, 3);
 
+/** Mux HLS (or raw MP4 fallback) for a professional's intro video, if any. */
+const resolveProfessionalVideoUri = professional => {
+  if (!professional) return null;
+  return resolveAdVideoUri({
+    video_url: professional.video_url,
+    video_hls_url: professional.video_hls_url,
+    video_playback_url: professional.video_playback_url,
+    video_status: professional.video_status,
+  });
+};
+
 const formatRating = value => {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return '5';
@@ -112,9 +125,17 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
   const tags = collectTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
+  const videoUri = resolveProfessionalVideoUri(professional);
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
   const description = String(professional?.bio || 'ללא תיאור').trim();
+  const [muted, setMuted] = useState(true);
+  const webVideoRef = useCallback(
+    node => {
+      if (node) node.muted = muted;
+    },
+    [muted],
+  );
 
   return (
     <TouchableOpacity
@@ -122,7 +143,31 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
       onPress={onPress}
       activeOpacity={0.9}>
       <View style={styles.cardMedia}>
-        {mediaUrl ? (
+        {videoUri ? (
+          Platform.OS === 'web' ? (
+            <video
+              ref={webVideoRef}
+              src={videoUri}
+              style={styles.cardMediaWebVideo}
+              autoPlay
+              muted={muted}
+              loop
+              playsInline
+              poster={mediaUrl || undefined}
+            />
+          ) : (
+            <Video
+              key={videoUri}
+              source={{uri: videoUri}}
+              style={styles.cardMediaImage}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay
+              isMuted={muted}
+              isLooping
+              useNativeControls={false}
+            />
+          )
+        ) : mediaUrl ? (
           <Image
             source={{uri: mediaUrl}}
             style={styles.cardMediaImage}
@@ -136,7 +181,26 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
           start={{x: 0.5, y: 0}}
           end={{x: 0.5, y: 1}}
           style={styles.cardMediaOverlay}
+          pointerEvents="none"
         />
+        {videoUri ? (
+          <TouchableOpacity
+            style={styles.cardMuteButton}
+            onPress={e => {
+              e?.stopPropagation?.();
+              setMuted(prev => !prev);
+            }}
+            activeOpacity={0.85}
+            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+            accessibilityRole="button"
+            accessibilityLabel={muted ? 'הפעל קול' : 'השתק'}>
+            <MaterialCommunityIcons
+              name={muted ? 'volume-off' : 'volume-high'}
+              size={24}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.cardContent}>
@@ -1043,6 +1107,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  cardMediaWebVideo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+    backgroundColor: '#1a1a22',
+  },
   cardMediaFallback: {
     backgroundColor: '#5A5670',
   },
@@ -1055,6 +1126,17 @@ const styles = StyleSheet.create({
     top: 208,
     width: 24,
     height: 24,
+  },
+  cardMuteButton: {
+    position: 'absolute',
+    left: 18,
+    bottom: 20,
+    width: 24,
+    height: 24,
+    zIndex: 12,
+    elevation: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timelineTrack: {
     position: 'absolute',
