@@ -52,6 +52,7 @@ import {
   respondToExclusiveOffer,
 } from '../utils/api';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
+import {shouldShowProfileGoldRing} from '../utils/constant';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
@@ -748,12 +749,22 @@ const ChatScreen = ({
         name: seedName,
         profileImageUrl: seedPic,
         phone: null,
-        subscriptionType: null,
+        subscriptionType:
+          conversation?.subscriptionType ||
+          conversation?.subscription_type ||
+          null,
       });
     } else {
       setResolvedDisplay(null);
     }
-  }, [isUser, otherUserRef, conversation?.name, conversation?.profileImageUrl]);
+  }, [
+    isUser,
+    otherUserRef,
+    conversation?.name,
+    conversation?.profileImageUrl,
+    conversation?.subscriptionType,
+    conversation?.subscription_type,
+  ]);
 
   useEffect(() => {
     if (!isUser || !otherUserRef) return;
@@ -2800,6 +2811,10 @@ const ChatScreen = ({
                 name={displayName}
                 size={40}
                 subscriptionType={resolvedDisplay || conversation}
+                forceGoldRing={
+                  isWelcomeConversation(conversation) ||
+                  shouldShowProfileGoldRing(resolvedDisplay || conversation)
+                }
                 placeholderImage={DEFAULT_PI_PROFILE_AVATAR}
               />
               <View style={styles.headerTitleWrap}>

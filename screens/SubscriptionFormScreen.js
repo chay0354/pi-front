@@ -440,15 +440,11 @@ const SubscriptionFormScreen = ({
         }
         if (video) files.video = video;
       } else {
+        // Photo profile: only תמונת פרופיל — no separate company logo.
         if (profilePicIsUrl) {
           formData.profile_picture_url = profilePicture.uri;
         } else if (profilePicture) {
           files.profilePicture = profilePicture;
-        }
-        if (companyLogoIsUrl) {
-          formData.company_logo_url = companyLogo.uri;
-        } else if (companyLogo) {
-          files.companyLogo = companyLogo;
         }
       }
 
@@ -752,32 +748,36 @@ const SubscriptionFormScreen = ({
               )}
             </View>
 
-            {/* Company Logo Section - No Container */}
-            <View style={styles.companyLogoWrap}>
-              <TouchableOpacity
-                onPress={pickCompanyLogo}
-                style={styles.companyLogoTouch}>
-                <View style={styles.companyLogoCircle}>
-                  <View style={styles.companyLogoInnerFrame}>
-                    {companyLogo ? (
-                      <Image
-                        source={{uri: companyLogo.uri}}
-                        style={styles.companyLogoImageFilled}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Text style={styles.companyLogoPlaceholderText}>
-                        לוגו{'\n'}חברה
-                      </Text>
-                    )}
-                  </View>
+            {/* Company logo only for video profile — photo flow uses תמונת פרופיל instead */}
+            {activeTab === 'video' ? (
+              <>
+                <View style={styles.companyLogoWrap}>
+                  <TouchableOpacity
+                    onPress={pickCompanyLogo}
+                    style={styles.companyLogoTouch}>
+                    <View style={styles.companyLogoCircle}>
+                      <View style={styles.companyLogoInnerFrame}>
+                        {companyLogo ? (
+                          <Image
+                            source={{uri: companyLogo.uri}}
+                            style={styles.companyLogoImageFilled}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.companyLogoPlaceholderText}>
+                            לוגו{'\n'}חברה
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.companyLogoAddBadge}>
+                      <Text style={styles.companyLogoAddBadgeText}>+</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.companyLogoAddBadge}>
-                  <Text style={styles.companyLogoAddBadgeText}>+</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.companyDivider} />
+                <View style={styles.companyDivider} />
+              </>
+            ) : null}
 
             {/* Type Section - Only for professional */}
             {subscriptionType === subscriptionTypes.professional && (

@@ -84,6 +84,7 @@ import {PresenceProvider} from './hooks/PresenceContext';
 import {
   subscriptionTypes,
   DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+  canAccessListingAnalysis,
 } from './utils/constant';
 import {
   getChatUnreadCount,
@@ -670,11 +671,15 @@ function App() {
           subscription_id: subscriptionId,
         });
         const list = Array.isArray(res?.listings) ? res.listings : [];
-        const top = pickTopViewedListingForProfile(list);
+        const top = pickTopViewedListingForProfile(list, {preferAds: true});
         if (top) {
           const merged = mergeHubRowIntoListingPayload(row, top);
           const enriched = enrichListingForUserProfile(merged);
-          setProfileUser({...enriched, _fromTikTokPost: true});
+          setProfileUser({
+            ...enriched,
+            _fromTikTokPost: true,
+            _forceListingAdProfile: !isPostListingRecord(enriched),
+          });
         } else {
           setProfileUser({
             subscription_id: subscriptionId,
@@ -968,7 +973,11 @@ function App() {
                   onOpenFeatureListing={listing => {
                     openListingAdProfile(listing, {
                       returnScreen: screenName.home,
-                      profileExtras: {_fromTikTokPost: true},
+                      profileExtras: {
+                        _fromTikTokPost: true,
+                        _fromHomeFeatureProject: true,
+                        _forceListingAdProfile: true,
+                      },
                     });
                   }}
                   onOpenStoryProfile={openUserProfileFromStoryRing}
@@ -1019,7 +1028,11 @@ function App() {
                     onOpenFeatureListing={listing => {
                       openListingAdProfile(listing, {
                         returnScreen: screenName.home,
-                        profileExtras: {_fromTikTokPost: true},
+                        profileExtras: {
+                          _fromTikTokPost: true,
+                          _fromHomeFeatureProject: true,
+                          _forceListingAdProfile: true,
+                        },
                       });
                     }}
                     onOpenStoryProfile={openUserProfileFromStoryRing}
@@ -1257,6 +1270,7 @@ function App() {
             )}
             {currentScreen === screenName.professionalsDirectory && (
               <ProfessionalsDirectoryScreen
+                currentUser={currentUser}
                 onClose={() => setCurrentScreen(screenName.home)}
                 onOpenProfessional={professional => {
                   setProfileReturnScreen(screenName.professionalsDirectory);
@@ -1276,6 +1290,31 @@ function App() {
                   setCurrentScreen(screenName.userProfile);
                 }}
                 onMessageProfessional={professional => {
+                  const mySubId = toSubscriptionId(
+                    currentUser?.id ||
+                      currentUser?.subscription_id ||
+                      currentUser?.owner_id,
+                  );
+                  const theirSubId = toSubscriptionId(
+                    professional?.id ||
+                      professional?.subscription_id ||
+                      professional?.owner_id,
+                  );
+                  const myEmail = String(currentUser?.email || '')
+                    .trim()
+                    .toLowerCase();
+                  const theirEmail = String(
+                    professional?.email || professional?.creator_email || '',
+                  )
+                    .trim()
+                    .toLowerCase();
+                  const isOwn =
+                    !!mySubId &&
+                    !!theirSubId &&
+                    mySubId === theirSubId &&
+                    (!myEmail || !theirEmail || myEmail === theirEmail);
+                  if (isOwn) return;
+
                   const u = {
                     ...professional,
                     creator_name:
@@ -1320,6 +1359,14 @@ function App() {
                     preview: '',
                     time: '',
                     profileImageUrl: getUserProfileImageUrl(u),
+                    subscription_type:
+                      u?.subscription_type ||
+                      u?.subscriptionType ||
+                      subscriptionTypes.professional,
+                    subscriptionType:
+                      u?.subscription_type ||
+                      u?.subscriptionType ||
+                      subscriptionTypes.professional,
                     ...(listingId
                       ? {
                           listingId,
@@ -1375,6 +1422,14 @@ function App() {
                     preview: '',
                     time: '',
                     profileImageUrl: getUserProfileImageUrl(u),
+                    subscription_type:
+                      u?.subscription_type ||
+                      u?.subscriptionType ||
+                      subscriptionTypes.professional,
+                    subscriptionType:
+                      u?.subscription_type ||
+                      u?.subscriptionType ||
+                      subscriptionTypes.professional,
                     ...(listingId
                       ? {
                           listingId,
@@ -1420,6 +1475,7 @@ function App() {
                       returnScreen: screenName.companyProjects,
                       profileExtras: {
                         _fromCompanyProjects: true,
+                        _forceListingAdProfile: true,
                         business_name:
                           listing.business_name || ctx?.name || null,
                         creator_name: listing.creator_name || ctx?.name || null,
@@ -1509,6 +1565,10 @@ function App() {
                     preview: '',
                     time: '',
                     profileImageUrl: getUserProfileImageUrl(u),
+                    subscription_type:
+                      u?.subscription_type || u?.subscriptionType || null,
+                    subscriptionType:
+                      u?.subscription_type || u?.subscriptionType || null,
                     ...(listingId
                       ? {
                           listingId,
@@ -2091,10 +2151,18 @@ function App() {
                     ? String(currentUser.id).trim()
                     : '';
                   setProfileReturnScreen(screenName.settings);
+                  setProfileListingFocusKey('');
+                  setProfileOverviewSnapshot(null);
                   setProfileUser({
                     ...currentUser,
                     subscription_id: mySubId || currentUser.subscription_id,
                     owner_id: mySubId || currentUser.owner_id,
+                    // Own profile: posts-grid layout for every account type (not an ad).
+                    _forceListingAdProfile: false,
+                    _fromHomeFeatureProject: false,
+                    _fromCompanyProjects: false,
+                    _fromTikTokPost: false,
+                    _fromProfessionalsDirectory: false,
                   });
                   setCurrentScreen(screenName.userProfile);
                 }}
@@ -2253,10 +2321,7 @@ function App() {
                     : null
                 }
                 onOpenListingAnalysis={() => {
-                  const t = String(
-                    currentUser?.subscription_type || '',
-                  ).trim().toLowerCase();
-                  if (t === 'company' || t === 'broker') {
+                  if (canAccessListingAnalysis(currentUser?.subscription_type)) {
                     setCurrentScreen(screenName.listingAnalysis);
                   }
                 }}

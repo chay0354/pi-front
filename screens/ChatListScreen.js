@@ -256,11 +256,21 @@ const CHAT_LIST_AVATAR_PLACEHOLDER = DEFAULT_PI_PROFILE_AVATAR;
 /**
  * RN Web: `Image` often renders blank inside circular overflow + % sizes. Use DOM `img` with fixed px.
  */
-function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
+function ChatListRowAvatar({
+  uri,
+  debugKey,
+  userRef,
+  subscriptionType,
+  forceGoldRing = false,
+}) {
   const trimmed = uri != null && String(uri).trim() ? String(uri).trim() : null;
+  const initialSubType =
+    subscriptionType != null && String(subscriptionType).trim()
+      ? String(subscriptionType).trim().toLowerCase()
+      : null;
   const [resolvedUri, setResolvedUri] = useState(trimmed);
   const [resolvedSubscriptionType, setResolvedSubscriptionType] = useState(
-    subscriptionType || null,
+    initialSubType,
   );
   const [lookupTried, setLookupTried] = useState(false);
   const [useProxyStream, setUseProxyStream] = useState(false);
@@ -271,10 +281,41 @@ function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
       : resolvedUri;
   useEffect(() => {
     setResolvedUri(trimmed);
-    setResolvedSubscriptionType(subscriptionType || null);
+    setResolvedSubscriptionType(initialSubType);
     setLookupTried(false);
     setUseProxyStream(false);
-  }, [trimmed, subscriptionType]);
+  }, [trimmed, initialSubType]);
+
+  // Resolve ring color even when the avatar image loads fine (type was only
+  // fetched before on image error, so every row defaulted to the teal ring).
+  useEffect(() => {
+    if (forceGoldRing || initialSubType || !userRef || lookupTried) return;
+    let cancelled = false;
+    setLookupTried(true);
+    (async () => {
+      try {
+        const res = await getChatParticipantDisplay(userRef);
+        if (cancelled) return;
+        const subType =
+          res?.subscription_type != null && String(res.subscription_type).trim()
+            ? String(res.subscription_type).trim().toLowerCase()
+            : null;
+        if (subType) setResolvedSubscriptionType(subType);
+        const fallback =
+          normalizeChatListAvatarUri(
+            res?.profileImageUrl || res?.profile_picture_url || null,
+          ) || null;
+        if (fallback && !trimmed) {
+          setResolvedUri(fallback);
+        }
+      } catch (_) {
+        /* keep teal until type is known */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [forceGoldRing, initialSubType, userRef, lookupTried, trimmed]);
 
   useEffect(() => {
     logProfilePic(`ChatListRowAvatar.pull.${String(debugKey || 'row')}`, {
@@ -285,6 +326,7 @@ function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
       userRef: userRef || null,
       lookupTried,
       useProxyStream,
+      subscriptionType: resolvedSubscriptionType,
     });
   }, [
     debugKey,
@@ -294,6 +336,7 @@ function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
     userRef,
     lookupTried,
     useProxyStream,
+    resolvedSubscriptionType,
   ]);
 
   const handleImageError = useCallback(async () => {
@@ -323,7 +366,7 @@ function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
         ) || null;
       const subType =
         res?.subscription_type != null && String(res.subscription_type).trim()
-          ? String(res.subscription_type).trim()
+          ? String(res.subscription_type).trim().toLowerCase()
           : null;
       logProfilePic(`ChatListRowAvatar.lookup.${String(debugKey || 'row')}`, {
         row: debugKey || null,
@@ -363,6 +406,7 @@ function ChatListRowAvatar({uri, debugKey, userRef, subscriptionType}) {
       uri={sourceUri}
       size={CHAT_LIST_AVATAR_PX}
       subscriptionType={resolvedSubscriptionType}
+      forceGoldRing={forceGoldRing === true}
       placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
       onImageError={handleImageError}
     />
@@ -961,8 +1005,14 @@ const ChatListScreen = ({
       try {
         const res = await getChatConversations(myEmail);
         const list = res.conversations || [];
-        const asConv = list.map(c =>
-          normalizeConversationForOpen({
+        const asConv = list.map(c => {
+          const peerSubTypeRaw =
+            c.subscriptionType ?? c.subscription_type ?? null;
+          const peerSubscriptionType =
+            peerSubTypeRaw != null && String(peerSubTypeRaw).trim()
+              ? String(peerSubTypeRaw).trim().toLowerCase()
+              : null;
+          return normalizeConversationForOpen({
             id: c.otherUserEmail || c.id,
             conversationId: c.id,
             otherUserEmail: c.otherUserEmail || null,
@@ -977,6 +1027,8 @@ const ChatListScreen = ({
                 ? String(c.group_image_url).trim()
                 : null) ||
               null,
+            subscriptionType: peerSubscriptionType,
+            subscription_type: peerSubscriptionType,
             preview: c.preview || '',
             time: c.time || '',
             lastMessageAt: c.lastMessageAt || null,
@@ -989,8 +1041,8 @@ const ChatListScreen = ({
             exclusiveOfferStatus: c.exclusiveOfferStatus || null,
             unreadCount:
               typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
-          }),
-        );
+          });
+        });
         const cu = currentUserRef.current;
         logProfilePic('ChatListScreen.fetchConversations', {
           myEmail,
@@ -1312,7 +1364,17 @@ const ChatListScreen = ({
                       <ChatListRowAvatar
                         uri={rowAvatarUrl}
                         debugKey={rowDebugKey}
-                        userRef={rowUserRef}
+                        userRef={
+                          conv.isGroup === true || conv.id === '1'
+                            ? null
+                            : rowUserRef
+                        }
+                        subscriptionType={
+                          conv.subscriptionType ||
+                          conv.subscription_type ||
+                          null
+                        }
+                        forceGoldRing={conv.id === '1'}
                       />
                       <Text style={styles.senderName} numberOfLines={1}>
                         {conv.name != null ? String(conv.name) : 'משתמש'}

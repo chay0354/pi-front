@@ -287,11 +287,11 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
                         minimumFontScale={0.8}>
                         {publishedCountLabel}
                       </Text>
-                      {!isRegularUser ? (
-                        <Text style={styles.rowSubtextNote}>
-                          לא כולל בית פתוח ופוסטים
-                        </Text>
-                      ) : null}
+                      <Text style={styles.rowSubtextNote}>
+                        {isRegularUser
+                          ? 'ללא פוסטים'
+                          : 'לא כולל בית פתוח ופוסטים'}
+                      </Text>
                     </View>
                     <Text style={styles.rowCount}>{count}</Text>
                   </View>

@@ -721,11 +721,17 @@ const AdsForm = ({
       field => field?.key === 'pricepernight',
     );
     if (!hasPricePerNight) return;
+    // New BnB upload: use 1000/night instead of the sale default (1_000_000).
+    if (initialListing) return;
     const numericPrice = Number(price);
-    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+    if (
+      !Number.isFinite(numericPrice) ||
+      numericPrice <= 0 ||
+      numericPrice === 1_000_000
+    ) {
       setPrice(1000);
     }
-  }, [category, formList, price]);
+  }, [category, formList, initialListing, price]);
 
   useEffect(() => {
     if (initialListing) {

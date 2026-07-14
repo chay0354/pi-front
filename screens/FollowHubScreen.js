@@ -495,11 +495,8 @@ const FollowHubScreen = ({
     return `עוקב ${counts.following}`;
   };
 
-  /** On someone else's hub, don't list people where your follow is still pending (ממתין לאישור). */
-  const displayRows = useMemo(() => {
-    if (isOwnProfile) return rows;
-    return (rows || []).filter(r => !r?.has_pending_request_by_viewer);
-  }, [rows, isOwnProfile]);
+  /** Always show the full hub list (followers / following / likes) — including people you already follow. */
+  const displayRows = rows || [];
 
   return (
     <View style={styles.root}>

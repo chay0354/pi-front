@@ -15,7 +15,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {getProfessionalsDirectory} from '../utils/api';
+import {getProfessionalsDirectory, toSubscriptionId} from '../utils/api';
 import {resolveAdVideoUri} from '../utils/videoPlayback';
 import {
   PROFESSIONAL_FILTER_TYPES,
@@ -121,7 +121,40 @@ const ProfessionalPiRatingBadge = ({rating, variant = 'list'}) => {
   );
 };
 
-const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
+const isOwnProfessionalAccount = (professional, currentUser) => {
+  if (!professional || !currentUser) return false;
+  const mySubId = toSubscriptionId(
+    currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id,
+  );
+  const theirSubId = toSubscriptionId(
+    professional?.id ||
+      professional?.subscription_id ||
+      professional?.owner_id,
+  );
+  const myEmail = String(currentUser?.email || '')
+    .trim()
+    .toLowerCase();
+  const theirEmail = String(
+    professional?.email || professional?.creator_email || '',
+  )
+    .trim()
+    .toLowerCase();
+  return (
+    !!mySubId &&
+    !!theirSubId &&
+    mySubId === theirSubId &&
+    (!myEmail || !theirEmail || myEmail === theirEmail)
+  );
+};
+
+const ProfessionalCard = ({
+  professional,
+  onPress,
+  onPressMessage,
+  muted = true,
+  onToggleMute,
+  isOwnAccount = false,
+}) => {
   const tags = collectTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
@@ -129,7 +162,6 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
   const title = String(professional?.display_name || 'בעל מקצוע').trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
   const description = String(professional?.bio || 'ללא תיאור').trim();
-  const [muted, setMuted] = useState(true);
   const webVideoRef = useCallback(
     node => {
       if (node) node.muted = muted;
@@ -188,7 +220,7 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
             style={styles.cardMuteButton}
             onPress={e => {
               e?.stopPropagation?.();
-              setMuted(prev => !prev);
+              onToggleMute?.();
             }}
             activeOpacity={0.85}
             hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
@@ -254,9 +286,11 @@ const ProfessionalCard = ({professional, onPress, onPressMessage}) => {
         </Text>
 
         <TouchableOpacity
-          activeOpacity={0.85}
+          activeOpacity={isOwnAccount ? 1 : 0.85}
+          disabled={isOwnAccount}
           onPress={e => {
             e?.stopPropagation?.();
+            if (isOwnAccount) return;
             onPressMessage?.(professional);
           }}>
           <Image
@@ -340,6 +374,7 @@ const ProfessionalsDirectoryScreen = ({
   onClose,
   onOpenProfessional,
   onMessageProfessional,
+  currentUser = null,
 }) => {
   const insets = useSafeAreaInsets();
   const settingsScrollBottomPad =
@@ -350,6 +385,8 @@ const ProfessionalsDirectoryScreen = ({
   const [professionals, setProfessionals] = useState([]);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('cards');
+  /** Only one professional card video may be unmuted at a time. */
+  const [unmutedVideoId, setUnmutedVideoId] = useState(null);
   const [showSearchSettings, setShowSearchSettings] = useState(false);
   const [draftLocation, setDraftLocation] = useState('');
   const [appliedLocation, setAppliedLocation] = useState('');
@@ -596,9 +633,10 @@ const ProfessionalsDirectoryScreen = ({
           <View style={styles.viewToggle}>
             <View style={styles.viewToggleRightInactive}>
               <TouchableOpacity
-                onPress={() =>
-                  setViewMode(prev => (prev === 'cards' ? 'list' : 'cards'))
-                }
+                onPress={() => {
+                  setUnmutedVideoId(null);
+                  setViewMode(prev => (prev === 'cards' ? 'list' : 'cards'));
+                }}
                 activeOpacity={0.9}>
                 <Image
                   source={
@@ -635,13 +673,24 @@ const ProfessionalsDirectoryScreen = ({
           {filtered.length === 0 ? (
             <Text style={styles.emptyText}>לא נמצאו בעלי מקצוע</Text>
           ) : (
-            filtered.map(item =>
-              viewMode === 'cards' ? (
+            filtered.map(item => {
+              const isOwnAccount = isOwnProfessionalAccount(item, currentUser);
+              return viewMode === 'cards' ? (
                 <ProfessionalCard
                   key={item.id}
                   professional={item}
+                  isOwnAccount={isOwnAccount}
+                  muted={String(unmutedVideoId) !== String(item.id)}
+                  onToggleMute={() =>
+                    setUnmutedVideoId(prev =>
+                      String(prev) === String(item.id) ? null : item.id,
+                    )
+                  }
                   onPress={() => onOpenProfessional?.(item)}
-                  onPressMessage={() => onMessageProfessional?.(item)}
+                  onPressMessage={() => {
+                    if (isOwnAccount) return;
+                    onMessageProfessional?.(item);
+                  }}
                 />
               ) : (
                 <ProfessionalListCard
@@ -649,8 +698,8 @@ const ProfessionalsDirectoryScreen = ({
                   professional={item}
                   onPress={() => onOpenProfessional?.(item)}
                 />
-              ),
-            )
+              );
+            })
           )}
         </ScrollView>
       )}

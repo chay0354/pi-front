@@ -57,10 +57,16 @@ function getListingViewScore(item) {
 /**
  * Picks a single listing/post to open a profile the same way as from TikTok
  * (hero = highest engagement — views, or post likes for feed posts).
+ * Prefer real ads/projects when `preferAds` is true (home / company flows).
  */
-export function pickTopViewedListingForProfile(listings) {
+export function pickTopViewedListingForProfile(listings, options = {}) {
   if (!Array.isArray(listings) || listings.length === 0) return null;
-  const sorted = [...listings].sort(
+  const preferAds = options?.preferAds === true;
+  const pool = preferAds
+    ? listings.filter(l => !isPostListingRecord(l))
+    : listings;
+  const source = pool.length > 0 ? pool : listings;
+  const sorted = [...source].sort(
     (a, b) => getListingViewScore(b) - getListingViewScore(a),
   );
   return sorted[0] || null;

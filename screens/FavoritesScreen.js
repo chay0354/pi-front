@@ -459,39 +459,42 @@ const FavoritesScreen = ({
           />
         </Pressable>
         <View style={styles.topBarCenter}>
-          {TOP_BAR_FILTERS.map(f => {
-            // Same strip as TikTok: heart reflects “favorites / liked context”; return uses `f.id` in storage.
-            const isActive = f.id === 'liked';
-            return (
-              <TouchableOpacity
-                key={f.id}
-                style={styles.topBarFilterBtn}
-                hitSlop={8}
-                onPress={() => {
-                  // Persist mode; TikTok remount reads `tikTokFeedSelectedTopBarFilter` from storage.
-                  AsyncStorage.setItem(
-                    TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                    f.id,
-                  ).catch(() => {});
-                  if (
-                    typeof onNavigateToTikTokAfterTopBarFilter === 'function'
-                  ) {
-                    onNavigateToTikTokAfterTopBarFilter();
-                  } else {
-                    onClose?.();
-                  }
-                }}>
-                <Image
-                  source={f.icon}
-                  style={[
-                    styles.topBarFilterIcon,
-                    isActive && styles.filterIconSelectedTint,
-                  ]}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            );
-          })}
+            {TOP_BAR_FILTERS.map(f => {
+              // Same strip as TikTok: heart reflects “favorites / liked context”.
+              const isActive = f.id === 'liked';
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  style={styles.topBarFilterBtn}
+                  hitSlop={8}
+                  onPress={() => {
+                    // Already on liked (this screen): second heart tap → TikTok default (pics).
+                    // Other icons → open TikTok in that top-bar mode.
+                    const nextFilter =
+                      f.id === 'liked' ? 'pics' : f.id;
+                    AsyncStorage.setItem(
+                      TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                      nextFilter,
+                    ).catch(() => {});
+                    if (
+                      typeof onNavigateToTikTokAfterTopBarFilter === 'function'
+                    ) {
+                      onNavigateToTikTokAfterTopBarFilter();
+                    } else {
+                      onClose?.();
+                    }
+                  }}>
+                  <Image
+                    source={f.icon}
+                    style={[
+                      styles.topBarFilterIcon,
+                      isActive && styles.filterIconSelectedTint,
+                    ]}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              );
+            })}
         </View>
         <TouchableOpacity
           style={styles.topBarSideBtn}

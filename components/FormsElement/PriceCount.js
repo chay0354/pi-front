@@ -1,6 +1,7 @@
 import {
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import React, {useEffect, useRef, useState} from 'react';
@@ -11,10 +12,11 @@ import {
   formatPriceInputDraft,
   parsePriceInputNumber,
 } from '../../utils/priceInput';
+import {flexStart, hebrewTextAlign} from '../../utils/rtlLayout';
+import {FigmaCheckbox} from '../FigmaCheckbox';
 import {Title} from './Title';
 import {FormContainer} from './FormContainer';
 import {Divider} from './Divider';
-import {RadioWithText} from './RadioWithText';
 import {CounterStepper} from './CounterStepper';
 
 export const PriceCount = ({
@@ -27,7 +29,6 @@ export const PriceCount = ({
   /** ₪ increment/decrement for − / + buttons */
   counterStep = PRICE_COUNTER_STEP_DEFAULT,
 }) => {
-  const rowEndAlign = 'flex-start';
   const inputRef = useRef(null);
   const isFocusedRef = useRef(false);
   const [draftPrice, setDraftPrice] = useState(() =>
@@ -83,39 +84,24 @@ export const PriceCount = ({
         style={styles.priceInput}
       />
       {isPricePerNight && (
-        <View>
-          <Divider style={{marginVertical: 20}} />
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: rowEndAlign,
-            }}>
-            <RadioWithText
-              title={'הוסף ״מחיר במבצע״'}
-              name={'sale_price'}
-              setName={() => setHotDeal?.(v => !v)}
-              index={0}
-              isSelected={!!hotDeal}
-              radioOptionStyle={{
-                paddingTop: 0,
-                paddingLeft: 10,
-              }}
-            />
-            {hotDeal ? (
-              <View style={styles.hotDealContainer}>
-                <Text style={styles.hotDealText}>Hot deal</Text>
-              </View>
-            ) : null}
+        <View style={styles.hotDealSection}>
+          <Divider style={styles.hotDealDivider} />
+          <View style={styles.hotDealHeaderRow}>
+            <TouchableOpacity
+              style={styles.hotDealToggleRow}
+              onPress={() => setHotDeal?.(v => !v)}
+              activeOpacity={0.8}
+              accessibilityRole="checkbox"
+              accessibilityState={{checked: !!hotDeal}}
+              accessibilityLabel="הוסף מחיר במבצע">
+              <FigmaCheckbox checked={!!hotDeal} size={24} />
+              <Text style={styles.hotDealToggleLabel}>הוסף</Text>
+            </TouchableOpacity>
+            <View style={styles.hotDealBadge}>
+              <Text style={styles.hotDealBadgeText}>Hot deal</Text>
+            </View>
           </View>
-          <Text
-            style={{
-              textAlign: 'left',
-              color: '#9E9DA4',
-              marginTop: 10,
-              fontSize: 15,
-              fontFamily: 'Rubik-Regular',
-            }}>
+          <Text style={styles.hotDealDescription}>
             אם ברצונכם לקבוע עסקה אטרקטיבית, בחירה באופציה זו תדגיש שהמחיר
             המפורסם הינו מחיר במבצע.
           </Text>
@@ -133,15 +119,56 @@ const styles = StyleSheet.create({
     color: Colors.yellowIcons,
     fontFamily: 'Rubik-Medium',
   },
-  hotDealContainer: {
-    backgroundColor: Colors.yellowIcons,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
+  hotDealSection: {
+    width: '100%',
   },
-  hotDealText: {
+  hotDealDivider: {
+    marginVertical: 20,
+  },
+  hotDealHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: flexStart,
+    gap: 10,
+    width: '100%',
+  },
+  hotDealToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 24,
+  },
+  hotDealToggleLabel: {
+    color: Colors.whiteGeneral,
+    fontSize: 18,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  hotDealBadge: {
+    backgroundColor: Colors.yellowIcons,
+    height: 22,
+    paddingHorizontal: 10,
+    borderRadius: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hotDealBadgeText: {
     color: '#1E1D27',
     fontSize: 14,
+    lineHeight: 16,
     fontFamily: 'Rubik-Medium',
+    letterSpacing: 0.55,
+  },
+  hotDealDescription: {
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    color: '#9E9DA4',
+    marginTop: 10,
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+    lineHeight: 22,
+    paddingRight: 32,
+    width: '100%',
   },
 });

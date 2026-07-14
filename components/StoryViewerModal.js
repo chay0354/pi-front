@@ -9,6 +9,7 @@ import {
   Pressable,
   Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
@@ -35,15 +36,43 @@ function preloadRingImages(ring) {
   if (avatar) Image.prefetch(String(avatar)).catch(() => {});
 }
 
+/**
+ * Story video: always edge-to-edge horizontally.
+ * Top/bottom letterboxing is OK when the scaled video is shorter than the screen;
+ * taller videos are cropped top/bottom (never leave side bars).
+ */
+function storyVideoLayout(naturalW, naturalH) {
+  const {width: screenW, height: screenH} = Dimensions.get('window');
+  const w = Number(naturalW) || 0;
+  const h = Number(naturalH) || 0;
+  if (w <= 0 || h <= 0) {
+    return {width: screenW, height: screenH};
+  }
+  const displayH = screenW * (h / w);
+  return {
+    width: screenW,
+    height: displayH,
+  };
+}
+
 function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
   const webVideoRef = useRef(null);
   const uri = resolveStorySlideUri(slide);
+  const [videoLayout, setVideoLayout] = useState(null);
+  const sizedRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    sizedRef.current = false;
+    setVideoLayout(null);
+  }, [uri]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const el = webVideoRef.current;
     if (!el || slide?.media_type !== 'video') return;
-    if (isPaused) {
+    if (isPaused || !videoLayout) {
       el.pause();
       return;
     }
@@ -51,7 +80,20 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
     if (playPromise && typeof playPromise.catch === 'function') {
       playPromise.catch(() => {});
     }
-  }, [isPaused, slide?.media_type, uri]);
+  }, [isPaused, slide?.media_type, uri, videoLayout]);
+
+  const applyNaturalSize = useCallback((nw, nh) => {
+    if (sizedRef.current) return;
+    const w = Number(nw) || 0;
+    const h = Number(nh) || 0;
+    if (w <= 0 || h <= 0) return;
+    sizedRef.current = true;
+    setVideoLayout(storyVideoLayout(w, h));
+    // Reveal only after layout is committed — avoids the cover→sized jump.
+    requestAnimationFrame(() => {
+      onReadyRef.current?.();
+    });
+  }, []);
 
   if (!uri) {
     return (
@@ -62,43 +104,71 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
   }
 
   if (slide.media_type === 'video') {
+    const sized = videoLayout != null;
     if (Platform.OS === 'web') {
       return (
-        <View style={styles.mediaFullScreen}>
+        <View style={styles.mediaVideoClip}>
           <video
             ref={webVideoRef}
             src={String(uri)}
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
+              width: sized ? videoLayout.width : '100%',
+              height: sized ? videoLayout.height : '100%',
+              objectFit: sized ? 'fill' : 'cover',
               backgroundColor: '#000',
+              display: 'block',
+              opacity: sized ? 1 : 0,
             }}
-            autoPlay={!isPaused}
+            autoPlay={sized && !isPaused}
             muted={isMuted}
             loop
             playsInline
             preload="auto"
-            onLoadedData={onReady}
-            onCanPlay={onReady}
+            onLoadedMetadata={e => {
+              const el = e?.target || webVideoRef.current;
+              if (el?.videoWidth && el?.videoHeight) {
+                applyNaturalSize(el.videoWidth, el.videoHeight);
+              }
+            }}
           />
         </View>
       );
     }
 
     return (
-      <Video
-        key={String(uri)}
-        source={{uri: String(uri)}}
-        style={styles.mediaFullScreen}
-        resizeMode={ResizeMode.CONTAIN}
-        shouldPlay={!isPaused}
-        isMuted={isMuted}
-        useNativeControls={false}
-        isLooping
-        onLoad={onReady}
-        onReadyForDisplay={onReady}
-      />
+      <View style={styles.mediaVideoClip}>
+        <Video
+          key={String(uri)}
+          source={{uri: String(uri)}}
+          style={[
+            sized ? videoLayout : styles.mediaFullScreen,
+            {opacity: sized ? 1 : 0},
+          ]}
+          resizeMode={sized ? ResizeMode.STRETCH : ResizeMode.COVER}
+          shouldPlay={sized && !isPaused}
+          isMuted={isMuted}
+          useNativeControls={false}
+          isLooping
+          onLoad={status => {
+            const ns = status?.naturalSize;
+            if (ns?.width && ns?.height) {
+              let nw = ns.width;
+              let nh = ns.height;
+              if (ns.orientation === 'portrait' && nw > nh) {
+                nw = ns.height;
+                nh = ns.width;
+              }
+              applyNaturalSize(nw, nh);
+            }
+          }}
+          onReadyForDisplay={event => {
+            const ns = event?.naturalSize;
+            if (ns?.width && ns?.height) {
+              applyNaturalSize(ns.width, ns.height);
+            }
+          }}
+        />
+      </View>
     );
   }
 
@@ -384,6 +454,13 @@ const styles = StyleSheet.create({
   mediaFullScreen: {
     width: '100%',
     height: '100%',
+  },
+  mediaVideoClip: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

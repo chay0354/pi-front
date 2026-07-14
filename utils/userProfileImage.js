@@ -97,8 +97,6 @@ export function getUserCompanyLogoUrl(entity) {
   return pickFirstValidImageUrl([
     entity.company_logo_url,
     entity.companyLogoUrl,
-    entity.bnb_business_logo_url,
-    entity.bnbBusinessLogoUrl,
     entity.logo_url,
     entity.logoUrl,
     entity.business_logo_url,
@@ -146,22 +144,35 @@ export function shouldForceGoldRingForListing(listing) {
   return isBnbBusinessListing(listing);
 }
 
+function getListingPublisherProfilePhoto(listing) {
+  return (
+    getUserProfilePhotoUrl(listing) ||
+    pickFirstValidImageUrl([
+      listing.creator_profile_image_url,
+      listing.creatorProfileImageUrl,
+      listing.profile_image_url,
+      listing.profileImageUrl,
+    ])
+  );
+}
+
 /**
- * Feed/list avatar: BnB business ads use the publisher's profile photo (not the
- * business logo) with a gold ring; other listings keep getUserProfileImageUrl.
+ * Feed/list avatar for TikTok sidebar and grid cards.
+ * BnB business: uploaded business logo when present, else publisher profile photo.
+ * BnB private / other: standard profile resolution (regular users keep teal ring).
  */
 export function getListingFeedAvatarUrl(listing) {
   if (!listing || typeof listing !== 'object') return null;
-  if (isBnbBusinessListing(listing)) {
-    return (
-      getUserProfilePhotoUrl(listing) ||
-      pickFirstValidImageUrl([
-        listing.creator_profile_image_url,
-        listing.creatorProfileImageUrl,
-        listing.profile_image_url,
-        listing.profileImageUrl,
-      ])
-    );
+  if (Number(listing?.category) === 5) {
+    if (isBnbBusinessListing(listing)) {
+      const businessLogo = pickFirstValidImageUrl([
+        listing.bnb_business_logo_url,
+        listing.bnbBusinessLogoUrl,
+      ]);
+      if (businessLogo) return businessLogo;
+      return getListingPublisherProfilePhoto(listing);
+    }
+    return getListingPublisherProfilePhoto(listing);
   }
   return getUserProfileImageUrl(listing);
 }

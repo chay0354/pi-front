@@ -986,14 +986,13 @@ const NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new.png');
 const OFFICE_NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new-2.png');
 
 /**
- * חדש מקבלן (category 1) only — הדמיות first (company ads with video only), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
+ * חדש מקבלן (category 1) only — הדמיות first (all company ads), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
  * Do not use as the default for דירות / גלובל / other feeds.
  */
 const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
   {
     id: 'renderings',
     label: 'הדמיות',
-    has_video: true,
     subscription_type: 'company',
     ads_only: true,
     svg: officeSidebarSvgs.renderings,
@@ -1056,7 +1055,6 @@ const APARTMENTS_SIDEBAR_FILTERS = [
   {
     id: 'renderings',
     label: 'הדמיות',
-    has_video: true,
     subscription_type: 'company',
     ads_only: true,
     svg: officeSidebarSvgs.renderings,
@@ -1110,7 +1108,6 @@ const OFFICE_SIDEBAR_FILTERS = [
   {
     id: 'renderings',
     label: 'הדמיות',
-    has_video: true,
     subscription_type: 'company',
     ads_only: true,
     svg: officeSidebarSvgs.renderings,
@@ -1193,7 +1190,6 @@ const COMMERCIAL_SIDEBAR_FILTERS = [
   {
     id: 'renderings',
     label: 'הדמיות',
-    has_video: true,
     subscription_type: 'company',
     ads_only: true,
     svg: officeSidebarSvgs.renderings,
@@ -1775,6 +1771,11 @@ const ImageSwiper = ({
     });
   };
 
+  // Feed posts (incl. color/gradient canvases) are full-bleed TikTok media —
+  // `contain` letterboxes them with black side/top gaps. Listing ad photos keep
+  // `contain` so the whole photo stays visible.
+  const slideResizeMode = isFeedPostVideo(video) ? 'cover' : 'contain';
+
   const renderSlideshowSlide = (image, slideKey, single = false) => {
     const uri = resolveImageUri(image);
     const useFallback = !uri || erroredKeys.has(slideKey);
@@ -1794,7 +1795,7 @@ const ImageSwiper = ({
             single && styles.swiperImageSingle,
             {maxWidth: pageWidth, maxHeight: screenHeight},
           ]}
-          resizeMode="contain"
+          resizeMode={slideResizeMode}
           onError={() => markImageErrored(slideKey)}
         />
       </View>
@@ -2856,7 +2857,7 @@ const TikTokFeedScreen = ({
           officeFilter?.condition ??
           commercialFilter?.condition ??
           landFilter?.condition;
-        // API has_video only from sidebar (e.g. “הדמיות” = company ads with video, no posts).
+        // API has_video only from sidebar filters that still request it (הדמיות no longer does).
         const hasVideoFromSidebar =
           officeFilter?.has_video === true ||
           landFilter?.has_video === true ||
@@ -3204,7 +3205,7 @@ const TikTokFeedScreen = ({
                 budget: listing.budget,
                 isUploaded: true,
                 fromDatabase: true,
-                profileImageUrl: getUserProfileImageUrl(listing),
+                profileImageUrl: getListingFeedAvatarUrl(listing),
                 creator_name: listing.creator_name || null,
                 creator_email: listing.creator_email || null,
                 creator_business_address:
@@ -3417,13 +3418,9 @@ const TikTokFeedScreen = ({
             !isProfilePostsFeed &&
             selectedSidebarFilter === 'renderings'
           ) {
+            // הדמיות: all company ads in this category (images + videos), exclude posts.
             displayListings = displayListings.filter(
-              l =>
-                !isFeedPost(l) &&
-                isCompany(l) &&
-                (listingHasPlayableVideo(l) ||
-                  l.videoProcessing === true ||
-                  Boolean(String(l.rawVideoUrl || '').trim())),
+              l => !isFeedPost(l) && isCompany(l),
             );
           }
           if (landFilter?.land_in_mortgage) {
@@ -3455,6 +3452,14 @@ const TikTokFeedScreen = ({
                 l.searchPurposeKey != null &&
                 String(l.searchPurposeKey).trim() === need,
             );
+          }
+          // BnB + שותפים: hide non-regular publishers (legacy broker/company ads).
+          // Keep professional posts when the נותני שירות filter is active.
+          if (
+            (selectedCatNum === 3 || selectedCatNum === 5) &&
+            !sidebarWantsProfessionalPosts
+          ) {
+            displayListings = displayListings.filter(isRegularUserListing);
           }
           }
 
@@ -7237,13 +7242,9 @@ const TikTokFeedScreen = ({
     if (video.isUploaded) {
       const feedVideoUri = resolveFeedVideoUri(video);
       if (video.type === 'video' && feedVideoUri) {
-        const inPreloadWindow = [currentIndex, scrollAnchorIndex].some(
-          anchor =>
-            index >= anchor - FEED_PRELOAD_ABOVE_COUNT &&
-            index <= anchor + FEED_PRELOAD_BELOW_COUNT,
-        );
-        const mustMountVideoPlayer =
-          inPreloadWindow || isActiveVideoPage || prewarmVideoPage;
+        // Only mount real Video players for the active page ±1.
+        // Mounting HLS for the full FlatList preload window freezes Android.
+        const mustMountVideoPlayer = isActiveVideoPage || prewarmVideoPage;
         if (!mustMountVideoPlayer) {
           const posterUri = resolveFeedVideoPosterUri(video);
           if (posterUri) {
@@ -7618,7 +7619,7 @@ const TikTokFeedScreen = ({
                           0,
                         ).catch(() => {});
                       }
-                      // Same as other filters: tap again while active → back to default (pics).
+                      // Already on liked → back to default leftmost tab (pics).
                       if (selectedTopBarFilter === 'liked') {
                         setSelectedTopBarFilter(DEFAULT_TOP_BAR_FILTER);
                         AsyncStorage.setItem(
@@ -7627,6 +7628,7 @@ const TikTokFeedScreen = ({
                         ).catch(() => {});
                         return;
                       }
+                      // First tap: open Favorites; keep heart selected for return.
                       if (typeof onOpenFavorites === 'function') {
                         setSelectedTopBarFilter('liked');
                         AsyncStorage.setItem(
@@ -7635,15 +7637,11 @@ const TikTokFeedScreen = ({
                         ).catch(() => {});
                         onOpenFavorites(selectedCategory);
                       } else {
-                        setSelectedTopBarFilter(prev => {
-                          const next =
-                            prev === 'liked' ? DEFAULT_TOP_BAR_FILTER : 'liked';
-                          AsyncStorage.setItem(
-                            TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                            next,
-                          ).catch(() => {});
-                          return next;
-                        });
+                        setSelectedTopBarFilter('liked');
+                        AsyncStorage.setItem(
+                          TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+                          'liked',
+                        ).catch(() => {});
                       }
                       return;
                     }

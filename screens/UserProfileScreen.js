@@ -833,14 +833,6 @@ const UserProfileScreen = ({
   const isOwnProfile =
     subscriptionIdsMatch &&
     (!viewedProfileEmail || !currentProfileEmail || profileEmailsMatch);
-  const ownProfileSubscriptionTypeEarly = String(
-    user?.subscription_type ||
-      currentUser?.subscription_type ||
-      resolvedCreator?.subscription_type ||
-      '',
-  ).toLowerCase();
-  const isOwnBrokerProfile =
-    isOwnProfile && ownProfileSubscriptionTypeEarly === 'broker';
 
   const copyContactDetails = async () => {
     const lines = [...contactPhones, contactEmail].filter(Boolean);
@@ -1691,37 +1683,59 @@ const UserProfileScreen = ({
   /** Post grid + profile-only TikTok feed — any profile with posts, not only own or TikTok-post entry. */
   const showProfilePostGrid =
     !isDedicatedListingAdProfile && recentPostGridImages.length > 0;
-  const ownProfileAdCount = userListings.filter(
-    l => !isPostListingRecord(l),
-  ).length;
-  const ownProfileHasPosts = recentPostGridImages.length > 0;
-  /** Own profile: broker always gets 6-post grid at top; others — posts grid or empty grid when no ads. */
-  const showOwnProfilePostGridAtTop =
-    isOwnProfile &&
-    !isDedicatedListingAdProfile &&
-    (isOwnBrokerProfile ||
-      ownProfileHasPosts ||
-      (!userListingsLoading && ownProfileAdCount === 0));
-  /** Opened on a specific feed ad (TikTok swipe / list) — show that ad, not the 6-post grid. */
-  const openedFromFeedAdListing = isListingFromFeed && !openedFromPost;
   const openedFromProfessionalsDirectory = Boolean(
     user?._fromProfessionalsDirectory,
   );
-  const showProfilePostGridAtTop = isOwnProfile
-    ? showOwnProfilePostGridAtTop
-    : showProfilePostGrid &&
-      !openedFromProfessionalsDirectory &&
-      !openedFromFeedAdListing;
-  /** From בעלי מקצוע: always show 6-tile grid (empty placeholders when no posts). */
+  /**
+   * Opened on a specific feed ad (TikTok swipe / list / home project) — show that ad,
+   * not the 6-post grid. Professional directory rows often have `address` and get
+   * misclassified as listings — never treat those as feed ads.
+   */
+  const openedFromFeedAdListing =
+    isListingFromFeed &&
+    !openedFromPost &&
+    !openedFromProfessionalsDirectory;
+  /** Explicit false from own-profile open must win over listing heuristics. */
+  const forceListingAdProfile =
+    user?._forceListingAdProfile === false
+      ? false
+      : Boolean(
+          user?._forceListingAdProfile ||
+            user?._fromHomeFeatureProject ||
+            user?._fromCompanyProjects ||
+            openedFromFeedAdListing,
+        );
+  /** Own profile (all account types): always 6-post grid layout — never the ad hero/body.
+   * Exception: opened as a specific listing (home פרויקט נבחר / company projects / feed ad). */
+  const showOwnProfilePostGridAtTop =
+    isOwnProfile && !isDedicatedListingAdProfile && !forceListingAdProfile;
+  /**
+   * Figma 8:79136 — professional profile always uses the 6-post grid under
+   * avatar/stats (own + other), never a listing hero between stats and posts.
+   */
+  const showProfessionalFigmaProfile =
+    isProfessional && !isDedicatedListingAdProfile;
+  const showProfessionalStandardPostGrid = showProfessionalFigmaProfile;
+  const showProfilePostGridAtTop = showProfessionalStandardPostGrid
+    ? true
+    : isOwnProfile
+      ? showOwnProfilePostGridAtTop
+      : showProfilePostGrid &&
+        !openedFromProfessionalsDirectory &&
+        !forceListingAdProfile;
+  /** Legacy directory path only — Figma pro layout keeps the grid at the top. */
   const showProfilePostGridAfterBio =
+    !showProfessionalFigmaProfile &&
     openedFromProfessionalsDirectory &&
     isProfessional &&
-    !isDedicatedListingAdProfile;
+    !isDedicatedListingAdProfile &&
+    !showProfilePostGridAtTop;
+  /** Posts-grid profile (incl. own profile): no ad smart-info / neighborhood tools. */
   const showPiAiSmartInfoBlock =
     !openedFromPost &&
     !isProfessional &&
     !isDedicatedListingAdProfile &&
-    !(isOwnBrokerProfile && showProfilePostGridAtTop);
+    !showProfilePostGridAtTop;
   const showLandProfileContactAndReviews = isLandListingAdProfile;
   const showListingContactAndReviews =
     !isDedicatedListingAdProfile || showLandProfileContactAndReviews;
@@ -1745,23 +1759,34 @@ const UserProfileScreen = ({
   const showLocationMap =
     isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile;
   const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
-  /** Own profile (and TikTok pro entry) use the standard avatar/stats header — not the feed listing hero shell. */
-  const showStandardProfileHeader =
-    !isProfessional || showTikTokProfessionalHeader || isOwnProfile;
+  /**
+   * Figma 8:79136 — every professional profile (own + other) uses the standard
+   * avatar / email / עוקבים-לייקים header. Other account types unchanged.
+   */
+  const showStandardProfileHeader = isProfessional
+    ? !isDedicatedListingAdProfile
+    : true;
   /** Company profile opened from Selected Projects (פרויקטים נבחרים) → company listing → profile. */
   const openedFromCompaniesDirectory = Boolean(user?._fromCompanyProjects);
   /** Same flow + listing record (hero nav, favorite on listing id). */
   const fromCompanyProjects = Boolean(
     isListingFromFeed && openedFromCompaniesDirectory,
   );
-  /** Company ad from TikTok or פרויקטים נבחרים — fixed back / share / like top bar (not posts). Never on your own profile. */
+  /** Company ad from TikTok, home featured project, or פרויקטים נבחרים — fixed back / share / like top bar (not posts).
+   * Own profile normally uses the standard header, but forced listing opens (home ברושים / company projects) still get the project hero. */
   const showCompanyFeedHeroTop = Boolean(
     isCompany &&
     isListingFromFeed &&
     lastAd &&
     !openedFromPost &&
-    !isOwnProfile &&
-    (fromCompanyProjects || user?._fromTikTokPost),
+    (fromCompanyProjects ||
+      user?._fromTikTokPost ||
+      user?._fromHomeFeatureProject ||
+      user?._forceListingAdProfile) &&
+    (!isOwnProfile ||
+      user?._fromHomeFeatureProject ||
+      user?._fromCompanyProjects ||
+      user?._forceListingAdProfile),
   );
   const companyListingId =
     showCompanyFeedHeroTop && user?.id != null ? String(user.id) : null;
@@ -1898,7 +1923,7 @@ const UserProfileScreen = ({
           }
         })()
       : [];
-  // התמחויות: use types from table (creator_types / types) instead of activity_regions
+  // Types (סוג) — used for professionals next to the name.
   const typesRaw =
     user?.creator_types ??
     user?.types ??
@@ -1982,31 +2007,34 @@ const UserProfileScreen = ({
   // Filter out display name from tags so it doesn't appear as a specialty/region
   const tagLabel = s =>
     (typeof s === 'string' ? s : (s?.label ?? s?.name ?? String(s))).trim();
-  const filteredActivityRegions = (
-    activityRegions.length > 0 ? activityRegions : brokerSpecialties
-  ).filter(s => tagLabel(s) !== displayName);
-  const filteredSpecialties = (
-    activityRegions.length > 0 ? activityRegions : brokerSpecialties
-  ).filter(s => tagLabel(s) !== displayName);
-  // For overlay התמחויות: prefer types from table; fallback to activity_regions, then specializations (so something shows even if types column is missing or empty)
-  const overlaySource =
-    typesArray.length > 0
-      ? typesArray
-      : activityRegions.length > 0
-        ? activityRegions
-        : brokerSpecialties;
-  const overlayActivityRegions = overlaySource.filter(
+  const filteredActivityRegions = activityRegions.filter(
     s => tagLabel(s) !== displayName,
   );
+  const brokerSpecializationsDisplay = (
+    specializationsArray.length > 0 ? specializationsArray : brokerSpecialties
+  )
+    .map(tagLabel)
+    .filter(t => t && t !== displayName);
   const professionalTypesDisplay = typesArray
     .map(tagLabel)
     .filter(t => t && t !== displayName);
   const professionalSpecializationsDisplay = specializationsArray
     .map(tagLabel)
     .filter(t => t && t !== displayName);
+  // Professionals → התמחויות from specializations.
+  // Brokers → אזור פעילות from activity_regions (not under התמחויות).
+  // Company → התמחויות from specializations only (never activity regions).
   const profileSpecialtyTags = isProfessional
     ? professionalSpecializationsDisplay
-    : overlayActivityRegions;
+    : isBroker
+      ? filteredActivityRegions.map(tagLabel).filter(Boolean)
+      : brokerSpecializationsDisplay;
+  const profileSpecialtySectionTitle = isBroker
+    ? 'אזור פעילות'
+    : 'התמחויות';
+  const profileSpecialtyEmptyText = isBroker
+    ? 'אין אזורי פעילות'
+    : 'אין התמחויות';
 
   const renderProfessionalTypeTags = extraStyle =>
     professionalTypesDisplay.length > 0 ? (
@@ -2150,14 +2178,8 @@ const UserProfileScreen = ({
 
   /** Pinned top nav for any open-from–TikTok-feed / listing: inner hero + scroll back used to move away while scrolling. */
   const showFixedCompanyHero = showCompanyFeedHeroTop;
-  const showFixedProHero = Boolean(
-    isListingFromFeed &&
-    lastAd &&
-    isProfessional &&
-    !showTikTokProfessionalHeader &&
-    !showCompanyFeedHeroTop &&
-    !isOwnProfile,
-  );
+  /** Figma pro profile uses the standard header — never the feed listing hero shell. */
+  const showFixedProHero = false;
   const showFixedBackOnly = Boolean(
     isListingFromFeed &&
     !showCompanyFeedHeroTop &&
@@ -2170,10 +2192,11 @@ const UserProfileScreen = ({
 
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
 
+  /** Professionals use the top טלפון/הודעה row (Figma); keep messaging CTA for company/broker only. */
   const showProfileMessagingCta =
     !isOwnProfile &&
-    (isCompany || isBroker || isProfessional) &&
-    (!user?._fromTikTokPost || isCompany || isProfessional);
+    (isCompany || isBroker) &&
+    (!user?._fromTikTokPost || isCompany);
 
   const hideOwnSubscriberProfileCta =
     isOwnProfile && (isCompany || isProfessional);
@@ -2304,9 +2327,6 @@ const UserProfileScreen = ({
                 ) : null}
               </View>
               <Text style={styles.userName}>{displayName}</Text>
-              {isProfessional && showTikTokProfessionalHeader
-                ? renderProfessionalTypeTags(styles.professionalHeaderTypeTags)
-                : null}
               {displayEmail != null && displayEmail !== '' ? (
                 <Text style={styles.userEmail}>{displayEmail}</Text>
               ) : null}
@@ -2433,6 +2453,7 @@ const UserProfileScreen = ({
 
             {!openedFromPost &&
               lastAd &&
+              !showProfilePostGridAtTop &&
               (isDedicatedListingAdProfile || !isProfessional) && (
                 <View style={styles.lastAdBody}>
                   {isBnbListingAdProfile ? (
@@ -2516,6 +2537,7 @@ const UserProfileScreen = ({
                         </Text>
                       )}
                       {(() => {
+                        if (isOwnProfile) return null;
                         const addr = firstNonEmpty(
                           user?._fromTikTokPost
                             ? user?.creator_business_address
@@ -2958,13 +2980,18 @@ const UserProfileScreen = ({
           </>
         )}
 
-        {/* Broker block + My Properties – same scroll as whole screen */}
+        {/* Broker / professional details block + My Properties */}
         {showProfileRatingFeatures &&
           !openedFromPost &&
           !isProfessional &&
           !isDedicatedListingAdProfile && (
             <View style={styles.brokerCardOverlayLine} />
           )}
+        {/*
+          Figma 8:79136 professional order:
+          header → buttons → 6 posts → name/rating/location/specialties/bio → contact → reviews.
+          Reuses the same brokerCardBottom block as brokers/companies.
+        */}
         {showProfileRatingFeatures && !isDedicatedListingAdProfile && (
           <View style={styles.brokerCardBottom}>
             {!isCompany || showCompanyPostSpecialties ? (
@@ -2982,10 +3009,13 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
-                {isProfessional && !showTikTokProfessionalHeader
+                {/* Figma pro: no type chips under the large title — specialties are below. */}
+                {!showProfessionalFigmaProfile &&
+                isProfessional &&
+                !showTikTokProfessionalHeader
                   ? renderProfessionalTypeTags()
                   : null}
-                {brokerAddress ? (
+                {brokerAddress && !isOwnProfile ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
                       name="location-pin"
@@ -3000,13 +3030,14 @@ const UserProfileScreen = ({
                 {user?._fromTikTokPost && isBroker && openedFromPost ? (
                   <View style={styles.brokerCardBottomSectionDivider} />
                 ) : null}
-                {!user?._fromTikTokPost && !isBroker && (
+                {(showProfessionalFigmaProfile ||
+                  (!user?._fromTikTokPost && !isBroker)) && (
                   <View style={styles.brokerCardBottomSectionDivider} />
                 )}
                 {!hideCompanyPostSpecialtiesBlock && (
                   <>
                     <Text style={styles.brokerCardBottomSectionTitle}>
-                      התמחויות
+                      {profileSpecialtySectionTitle}
                     </Text>
                     <View style={styles.brokerCardBottomTags}>
                       {profileSpecialtyTags.length > 0 ? (
@@ -3021,13 +3052,13 @@ const UserProfileScreen = ({
                         ))
                       ) : (
                         <Text style={styles.brokerCardBottomTagEmpty}>
-                          אין התמחויות
+                          {profileSpecialtyEmptyText}
                         </Text>
                       )}
                     </View>
                   </>
                 )}
-                {!user?._fromTikTokPost && (
+                {(showProfessionalFigmaProfile || !user?._fromTikTokPost) && (
                   <View style={styles.brokerCardBottomContentDivider} />
                 )}
               </>
@@ -3283,7 +3314,7 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
             </View>
-            {(isCompany || isProfessional)
+            {(isCompany)
               ? renderProfileCtaSection(styles.contactDetailsCtaSection)
               : null}
           </View>
@@ -3408,7 +3439,10 @@ const UserProfileScreen = ({
                 <View style={styles.contactDetailsDivider} />
               </View>
             ) : null}
-            {!isCompany && !isProfessional ? renderProfileCtaSection() : null}
+            {/* Figma pro: דווח sits under reviews (phone/message already in the top row). */}
+            {(!isCompany && !isProfessional) || showProfessionalFigmaProfile
+              ? renderProfileCtaSection()
+              : null}
           </View>
         ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
           <View style={styles.profileCtaSection}>
@@ -3895,8 +3929,8 @@ const styles = StyleSheet.create({
   },
   proBrokerCardBottomName: {
     color: '#F7F3E6',
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 32,
+    lineHeight: 37,
     fontFamily: 'Rubik-SemiBold',
     textAlign: Platform.OS === 'web' ? 'right' : 'left',
     alignSelf: 'stretch',
