@@ -42,12 +42,15 @@ const ExclusiveOfferResponseCard = ({
   loading,
   onAccept,
   onReject,
+  /** 'exclusive' (broker→user) or 'collab' (broker→broker שת״פ) */
+  offerKind = 'exclusive',
 }) => {
   const st = String(decisionStatus || 'pending')
     .trim()
     .toLowerCase();
   const isAccepted = st === 'accepted';
   const isRejected = st === 'rejected';
+  const isCollab = String(offerKind || '').trim().toLowerCase() === 'collab';
 
   const pill = purposeLabel || 'למכירה';
   const months =
@@ -105,9 +108,13 @@ const ExclusiveOfferResponseCard = ({
 
       <View style={styles.bottomCard}>
         <Text style={styles.periodText}>
-          {months != null
-            ? `תקופת הבלעדיות המוצעת: ${months} חודשים`
-            : 'תקופת הבלעדיות המוצעת'}
+          {isCollab
+            ? months != null
+              ? `תקופת השת״פ המוצעת: ${months} חודשים`
+              : 'תקופת השת״פ המוצעת'
+            : months != null
+              ? `תקופת הבלעדיות המוצעת: ${months} חודשים`
+              : 'תקופת הבלעדיות המוצעת'}
         </Text>
         <View style={styles.btnRow}>
           <TouchableOpacity

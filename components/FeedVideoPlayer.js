@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {View, Image, Platform, StyleSheet, Pressable} from 'react-native';
+import {View, Image, Platform, StyleSheet} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {
@@ -192,8 +192,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     () => ({
       play: playNow,
       pause: pauseNow,
+      togglePause: toggleUserPause,
     }),
-    [playNow, pauseNow],
+    [playNow, pauseNow, toggleUserPause],
   );
 
   useEffect(() => {
@@ -269,16 +270,6 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     </View>
   ) : null;
 
-  const tapPauseLayer =
-    isActive && !failed ? (
-      <Pressable
-        style={styles.tapLayer}
-        onPress={toggleUserPause}
-        accessibilityRole="button"
-        accessibilityLabel={userPaused ? 'הפעל סרטון' : 'השהה סרטון'}
-      />
-    ) : null;
-
   const playHintLayer =
     userPaused && isActive ? (
       <View style={styles.playHintOverlay} pointerEvents="none">
@@ -303,7 +294,6 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
           />
         ) : null}
         {overlayLayer}
-        {tapPauseLayer}
         {playHintLayer}
       </View>
     );
@@ -325,8 +315,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
                   backgroundColor: 'transparent',
                   display: 'block',
                   opacity: hasFrame || sized ? 1 : 0,
+                  pointerEvents: 'none',
                 }
-              : styles.webVideo
+              : [styles.webVideo, {pointerEvents: 'none'}]
           }
           preload="auto"
           playsInline
@@ -352,7 +343,6 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
           onError={handleError}
         />
         {overlayLayer}
-        {tapPauseLayer}
         {playHintLayer}
       </View>
     );
@@ -364,6 +354,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       <Video
         key={String(uri)}
         ref={videoRef}
+        pointerEvents="none"
         source={{uri}}
         style={
           fitWidth
@@ -403,7 +394,6 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
         }}
       />
       {overlayLayer}
-      {tapPauseLayer}
       {playHintLayer}
     </View>
   );
@@ -456,10 +446,6 @@ const styles = StyleSheet.create({
   overlaySlot: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 3,
-  },
-  tapLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 5,
   },
   playHintOverlay: {
     ...StyleSheet.absoluteFillObject,

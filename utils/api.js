@@ -2423,13 +2423,16 @@ export const getUsersForGroupPicker = async (q = '', excludeEmail = null, audien
   return { success: !!data.success, users: data.users || [] };
 };
 
-export const createChatGroup = async ({ creatorEmail, memberEmails, title, kind, groupImageUrl = null }) => {
+export const createChatGroup = async ({ creatorEmail, creatorSubscriptionId, memberEmails, title, kind, groupImageUrl = null }) => {
   const payload = {
     creator_email: String(creatorEmail).trim().toLowerCase(),
     member_emails: (memberEmails || []).map((e) => String(e).trim().toLowerCase()).filter(Boolean),
     title: title != null ? String(title).trim() : '',
     kind: kind === 'brokers' ? 'brokers' : 'customers',
   };
+  const subId =
+    creatorSubscriptionId != null ? String(creatorSubscriptionId).trim() : '';
+  if (subId) payload.creator_subscription_id = subId;
   if (groupImageUrl != null && String(groupImageUrl).trim()) {
     payload.group_image_url = String(groupImageUrl).trim();
   }

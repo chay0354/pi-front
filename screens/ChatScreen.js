@@ -162,6 +162,24 @@ const sharedPostPreviewText = (cachedListing, bodyTrim) => {
 
 /** Substring used in broker exclusive-offer messages and to detect them in history. */
 const EXCLUSIVE_OFFER_BODY_MARKER = 'להציע בלעדיות על הנכס';
+/** Broker→broker collaboration offer — same flow, different copy. */
+const COLLAB_OFFER_BODY_MARKER = 'להציע שיתוף פעולה על הנכס';
+
+const isBrokerOfferBody = body => {
+  const text = typeof body === 'string' ? body : '';
+  return (
+    text.includes(EXCLUSIVE_OFFER_BODY_MARKER) ||
+    text.includes(COLLAB_OFFER_BODY_MARKER)
+  );
+};
+
+const isCollabOfferBody = body => {
+  const text = typeof body === 'string' ? body : '';
+  return text.includes(COLLAB_OFFER_BODY_MARKER);
+};
+
+const EXCLUSIVE_CTA_GOLD = ['#FEE787', '#BD9947', '#9C6522'];
+const EXCLUSIVE_CTA_GOLD_LOCATIONS = [0.045, 0.508, 0.883];
 
 const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
   if (!meta || typeof meta !== 'object') return meta;
@@ -172,7 +190,16 @@ const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
       ? String(conversationIdFromResponse).trim()
       : '';
   const cid = fromMeta || fromRes;
-  return cid ? {...meta, conversationId: cid} : {...meta};
+  const kindRaw =
+    meta.offerKind != null
+      ? String(meta.offerKind).trim().toLowerCase()
+      : meta.offer_kind != null
+        ? String(meta.offer_kind).trim().toLowerCase()
+        : '';
+  const offerKind = kindRaw === 'collab' ? 'collab' : 'exclusive';
+  return cid
+    ? {...meta, conversationId: cid, offerKind}
+    : {...meta, offerKind};
 };
 
 /** Prefer API otherUserEmail; else id when it is an email or subscription UUID peer ref. */
@@ -271,7 +298,7 @@ const normalizeChatMessage = m => {
 const isExclusiveOfferFromPeerForViewer = (m, viewerEmail) => {
   const nm = normalizeChatMessage(m);
   const body = typeof nm.body === 'string' ? nm.body : '';
-  if (!body.includes(EXCLUSIVE_OFFER_BODY_MARKER)) return false;
+  if (!isBrokerOfferBody(body)) return false;
   const me = (viewerEmail || '').trim().toLowerCase();
   const sidRaw = nm.senderId ?? nm.sender_id;
   const sid = sidRaw != null ? String(sidRaw).trim().toLowerCase() : '';
@@ -377,6 +404,44 @@ const ChatScreen = ({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
+  /** Peer account type for exclusivity (broker→user) vs שת״פ (broker→broker). */
+  const peerSubscriptionType = useMemo(() => {
+    const t =
+      resolvedDisplay?.subscriptionType ??
+      conversation?.subscriptionType ??
+      conversation?.subscription_type ??
+      null;
+    return t != null ? String(t).trim().toLowerCase() : '';
+  }, [
+    resolvedDisplay?.subscriptionType,
+    conversation?.subscriptionType,
+    conversation?.subscription_type,
+  ]);
+  const isPeerRegularUser = peerSubscriptionType === 'user';
+  const isPeerBroker = peerSubscriptionType === 'broker';
+  /** Broker→broker uses collaboration copy; broker→user uses exclusivity. */
+  const isCollabOfferMode = isBrokerUser && isPeerBroker;
+  const canSendBrokerOffer =
+    isBrokerUser && (isPeerRegularUser || isPeerBroker);
+  const peerBlocksExclusiveOffers =
+    resolvedDisplay?.blockExclusiveOffers === true ||
+    conversation?.blockExclusiveOffers === true;
+  const peerBlocksCollabOffers =
+    resolvedDisplay?.blockCollabOffers === true ||
+    conversation?.blockCollabOffers === true;
+  const offerBlockedMessage = useMemo(() => {
+    if (isCollabOfferMode && peerBlocksCollabOffers) {
+      return 'המשתמש הזה חסם הצעות לשת"פ';
+    }
+    if (!isCollabOfferMode && peerBlocksExclusiveOffers) {
+      return 'המשתמש הזה חסם הצעות לבלעדיות';
+    }
+    return null;
+  }, [
+    isCollabOfferMode,
+    peerBlocksCollabOffers,
+    peerBlocksExclusiveOffers,
+  ]);
   const [senderAvatarFailed, setSenderAvatarFailed] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceLocked, setVoiceLocked] = useState(false);
@@ -716,6 +781,13 @@ const ChatScreen = ({
           }
           return null;
         });
+        if (res.peerOfferBlocks) {
+          setResolvedDisplay(prev => ({
+            ...(prev || {}),
+            blockExclusiveOffers: res.peerOfferBlocks.blockExclusiveOffers === true,
+            blockCollabOffers: res.peerOfferBlocks.blockCollabOffers === true,
+          }));
+        }
       })
       .catch(e => {
         console.error('[ChatScreen.fetchMessages] direct fetch failed', e);
@@ -795,6 +867,14 @@ const ChatScreen = ({
             phone: phone || prev?.phone || null,
             subscriptionType:
               res.subscription_type || prev?.subscriptionType || null,
+            blockExclusiveOffers:
+              typeof res.block_exclusive_offers === 'boolean'
+                ? res.block_exclusive_offers
+                : prev?.blockExclusiveOffers === true,
+            blockCollabOffers:
+              typeof res.block_collab_offers === 'boolean'
+                ? res.block_collab_offers
+                : prev?.blockCollabOffers === true,
           }));
         }
       })
@@ -1333,6 +1413,10 @@ const ChatScreen = ({
       Alert.alert('', 'כתוב הודעה לפני השליחה');
       return;
     }
+    if (offerBlockedMessage) {
+      Alert.alert('', offerBlockedMessage);
+      return;
+    }
     if (!myEmail || !otherUserEmail) {
       Alert.alert(
         '',
@@ -1364,7 +1448,10 @@ const ChatScreen = ({
       applyConversationIdFromSend(res);
       if (onMessageSent) onMessageSent();
       setShowExclusiveOfferModal(false);
-      Alert.alert('', 'הצעת בלעדיות נשלחה');
+      Alert.alert(
+        '',
+        isCollabOfferMode ? 'הצעת שת״פ נשלחה' : 'הצעת בלעדיות נשלחה',
+      );
       fetchMessages();
     } catch (e) {
       console.error('[ExclusiveOffer] send failed', e);
@@ -2057,8 +2144,7 @@ const ChatScreen = ({
             )
           : null;
       const isExclusiveOffer =
-        typeof msg.body === 'string' &&
-        msg.body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
+        typeof msg.body === 'string' && isBrokerOfferBody(msg.body);
       return (
         <React.Fragment key={m.id}>
           <View
@@ -2329,7 +2415,9 @@ const ChatScreen = ({
           {isExclusiveOffer && m.isMe ? (
             <View style={styles.exclusiveStatusBanner}>
               <Text style={styles.exclusiveStatusText}>
-                הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה
+                {isCollabOfferBody(bodyTrim)
+                  ? 'הצעת השת״פ נשלחה, ברגע שתאושר תוכלו לנהל שיחה'
+                  : 'הצעת הבלעדיות נשלחה, ברגע שתאושר תוכלו לנהל שיחה'}
               </Text>
             </View>
           ) : null}
@@ -2339,6 +2427,12 @@ const ChatScreen = ({
           isExclusiveOfferFromPeerForViewer(m, myEmail) ? (
             <View style={styles.exclusiveOfferOwnerAnchor}>
               <ExclusiveOfferResponseCard
+                offerKind={
+                  exclusiveOfferMeta?.offerKind === 'collab' ||
+                  isCollabOfferBody(bodyTrim)
+                    ? 'collab'
+                    : 'exclusive'
+                }
                 purposeLabel={exclusiveOfferListingPreview?.purposeLabel}
                 priceFormatted={formatPrice(
                   exclusiveOfferListingPreview?.price,
@@ -2367,7 +2461,7 @@ const ChatScreen = ({
     let pending = false;
     for (const m of messages) {
       const body = typeof m?.body === 'string' ? m.body : '';
-      const isExclusive = body.includes(EXCLUSIVE_OFFER_BODY_MARKER);
+      const isExclusive = isBrokerOfferBody(body);
       if (isExclusive && m?.isMe) {
         pending = true;
       } else if (!m?.isMe) {
@@ -2377,14 +2471,14 @@ const ChatScreen = ({
     return pending;
   }, [messages]);
 
-  /** After one exclusive offer is sent to this peer, hide the CTA (still show history / banner). */
+  /** After one exclusive/collab offer is sent to this peer, hide the CTA (still show history / banner). */
   const hasSentExclusiveOfferInThread = useMemo(() => {
     if (!messages || messages.length === 0) return false;
     return messages.some(
       m =>
         m?.isMe &&
         typeof m?.body === 'string' &&
-        m.body.includes(EXCLUSIVE_OFFER_BODY_MARKER),
+        isBrokerOfferBody(m.body),
     );
   }, [messages]);
 
@@ -2532,6 +2626,40 @@ const ChatScreen = ({
     );
   }, [exclusiveListingData, sharedListing]);
 
+  /** Rent vs sale — exclusivity / שת״פ message wording depends on this. */
+  const offerIsRent = useMemo(() => {
+    const src = exclusiveListingData || sharedListing || {};
+    const purpose = String(
+      src.purpose ?? src.listingPurpose ?? src.listing_purpose ?? '',
+    )
+      .trim()
+      .toLowerCase();
+    if (
+      purpose === 'rent' ||
+      purpose === 'rental' ||
+      purpose === 'להשכרה' ||
+      purpose.includes('rent') ||
+      purpose.includes('השכר')
+    ) {
+      return true;
+    }
+    if (
+      purpose === 'sale' ||
+      purpose === 'sell' ||
+      purpose === 'למכירה' ||
+      purpose.includes('sale') ||
+      purpose.includes('מכיר')
+    ) {
+      return false;
+    }
+    const label = String(src.purposeLabel || src.purpose_label || '')
+      .trim()
+      .toLowerCase();
+    if (label.includes('השכר') || label === 'להשכרה') return true;
+    if (label.includes('מכיר') || label === 'למכירה') return false;
+    return false;
+  }, [exclusiveListingData, sharedListing]);
+
   /**
    * Exclusivity slider geometry — RTL-visual.
    *   Numbers row reads 10 → 1 (RTL), so "1" sits on the right and the bar must
@@ -2648,9 +2776,25 @@ const ChatScreen = ({
   const buildExclusiveTemplate = useCallback(
     months => {
       const safeMonths = Number.isFinite(Number(months)) ? Number(months) : 1;
-      return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי בתוך ${safeMonths} חודשים, אשמח לשוחח.`;
+      const monthsPhrase =
+        safeMonths === 1 ? 'חודש' : `${safeMonths} חודשים`;
+      if (isCollabOfferMode) {
+        if (offerIsRent) {
+          return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי שוכר שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא שוכר בתוך ${monthsPhrase}, אשמח לשוחח.`;
+        }
+        return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי קונה שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
+      }
+      if (offerIsRent) {
+        return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי בתוך ${monthsPhrase}, אשמח לשוחח.`;
+      }
+      return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא קונה איכותי בתוך ${monthsPhrase}, אשמח לשוחח.`;
     },
-    [exclusiveSenderName, offerLocationText],
+    [
+      exclusiveSenderName,
+      offerLocationText,
+      isCollabOfferMode,
+      offerIsRent,
+    ],
   );
 
   useEffect(() => {
@@ -2879,19 +3023,44 @@ const ChatScreen = ({
               Platform.OS === 'ios' ? 'interactive' : 'on-drag'
             }
             onContentSizeChange={() => scrollMessagesToEnd(false)}>
-            {isDirectPeer && isBrokerUser && !hasSentExclusiveOfferInThread ? (
+            {isDirectPeer &&
+            canSendBrokerOffer &&
+            !hasSentExclusiveOfferInThread ? (
               <View style={styles.exclusiveCtaWrap}>
                 <TouchableOpacity
                   activeOpacity={0.82}
-                  onPress={() => setShowExclusiveOfferModal(true)}
+                  onPress={() => {
+                    if (offerBlockedMessage) {
+                      Alert.alert('', offerBlockedMessage);
+                      return;
+                    }
+                    setShowExclusiveOfferModal(true);
+                  }}
                   style={styles.exclusiveCtaBtnHit}
                   accessibilityRole="button"
-                  accessibilityLabel="שלח הצעה לבלעדיות">
-                  <Image
-                    source={require('../assets/pi-chat/send-req.png')}
-                    style={styles.exclusiveCtaImage}
-                    resizeMode="contain"
-                  />
+                  accessibilityLabel={
+                    isCollabOfferMode
+                      ? 'שלח הצעה לשת״פ'
+                      : 'שלח הצעה לבלעדיות'
+                  }>
+                  {isCollabOfferMode ? (
+                    <LinearGradient
+                      colors={EXCLUSIVE_CTA_GOLD}
+                      locations={EXCLUSIVE_CTA_GOLD_LOCATIONS}
+                      start={{x: 0, y: 0.5}}
+                      end={{x: 1, y: 0.5}}
+                      style={styles.exclusiveCtaBtn}>
+                      <Text style={styles.exclusiveCtaBtnText}>
+                        שלח הצעה לשת״פ
+                      </Text>
+                    </LinearGradient>
+                  ) : (
+                    <Image
+                      source={require('../assets/pi-chat/send-req.png')}
+                      style={styles.exclusiveCtaImage}
+                      resizeMode="contain"
+                    />
+                  )}
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -2950,19 +3119,18 @@ const ChatScreen = ({
                               styles.groupMemberOverlap,
                               i > 0 && styles.groupMemberOverlapShift,
                             ]}>
-                            {resolvedAvatar ? (
-                              <Image
-                                source={{uri: resolvedAvatar}}
-                                style={styles.groupMemberAvatar}
-                                resizeMode="cover"
-                              />
-                            ) : (
-                              <Image
-                                source={DEFAULT_PI_PROFILE_AVATAR}
-                                style={styles.groupMemberAvatar}
-                                resizeMode="cover"
-                              />
-                            )}
+                            <ProfileAvatar
+                              uri={resolvedAvatar}
+                              name={member?.name || member?.email}
+                              size={38}
+                              subscriptionType={
+                                member?.subscriptionType ||
+                                member?.subscription_type ||
+                                (groupAddAudience === 'regular'
+                                  ? 'user'
+                                  : 'broker')
+                              }
+                            />
                           </View>
                         );
                       })(),
@@ -3270,7 +3438,9 @@ const ChatScreen = ({
                   color="#fff"
                 />
               </TouchableOpacity>
-              <Text style={styles.offerHeaderTitle}>הצעה לבלעדיות</Text>
+              <Text style={styles.offerHeaderTitle}>
+                {isCollabOfferMode ? 'הצעה לשת״פ' : 'הצעה לבלעדיות'}
+              </Text>
               <View style={styles.offerNavAction} />
             </View>
           </View>
@@ -3332,9 +3502,17 @@ const ChatScreen = ({
             </View>
 
             <View style={styles.offerCard}>
-              <Text style={styles.offerCardTitle}>תקופת בלעדיות</Text>
+              <Text style={styles.offerCardTitle}>
+                {isCollabOfferMode ? 'תקופת שת״פ' : 'תקופת בלעדיות'}
+              </Text>
               <Text style={styles.offerCardSubtitle}>
-                תוך כמה חודשים אתם מתחייבים למצוא שוכר?
+                {isCollabOfferMode
+                  ? offerIsRent
+                    ? 'תוך כמה חודשים אתם מתחייבים להביא שוכר?'
+                    : 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
+                  : offerIsRent
+                    ? 'תוך כמה חודשים אתם מתחייבים למצוא שוכר?'
+                    : 'תוך כמה חודשים אתם מתחייבים למצוא קונה?'}
               </Text>
               <View style={styles.offerScaleNumbers}>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
@@ -3359,28 +3537,52 @@ const ChatScreen = ({
               </View>
             </View>
 
-            <Text style={styles.offerSectionTitle}>הודעה לבעל הנכס</Text>
+            <Text style={styles.offerSectionTitle}>
+              {isCollabOfferMode ? 'הודעה למתווך' : 'הודעה לבעל הנכס'}
+            </Text>
             <View
               style={styles.offerMessageInput}
               {...(Platform.OS === 'web'
                 ? {nativeID: 'pi-chat-offer-message-textarea'}
                 : {})}>
-              <Text style={styles.offerMessageText}>
-                היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי
-                במודעה שלך עבור הדירה ב{offerLocationText} ואני מעוניין להציע
-                בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי{' '}
-                <Text style={styles.offerMessageHighlightGold}>
-                  בתוך {exclusiveMonths} חודשים
+              {isCollabOfferMode ? (
+                <Text style={styles.offerMessageText}>
+                  היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן. יש לי{' '}
+                  {offerIsRent ? 'שוכר' : 'קונה'} שמתאים למודעה שלך ב
+                  {offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס.
+                  אשמח שנעבוד יחד על העסקה — אני מתחייב להביא{' '}
+                  {offerIsRent ? 'שוכר' : 'קונה'}{' '}
+                  <Text style={styles.offerMessageHighlightGold}>
+                    בתוך{' '}
+                    {exclusiveMonths === 1
+                      ? 'חודש'
+                      : `${exclusiveMonths} חודשים`}
+                  </Text>
+                  , אשמח לשוחח.
                 </Text>
-                , אשמח לשוחח.
-              </Text>
+              ) : (
+                <Text style={styles.offerMessageText}>
+                  היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי
+                  במודעה שלך עבור הדירה ב{offerLocationText} ואני מעוניין להציע
+                  בלעדיות על הנכס. אני מתחייב למצוא{' '}
+                  {offerIsRent ? 'שוכר איכותי' : 'קונה איכותי'}{' '}
+                  <Text style={styles.offerMessageHighlightGold}>
+                    בתוך{' '}
+                    {exclusiveMonths === 1
+                      ? 'חודש'
+                      : `${exclusiveMonths} חודשים`}
+                  </Text>
+                  , אשמח לשוחח.
+                </Text>
+              )}
             </View>
 
             <View style={styles.offerHowCard}>
               <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
               <Text style={styles.offerHowText}>
-                ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר
-                אישור תוכלו להתחיל לנהל איתו שיחה.
+                {isCollabOfferMode
+                  ? 'ההצעה שלכם תישלח למתווך בעל המודעה והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה על השת״פ.'
+                  : 'ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה.'}
               </Text>
             </View>
           </ScrollView>
@@ -3390,7 +3592,11 @@ const ChatScreen = ({
               style={styles.offerSubmitBtn}
               activeOpacity={0.85}
               onPress={handleSubmitExclusiveOffer}>
-              <Text style={styles.offerSubmitText}>שלח הצעת בלעדיות</Text>
+              <Text style={styles.offerSubmitText}>
+                {isCollabOfferMode
+                  ? 'שלח הצעת שת״פ'
+                  : 'שלח הצעת בלעדיות'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3492,17 +3698,16 @@ const ChatScreen = ({
                         {row?.subtitle || email}
                       </Text>
                     </View>
-                    <View style={styles.addMemberAvatarRing}>
-                      <Image
-                        source={
-                          pic
-                            ? {uri: pic}
-                            : DEFAULT_PI_PROFILE_AVATAR
-                        }
-                        style={styles.addMemberAvatar}
-                        resizeMode="cover"
-                      />
-                    </View>
+                    <ProfileAvatar
+                      uri={pic}
+                      name={row?.title || email}
+                      size={48}
+                      subscriptionType={
+                        row?.subscriptionType ||
+                        row?.subscription_type ||
+                        (groupAddAudience === 'regular' ? 'user' : 'broker')
+                      }
+                    />
                   </Pressable>
                 );
               })
@@ -4126,9 +4331,10 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
   exclusiveCtaBtn: {
-    minHeight: 56,
-    borderRadius: 28,
-    paddingHorizontal: 34,
+    minHeight: 28,
+    height: 28,
+    borderRadius: 14,
+    paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -4138,6 +4344,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 10,
     ...(isWeb ? {boxShadow: '0px 6px 14px rgba(0,0,0,0.28)'} : null),
+  },
+  exclusiveCtaBtnText: {
+    color: '#1E1D27',
+    fontSize: 13,
+    fontFamily: 'Rubik-Bold',
+    textAlign: 'center',
   },
   exclusiveCtaImage: {
     width: 132,

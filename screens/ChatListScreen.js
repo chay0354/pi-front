@@ -5,6 +5,7 @@ import React, {
   useRef,
   useReducer,
   useMemo,
+  useContext,
 } from 'react';
 import {
   View,
@@ -39,13 +40,19 @@ import {
   getChatParticipantDisplay,
   getResolvedApiUrl,
   deleteChatConversation,
+  updateSubscriptionProfile,
 } from '../utils/api';
+import {ContextHook} from '../hooks/ContextHook';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import ProfileAvatar from '../components/ProfileAvatar';
 import CircleImageCropModal from '../components/CircleImageCropModal';
 import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
+import {
+  isRegularSubscriptionType,
+  subscriptionTypes,
+} from '../utils/constant';
 
 /** Main chats list panel — matches Figma node 8:3115 */
 const CHAT_LIST_PANEL_BG = '#2B2A39';
@@ -146,7 +153,13 @@ function groupPickReducer(state, action) {
                 row.profileImageUrl ||
                 null,
             ) || undefined;
-          meta[key] = {title, subtitle, avatarUrl};
+          const subscriptionType =
+            row.subscriptionType != null
+              ? String(row.subscriptionType).trim().toLowerCase()
+              : row.subscription_type != null
+                ? String(row.subscription_type).trim().toLowerCase()
+                : undefined;
+          meta[key] = {title, subtitle, avatarUrl, subscriptionType};
         }
       }
       return {selected, meta};
@@ -589,6 +602,7 @@ const ChatListScreen = ({
   piWelcomeRead = true,
 }) => {
   const insets = useSafeAreaInsets();
+  const {setCurrentUser} = useContext(ContextHook);
   const [search, setSearch] = useState('');
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -596,6 +610,7 @@ const ChatListScreen = ({
   const [deletingConvId, setDeletingConvId] = useState(null);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatSearch, setNewChatSearch] = useState('');
+  const [blockExclusiveOffers, setBlockExclusiveOffers] = useState(false);
   const [blockCollabOffers, setBlockCollabOffers] = useState(false);
   const [brokerResults, setBrokerResults] = useState([]);
   const [brokerSearchLoading, setBrokerSearchLoading] = useState(false);
@@ -626,10 +641,60 @@ const ChatListScreen = ({
   const groupPickSeq = useRef(0);
   const groupMetaLookupInFlight = useRef(new Set());
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
-  const isBrokerUser = currentUserType === 'broker';
-  const isCompanyUser = currentUserType === 'company';
+  const isBrokerUser = currentUserType === subscriptionTypes.broker;
+  const isCompanyUser = currentUserType === subscriptionTypes.company;
+  const isRegularUser = isRegularSubscriptionType(currentUserType);
   const canShowListingAdNumber = isBrokerUser || isCompanyUser;
-  const canOpenGroups = !currentUserType || isBrokerUser;
+  /** Brokers: any group. Regular users: regular group (customers) only. */
+  const canOpenGroups = isBrokerUser || isRegularUser;
+  const isRegularGroupCreator = isRegularUser && !isBrokerUser;
+  const hideMemberPickerSubtitle =
+    isRegularGroupCreator && groupFlow === 'customers';
+
+  const persistOfferBlockPreference = useCallback(
+    async (field, nextValue) => {
+      const subId = currentUser?.id;
+      if (!subId) return;
+      try {
+        const res = await updateSubscriptionProfile(subId, {[field]: nextValue});
+        if (res?.subscription) {
+          setCurrentUser(prev => ({...(prev || {}), ...res.subscription}));
+        } else {
+          setCurrentUser(prev => ({...(prev || {}), [field]: nextValue}));
+        }
+      } catch (e) {
+        if (field === 'block_exclusive_offers') {
+          setBlockExclusiveOffers(!nextValue);
+        } else if (field === 'block_collab_offers') {
+          setBlockCollabOffers(!nextValue);
+        }
+        Alert.alert('', e?.message || 'עדכון ההגדרה נכשל');
+      }
+    },
+    [currentUser?.id, setCurrentUser],
+  );
+
+  const toggleBlockExclusiveOffers = useCallback(() => {
+    const next = !blockExclusiveOffers;
+    setBlockExclusiveOffers(next);
+    persistOfferBlockPreference('block_exclusive_offers', next);
+  }, [blockExclusiveOffers, persistOfferBlockPreference]);
+
+  const toggleBlockCollabOffers = useCallback(() => {
+    const next = !blockCollabOffers;
+    setBlockCollabOffers(next);
+    persistOfferBlockPreference('block_collab_offers', next);
+  }, [blockCollabOffers, persistOfferBlockPreference]);
+
+  useEffect(() => {
+    if (!showNewChat) return;
+    setBlockExclusiveOffers(currentUser?.block_exclusive_offers === true);
+    setBlockCollabOffers(currentUser?.block_collab_offers === true);
+  }, [
+    showNewChat,
+    currentUser?.block_exclusive_offers,
+    currentUser?.block_collab_offers,
+  ]);
 
   useEffect(() => {
     if (!showNewChat) {
@@ -918,12 +983,17 @@ const ChatListScreen = ({
     const rawTitle =
       groupNameDraft != null ? String(groupNameDraft).trim() : '';
     const defaultTitle =
-      groupFlow === 'brokers' ? 'קבוצת מתווכים' : 'קבוצת לקוחות';
+      groupFlow === 'brokers'
+        ? 'קבוצת מתווכים'
+        : isRegularGroupCreator
+          ? 'קבוצה'
+          : 'קבוצת לקוחות';
     const title = rawTitle || defaultTitle;
     setGroupCreating(true);
     try {
       const {conversation} = await createChatGroup({
         creatorEmail: myEmail,
+        creatorSubscriptionId: currentUser?.id || null,
         memberEmails: selectedGroupEmails,
         kind: groupFlow,
         title,
@@ -960,6 +1030,8 @@ const ChatListScreen = ({
     groupWizardStep,
     groupNameDraft,
     groupImageUrl,
+    isRegularGroupCreator,
+    currentUser?.id,
     onOpenChat,
     resetGroupFlowState,
   ]);
@@ -1079,6 +1151,7 @@ const ChatListScreen = ({
                 : null,
             listingCategoryLabel: c.listingCategoryLabel || null,
             exclusiveOfferStatus: c.exclusiveOfferStatus || null,
+            exclusiveOfferKind: c.exclusiveOfferKind || null,
             unreadCount:
               typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
           });
@@ -1272,13 +1345,26 @@ const ChatListScreen = ({
               style={styles.badgeYellowText}
               numberOfLines={1}
               ellipsizeMode="tail">
-              {exStatus === 'accepted'
-                ? 'בלעדיות'
-                : exStatus === 'pending'
-                  ? 'בלעדיות - ממתין לאישור'
-                  : exStatus === 'rejected'
-                    ? 'בלעדיות - נדחה'
-                    : ''}
+              {(() => {
+                const kind = String(
+                  conv.exclusiveOfferKind || conv.exclusive_offer_kind || '',
+                )
+                  .trim()
+                  .toLowerCase();
+                const isCollab = kind === 'collab';
+                if (exStatus === 'accepted') {
+                  return isCollab ? 'שת״פ' : 'בלעדיות';
+                }
+                if (exStatus === 'pending') {
+                  return isCollab
+                    ? 'שת״פ - ממתין לאישור'
+                    : 'בלעדיות - ממתין לאישור';
+                }
+                if (exStatus === 'rejected') {
+                  return isCollab ? 'שת״פ - נדחה' : 'בלעדיות - נדחה';
+                }
+                return '';
+              })()}
             </Text>
           </View>
         ) : null}
@@ -1320,13 +1406,15 @@ const ChatListScreen = ({
               resizeMode="contain"
             />
           </View>
-          {isBrokerUser ? (
+          {canOpenGroups ? (
             <TouchableOpacity
               style={styles.headerBtn}
               activeOpacity={0.7}
               onPress={() => setShowNewChat(true)}
               accessibilityRole="button"
-              accessibilityLabel="צ'אט חדש">
+              accessibilityLabel={
+                isRegularGroupCreator ? 'קבוצה חדשה' : "צ'אט חדש"
+              }>
               <View style={styles.plusCircle}>
                 <MaterialCommunityIcons name="plus" size={22} color="#fff" />
               </View>
@@ -1488,9 +1576,11 @@ const ChatListScreen = ({
                       styles.ncTitleWizard,
                       styles.ncTitleWizardText,
                     ]}>
-                    {groupFlow === 'customers'
-                      ? 'צור קבוצת לקוחות'
-                      : 'צור קבוצת מתווכים'}
+                    {groupFlow === 'brokers'
+                      ? 'צור קבוצת מתווכים'
+                      : isRegularGroupCreator
+                        ? 'קבוצה'
+                        : 'צור קבוצת לקוחות'}
                   </Text>
                   <View style={styles.ncWizardColEnd}>
                     <TouchableOpacity
@@ -1517,7 +1607,9 @@ const ChatListScreen = ({
                       color="#fff"
                     />
                   </TouchableOpacity>
-                  <Text style={styles.ncTitle}>{"צ'אט חדש"}</Text>
+                  <Text style={styles.ncTitle}>
+                    {isRegularGroupCreator ? 'קבוצה' : "צ'אט חדש"}
+                  </Text>
                   <View style={styles.ncHeaderSpacer} />
                 </>
               )}
@@ -1544,7 +1636,7 @@ const ChatListScreen = ({
                     placeholder={
                       groupFlow === 'brokers'
                         ? 'חפש מתווך לפי שם / משרד / טלפון'
-                        : 'חפש מתווך לפי שם / משרד / טלפון'
+                        : 'חפש משתמש לפי שם / טלפון'
                     }
                     placeholderTextColor={NC_TEXT_SECONDARY}
                     value={groupSearch}
@@ -1598,7 +1690,9 @@ const ChatListScreen = ({
                 <Text style={styles.ncChipsLabel}>
                   {groupFlow === 'brokers'
                     ? 'מתווכים שהתווספו'
-                    : 'אנשי קשר שהתווספו'}
+                    : isRegularGroupCreator
+                      ? 'חברים שהתווספו'
+                      : 'אנשי קשר שהתווספו'}
                 </Text>
                 <View
                   style={styles.ncChipsCard}
@@ -1635,23 +1729,17 @@ const ChatListScreen = ({
                       return (
                         <View key={em} style={styles.ncChipCol}>
                           <View style={styles.ncChipAvatarWrap}>
-                            <View style={styles.ncChipAvatarRing}>
-                              <View style={styles.ncChipAvatarInner}>
-                                {pic ? (
-                                  <Image
-                                    source={{uri: pic}}
-                                    style={styles.ncChipAvatarImg}
-                                    resizeMode="cover"
-                                  />
-                                ) : (
-                                  <Image
-                                    source={DEFAULT_PI_PROFILE_AVATAR}
-                                    style={styles.ncChipAvatarImg}
-                                    resizeMode="cover"
-                                  />
-                                )}
-                              </View>
-                            </View>
+                            <ProfileAvatar
+                              uri={pic}
+                              name={chipTitle}
+                              size={72}
+                              subscriptionType={
+                                meta.subscriptionType ||
+                                rowFromList?.subscriptionType ||
+                                rowFromList?.subscription_type ||
+                                (groupFlow === 'customers' ? 'user' : 'broker')
+                              }
+                            />
                             <TouchableOpacity
                               style={styles.ncChipRemove}
                               onPress={() => removeGroupMember(em)}
@@ -1671,7 +1759,7 @@ const ChatListScreen = ({
                 </View>
               </View>
             ) : null}
-            {!groupFlow ? (
+            {!groupFlow && !isRegularGroupCreator ? (
               <>
                 <View style={styles.ncSearchFullBleed}>
                   <View style={styles.ncSearchWrap}>
@@ -1740,7 +1828,9 @@ const ChatListScreen = ({
                 ) : groupCandidates.length === 0 ? (
                   <Text style={styles.ncBrokerEmpty}>
                     {groupFlow === 'customers'
-                      ? 'אין אנשי קשר עדיין. התחל/י שיחה פרטית עם לקוח — הוא יופיע כאן.'
+                      ? isRegularGroupCreator
+                        ? 'לא נמצאו משתמשים. חפשו לפי שם או טלפון.'
+                        : 'אין אנשי קשר עדיין. התחל/י שיחה פרטית — הוא יופיע כאן.'
                       : 'לא נמצאו מתווכים.'}
                   </Text>
                 ) : groupSearch.trim().length > 0 ? (
@@ -1796,7 +1886,7 @@ const ChatListScreen = ({
                                 numberOfLines={1}>
                                 {title}
                               </Text>
-                              {sub && sub !== title ? (
+                              {sub && sub !== title && !hideMemberPickerSubtitle ? (
                                 <Text
                                   style={styles.ncBrokerSubtitle}
                                   numberOfLines={1}>
@@ -1804,23 +1894,16 @@ const ChatListScreen = ({
                                 </Text>
                               ) : null}
                             </View>
-                            <View style={styles.ncBrokerAvatarRing}>
-                              <View style={styles.ncBrokerAvatarInner}>
-                                {pic ? (
-                                  <Image
-                                    source={{uri: pic}}
-                                    style={styles.ncBrokerAvatarImg}
-                                    resizeMode="cover"
-                                  />
-                                ) : (
-                                  <Image
-                                    source={DEFAULT_PI_PROFILE_AVATAR}
-                                    style={styles.ncBrokerAvatarImg}
-                                    resizeMode="cover"
-                                  />
-                                )}
-                              </View>
-                            </View>
+                            <ProfileAvatar
+                              uri={pic}
+                              name={title}
+                              size={60}
+                              subscriptionType={
+                                row?.subscriptionType ||
+                                row?.subscription_type ||
+                                (groupFlow === 'customers' ? 'user' : 'broker')
+                              }
+                            />
                           </Pressable>
                         );
                       })}
@@ -1875,7 +1958,7 @@ const ChatListScreen = ({
                                     numberOfLines={1}>
                                     {title}
                                   </Text>
-                                  {sub && sub !== title ? (
+                                  {sub && sub !== title && !hideMemberPickerSubtitle ? (
                                     <Text
                                       style={styles.ncBrokerSubtitle}
                                       numberOfLines={1}>
@@ -1883,23 +1966,18 @@ const ChatListScreen = ({
                                     </Text>
                                   ) : null}
                                 </View>
-                                <View style={styles.ncBrokerAvatarRing}>
-                                  <View style={styles.ncBrokerAvatarInner}>
-                                    {pic ? (
-                                      <Image
-                                        source={{uri: pic}}
-                                        style={styles.ncBrokerAvatarImg}
-                                        resizeMode="cover"
-                                      />
-                                    ) : (
-                                      <Image
-                                        source={DEFAULT_PI_PROFILE_AVATAR}
-                                        style={styles.ncBrokerAvatarImg}
-                                        resizeMode="cover"
-                                      />
-                                    )}
-                                  </View>
-                                </View>
+                                <ProfileAvatar
+                                  uri={pic}
+                                  name={title}
+                                  size={60}
+                                  subscriptionType={
+                                    row?.subscriptionType ||
+                                    row?.subscription_type ||
+                                    (groupFlow === 'customers'
+                                      ? 'user'
+                                      : 'broker')
+                                  }
+                                />
                               </Pressable>
                             );
                           })}
@@ -1977,107 +2055,170 @@ const ChatListScreen = ({
                 </>
               ) : null}
 
-              <Text
-                style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
-                מתווכים
-              </Text>
+              {isRegularGroupCreator ? (
+                <>
+                  <Text
+                    style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
+                    קבוצה
+                  </Text>
+                  <View style={styles.ncCard}>
+                    <Pressable
+                      style={({pressed}) => [
+                        styles.ncRow,
+                        pressed && styles.ncRowPressed,
+                      ]}
+                      onPress={() => {
+                        dispatchGroupPick({type: 'reset'});
+                        setGroupWizardStep(1);
+                        setGroupNameDraft('');
+                        setGroupImageUrl(null);
+                        setGroupSearch('');
+                        setGroupFlow('customers');
+                      }}
+                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={22}
+                        color="#FFFFFF"
+                        style={styles.ncChevron}
+                      />
+                      <View style={styles.ncRowTextWrap}>
+                        <Text style={styles.ncRowTitle}>קבוצה</Text>
+                        <Text style={styles.ncRowSubtitle}>
+                          פתחו קבוצה עם משתמשים רגילים אחרים
+                        </Text>
+                      </View>
+                      <View style={styles.ncIconBubble}>
+                        <Image
+                          source={require('../assets/pi-chat/private-group.png')}
+                          style={styles.ncIconImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </Pressable>
+                  </View>
 
-              <View style={styles.ncCard}>
-                <Pressable
-                  style={({pressed}) => [
-                    styles.ncRow,
-                    pressed && styles.ncRowPressed,
-                  ]}
-                  onPress={() => {
-                    if (!canOpenGroups) {
-                      Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצות');
-                      return;
-                    }
-                    dispatchGroupPick({type: 'reset'});
-                    setGroupWizardStep(1);
-                    setGroupNameDraft('');
-                    setGroupImageUrl(null);
-                    setGroupSearch('');
-                    setGroupFlow('customers');
-                  }}
-                  android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                  <MaterialCommunityIcons
-                    name="chevron-left"
-                    size={22}
-                    color="#FFFFFF"
-                    style={styles.ncChevron}
-                  />
-                  <View style={styles.ncRowTextWrap}>
-                    <Text style={styles.ncRowTitle}>צור קבוצת לקוחות</Text>
-                    <Text style={styles.ncRowSubtitle}>
-                      יצר קבוצה ייעודית ללקוחות שלך
-                    </Text>
-                  </View>
-                  <View style={styles.ncIconBubble}>
-                    <Image
-                      source={require('../assets/pi-chat/private-group.png')}
-                      style={styles.ncIconImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </Pressable>
-                <View style={styles.ncRowDivider} />
-                <Pressable
-                  style={({pressed}) => [
-                    styles.ncRow,
-                    pressed && styles.ncRowPressed,
-                  ]}
-                  onPress={() => {
-                    if (!canOpenGroups) {
-                      Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצות');
-                      return;
-                    }
-                    dispatchGroupPick({type: 'reset'});
-                    setGroupWizardStep(1);
-                    setGroupNameDraft('');
-                    setGroupImageUrl(null);
-                    setGroupSearch('');
-                    setGroupFlow('brokers');
-                  }}
-                  android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                  <MaterialCommunityIcons
-                    name="chevron-left"
-                    size={22}
-                    color="#FFFFFF"
-                    style={styles.ncChevron}
-                  />
-                  <View style={styles.ncRowTextWrap}>
-                    <Text style={styles.ncRowTitle}>צור קבוצת מתווכים</Text>
-                    <Text style={styles.ncRowSubtitle}>
-                      שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד בקבוצה
-                      ייעודית.
-                    </Text>
-                  </View>
-                  <View style={styles.ncIconBubble}>
-                    <Image
-                      source={require('../assets/pi-chat/brokers-group.png')}
-                      style={styles.ncIconImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </Pressable>
-              </View>
+                  <Pressable
+                    style={styles.ncToggleRow}
+                    onPress={toggleBlockExclusiveOffers}
+                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                    <View style={styles.ncToggleOuter}>
+                      {blockExclusiveOffers ? (
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={15}
+                          color={NC_TOGGLE_AMBER}
+                        />
+                      ) : null}
+                    </View>
+                    <Text style={styles.ncToggleLabel}>חסום הצעות לבלעדיות</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
+                    מתווכים
+                  </Text>
 
-              <Pressable
-                style={styles.ncToggleRow}
-                onPress={() => setBlockCollabOffers(v => !v)}
-                android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                <View style={styles.ncToggleOuter}>
-                  {blockCollabOffers ? (
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={15}
-                      color={NC_TOGGLE_AMBER}
-                    />
-                  ) : null}
-                </View>
-                <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
-              </Pressable>
+                  <View style={styles.ncCard}>
+                    <Pressable
+                      style={({pressed}) => [
+                        styles.ncRow,
+                        pressed && styles.ncRowPressed,
+                      ]}
+                      onPress={() => {
+                        if (!canOpenGroups) {
+                          Alert.alert('', 'אין הרשאה לפתוח קבוצות');
+                          return;
+                        }
+                        dispatchGroupPick({type: 'reset'});
+                        setGroupWizardStep(1);
+                        setGroupNameDraft('');
+                        setGroupImageUrl(null);
+                        setGroupSearch('');
+                        setGroupFlow('customers');
+                      }}
+                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={22}
+                        color="#FFFFFF"
+                        style={styles.ncChevron}
+                      />
+                      <View style={styles.ncRowTextWrap}>
+                        <Text style={styles.ncRowTitle}>צור קבוצת לקוחות</Text>
+                        <Text style={styles.ncRowSubtitle}>
+                          יצר קבוצה ייעודית ללקוחות שלך
+                        </Text>
+                      </View>
+                      <View style={styles.ncIconBubble}>
+                        <Image
+                          source={require('../assets/pi-chat/private-group.png')}
+                          style={styles.ncIconImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </Pressable>
+                    <View style={styles.ncRowDivider} />
+                    <Pressable
+                      style={({pressed}) => [
+                        styles.ncRow,
+                        pressed && styles.ncRowPressed,
+                      ]}
+                      onPress={() => {
+                        if (!isBrokerUser) {
+                          Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצת מתווכים');
+                          return;
+                        }
+                        dispatchGroupPick({type: 'reset'});
+                        setGroupWizardStep(1);
+                        setGroupNameDraft('');
+                        setGroupImageUrl(null);
+                        setGroupSearch('');
+                        setGroupFlow('brokers');
+                      }}
+                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={22}
+                        color="#FFFFFF"
+                        style={styles.ncChevron}
+                      />
+                      <View style={styles.ncRowTextWrap}>
+                        <Text style={styles.ncRowTitle}>צור קבוצת מתווכים</Text>
+                        <Text style={styles.ncRowSubtitle}>
+                          שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד
+                          בקבוצה ייעודית.
+                        </Text>
+                      </View>
+                      <View style={styles.ncIconBubble}>
+                        <Image
+                          source={require('../assets/pi-chat/brokers-group.png')}
+                          style={styles.ncIconImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </Pressable>
+                  </View>
+
+                  <Pressable
+                    style={styles.ncToggleRow}
+                    onPress={toggleBlockCollabOffers}
+                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                    <View style={styles.ncToggleOuter}>
+                      {blockCollabOffers ? (
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={15}
+                          color={NC_TOGGLE_AMBER}
+                        />
+                      ) : null}
+                    </View>
+                    <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
+                  </Pressable>
+                </>
+              )}
             </ScrollView>
           )}
         </View>

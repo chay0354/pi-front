@@ -24,6 +24,7 @@ import {
   useWindowDimensions,
   InteractionManager,
   Keyboard,
+  Pressable,
 } from 'react-native';
 import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7345,17 +7346,36 @@ const TikTokFeedScreen = ({
     );
   };
 
-  const wrapFeedPage = (video, index, media) => (
+  const wrapFeedPage = (video, index, media) => {
+    const isActiveFeedPage = index === currentIndex;
+    const canPauseFeedVideo =
+      isActiveFeedPage &&
+      video?.isUploaded &&
+      video?.type === 'video' &&
+      Boolean(resolveFeedVideoUri(video));
+
+    return (
     <View style={[styles.videoItem, styles.feedPage, feedPageDimensions]}>
       {media}
       {shouldRenderFeedChrome(index) ? (
         <View style={styles.feedPageChrome} pointerEvents="box-none">
+          {canPauseFeedVideo ? (
+            <Pressable
+              style={styles.feedVideoPauseTap}
+              onPress={() => {
+                feedVideoRefs.current.get(index)?.togglePause?.();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="השהה סרטון"
+            />
+          ) : null}
           {renderFeedPageSidebar(video, index)}
           {renderFeedPageActionOverlay(video)}
         </View>
       ) : null}
     </View>
-  );
+    );
+  };
 
   const renderFeedMedia = (video, index) => {
     const isActiveFeedPage = index === currentIndex;
@@ -9493,6 +9513,11 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     zIndex: 10,
+  },
+  /** Tap-to-pause sits above the video but below sidebar/actions (z20). */
+  feedVideoPauseTap: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 15,
   },
   feedPageSidebar: {
     position: 'absolute',
