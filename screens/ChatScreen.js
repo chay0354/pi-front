@@ -24,7 +24,7 @@ import {
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import {Audio} from 'expo-av';
-import {pickChatDocument} from '../utils/pickChatDocument';
+import {tryPickChatDocumentNative} from '../utils/pickChatDocument';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -57,6 +57,7 @@ import {shouldShowProfileGoldRing} from '../utils/constant';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
+import ChatDocumentPickerModal from '../components/ChatDocumentPickerModal';
 import ChatVoiceMessageBubble from '../components/ChatVoiceMessageBubble';
 import ExclusiveOfferResponseCard, {
   formatPrice,
@@ -463,6 +464,7 @@ const ChatScreen = ({
   });
   const voicePlayBeganRef = useRef(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
+  const [showDocumentPicker, setShowDocumentPicker] = useState(false);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
@@ -1655,7 +1657,13 @@ const ChatScreen = ({
         input.click();
         return;
       }
-      const result = await pickChatDocument();
+      // Prefer native picker when the current native binary includes it.
+      // Older / unrebuilt dev clients throw "Cannot find native module ExpoDocumentPicker".
+      const result = await tryPickChatDocumentNative();
+      if (result == null) {
+        setShowDocumentPicker(true);
+        return;
+      }
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       await sendPickedChatFile({
@@ -3995,6 +4003,24 @@ const ChatScreen = ({
           />
         </View>
       </Modal>
+
+      <ChatDocumentPickerModal
+        visible={showDocumentPicker}
+        onCancel={errorMessage => {
+          setShowDocumentPicker(false);
+          if (errorMessage) Alert.alert('', String(errorMessage));
+        }}
+        onPicked={async file => {
+          setShowDocumentPicker(false);
+          if (!file?.uri) return;
+          await sendPickedChatFile({
+            uri: file.uri,
+            mimeType: file.mimeType || 'application/octet-stream',
+            name: file.name || `file-${Date.now()}`,
+            size: file.size,
+          });
+        }}
+      />
 
       <Modal
         visible={!!actionMenuMessage}

@@ -121,6 +121,7 @@ module.exports = {
     plugins: [
       'expo-font',
       'expo-secure-store',
+      'expo-document-picker',
       [
         'expo-location',
         {
