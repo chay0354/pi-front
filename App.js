@@ -185,6 +185,16 @@ const screenName = {
   editProfile: 'editProfile',
 };
 
+/** Opened from TikTok feed — keep feed mounted so back restores scroll position. */
+const TIKTOK_PROFILE_STACK_SCREENS = new Set([
+  screenName.userProfile,
+  screenName.profileReviews,
+  screenName.followHub,
+  screenName.userListings,
+  screenName.companyReport,
+  screenName.companyProjects,
+]);
+
 const INITIAL_FEED_FILTERS = {
   price: null, // null | { minPrice, maxPrice }
   rooms: null, // null | { area, rooms, floor, parking, balcony, elevator, mamad }
@@ -933,6 +943,11 @@ function App() {
       ? String(currentUser.email).trim().toLowerCase()
       : null;
 
+  const keepTikTokFeedMounted =
+    currentScreen === screenName.tikTokFeed ||
+    (profileReturnScreen === screenName.tikTokFeed &&
+      TIKTOK_PROFILE_STACK_SCREENS.has(currentScreen));
+
   return (
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <PresenceProvider userEmail={presenceUserEmail}>
@@ -1094,10 +1109,19 @@ function App() {
                 ) : null} */}
               </View>
             )}
-            {currentScreen === screenName.tikTokFeed && (
-              <View style={styles.tikTokShell}>
+            {keepTikTokFeedMounted && (
+              <View
+                style={[
+                  styles.tikTokShell,
+                  currentScreen !== screenName.tikTokFeed &&
+                    styles.tikTokShellCached,
+                ]}
+                pointerEvents={
+                  currentScreen === screenName.tikTokFeed ? 'auto' : 'none'
+                }>
                 <TikTokFeedScreen
                   key={tikTokFeedRefreshKey} // Force remount when refreshKey changes
+                  isScreenActive={currentScreen === screenName.tikTokFeed}
                   onClose={() => {
                     setBnbPublishHostType(null);
                     // Keep the selected bottom filters so they persist when the
@@ -2917,6 +2941,12 @@ const styles = StyleSheet.create({
   tikTokShell: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
+  },
+  /** TikTok stays mounted under profile stack so back is instant (no scroll reset). */
+  tikTokShellCached: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
+    zIndex: 0,
   },
   container: {
     flex: 1,

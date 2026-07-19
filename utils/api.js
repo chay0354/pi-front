@@ -497,6 +497,9 @@ async function toFormDataFile(file, fieldName = 'file') {
     } else if (fieldName === 'companyLogo') {
       name = name || 'logo.jpg';
       type = type || 'image/jpeg';
+    } else if (fieldName === 'file') {
+      name = name || 'file.bin';
+      type = type || blob.type || 'application/octet-stream';
     } else {
       name = name || 'image.jpg';
       type = type || blob.type || 'image/jpeg';
@@ -2548,7 +2551,11 @@ export const sendGroupChatMessage = async (
     sender_email: String(senderEmail).trim().toLowerCase(),
     body: body != null ? String(body).trim() : '',
   };
-  if (media && media.url && (media.type === 'image' || media.type === 'audio')) {
+  if (
+    media &&
+    media.url &&
+    (media.type === 'image' || media.type === 'audio' || media.type === 'file')
+  ) {
     payload.media_type = media.type;
     payload.media_url = String(media.url).trim();
   }
@@ -2648,7 +2655,7 @@ export const respondToExclusiveOffer = async ({userEmail, conversationId, accept
  * @returns {Promise<{ success: boolean, message: object }>}
  */
 /**
- * @param {{ type: 'image'|'audio', url: string }} [media] - optional; use with empty body for media-only messages
+ * @param {{ type: 'image'|'audio'|'file', url: string }} [media] - optional; use with empty body for media-only messages
  * @param {string|null} [listingId] - optional ads.id (UUID); stored on message for inbox listing badges
  * @param {boolean} [listingShare] - true when sharing a feed post (card UI); false for normal text
  */
@@ -2666,7 +2673,7 @@ export const sendChatMessage = async (
   const hasMedia =
     media &&
     media.url &&
-    (media.type === 'image' || media.type === 'audio');
+    (media.type === 'image' || media.type === 'audio' || media.type === 'file');
   if (!senderEmail || !receiverEmail || (!text && !hasMedia)) {
     throw new Error('senderEmail, receiverEmail and body or media required');
   }

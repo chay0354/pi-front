@@ -24,6 +24,7 @@ import {
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import {Audio} from 'expo-av';
+import {pickChatDocument} from '../utils/pickChatDocument';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -273,7 +274,7 @@ const normalizeChatMessage = m => {
   let mediaType = null;
   if (rawType != null && String(rawType).trim() !== '') {
     const t = String(rawType).trim().toLowerCase();
-    if (t === 'image' || t === 'audio') mediaType = t;
+    if (t === 'image' || t === 'audio' || t === 'file') mediaType = t;
   }
   const lid = m.listingId ?? m.listing_id;
   const listingId =
@@ -1564,6 +1565,111 @@ const ChatScreen = ({
     }
   };
 
+  const sendPickedChatFile = async ({uri, mimeType, name, size}) => {
+    const fileUri = uri != null ? String(uri).trim() : '';
+    if (!fileUri) return;
+    const fileName =
+      name != null && String(name).trim() !== ''
+        ? String(name).trim()
+        : `file-${Date.now()}`;
+    const mime = mimeType || 'application/octet-stream';
+    const maxBytes = 25 * 1024 * 1024;
+    if (size != null && Number(size) > maxBytes) {
+      Alert.alert('', 'הקובץ גדול מדי (מקסימום 25MB)');
+      return;
+    }
+    setSending(true);
+    try {
+      const up = await uploadChatMedia({uri: fileUri, type: mime, name: fileName});
+      let res;
+      if (isGroupThread && groupConversationId) {
+        res = await sendGroupChatMessage(
+          groupConversationId,
+          myEmail,
+          fileName,
+          {
+            type: 'file',
+            url: up.url,
+          },
+        );
+      } else {
+        const {receiverDisplay, senderDisplay} = getChatDisplays();
+        res = await sendChatMessage(
+          myEmail,
+          otherUserEmail,
+          fileName,
+          receiverDisplay,
+          senderDisplay,
+          {
+            type: 'file',
+            url: up.url,
+          },
+        );
+      }
+      if (res.message) {
+        const nm = normalizeChatMessage(res.message);
+        setMessages(prev => [
+          ...prev,
+          {
+            ...nm,
+            id: nm.id || Date.now(),
+            mediaType: nm.mediaType || 'file',
+            mediaUrl: nm.mediaUrl || up.url,
+            body: nm.body || fileName,
+          },
+        ]);
+        applyConversationIdFromSend(res);
+        if (onMessageSent) onMessageSent();
+      }
+    } catch (e) {
+      Alert.alert('', e?.message || 'העלאת הקובץ נכשלה');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handlePickFile = async () => {
+    if (!myEmail || sending || isRecording) return;
+    if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof document === 'undefined') return;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '*/*';
+        input.onchange = async e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const objectUrl = URL.createObjectURL(file);
+          try {
+            await sendPickedChatFile({
+              uri: objectUrl,
+              mimeType: file.type || 'application/octet-stream',
+              name: file.name || `file-${Date.now()}`,
+              size: file.size,
+            });
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+          }
+        };
+        input.click();
+        return;
+      }
+      const result = await pickChatDocument();
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      await sendPickedChatFile({
+        uri: asset.uri,
+        mimeType: asset.mimeType || 'application/octet-stream',
+        name: asset.name || `file-${Date.now()}`,
+        size: asset.size,
+      });
+    } catch (e) {
+      Alert.alert('', e?.message || 'בחירת הקובץ נכשלה');
+      setSending(false);
+    }
+  };
+
   const resetVoiceComposerState = useCallback(() => {
     setIsRecording(false);
     setVoiceLocked(false);
@@ -1852,6 +1958,14 @@ const ChatScreen = ({
     setFullScreenImageUrl(u);
   }, []);
 
+  const openChatFile = useCallback(url => {
+    const u = url != null ? String(url).trim() : '';
+    if (!u) return;
+    Linking.openURL(u).catch(() => {
+      Alert.alert('', 'לא ניתן לפתוח את הקובץ');
+    });
+  }, []);
+
   const handleVoiceDurationKnown = useCallback((messageId, durationMs) => {
     const id = String(messageId);
     const ms = Math.max(0, Number(durationMs) || 0);
@@ -2117,6 +2231,7 @@ const ChatScreen = ({
       const bodyTrim = String(msg.body || '').trim();
       const hasAudio = msg.mediaType === 'audio' && msg.mediaUrl;
       const hasImage = msg.mediaType === 'image' && msg.mediaUrl;
+      const hasFile = msg.mediaType === 'file' && msg.mediaUrl;
       /** True for SharePostSheet (`listing_share`); false stored for normal text with listing_id; undefined = legacy rows. */
       const legacyInferredShare =
         !!msg.listingId &&
@@ -2357,6 +2472,24 @@ const ChatScreen = ({
                     />
                   </TouchableOpacity>
                   )
+                ) : msg.mediaType === 'file' && msg.mediaUrl ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => openChatFile(msg.mediaUrl)}
+                    style={styles.fileAttachmentBubble}
+                    accessibilityRole="button"
+                    accessibilityLabel={`פתח קובץ ${bodyTrim || 'מצורף'}`}>
+                    <View style={styles.fileAttachmentIconWrap}>
+                      <MaterialCommunityIcons
+                        name="paperclip"
+                        size={18}
+                        color="#fff"
+                      />
+                    </View>
+                    <Text style={styles.fileAttachmentName} numberOfLines={2}>
+                      {bodyTrim || 'קובץ מצורף'}
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
                 {msg.mediaType === 'audio' && msg.mediaUrl ? (
                   <ChatVoiceMessageBubble
@@ -2396,7 +2529,8 @@ const ChatScreen = ({
                   </Text>
                 ) : null}
                 {bodyTrim &&
-                !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) ? (
+                !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
+                !hasFile ? (
                   <Text style={styles.bubbleText}>{bodyTrim}</Text>
                 ) : null}
                 {!(hasAudio && !bodyTrim) ? (
@@ -3343,6 +3477,25 @@ const ChatScreen = ({
                 </TouchableOpacity>
               </>
             ) : null}
+            {!isRecording ? (
+              <TouchableOpacity
+                style={[
+                  styles.inputBarIconBtn,
+                  !canSendChatMedia && styles.inputBarIconDisabled,
+                ]}
+                activeOpacity={0.7}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                onPress={canSendChatMedia ? handlePickFile : undefined}
+                disabled={!canSendChatMedia}
+                accessibilityRole="button"
+                accessibilityLabel="צרף קובץ">
+                <MaterialCommunityIcons
+                  name="paperclip"
+                  size={22}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            ) : null}
             {sending ? (
               <View
                 style={styles.inputBarIconBtn}
@@ -4057,15 +4210,10 @@ const styles = StyleSheet.create({
   groupMemberOverlap: {
     width: 38,
     height: 38,
-    borderWidth: 1.5,
-    borderColor: '#FFE8A8',
-    borderRadius: 19,
-    overflow: 'hidden',
   },
   groupMemberOverlapShift: {
-    marginLeft: -8,
+    marginStart: -10,
   },
-  groupMemberAvatar: {width: '100%', height: '100%', borderRadius: 19},
   groupDescPreview: {
     color: '#FFFFFF',
     fontSize: 20,
@@ -5115,6 +5263,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inputBarAssetIcon: {width: 22, height: 22},
+  fileAttachmentBubble: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    maxWidth: 240,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 4,
+  },
+  fileAttachmentIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fileAttachmentName: {
+    flex: 1,
+    minWidth: 0,
+    color: '#fff',
+    fontSize: 14,
+    textAlign: 'right',
+  },
   inputPillWrap: {
     flex: 1,
     minWidth: 0,

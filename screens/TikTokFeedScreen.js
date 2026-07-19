@@ -2119,6 +2119,8 @@ const TikTokFeedScreen = ({
   onOpenPostInFeed = null,
   /** Profile grid → feed limited to one user's posts; chrome-only top/bottom bars. */
   profilePostsScope = null,
+  /** False while profile (or related) covers the feed — pause playback but keep scroll state. */
+  isScreenActive = true,
 }) => {
   const insets = useSafeAreaInsets();
   const profilePostsSubId = profilePostsScope?.subscriptionId
@@ -2138,6 +2140,7 @@ const TikTokFeedScreen = ({
   const [scrollAnchorIndex, setScrollAnchorIndex] = useState(0);
   const currentIndexRef = useRef(0);
   const feedVideoRefs = useRef(new Map());
+  const isScreenActiveRef = useRef(isScreenActive);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const bottomSheetTranslateY = useRef(new Animated.Value(0)).current;
@@ -5206,6 +5209,12 @@ const TikTokFeedScreen = ({
   }, [currentIndex, videos]);
 
   const activateFeedVideoAt = useCallback(index => {
+    if (!isScreenActiveRef.current) {
+      feedVideoRefs.current.forEach(player => {
+        player?.pause?.();
+      });
+      return;
+    }
     feedVideoRefs.current.forEach((player, i) => {
       if (i === index) {
         player?.play?.();
@@ -5215,10 +5224,27 @@ const TikTokFeedScreen = ({
     });
   }, []);
 
+  useEffect(() => {
+    isScreenActiveRef.current = isScreenActive;
+  }, [isScreenActive]);
+
+  useEffect(() => {
+    if (isScreenActive) {
+      activateFeedVideoAt(currentIndexRef.current);
+      return;
+    }
+    feedVideoRefs.current.forEach(player => {
+      player?.pause?.();
+    });
+  }, [isScreenActive, activateFeedVideoAt]);
+
   const bindFeedVideoRef = useCallback((index, node) => {
     if (node) {
       feedVideoRefs.current.set(index, node);
-      if (index === currentIndexRef.current) {
+      if (
+        index === currentIndexRef.current &&
+        isScreenActiveRef.current
+      ) {
         node.play?.();
       }
     } else {

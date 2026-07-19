@@ -1876,7 +1876,11 @@ const ChatListScreen = ({
                                   checked && styles.ncPickCheckOuterOn,
                                 ]}>
                                 {checked ? (
-                                  <View style={styles.ncPickCheckMark} />
+                                  <MaterialCommunityIcons
+                                    name="check"
+                                    size={14}
+                                    color={NC_TOGGLE_AMBER}
+                                  />
                                 ) : null}
                               </View>
                             </View>
@@ -1948,7 +1952,11 @@ const ChatListScreen = ({
                                       checked && styles.ncPickCheckOuterOn,
                                     ]}>
                                     {checked ? (
-                                      <View style={styles.ncPickCheckMark} />
+                                      <MaterialCommunityIcons
+                                        name="check"
+                                        size={14}
+                                        color={NC_TOGGLE_AMBER}
+                                      />
                                     ) : null}
                                   </View>
                                 </View>
@@ -2949,15 +2957,6 @@ const styles = StyleSheet.create({
   },
   ncPickCheckOuterOn: {
     backgroundColor: '#000000',
-  },
-  ncPickCheckMark: {
-    width: 8,
-    height: 5,
-    borderLeftWidth: 2,
-    borderBottomWidth: 2,
-    borderColor: NC_TOGGLE_AMBER,
-    transform: [{rotate: '-45deg'}],
-    marginTop: -1,
   },
   ncGroupFooter: {
     paddingHorizontal: 16,
