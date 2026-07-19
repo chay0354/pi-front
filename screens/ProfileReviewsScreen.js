@@ -7,10 +7,10 @@ import {
   Image,
   TouchableOpacity,
   Platform,
-  I18nManager,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import ProfileAvatar from '../components/ProfileAvatar';
 import {flexStart} from '../utils/rtlLayout';
 
 /** Figma 10:31152 — full-screen ביקורות list (RTL). */
@@ -24,13 +24,15 @@ const isWeb = Platform.OS === 'web';
 const baseUrl =
   isWeb && typeof window !== 'undefined' ? window.location.origin : '';
 const ratingStarSources = isWeb
-  ? [1, 2, 3, 4, 5].map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
+  ? [1, 2, 3, 4].map(i => ({uri: `${baseUrl}/starts/${i}.png`})).concat([
+      {uri: `${baseUrl}/starts/5old.png`},
+    ])
   : [
       require('../assets/starts/1.png'),
       require('../assets/starts/2.png'),
       require('../assets/starts/3.png'),
       require('../assets/starts/4.png'),
-      require('../assets/starts/5.png'),
+      require('../assets/starts/5old.png'),
     ];
 
 function getStarSource(index) {
@@ -59,32 +61,22 @@ const ReviewRow = ({r}) => {
   const starIdx = rating - 1;
   const starSource = getStarSource(starIdx);
   const starStyle =
-    rating === 1
-      ? styles.starBadge1
-      : rating === 5
-        ? styles.starBadge5
-        : styles.starBadge;
+    rating === 1 ? styles.starBadge1 : styles.starBadge;
 
   return (
     <View style={styles.card}>
       {/** Figma 10:31157: Top row justify-end, gap 15 — avatar 66px right, name+date flex-1 left of it (row-reverse + avatar first). */}
       <View style={styles.cardTop}>
         <View style={styles.avatarCol}>
-          {r.reviewer_image_url ? (
-            <Image
-              source={{uri: r.reviewer_image_url}}
-              style={styles.avatar}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPh]}>
-              <MaterialCommunityIcons
-                name="account"
-                size={24}
-                color="rgba(255,255,255,0.6)"
-              />
-            </View>
-          )}
+          <ProfileAvatar
+            uri={r.reviewer_image_url || undefined}
+            name={r.reviewer_name}
+            size={60}
+            subscriptionType={r.reviewer_subscription_type}
+            imageStyle={
+              Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+            }
+          />
           <Image source={starSource} style={starStyle} resizeMode="contain" />
         </View>
         <View style={styles.nameCol}>
@@ -243,14 +235,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 54,
     left: 21,
-  },
-  /** 5★ only: larger badge (match profile emphasis), still centered in 66px column */
-  starBadge5: {
-    width: 32,
-    height: 32,
-    position: 'absolute',
-    top: 48,
-    left: 17,
   },
   starBadge: {
     width: 24,

@@ -9,11 +9,13 @@ import {
   TextInput,
   Alert,
   I18nManager,
+  Platform,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getReviews, submitReview} from '../utils/api';
 import RatingImprovePicker from '../components/RatingImprovePicker';
+import ProfileAvatar from '../components/ProfileAvatar';
 import {flexStart} from '../utils/rtlLayout';
 
 const imgBack =
@@ -222,7 +224,7 @@ const ProfessionalFlyerScreen = ({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
-          {paddingBottom: 210 + insets.bottom},
+          {paddingBottom: Math.max(24, insets.bottom + 24)},
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
@@ -370,6 +372,37 @@ const ProfessionalFlyerScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
+
+          <View style={styles.contactCtaSection}>
+            <TouchableOpacity onPress={onMessage} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#FEE787', '#BD9947', '#9C6522']}
+                locations={[0.0456, 0.5076, 0.8831]}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}
+                style={styles.ctaGold}>
+                <Image
+                  source={{uri: imgChatBadge}}
+                  style={styles.chatBadge}
+                  resizeMode="contain"
+                />
+                <Text style={styles.ctaGoldText}>שליחת הודעה</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => onCall?.(phones[0] || '')}
+              activeOpacity={0.85}
+              style={styles.ctaPhone}>
+              <Image
+                source={{uri: imgCallWhite}}
+                style={styles.ctaPhoneIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.ctaPhoneText}>
+                {`פנייה בטלפון ${phones[0] || ''}`}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -428,19 +461,15 @@ const ProfessionalFlyerScreen = ({
                     </Text>
                   </View>
                   <View style={styles.reviewAvatarWrap}>
-                    {r.reviewer_image_url ? (
-                      <Image
-                        source={{uri: r.reviewer_image_url}}
-                        style={styles.reviewAvatar}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Image
-                        source={fallbackExpertImage}
-                        style={styles.reviewAvatar}
-                        resizeMode="cover"
-                      />
-                    )}
+                    <ProfileAvatar
+                      uri={r.reviewer_image_url || undefined}
+                      name={r.reviewer_name}
+                      size={66}
+                      subscriptionType={r.reviewer_subscription_type}
+                      imageStyle={
+                        Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                      }
+                    />
                     <RatingBadge value={Number(r.rating) || 5} compact />
                   </View>
                 </View>
@@ -465,42 +494,6 @@ const ProfessionalFlyerScreen = ({
           />
         </TouchableOpacity>
       </ScrollView>
-
-      <View
-        style={[
-          styles.bottomCtas,
-          {paddingBottom: Math.max(9, insets.bottom)},
-        ]}>
-        <TouchableOpacity onPress={onMessage} activeOpacity={0.85}>
-          <LinearGradient
-            colors={['#FEE787', '#BD9947', '#9C6522']}
-            locations={[0.0456, 0.5076, 0.8831]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}
-            style={styles.ctaGold}>
-            <Image
-              source={{uri: imgChatBadge}}
-              style={styles.chatBadge}
-              resizeMode="contain"
-            />
-            <Text style={styles.ctaGoldText}>שליחת הודעה</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => onCall?.(phones[0] || '')}
-          activeOpacity={0.85}
-          style={styles.ctaPhone}>
-          <Image
-            source={{uri: imgCallWhite}}
-            style={styles.ctaPhoneIcon}
-            resizeMode="contain"
-          />
-          <Text
-            style={
-              styles.ctaPhoneText
-            }>{`פנייה בטלפון ${phones[0] || ''}`}</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -781,14 +774,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
   },
   reportIcon: {width: 24, height: 24},
-  bottomCtas: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#1E1D27',
-    paddingTop: 24,
-    paddingHorizontal: 24,
+  contactCtaSection: {
+    width: '100%',
+    marginTop: 20,
     gap: 20,
   },
   ctaGold: {

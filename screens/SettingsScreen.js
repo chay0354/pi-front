@@ -87,8 +87,6 @@ const SettingsScreen = ({
     currentUser?.subscription_type === subscriptionTypes.professional;
   const isLoggedCompany =
     currentUser?.subscription_type === subscriptionTypes.company;
-  const isLoggedRegular =
-    currentUser?.subscription_type === subscriptionTypes.user;
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
   const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
   const viewerId = toSubscriptionId(
@@ -175,7 +173,7 @@ const SettingsScreen = ({
   }, [currentUser?.email, setCurrentUser]);
 
   useEffect(() => {
-    if (!isLoggedRegular || !viewerId) {
+    if (!viewerId) {
       setFollowingPreviewRows([]);
       setFollowingPreviewLoading(false);
       return;
@@ -202,7 +200,7 @@ const SettingsScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [isLoggedRegular, viewerId]);
+  }, [viewerId]);
   const handleSubscriptionPress = type => {
     if (onOpenSubscription) {
       onOpenSubscription(type);
@@ -343,7 +341,7 @@ const SettingsScreen = ({
             </View>
           ) : null}
         </TouchableOpacity>
-        {isLoggedRegular ? (
+        {currentUser && viewerId ? (
           <TouchableOpacity
             style={styles.followingPreviewWrap}
             activeOpacity={0.8}
@@ -393,7 +391,7 @@ const SettingsScreen = ({
             onPress={onOpenEditPublishAd}>
             {renderChevron()}
             <View style={styles.cardItemTextWrap}>
-              <Text style={styles.cardItemText}>ערוך / פרסם פוסט</Text>
+              <Text style={styles.cardItemText}>ערוך / פרסם</Text>
               {renderMenuIcon('edit')}
             </View>
           </TouchableOpacity>
@@ -422,8 +420,8 @@ const SettingsScreen = ({
         </View>
       </View>
 
-      {/* Subscriptions Section */}
-      {!isLoggedBroker && !isLoggedProfessional && !isLoggedCompany ? (
+      {/* Subscriptions Section — guests only; hidden for all signed-in account types */}
+      {!currentUser ? (
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>מנויים</Text>

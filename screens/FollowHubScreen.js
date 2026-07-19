@@ -149,10 +149,12 @@ const FollowHubScreen = ({
         likes: Number(data?.stats?.likes || 0),
         followers: Number(data?.stats?.followers || 0),
         following: Number(data?.stats?.following || 0),
-        pending_requests: Number(data?.stats?.pending_requests || 0),
+        pending_requests: isOwnProfile
+          ? Number(data?.stats?.pending_requests || 0)
+          : 0,
       });
     } catch (_) {}
-  }, [profileId]);
+  }, [profileId, isOwnProfile]);
 
   const loadRows = useCallback(async () => {
     if (!profileId) return;
@@ -495,8 +497,18 @@ const FollowHubScreen = ({
     return `עוקב ${counts.following}`;
   };
 
-  /** Always show the full hub list (followers / following / likes) — including people you already follow. */
-  const displayRows = rows || [];
+  /** Always show the full hub list — on someone else's profile, hide unapproved follow rows. */
+  const displayRows = useMemo(() => {
+    const list = rows || [];
+    if (isOwnProfile) return list;
+    if (activeTab === TAB_FOLLOWING) {
+      return list.filter(row => !row?.outgoing_follow_pending);
+    }
+    if (activeTab === TAB_FOLLOWERS) {
+      return list.filter(row => !row?.request_id);
+    }
+    return list;
+  }, [rows, isOwnProfile, activeTab]);
 
   return (
     <View style={styles.root}>

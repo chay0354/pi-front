@@ -1,5 +1,5 @@
 const DEFAULT_FONT_SIZE = 20;
-const STAGE_TEXT_PAD_LEFT = 8;
+const STAGE_TEXT_PAD_LEFT = 2;
 const STAGE_TEXT_PAD_RIGHT = 2;
 const STAGE_TEXT_PAD_Y = 12;
 /** Matches PostEditorScreen styles.stage marginHorizontal. */
@@ -170,6 +170,18 @@ export const parsePostTextOverlayPayload = listing => {
     }
   }
   if (!gd || typeof gd !== 'object') return null;
+  // Sales-image text lives under sales_image_editor on regular ads. Only read it
+  // when explicitly editing/previewing the sales image — never on the main ad
+  // media in the feed (that was drawing תמונה מכירתית text on the ad image).
+  if (
+    listing?._preferSalesImage === true &&
+    (!Array.isArray(gd.post_text_overlays) ||
+      gd.post_text_overlays.length === 0) &&
+    gd.sales_image_editor &&
+    typeof gd.sales_image_editor === 'object'
+  ) {
+    gd = gd.sales_image_editor;
+  }
   const overlays = gd.post_text_overlays;
   if (!Array.isArray(overlays) || overlays.length === 0) return null;
 
@@ -191,9 +203,26 @@ export const parsePostTextOverlayPayload = listing => {
   };
 };
 
-/** general_details fragment to persist overlay layout for a video post. */
-export const buildPostTextGeneralDetails = postTextMeta => {
-  if (!postTextMeta?.overlays?.length) return null;
+/** general_details fragment to persist overlay layout for a post. */
+export const buildPostTextGeneralDetails = (
+  postTextMeta,
+  {
+    sourceImageUrl = null,
+    textBakedIntoImage = false,
+    backgroundGradientIndex = null,
+  } = {},
+) => {
+  if (!postTextMeta?.overlays?.length) {
+    // Explicit clear so edits that remove all text don't leave stale overlays.
+    return {
+      post_text_overlays: [],
+      post_overlay_preview_w: null,
+      post_overlay_preview_h: null,
+      post_source_image_url: null,
+      post_text_baked: false,
+      post_bg_gradient_index: null,
+    };
+  }
   const gd = {post_text_overlays: postTextMeta.overlays};
   if (postTextMeta.previewWidth > 0) {
     gd.post_overlay_preview_w = postTextMeta.previewWidth;
@@ -201,13 +230,117 @@ export const buildPostTextGeneralDetails = postTextMeta => {
   if (postTextMeta.previewHeight > 0) {
     gd.post_overlay_preview_h = postTextMeta.previewHeight;
   }
+  const source =
+    sourceImageUrl != null ? String(sourceImageUrl).trim() : '';
+  if (source) {
+    gd.post_source_image_url = source;
+  }
+  if (textBakedIntoImage) {
+    gd.post_text_baked = true;
+  }
+  const gradientIdx = Number(backgroundGradientIndex);
+  if (Number.isFinite(gradientIdx) && gradientIdx >= 0) {
+    gd.post_bg_gradient_index = gradientIdx;
+  }
   return gd;
 };
+
+/**
+ * Editor restore info for a previously published post: whether the feed image
+ * has the text burned in, the clean source image (if stored), and the gradient
+ * background index for text-on-gradient posts.
+ */
+function resolveEditorGeneralDetails(listing) {
+  const gd = parseListingGeneralDetails(listing?.general_details);
+  if (!gd) return null;
+  if (
+    listing?._preferSalesImage &&
+    gd.sales_image_editor &&
+    typeof gd.sales_image_editor === 'object'
+  ) {
+    return gd.sales_image_editor;
+  }
+  return gd;
+}
+
+export function parsePostEditorRestoreInfo(listing) {
+  const gd = resolveEditorGeneralDetails(listing);
+  const source =
+    gd?.post_source_image_url != null
+      ? String(gd.post_source_image_url).trim()
+      : '';
+  const gradientIdx = Number(gd?.post_bg_gradient_index);
+  return {
+    textBaked: gd?.post_text_baked === true,
+    sourceImageUrl: source || null,
+    bgGradientIndex:
+      Number.isFinite(gradientIdx) && gradientIdx >= 0 ? gradientIdx : null,
+  };
+}
+
+/**
+ * Clean background image for the editor (not a baked composite with text).
+ * Prefers `post_source_image_url` when the feed image has text burned in.
+ */
+export function extractPostSourceImageUrl(listing) {
+  const gd = resolveEditorGeneralDetails(listing);
+  const source =
+    gd?.post_source_image_url != null
+      ? String(gd.post_source_image_url).trim()
+      : '';
+  return source || null;
+}
+
+/** True when feed should draw live text overlays (not already baked into pixels). */
+export function shouldRenderPostTextOverlaysOnFeed(listing) {
+  // Regular listing ads must never show post/sales text overlays on main media.
+  const isFeedPost =
+    listing?.feed_post === true ||
+    listing?.feed_post === 'true' ||
+    listing?.feed_post === 't' ||
+    listing?.isPost === true ||
+    listing?.type === 'post' ||
+    listing?.type === 'feed_post';
+  if (!isFeedPost) return false;
+
+  const payload = parsePostTextOverlayPayload(listing);
+  if (!payload?.overlays?.length) return false;
+  const gd = parseListingGeneralDetails(listing?.general_details);
+  if (gd?.post_text_baked === true) return false;
+  return true;
+}
 
 /** Extract main image / video URLs from a listing row for post editor hydration. */
 export function extractPostListingMediaUrls(listing) {
   if (!listing || typeof listing !== 'object') {
     return {videoUrl: null, mainImageUrl: null};
+  }
+  if (listing._preferSalesImage) {
+    // Prefer clean source when text was baked into the sales composite so
+    // overlays can be edited instead of tapping dead pixels on the bake.
+    const sourceImageUrl = extractPostSourceImageUrl(listing);
+    const salesRaw =
+      listing.sales_image_url ?? listing.salesImageUrl ?? null;
+    const salesUrl =
+      salesRaw != null && String(salesRaw).trim() !== ''
+        ? String(salesRaw).trim()
+        : null;
+    const salesLooksLikeVideo =
+      !!salesUrl &&
+      (/\.(mp4|m3u8|webm|mov|m4v)(\?|$)/i.test(salesUrl) ||
+        /\/videos?\//i.test(salesUrl));
+    if (salesLooksLikeVideo) {
+      return {
+        videoUrl: salesUrl,
+        mainImageUrl: sourceImageUrl || null,
+      };
+    }
+    if (sourceImageUrl) {
+      return {videoUrl: null, mainImageUrl: sourceImageUrl};
+    }
+    if (salesUrl) {
+      return {videoUrl: null, mainImageUrl: salesUrl};
+    }
   }
   const listingVideos = listing.listing_videos || [];
   const videoUrl =
@@ -215,9 +348,13 @@ export function extractPostListingMediaUrls(listing) {
     listingVideos[0]?.video_url ||
     listingVideos[0]?.video_playback_url ||
     null;
+  // Prefer the clean source image so re-opened edits get editable text layers
+  // instead of a baked composite with text burned in.
+  const sourceImageUrl = extractPostSourceImageUrl(listing);
   const imgs = listing.listing_images || [];
   const main = imgs.find(i => i?.image_type === 'main');
   let mainImageUrl =
+    sourceImageUrl ||
     (main?.image_url && String(main.image_url).trim()) ||
     (listing.main_image_url && String(listing.main_image_url).trim()) ||
     (listing.image && String(listing.image).trim()) ||
@@ -292,10 +429,9 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
       y = (overlay.y ?? 0) - stageOffsetY;
     }
     const boxWidth = getTextBlockBoxWidth(stageW);
-    x = Math.max(
-      STAGE_TEXT_PAD_LEFT,
-      Math.min(Number(x) || 0, stageW - boxWidth - STAGE_TEXT_PAD_RIGHT),
-    );
+    // Loose x clamp: text can be freely positioned, so the box may hang past
+    // the stage edges; the editor re-clamps precisely against glyph bounds.
+    x = Math.max(-boxWidth, Math.min(Number(x) || 0, stageW));
     y = Math.max(
       STAGE_TEXT_PAD_Y,
       Math.min(Number(y) || 0, stageH - 40 - STAGE_TEXT_PAD_Y),
@@ -356,3 +492,83 @@ export const scalePostTextOverlayBlock = (
     lineHeight: Math.round(fontSize * 1.15),
   };
 };
+
+const normalizeMediaUrlForCompare = url => {
+  if (url == null || url === '') return '';
+  return String(url).trim().split('?')[0].toLowerCase();
+};
+
+/**
+ * Build PostEditor initialListing for תמונה מכירתית edit.
+ * Loads overlay metadata from the ad (sales_image_editor) or the companion
+ * feed post that shares the same image URL (older ads like #24).
+ */
+export async function resolveSalesImageEditorListing({
+  salesImageUrl,
+  subscriptionId,
+  editorMeta = null,
+  adGeneralDetails = null,
+}) {
+  const trimmed = String(salesImageUrl || '').trim();
+  if (!trimmed) return null;
+
+  let generalDetails =
+    editorMeta?.generalDetails && typeof editorMeta.generalDetails === 'object'
+      ? {...editorMeta.generalDetails}
+      : null;
+
+  const adGd = parseListingGeneralDetails(adGeneralDetails);
+  if (
+    (!generalDetails?.post_text_overlays?.length) &&
+    adGd?.sales_image_editor &&
+    typeof adGd.sales_image_editor === 'object'
+  ) {
+    generalDetails = {...adGd.sales_image_editor};
+  }
+
+  if (!generalDetails?.post_text_overlays?.length && subscriptionId) {
+    try {
+      const {getListings} = await import('./api');
+      const res = await getListings({
+        subscription_id: subscriptionId,
+        feed_post: true,
+        status: 'published',
+      });
+      const target = normalizeMediaUrlForCompare(trimmed);
+      const companion = (res?.listings || []).find(
+        row =>
+          normalizeMediaUrlForCompare(row?.main_image_url) === target ||
+          normalizeMediaUrlForCompare(row?.video_url) === target,
+      );
+      if (companion?.general_details) {
+        const pgd = parseListingGeneralDetails(companion.general_details);
+        if (Array.isArray(pgd?.post_text_overlays) && pgd.post_text_overlays.length) {
+          generalDetails = {...pgd};
+        }
+      }
+    } catch (_) {
+      /* companion lookup is best-effort */
+    }
+  }
+
+  const sourceImageUrl =
+    (editorMeta?.sourceImageUrl &&
+      String(editorMeta.sourceImageUrl).trim()) ||
+    (generalDetails?.post_source_image_url &&
+      String(generalDetails.post_source_image_url).trim()) ||
+    null;
+
+  const listing = {
+    _preferSalesImage: true,
+    sales_image_url: trimmed,
+    main_image_url: trimmed,
+  };
+
+  if (generalDetails && typeof generalDetails === 'object') {
+    listing.general_details = sourceImageUrl
+      ? {...generalDetails, post_source_image_url: sourceImageUrl}
+      : generalDetails;
+  }
+
+  return listing;
+}

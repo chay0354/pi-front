@@ -44,7 +44,10 @@ import {
   PostFeedLikeIcon,
   FollowPlusBadge,
 } from '../components';
-import {FeedVideoPlayer} from '../components/FeedVideoPlayer';
+import {
+  FeedVideoPlayer,
+  FeedVideoPosterPlaceholder,
+} from '../components/FeedVideoPlayer';
 import PostTextOverlays from '../components/PostTextOverlays';
 import {
   prefetchFeedWindowMedia,
@@ -52,8 +55,12 @@ import {
   resolveFeedVideoUri,
   feedScrollFocusIndex,
 } from '../utils/feedVideoPreload';
+import {fitWidthMediaLayout} from '../utils/fitWidthMedia';
 import {resolveAdVideoUri, isVideoProcessing} from '../utils/videoPlayback';
-import {parsePostTextOverlayPayload} from '../utils/postTextOverlay';
+import {
+  parsePostTextOverlayPayload,
+  shouldRenderPostTextOverlaysOnFeed,
+} from '../utils/postTextOverlay';
 import FeedBottomBar from '../components/FeedBottomBar';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
 import {
@@ -127,6 +134,7 @@ import {
   categoryImages,
   companySheetAdListingCategoryIds,
   getCreateSheetListingIcon,
+  getListingSheetCopy,
   regularUserAdListingCategoryIds,
   subscriptionTypes,
 } from '../utils/constant';
@@ -387,6 +395,17 @@ const mergeListingRows = (target, rows) => {
 
 const isNewsSidebarFilterDef = filter =>
   filter?.id === 'new' && filter?.ads_only === true;
+
+/** הדמיות sidebar: company ads only (no posts), every category. */
+const isRenderingsSidebarFilterDef = filter =>
+  filter?.id === 'renderings' &&
+  String(filter?.subscription_type || '').toLowerCase() === 'company' &&
+  filter?.ads_only === true;
+
+const isRenderingsSidebarListing = listing => {
+  if (!listing || isFeedPost(listing)) return false;
+  return String(listing?.subscription_type || '').toLowerCase() === 'company';
+};
 
 /** Company ads: `construction_status` from DB may be English keys or Hebrew labels from the form. */
 function companyConstructionStatusMatches(listing, target) {
@@ -986,7 +1005,7 @@ const NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new.png');
 const OFFICE_NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new-2.png');
 
 /**
- * חדש מקבלן (category 1) only — הדמיות first (all company ads), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
+ * חדש מקבלן (category 1) only — הדמיות first (all company ads, all categories), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
  * Do not use as the default for דירות / גלובל / other feeds.
  */
 const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
@@ -1586,6 +1605,78 @@ function isFeedPostVideo(video) {
   );
 }
 
+/**
+ * Listing-ad slide: full width (edge-to-edge sides), letterbox top/bottom.
+ * Never crops left/right — same rule as story / ad videos.
+ */
+function FitWidthFeedImage({
+  source,
+  pageWidth,
+  screenHeight,
+  imageStyle,
+  onError,
+  single = false,
+}) {
+  const [layout, setLayout] = useState(null);
+  const sourceKey =
+    typeof source === 'number'
+      ? String(source)
+      : String(source?.uri || '');
+
+  useEffect(() => {
+    setLayout(null);
+  }, [sourceKey, pageWidth]);
+
+  const applyNaturalSize = useCallback(
+    (nw, nh) => {
+      const next = fitWidthMediaLayout(pageWidth, nw, nh);
+      if (next) setLayout(next);
+    },
+    [pageWidth],
+  );
+
+  return (
+    <View
+      style={[
+        styles.swiperImageContainer,
+        {width: pageWidth, height: screenHeight},
+        single && styles.swiperImageContainerSingle,
+      ]}>
+      <Image
+        source={source}
+        {...FEED_IMAGE_PROPS}
+        style={[
+          layout || {
+            width: pageWidth,
+            height: screenHeight,
+          },
+          imageStyle,
+        ]}
+        resizeMode={layout ? 'stretch' : 'contain'}
+        onLoad={e => {
+          const src = e?.nativeEvent?.source;
+          const w = Number(src?.width) || 0;
+          const h = Number(src?.height) || 0;
+          if (w > 0 && h > 0) {
+            applyNaturalSize(w, h);
+            return;
+          }
+          // Web / some Android builds omit source dims — resolve via Image.getSize.
+          const uri = typeof source === 'object' ? source?.uri : null;
+          if (uri) {
+            Image.getSize(
+              uri,
+              (gw, gh) => applyNaturalSize(gw, gh),
+              () => {},
+            );
+          }
+        }}
+        onError={onError}
+      />
+    </View>
+  );
+}
+
 const ImageSwiper = ({
   images,
   screenHeight,
@@ -1771,15 +1862,25 @@ const ImageSwiper = ({
     });
   };
 
-  // Feed posts (incl. color/gradient canvases) are full-bleed TikTok media —
-  // `contain` letterboxes them with black side/top gaps. Listing ad photos keep
-  // `contain` so the whole photo stays visible.
-  const slideResizeMode = isFeedPostVideo(video) ? 'cover' : 'contain';
+  // Feed posts stay full-bleed `cover`. Listing ads use fit-width: edge-to-edge
+  // sides, letterbox top/bottom — never crop left/right.
+  const isPostSlide = isFeedPostVideo(video);
 
   const renderSlideshowSlide = (image, slideKey, single = false) => {
     const uri = resolveImageUri(image);
     const useFallback = !uri || erroredKeys.has(slideKey);
     const imageSource = useFallback ? fallbackCategoryImage : {uri};
+    if (!isPostSlide) {
+      return (
+        <FitWidthFeedImage
+          source={imageSource}
+          pageWidth={pageWidth}
+          screenHeight={screenHeight}
+          single={single}
+          onError={() => markImageErrored(slideKey)}
+        />
+      );
+    }
     return (
       <View
         style={[
@@ -1795,7 +1896,7 @@ const ImageSwiper = ({
             single && styles.swiperImageSingle,
             {maxWidth: pageWidth, maxHeight: screenHeight},
           ]}
-          resizeMode={slideResizeMode}
+          resizeMode="cover"
           onError={() => markImageErrored(slideKey)}
         />
       </View>
@@ -1876,7 +1977,9 @@ const ImageSwiper = ({
                     },
                   ]}
                   resizeMode={
-                    useFallback || imageCount === 1 ? 'contain' : 'cover'
+                    isFeedPostVideo(video) && imageCount > 1 && !useFallback
+                      ? 'cover'
+                      : 'contain'
                   }
                   onError={() => markImageErrored(collageKey)}
                 />
@@ -1973,35 +2076,6 @@ const ImageSwiper = ({
   );
 };
 
-/** Title + subtitle for the listing row in the TikTok “צור מודעה” bottom sheet. */
-function getListingSheetCopy(selectedCategory) {
-  const cat = parseInt(String(selectedCategory ?? '').trim(), 10);
-  if (cat === 10) {
-    return {
-      title: 'פרויקט',
-      subtitle: 'פרסם נכס למכירה או השכרה',
-    };
-  }
-  if (cat === 3) {
-    return {
-      title: 'פרסם מודעה',
-      subtitle: 'צור מודעה כדי להיכנס, להכניס או למצוא שותף',
-    };
-  }
-  if (cat === 7) {
-    return {title: 'קרקע', subtitle: 'פרסם קרקע למכירה או השכרה'};
-  }
-  if (cat === 8) {
-    return {
-      title: 'נכס מסחרי',
-      subtitle: 'פרסם נכס מסחרי למכירה או השכרה',
-    };
-  }
-  if (cat === 4 || cat === 6 || cat === 12) {
-    return {title: 'נכס', subtitle: 'פרסם נכס למכירה או השכרה'};
-  }
-  return {title: 'משרד', subtitle: 'פרסם משרד למכירה או השכרה'};
-}
 
 /**
  * TikTokFeedScreen Component
@@ -2388,6 +2462,25 @@ const TikTokFeedScreen = ({
   const isSidebarIntroAnimReady =
     isSidebarProfileHoldReady && partnersSidebarLayoutsReady;
 
+  /**
+   * Center פרסם button: professionals + regular users get the create-ad
+   * drawer right on the feed (Figma מגירת צור מודעה) instead of being sent
+   * to the EditPublishAd page. Companies/brokers keep the manage-ads page;
+   * guests go to registration (handled by App via onOpenEditPublishAdWithCategory).
+   */
+  const handlePublishButtonPress = () => {
+    const sub = (currentUser?.subscription_type || '').toLowerCase();
+    if (
+      sub === subscriptionTypes.professional ||
+      sub === subscriptionTypes.user
+    ) {
+      bottomSheetTranslateY.setValue(0);
+      setShowBottomSheet(true);
+      return;
+    }
+    onOpenEditPublishAdWithCategory?.(selectedCategory);
+  };
+
   const closeSheetAndOpenListing = opts => {
     setShowBottomSheet(false);
     const isCompanyOrBroker =
@@ -2763,6 +2856,7 @@ const TikTokFeedScreen = ({
         let commercialFilter = null;
         let legacySidebarFilter = null;
         let newsSidebarFilterActive = false;
+        let renderingsSidebarFilterActive = false;
 
         if (isProfilePostsFeed) {
           result = await getListings({
@@ -2845,6 +2939,9 @@ const TikTokFeedScreen = ({
         newsSidebarFilterActive =
           selectedSidebarFilter === 'new' &&
           isNewsSidebarFilterDef(activeSidebarFilter);
+        renderingsSidebarFilterActive =
+          selectedSidebarFilter === 'renderings' &&
+          isRenderingsSidebarFilterDef(activeSidebarFilter);
         const subscriptionType =
           partnersFilter?.subscription_type ??
           bnbFilter?.subscription_type ??
@@ -2899,7 +2996,16 @@ const TikTokFeedScreen = ({
           ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
         };
 
-        if (newsSidebarFilterActive && categoryToFetch != null) {
+        if (renderingsSidebarFilterActive) {
+          result = await getListings({
+            status: 'published',
+            subscription_type: 'company',
+            ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
+          });
+          mergedListings = Array.isArray(result?.listings)
+            ? [...result.listings]
+            : [];
+        } else if (newsSidebarFilterActive && categoryToFetch != null) {
           result = await getListings({
             category: categoryToFetch,
             status: 'published',
@@ -3324,6 +3430,9 @@ const TikTokFeedScreen = ({
             ? afterTopBar
             : Number.isFinite(selectedCatNum)
               ? afterTopBar.filter(listing => {
+                  if (renderingsSidebarFilterActive) {
+                    return isRenderingsSidebarListing(listing);
+                  }
                   if (newsSidebarFilterActive) {
                     return isNewsSidebarListing(listing, selectedCatNum);
                   }
@@ -3416,12 +3525,10 @@ const TikTokFeedScreen = ({
             );
           } else if (
             !isProfilePostsFeed &&
-            selectedSidebarFilter === 'renderings'
+            renderingsSidebarFilterActive
           ) {
-            // הדמיות: all company ads in this category (images + videos), exclude posts.
-            displayListings = displayListings.filter(
-              l => !isFeedPost(l) && isCompany(l),
-            );
+            // הדמיות: all company ads across every category (video, image, etc.), no posts.
+            displayListings = displayListings.filter(isRenderingsSidebarListing);
           }
           if (landFilter?.land_in_mortgage) {
             const need = String(landFilter.land_in_mortgage).trim();
@@ -3582,8 +3689,9 @@ const TikTokFeedScreen = ({
     const normalized = text.toLowerCase();
     return normalized !== 'פוסט' && normalized !== 'post';
   };
-  /** Text overlay for video posts — only when explicit overlay data was saved. */
+  /** Text overlay for posts — live layers when not baked into the image. */
   const renderPostTextOverlays = video => {
+    if (!shouldRenderPostTextOverlaysOnFeed(video)) return null;
     const payload = video?.postTextOverlay;
     if (!payload) return null;
     return (
@@ -4185,6 +4293,7 @@ const TikTokFeedScreen = ({
 
   const cityDistanceKm = feedFilters?.city?.distanceKm;
   const distanceFilterActive =
+    !isProfilePostsFeed &&
     Number.isFinite(Number(cityDistanceKm)) &&
     Number(cityDistanceKm) > 0 &&
     selectedCategory !== 5 &&
@@ -4851,17 +4960,22 @@ const TikTokFeedScreen = ({
     }
     return out;
   };
-  const baseList =
-    selectedTopBarFilter === 'liked'
+  const baseList = isProfilePostsFeed
+    ? dbListings
+    : selectedTopBarFilter === 'liked'
       ? dbListings.filter(l => isItemLiked(l))
       : dbListings;
   const uploadedVideos = useMemo(() => {
     void listingDistanceVersion;
     void userCoordsReady;
     void distanceCalcReady;
+    // Profile post browsing: show that user's posts only — never apply TikTok
+    // bottom/top filters (price, city, rooms, liked, etc.).
+    if (isProfilePostsFeed) return baseList;
     return applyFeedFilters(baseList);
   }, [
     baseList,
+    isProfilePostsFeed,
     feedFilters,
     selectedCategory,
     userCoords,
@@ -5001,9 +5115,11 @@ const TikTokFeedScreen = ({
   // Video mode: do not mix in image-only mock cards when browsng all categories.
   const includeMockWhenNoCategory =
     !selectedCategory && selectedTopBarFilter !== 'video';
-  const videos = selectedCategory
+  const videos = isProfilePostsFeed
     ? uploadedVideos
-    : [...uploadedVideos, ...(includeMockWhenNoCategory ? allMockVideos : [])];
+    : selectedCategory
+      ? uploadedVideos
+      : [...uploadedVideos, ...(includeMockWhenNoCategory ? allMockVideos : [])];
 
   const listModeListings = useMemo(
     () => videos.filter(l => !isFeedPost(l)),
@@ -5576,6 +5692,12 @@ const TikTokFeedScreen = ({
       (ok && regularUserAdListingCategoryIds.has(n))
     );
   }, [currentUser?.subscription_type, tikTokSheetListingCategoryNum]);
+
+  const listingSheetCopy = useMemo(
+    () =>
+      getListingSheetCopy(selectedCategory, currentUser?.subscription_type),
+    [selectedCategory, currentUser?.subscription_type],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -6359,8 +6481,9 @@ const TikTokFeedScreen = ({
     }
 
     const filtersActive =
-      hasActiveFeedFilters(feedFilters) ||
-      (dbListings.length > 0 && uploadedVideos.length === 0);
+      !isProfilePostsFeed &&
+      (hasActiveFeedFilters(feedFilters) ||
+        (dbListings.length > 0 && uploadedVideos.length === 0));
 
     return (
       <View style={styles.feedEmptyCard}>
@@ -7237,55 +7360,42 @@ const TikTokFeedScreen = ({
   const renderFeedMedia = (video, index) => {
     const isActiveFeedPage = index === currentIndex;
     const isActiveVideoPage = index === currentIndex;
-    const prewarmVideoPage =
-      index === currentIndex + 1 || index === currentIndex - 1;
     if (video.isUploaded) {
       const feedVideoUri = resolveFeedVideoUri(video);
       if (video.type === 'video' && feedVideoUri) {
-        // Only mount real Video players for the active page ±1.
-        // Mounting HLS for the full FlatList preload window freezes Android.
-        const mustMountVideoPlayer = isActiveVideoPage || prewarmVideoPage;
+        // Active page always mounts its player. Neighbors (±1) mount paused
+        // players immediately (no settle delay) so they decode their first
+        // frame offscreen the instant they enter range — by the time the
+        // user's swipe lands, the next video is already frame-ready. Window
+        // stays fixed at 3 real players max (A07-safe decoder budget).
+        const isPrewarmNeighbor =
+          index === currentIndex + 1 || index === currentIndex - 1;
+        const mustMountVideoPlayer = isActiveVideoPage || isPrewarmNeighbor;
+        const posterUri = resolveFeedVideoPosterUri(video);
+        // Text overlays are passed INTO the player so post + text render as
+        // one unit: hidden while the video loads, shown with the first frame.
+        const fitAdWidth = !isFeedPostVideo(video);
         if (!mustMountVideoPlayer) {
-          const posterUri = resolveFeedVideoPosterUri(video);
-          if (posterUri) {
-            return (
-              <>
-                <Image
-                  source={{uri: posterUri}}
-                  {...FEED_IMAGE_PROPS}
-                  style={styles.feedVideoPlayer}
-                  resizeMode="cover"
-                />
-                {renderPostTextOverlays(video)}
-              </>
-            );
-          }
           return (
-            <>
-              <View style={styles.feedVideoPlayer}>
-                <Image
-                  source={getTikImage(video.image ?? video.category)}
-                  style={styles.videoImage}
-                  resizeMode="contain"
-                />
-              </View>
+            <FeedVideoPosterPlaceholder
+              posterUri={posterUri}
+              fitWidth={fitAdWidth}
+              style={styles.feedVideoPlayer}>
               {renderPostTextOverlays(video)}
-            </>
+            </FeedVideoPosterPlaceholder>
           );
         }
         return (
-          <>
-            <FeedVideoPlayer
-              ref={node => bindFeedVideoRef(index, node)}
-              uri={feedVideoUri}
-              posterUri={resolveFeedVideoPosterUri(video)}
-              isActive={isActiveVideoPage}
-              prewarm={prewarmVideoPage && !isActiveVideoPage}
-              style={styles.feedVideoPlayer}
-              placeholderSource={getTikImage(video.image ?? video.category)}
-            />
+          <FeedVideoPlayer
+            ref={node => bindFeedVideoRef(index, node)}
+            uri={feedVideoUri}
+            posterUri={posterUri}
+            isActive={isActiveVideoPage}
+            prewarm={isPrewarmNeighbor && !isActiveVideoPage}
+            fitWidth={fitAdWidth}
+            style={styles.feedVideoPlayer}>
             {renderPostTextOverlays(video)}
-          </>
+          </FeedVideoPlayer>
         );
       }
       if (video.type === 'video' && video.videoProcessing && !feedVideoUri) {
@@ -7314,14 +7424,17 @@ const TikTokFeedScreen = ({
         const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
         const displayMode = rawOpt === 'collage' ? 'collage' : 'slideshow';
         return (
-          <ImageSwiper
-            images={video.images}
-            screenHeight={feedPageHeight}
-            video={video}
-            displayOption={displayMode}
-            isActivePage={isActiveFeedPage}
-            pauseAutoAdvance={sidebarSlideshowPaused}
-          />
+          <>
+            <ImageSwiper
+              images={video.images}
+              screenHeight={feedPageHeight}
+              video={video}
+              displayOption={displayMode}
+              isActivePage={isActiveFeedPage}
+              pauseAutoAdvance={sidebarSlideshowPaused}
+            />
+            {renderPostTextOverlays(video)}
+          </>
         );
       }
     }
@@ -8196,10 +8309,18 @@ const TikTokFeedScreen = ({
           onOpenPreferencesFilter={onOpenPreferencesFilter}
           onOpenPriceFilter={onOpenPriceFilter}
           onOpenEditPublishAdWithCategory={onOpenEditPublishAdWithCategory}
+          onPressPublish={handlePublishButtonPress}
         />
       )}
 
       {/* Bottom Sheet */}
+      {showBottomSheet && (
+        <TouchableOpacity
+          style={styles.bottomSheetBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowBottomSheet(false)}
+        />
+      )}
       {showBottomSheet && (
         <Animated.View
           style={[
@@ -8232,8 +8353,8 @@ const TikTokFeedScreen = ({
                 </>
               ) : (
                 <CreateAdSheetRow
-                  title={getListingSheetCopy(selectedCategory).title}
-                  subtitle={getListingSheetCopy(selectedCategory).subtitle}
+                  title={listingSheetCopy.title}
+                  subtitle={listingSheetCopy.subtitle}
                   iconSource={getCreateSheetListingIcon(
                     selectedCategory,
                     currentUser?.subscription_type,
@@ -10469,6 +10590,12 @@ const styles = StyleSheet.create({
   viewsLikesDot: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
+  },
+  /** Figma מגירת צור מודעה: dim the feed behind the drawer; tap to dismiss. */
+  bottomSheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 299,
   },
   bottomSheetHost: {
     position: 'absolute',

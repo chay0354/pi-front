@@ -1,8 +1,9 @@
-import {StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {InputBox} from './InputBox';
 import {PhoneInput} from './PhoneInput';
 import {TextAreaBox} from './TextAreaBox';
 import {Title} from './Title';
+import {uploadProjectWording} from '../../utils/constant';
 
 export const PropertyAddress = ({
   projectName,
@@ -13,33 +14,35 @@ export const PropertyAddress = ({
   setPhone,
   description,
   setDescription,
+  subscriptionType = null,
 }) => {
+  const nameLabel = uploadProjectWording('שם הפרויקט', subscriptionType);
+  const addressLabel = uploadProjectWording('כתובת הפרויקט', subscriptionType);
+  const descriptionLabel = uploadProjectWording('תיאור הפרויקט', subscriptionType);
+
   return (
     <View style={styles.container}>
-      {/* Address Section */}
       <Title text={'פרטי כתובת הנכס'} />
       <InputBox
         value={projectName}
         setValue={setProjectName}
-        title={'שם הפרויקט'}
+        title={nameLabel}
         required={true}
         placeholder={'הזן שם'}
       />
       <InputBox
         value={address}
         setValue={setAddress}
-        title={'כתובת הפרויקט'}
+        title={addressLabel}
         required={true}
         placeholder={'הזן עיר, רחוב ומספר'}
       />
 
-      {/* Phone Section */}
       <PhoneInput phone={phone} setPhone={setPhone} />
-      {/* Description Section */}
       <TextAreaBox
         value={description}
         setValue={setDescription}
-        title={'תיאור הפרויקט'}
+        title={descriptionLabel}
         required={true}
         placeholder={'כתוב תיאור'}
       />

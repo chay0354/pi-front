@@ -60,18 +60,38 @@ const SEARCH_BUTTON_PNG = require('../assets/buy-rent/search.png');
 /** Reserve scroll padding so chips aren’t hidden under the pinned footer (~נקה + חפש strip). */
 const SETTINGS_FOOTER_SCROLL_PADDING = 162;
 
-const collectTypes = professional =>
-  (Array.isArray(professional?.types) ? professional.types : [])
+const isBrokerDirectoryItem = professional =>
+  String(professional?.subscription_type || '')
+    .trim()
+    .toLowerCase() === 'broker';
+
+const collectTypes = professional => {
+  if (isBrokerDirectoryItem(professional)) {
+    return ['תיווך'];
+  }
+  return (Array.isArray(professional?.types) ? professional.types : [])
     .map(v => String(v || '').trim())
     .filter(Boolean);
+};
 
-const collectTags = professional =>
-  (Array.isArray(professional?.specializations)
+/** Pros: התמחויות. Brokers: אזורי פעילות (same chip row under the address). */
+const collectTags = professional => {
+  const fromRegions = Array.isArray(professional?.activity_regions)
+    ? professional.activity_regions
+    : [];
+  const fromSpecs = Array.isArray(professional?.specializations)
     ? professional.specializations
-    : [])
+    : [];
+  const source = isBrokerDirectoryItem(professional)
+    ? fromRegions.length > 0
+      ? fromRegions
+      : fromSpecs
+    : fromSpecs;
+  return source
     .map(v => String(v || '').trim())
     .filter(Boolean)
     .slice(0, 3);
+};
 
 /** Mux HLS (or raw MP4 fallback) for a professional's intro video, if any. */
 const resolveProfessionalVideoUri = professional => {
@@ -159,7 +179,10 @@ const ProfessionalCard = ({
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const videoUri = resolveProfessionalVideoUri(professional);
-  const title = String(professional?.display_name || 'בעל מקצוע').trim();
+  const title = String(
+    professional?.display_name ||
+      (isBrokerDirectoryItem(professional) ? 'תיווך' : 'בעל מקצוע'),
+  ).trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
   const description = String(professional?.bio || 'ללא תיאור').trim();
   const webVideoRef = useCallback(
@@ -252,18 +275,20 @@ const ProfessionalCard = ({
                 ))}
               </View>
             ) : null}
-            <View style={styles.addressRow}>
-              <View style={styles.pinIconWrap}>
-                <Image
-                  source={imgLocationPro}
-                  style={styles.pinIconLayer}
-                  resizeMode="contain"
-                />
+            {!isBrokerDirectoryItem(professional) ? (
+              <View style={styles.addressRow}>
+                <View style={styles.pinIconWrap}>
+                  <Image
+                    source={imgLocationPro}
+                    style={styles.pinIconLayer}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={styles.addressText} numberOfLines={1}>
+                  {address}
+                </Text>
               </View>
-              <Text style={styles.addressText} numberOfLines={1}>
-                {address}
-              </Text>
-            </View>
+            ) : null}
           </View>
           <ProfessionalPiRatingBadge
             rating={professional?.average_rating}
@@ -308,8 +333,14 @@ const ProfessionalListCard = ({professional, onPress}) => {
   const tags = collectTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
-  const title = String(professional?.display_name || 'בעל מקצוע').trim();
+  const title = String(
+    professional?.display_name ||
+      (isBrokerDirectoryItem(professional) ? 'תיווך' : 'בעל מקצוע'),
+  ).trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
+  const avatarSubscriptionType = isBrokerDirectoryItem(professional)
+    ? 'broker'
+    : 'professional';
 
   return (
     <TouchableOpacity
@@ -317,7 +348,12 @@ const ProfessionalListCard = ({professional, onPress}) => {
       onPress={onPress}
       activeOpacity={0.9}>
       <View style={[styles.listCardTopRow, listRtlDirection]}>
-        <ProfileAvatar uri={mediaUrl} name={title} size={78} subscriptionType="professional" />
+        <ProfileAvatar
+          uri={mediaUrl}
+          name={title}
+          size={78}
+          subscriptionType={avatarSubscriptionType}
+        />
         <View style={[styles.listInfoCol, listRtlDirection]}>
           <View style={[styles.listTitleRow, listRtlDirection]}>
             <View style={[styles.listTitleTypesCol, listRtlDirection]}>
@@ -342,18 +378,20 @@ const ProfessionalListCard = ({professional, onPress}) => {
             />
           </View>
 
-          <View style={[styles.listAddressRow, listRtlDirection]}>
-            <View style={styles.listPinIconWrap}>
-              <Image
-                source={imgLocationPro}
-                style={styles.listPinIconLayer}
-                resizeMode="contain"
-              />
+          {!isBrokerDirectoryItem(professional) ? (
+            <View style={[styles.listAddressRow, listRtlDirection]}>
+              <View style={styles.listPinIconWrap}>
+                <Image
+                  source={imgLocationPro}
+                  style={styles.listPinIconLayer}
+                  resizeMode="contain"
+                />
+              </View>
+              <Text style={styles.listAddressText} numberOfLines={1}>
+                {address}
+              </Text>
             </View>
-            <Text style={styles.listAddressText} numberOfLines={1}>
-              {address}
-            </Text>
-          </View>
+          ) : null}
         </View>
       </View>
 
@@ -421,12 +459,18 @@ const ProfessionalsDirectoryScreen = ({
       .trim()
       .toLowerCase();
     const base = professionals.filter(item => {
+      const itemTypes = collectTypes(item);
+      const itemTags = [
+        ...(Array.isArray(item?.specializations) ? item.specializations : []),
+        ...(Array.isArray(item?.activity_regions) ? item.activity_regions : []),
+      ];
       const haystack = [
         item?.display_name,
         item?.address,
         item?.bio,
-        ...(Array.isArray(item?.specializations) ? item.specializations : []),
-        ...(Array.isArray(item?.types) ? item.types : []),
+        isBrokerDirectoryItem(item) ? 'תיווך' : '',
+        ...itemTags,
+        ...itemTypes,
       ]
         .map(v => String(v || '').toLowerCase())
         .join(' ');
@@ -436,16 +480,23 @@ const ProfessionalsDirectoryScreen = ({
         .trim()
         .toLowerCase();
       if (locationQuery) {
-        const locationHaystack = [item?.address, item?.display_name, item?.bio]
+        const locationHaystack = [
+          item?.address,
+          item?.display_name,
+          item?.bio,
+          ...itemTags,
+        ]
           .map(v => String(v || '').toLowerCase())
           .join(' ');
         if (!locationHaystack.includes(locationQuery)) return false;
       }
 
-      if (appliedTypeFilters.length > 0) {
+      // Type chips are professional סוג filters — brokers always stay in the
+      // directory (shown as תיווך) and are not excluded by those filters.
+      if (appliedTypeFilters.length > 0 && !isBrokerDirectoryItem(item)) {
         if (
           !appliedTypeFilters.some(filterType =>
-            professionalMatchesTypeFilter(filterType, item?.types),
+            professionalMatchesTypeFilter(filterType, itemTypes),
           )
         ) {
           return false;
@@ -454,10 +505,7 @@ const ProfessionalsDirectoryScreen = ({
 
       if (appliedExpertiseFilters.length > 0) {
         const expertiseSet = new Set(
-          (Array.isArray(item?.specializations)
-            ? item.specializations
-            : []
-          ).map(v => String(v || '').trim()),
+          itemTags.map(v => String(v || '').trim()),
         );
         if (!appliedExpertiseFilters.some(tag => expertiseSet.has(tag)))
           return false;

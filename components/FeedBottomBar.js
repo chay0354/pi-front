@@ -217,6 +217,8 @@ const FeedBottomBar = ({
   onOpenPreferencesFilter,
   onOpenPriceFilter,
   onOpenEditPublishAdWithCategory,
+  /** When provided, the center פרסם button calls this instead of navigating (e.g. open the create-ad drawer in place). */
+  onPressPublish = null,
   /** When true: keep bar chrome/background only (no filter buttons). */
   chromeOnly = false,
   /** Reports rendered bar height so feed chrome can align on every device. */
@@ -373,7 +375,9 @@ const FeedBottomBar = ({
                 key={item.id}
                 style={[styles.bottomBarItem, styles.bottomBarItemPost]}
                 onPress={() =>
-                  onOpenEditPublishAdWithCategory?.(selectedCategory)
+                  onPressPublish
+                    ? onPressPublish()
+                    : onOpenEditPublishAdWithCategory?.(selectedCategory)
                 }
                 activeOpacity={0.8}>
                 <View style={styles.bottomBarIconWrapPost}>

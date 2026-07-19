@@ -19,6 +19,8 @@ import {Colors} from '../constants/styles';
 const CROP_SIZE = Math.min(320, Dimensions.get('window').width - 48);
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+/** Extra slack (px) past each image edge — you can keep panning a bit after the photo ends. */
+const PAN_OVERSCROLL = 80;
 
 function getScaledLayout(imgSize, pan, zoom) {
   const baseScale = Math.max(CROP_SIZE / imgSize.width, CROP_SIZE / imgSize.height);
@@ -31,13 +33,15 @@ function getScaledLayout(imgSize, pan, zoom) {
 }
 
 function clampPan(pan, displayW, displayH) {
-  const minX = CROP_SIZE - displayW;
-  const maxX = 0;
-  const minY = CROP_SIZE - displayH;
-  const maxY = 0;
+  // pan = {0,0} is the CENTERED image, so the valid range is symmetric:
+  // ±(overhang/2) reaches each image edge exactly, plus overscroll slack.
+  // (The old asymmetric [CROP-display, 0] clamp let one side pan twice as
+  // far as needed while the opposite side got stuck before the edge.)
+  const halfX = Math.max(0, (displayW - CROP_SIZE) / 2) + PAN_OVERSCROLL;
+  const halfY = Math.max(0, (displayH - CROP_SIZE) / 2) + PAN_OVERSCROLL;
   return {
-    x: Math.min(maxX, Math.max(minX, pan.x)),
-    y: Math.min(maxY, Math.max(minY, pan.y)),
+    x: Math.min(halfX, Math.max(-halfX, pan.x)),
+    y: Math.min(halfY, Math.max(-halfY, pan.y)),
   };
 }
 

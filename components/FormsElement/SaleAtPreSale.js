@@ -3,24 +3,29 @@ import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
 import {LinearGradient} from 'expo-linear-gradient';
+import {uploadProjectWording} from '../../utils/constant';
 
 export const SaleAtPreSale = ({
   isSelected = false,
   onToggle = () => {},
+  subscriptionType = null,
 }) => {
   const toggle = () => onToggle(!isSelected);
+  const promoText = uploadProjectWording(
+    'הוסף תגית מכירה ייעודית כדי להבליט את הפרויקט ולמשוך מתעניינים',
+    subscriptionType,
+  );
   return (
     <FormContainer>
       <Title text="מכירה בפריסייל" />
       <RadioWithText
         key={0}
         isNotLastIndex={false}
-        title={'הוסף תגית מכירה ייעודית כדי להבליט את הפרויקט ולמשוך מתעניינים'}
+        title={promoText}
         name={'pre-sale'}
         setName={toggle}
         index={0}
         isSelected={isSelected}
-        // containerStyle={{marginLeft: 20}}
         radioOptionStyle={{paddingTop: 0}}
       />
       <TouchableOpacity

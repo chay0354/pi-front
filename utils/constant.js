@@ -32,6 +32,121 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
+/** Valid DB `ads.category` ids (gaps 9/11 unused). */
+export const LISTING_CATEGORY_IDS = new Set([
+  1, 2, 3, 4, 5, 6, 7, 8, 10, 12,
+]);
+
+/**
+ * Parse a listing category id; invalid/missing → fallback (default דירות).
+ * Never silently coerce to 1 (חדש מקבלן).
+ */
+export function parseListingCategoryId(value, fallback = 10) {
+  const n = parseInt(value, 10);
+  if (Number.isFinite(n) && LISTING_CATEGORY_IDS.has(n)) {
+    return n;
+  }
+  return fallback;
+}
+
+/** Regular / private end-user (not broker/company/professional). */
+export function isRegularSubscriptionType(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  if (
+    t === subscriptionTypes.broker ||
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.professional
+  ) {
+    return false;
+  }
+  // 'user', aliases, or missing → treat as regular so AdsForm never falls
+  // through to company/contractor forms for דירות.
+  return true;
+}
+
+/** Company accounts use "פרויקט" in upload flows; all other types use "נכס". */
+export function isCompanySubscriptionType(subscriptionType) {
+  return (
+    resolveSubscriptionType(subscriptionType) === subscriptionTypes.company
+  );
+}
+
+export const PROJECT_OFFERS_SECTION_TITLE = 'הפרויקט מציע';
+export const ASSET_OFFERS_SECTION_TITLE = 'הנכס מציע';
+
+export function listingOffersSectionTitle(subscriptionType) {
+  return isCompanySubscriptionType(subscriptionType)
+    ? PROJECT_OFFERS_SECTION_TITLE
+    : ASSET_OFFERS_SECTION_TITLE;
+}
+
+export function isListingOffersSectionTitle(title) {
+  return (
+    title === PROJECT_OFFERS_SECTION_TITLE ||
+    title === ASSET_OFFERS_SECTION_TITLE
+  );
+}
+
+/** Swap פרויקט → נכס in upload UI copy for non-company users. */
+export function uploadProjectWording(text, subscriptionType) {
+  if (text == null || isCompanySubscriptionType(subscriptionType)) {
+    return text;
+  }
+  return String(text).replace(/פרויקט/g, 'נכס');
+}
+
+function localizeUploadFormField(field, subscriptionType) {
+  if (isCompanySubscriptionType(subscriptionType) || !field) return field;
+  if (!field.groups?.title?.includes('פרויקט')) return field;
+  return {
+    ...field,
+    groups: {
+      ...field.groups,
+      title: uploadProjectWording(field.groups.title, subscriptionType),
+    },
+  };
+}
+
+export function localizeUploadFormFields(fields, subscriptionType) {
+  if (!Array.isArray(fields) || isCompanySubscriptionType(subscriptionType)) {
+    return fields || [];
+  }
+  return fields.map(f => localizeUploadFormField(f, subscriptionType));
+}
+
+/** Title + subtitle for the listing row in the TikTok / create-ad bottom sheet. */
+export function getListingSheetCopy(selectedCategory, subscriptionType) {
+  const cat = parseInt(String(selectedCategory ?? '').trim(), 10);
+  const assetLabel = isCompanySubscriptionType(subscriptionType)
+    ? 'פרויקט'
+    : 'נכס';
+  if (cat === 10) {
+    return {
+      title: assetLabel,
+      subtitle: 'פרסם נכס למכירה או השכרה',
+    };
+  }
+  if (cat === 3) {
+    return {
+      title: 'פרסם מודעה',
+      subtitle: 'צור מודעה כדי להיכנס, להכניס או למצוא שותף',
+    };
+  }
+  if (cat === 7) {
+    return {title: 'קרקע', subtitle: 'פרסם קרקע למכירה או השכרה'};
+  }
+  if (cat === 8) {
+    return {
+      title: 'נכס מסחרי',
+      subtitle: 'פרסם נכס מסחרי למכירה או השכרה',
+    };
+  }
+  if (cat === 4 || cat === 6 || cat === 12) {
+    return {title: 'נכס', subtitle: 'פרסם נכס למכירה או השכרה'};
+  }
+  return {title: 'משרד', subtitle: 'פרסם משרד למכירה או השכרה'};
+}
+
 /** Gold profile ring: company, broker, professional. Regular `user` uses teal ring in ProfileAvatar. */
 export const shouldShowProfileGoldRing = subscriptionType => {
   const t = resolveSubscriptionType(subscriptionType);
@@ -106,7 +221,7 @@ export function canShowListingAdInCreateSheet(
   subscriptionType,
   listingCategoryId,
 ) {
-  const sub = String(subscriptionType ?? '').toLowerCase();
+  const sub = resolveSubscriptionType(subscriptionType);
   const n = Number(listingCategoryId);
   if (!Number.isFinite(n)) {
     return false;
@@ -114,16 +229,14 @@ export function canShowListingAdInCreateSheet(
   if (sub === subscriptionTypes.professional) {
     return false;
   }
-  if (sub === subscriptionTypes.user) {
-    return regularUserAdListingCategoryIds.has(n);
-  }
   if (sub === subscriptionTypes.broker) {
     return brokerSheetAdListingCategoryIds.has(n);
   }
   if (sub === subscriptionTypes.company) {
     return companySheetAdListingCategoryIds.has(n);
   }
-  return true;
+  // Regular users + missing/alias types (never treat as company).
+  return regularUserAdListingCategoryIds.has(n);
 }
 
 /** EditPublishAd + ListingAnalysis: UI strip id → DB `ads.category`. */
@@ -2712,257 +2825,71 @@ export const companyCategoryForm = {
   },
   10: {
     role: 'company',
+    // דירות — apartment listing (was wrongly copied from חדש מקבלן project form)
     fields: [
       {key: 'multiimagewithvideo', wayToDisplayAd: true, addMorePhotos: true},
       {key: 'salesimage'},
       {key: 'displayoptions'},
-      {key: 'saleatpresale'},
       {
-        key: 'generaldetailswithradio',
-        groups: {
-          title: 'פרטים כלליים',
-          titleRequired: false,
-          groups: [
-            {
-              title: 'שטח הנכס',
-              titleRequired: true,
-              subTitle: '',
-              subTitleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'sqm_area',
-                  isArea: true,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'כמות מבנים',
-              titleRequired: true,
-              subTitle: '',
-              subTitleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'מספר קומות',
-              titleRequired: true,
-              subTitle: '',
-              subTitleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-            {
-              title: 'כמות דירות',
-              titleRequired: true,
-              subTitle: '',
-              subTitleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  isArea: false,
-                  value: 0,
-                },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        key: 'generaldetailswithradio',
-        groups: {
-          title: 'הפרויקט מציע',
-          titleRequired: true,
-          toggleableOfferGroups: true,
-          groups: [
-            {
-              title: 'דירות 3 חדרים',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'rooms_3_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'rooms_3_price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'דירות 4 חדרים',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'rooms_4_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'rooms_4_price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'דירות 5 חדרים',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'rooms_5_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'rooms_5_price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'דירות גן',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'garden_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  key: 'garden_rooms',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'garden_price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'פנטהאוזים',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'penthouse_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  key: 'penthouse_rooms',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'penthouse_price',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-            {
-              title: 'בתים פרטיים',
-              titleRequired: false,
-              isSelected: true,
-              fields: [
-                {
-                  type: 'count',
-                  key: 'private_area',
-                  isArea: true,
-                  value: 0,
-                  subTitle: 'גודל',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'count',
-                  key: 'private_rooms',
-                  isArea: false,
-                  value: 0,
-                  subTitle: 'כמות חדרים',
-                  subTitleRequired: true,
-                },
-                {
-                  type: 'price',
-                  key: 'private_price',
-                  value: 0,
-                  subTitle: 'הוסף מחיר ״החל מ-״',
-                  subTitleRequired: true,
-                },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        key: 'constructionstatus',
-        title: 'מצב בניה',
+        key: 'propertytype',
+        title: 'סןג הנכס',
         data: [
-          {name: 'on_paper', title: 'על הנייר'},
-          {name: 'beginning_of_construction', title: 'תחילת בנייה'},
-          {name: 'middle_of_construction', title: 'אמצע בנייה'},
-          {name: 'built', title: 'בנוי'},
+          {name: 'apartment', title: 'דירה'},
+          {name: 'studio_apartment', title: 'דירת סטודיו'},
+          {name: 'garden_apartment', title: 'דירת גן'},
+          {name: 'duplex', title: 'דופלקס'},
+          {name: 'penthouse', title: 'פנטהאוז'},
+          {name: 'private_house', title: 'בית פרטי'},
         ],
       },
       {
-        key: 'propertyaddress',
+        key: 'generaldetails',
+        counterData: [
+          {
+            title: 'שטח הנכס',
+            isArea: true,
+            value: 0,
+            required: true,
+          },
+          {
+            title: 'מספר חדרים',
+            isArea: false,
+            value: 0,
+            required: true,
+          },
+          {
+            title: 'קומה',
+            isArea: false,
+            value: 0,
+            isLast: true,
+            required: true,
+          },
+        ],
+        data: [
+          {
+            title: 'חנייה',
+            option: [1, 2, 3, 4],
+          },
+          {
+            title: 'מרפסת',
+            option: [1, 2, 3, 4],
+          },
+          {title: 'מעלית'},
+          {title: 'ממ״ד'},
+          {title: 'כניסה מיידית'},
+        ],
+      },
+      {
+        key: 'propertycondition',
+      },
+      {
+        key: 'purpose',
+      },
+      {
+        key: 'price',
+      },
+      {
+        key: 'address-phone-description',
       },
     ],
   },

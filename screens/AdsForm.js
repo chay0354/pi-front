@@ -41,7 +41,12 @@ import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   brokerCategoryForm,
   companyCategoryForm,
+  listingOffersSectionTitle,
+  localizeUploadFormFields,
+  parseListingCategoryId,
+  resolveSubscriptionType,
   subscriptionTypes,
+  uploadProjectWording,
   userCategoryForm,
 } from '../utils/constant';
 import {fonts} from '../utils/fonts';
@@ -52,6 +57,11 @@ import {
 } from '../utils/priceInput';
 import {PublishAdButton} from '../components/FormsElement/PublishAdButton';
 import {buildGlobalGroundFieldList} from '../utils/globalGroundAdFields';
+import {listingImageUrls} from '../utils/listingGridCardFigma';
+import {
+  resolveAdVideoUri,
+  resolveListingEditVideoSourceUrl,
+} from '../utils/videoPlayback';
 import {
   AccommodationOffers,
   AdditionalDetails,
@@ -88,6 +98,7 @@ import {
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
 import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
+import CircleImageCropModal from '../components/CircleImageCropModal';
 import {ContextHook} from '../hooks/ContextHook';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
@@ -525,34 +536,42 @@ const AdsForm = ({
   const [exposureLevel, setExposureLevel] = useState('medium'); // 'low' | 'medium' | 'high' – how often ad is shown to others
   const {currentUser} = useContext(ContextHook);
   const formList = useMemo(() => {
-    const t = String(currentUser?.subscription_type || '').toLowerCase();
-    if (t === subscriptionTypes.user) {
-      return userCategoryForm;
-    }
+    const t = resolveSubscriptionType(currentUser);
     if (t === subscriptionTypes.broker) {
       return brokerCategoryForm;
     }
-    // company & professional: `companyCategoryForm` had no key `1` — merge broker’s חדש מקבלן project form
-    return {
-      ...companyCategoryForm,
-      1: {
-        ...brokerCategoryForm[1],
-        role: 'company',
-      },
-    };
-  }, [currentUser?.subscription_type]);
+    if (
+      t === subscriptionTypes.company ||
+      t === subscriptionTypes.professional
+    ) {
+      // companyCategoryForm had no key `1` — merge broker’s חדש מקבלן project form
+      return {
+        ...companyCategoryForm,
+        1: {
+          ...brokerCategoryForm[1],
+          role: 'company',
+        },
+      };
+    }
+    // Regular users (and missing/alias types): never use company/contractor forms
+    // — that made דירות (10) look like חדש מקבלן.
+    return userCategoryForm;
+  }, [currentUser]);
 
-  const [category, setCategory] = useState(
-    initialCategory ? parseInt(initialCategory) : 1,
-  ); // Category 1-11 (default: 1, or use initialCategory if provided)
+  const [category, setCategory] = useState(() =>
+    parseListingCategoryId(initialCategory, 10),
+  ); // DB category (default דירות=10, never silent חדש מקבלן=1)
   /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7), hide irrelevant blocks */
+  const offersSectionTitle = listingOffersSectionTitle(
+    currentUser?.subscription_type,
+  );
   const adsFormFields = useMemo(() => {
-    return (
+    const raw =
       buildGlobalGroundFieldList(formList, category, propertyType) ??
       formList[category]?.fields ??
-      []
-    );
-  }, [formList, category, propertyType]);
+      [];
+    return localizeUploadFormFields(raw, currentUser?.subscription_type);
+  }, [formList, category, propertyType, currentUser?.subscription_type]);
 
   // New fields for category 3 (חדש מקבלן)
   const [searchPurpose, setSearchPurpose] = useState(null); // 'enter', 'bring_in', 'partner'
@@ -573,11 +592,12 @@ const AdsForm = ({
 
   // Update category when initialCategory prop changes
   useEffect(() => {
-    if (initialCategory) {
-      const categoryNum = parseInt(initialCategory);
-      if (categoryNum >= 1 && categoryNum <= 11) {
-        setCategory(categoryNum);
-      }
+    if (initialCategory == null || initialCategory === '') {
+      return;
+    }
+    const categoryNum = parseListingCategoryId(initialCategory, null);
+    if (categoryNum != null) {
+      setCategory(categoryNum);
     }
   }, [initialCategory]);
 
@@ -602,7 +622,7 @@ const AdsForm = ({
     adsFormFields.forEach((field, fieldIndex) => {
       if (
         field.key !== 'generaldetailswithradio' ||
-        field.groups?.title !== 'הפרויקט מציע'
+        field.groups?.title !== offersSectionTitle
       ) {
         return;
       }
@@ -620,7 +640,7 @@ const AdsForm = ({
     if (Object.keys(next).length > 0) {
       setProjectOfferGroupsExpanded(prev => ({...prev, ...next}));
     }
-  }, [initialListing?.id, adsFormFields]);
+  }, [initialListing?.id, adsFormFields, offersSectionTitle]);
 
   useEffect(() => {
     if (!initialListing?.id || parseInt(category, 10) !== 2) {
@@ -758,11 +778,8 @@ const AdsForm = ({
   // Pre-fill form when editing an existing listing
   useEffect(() => {
     if (!initialListing) return;
-    const cat =
-      initialListing.category != null
-        ? parseInt(initialListing.category)
-        : null;
-    if (cat >= 1 && cat <= 12) setCategory(cat);
+    const cat = parseListingCategoryId(initialListing.category, null);
+    if (cat != null) setCategory(cat);
     const ptRaw = initialListing.property_type ?? initialListing.propertyType;
     if (ptRaw != null && String(ptRaw).trim() !== '') {
       setPropertyType(String(ptRaw).trim());
@@ -861,23 +878,104 @@ const AdsForm = ({
     } else {
       setBudget(initialListing.budget ?? 1000);
     }
-    const imgs =
-      initialListing.images ??
-      (initialListing.image ? [{uri: initialListing.image}] : []);
-    if (imgs.length > 0) {
-      const first = imgs[0];
-      const uri = typeof first === 'string' ? first : first?.uri;
-      if (uri) {
-        setMainImage({uri});
-        setMainImageUrl(uri);
+    const imageUrlList = listingImageUrls(initialListing);
+    if (imageUrlList.length > 0) {
+      setMainImage({uri: imageUrlList[0]});
+      setMainImageUrl(imageUrlList[0]);
+      if (imageUrlList.length > 1) {
+        const rest = imageUrlList.slice(1).map(uri => ({uri}));
+        setAdditionalImages(rest);
+        setAdditionalImageUrls(imageUrlList.slice(1));
+      } else {
+        setAdditionalImages([]);
+        setAdditionalImageUrls([]);
       }
-      if (imgs.length > 1) {
-        const rest = imgs
-          .slice(1)
-          .map(i => (typeof i === 'string' ? {uri: i} : {uri: i?.uri}));
-        setAdditionalImages(rest.filter(i => i?.uri));
-        setAdditionalImageUrls(rest.map(i => i?.uri).filter(Boolean));
-      }
+    } else {
+      setMainImage(null);
+      setMainImageUrl(null);
+      setAdditionalImages([]);
+      setAdditionalImageUrls([]);
+    }
+    const editVideoUrl =
+      resolveListingEditVideoSourceUrl(initialListing) ||
+      resolveAdVideoUri(initialListing);
+    if (editVideoUrl) {
+      setVideoUrl(editVideoUrl);
+      setVideoFile({uri: editVideoUrl});
+      setHasVideo(true);
+    } else {
+      setVideoUrl(null);
+      setVideoFile(null);
+      setHasVideo(false);
+    }
+    if (initialListing.purpose != null && String(initialListing.purpose).trim()) {
+      setPurpose(String(initialListing.purpose).trim());
+    }
+    if (initialListing.condition != null && String(initialListing.condition).trim()) {
+      setCondition(String(initialListing.condition).trim());
+    }
+    if (
+      initialListing.amenities &&
+      typeof initialListing.amenities === 'object'
+    ) {
+      setAmenities({...initialListing.amenities});
+    }
+    if (initialListing.rooms != null && !Number.isNaN(Number(initialListing.rooms))) {
+      setRooms(Math.max(0, Math.round(Number(initialListing.rooms))));
+    }
+    if (initialListing.floor != null && !Number.isNaN(Number(initialListing.floor))) {
+      setFloor(Math.max(0, Math.round(Number(initialListing.floor))));
+    }
+    if (initialListing.area != null && !Number.isNaN(Number(initialListing.area))) {
+      setArea(Math.max(0, Math.round(Number(initialListing.area))));
+    }
+    const feedPri = initialListing.feed_display_priority;
+    if (feedPri === 'mainImage' || feedPri === 'video') {
+      setFeedDisplayPriority(feedPri);
+    }
+    if (
+      initialListing.display_option === 'collage' ||
+      initialListing.display_option === 'slideshow'
+    ) {
+      setDisplayOption(initialListing.display_option);
+    }
+    if (initialListing.search_purpose != null) {
+      setSearchPurpose(String(initialListing.search_purpose).trim() || null);
+    }
+    const aptType =
+      initialListing.preferred_apartment_type ??
+      initialListing.hospitality_nature ??
+      null;
+    if (aptType != null && String(aptType).trim()) {
+      setPreferredApartmentType(String(aptType).trim());
+    }
+    if (initialListing.preferred_gender != null) {
+      setPreferredGender(String(initialListing.preferred_gender).trim() || null);
+    }
+    if (
+      initialListing.preferences &&
+      typeof initialListing.preferences === 'object'
+    ) {
+      setPreferences({...initialListing.preferences});
+    }
+    const landRadios = {};
+    if (initialListing.plan_approval) {
+      landRadios['תב״ע'] = initialListing.plan_approval;
+    }
+    if (initialListing.land_in_mortgage) {
+      landRadios['קרקע במושע'] = initialListing.land_in_mortgage;
+    }
+    if (initialListing.permit) {
+      landRadios['היתר'] = initialListing.permit;
+    }
+    if (initialListing.agricultural_land) {
+      landRadios['קרקע חקלאית'] = initialListing.agricultural_land;
+    }
+    if (initialListing.land_ownership) {
+      landRadios['בעלות קרקע'] = initialListing.land_ownership;
+    }
+    if (Object.keys(landRadios).length > 0) {
+      setLandRadioValues(prev => ({...prev, ...landRadios}));
     }
     const bnbLogoRaw =
       initialListing.bnb_business_logo_url ??
@@ -1020,13 +1118,35 @@ const AdsForm = ({
       const u = String(salesImageRaw).trim();
       setSalesImage({uri: u});
       setSalesImageUrl(u);
+      initialSalesImageUrlRef.current = u;
       salesImageCompanionPendingRef.current = false;
       salesImageStoryAlreadyCreatedRef.current = true;
-    } else {
+      let gd = initialListing.general_details ?? null;
+      if (typeof gd === 'string') {
+        try {
+          gd = JSON.parse(gd);
+        } catch (_) {
+          gd = null;
+        }
+      }
+      if (!gd || typeof gd !== 'object') gd = null;
+      const editorGd = gd?.sales_image_editor;
+      if (editorGd && typeof editorGd === 'object') {
+        setSalesImageEditorMeta({
+          generalDetails: editorGd,
+          sourceImageUrl: editorGd.post_source_image_url || null,
+        });
+      } else {
+        setSalesImageEditorMeta(null);
+      }
+    } else if (!pendingSalesImageFromEditor?.url) {
+      // Listing has no sales media. Skip wipe when PostEditor just returned a draft.
       setSalesImage(null);
       setSalesImageUrl(null);
+      initialSalesImageUrlRef.current = null;
       salesImageCompanionPendingRef.current = false;
       salesImageStoryAlreadyCreatedRef.current = false;
+      setSalesImageEditorMeta(null);
     }
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
@@ -1050,7 +1170,9 @@ const AdsForm = ({
         initialListing.hot_deal === 't' ||
         initialListing.hot_deal === 1,
     );
-  }, [initialListing?.id, currentUser?.subscription_type]);
+    // Only re-prefill when the listing identity changes — not when subscription_type
+    // updates (that used to wipe a just-composed תמונה מכירתית).
+  }, [initialListing?.id]);
 
   // Request camera and media library permissions on mount
   useEffect(() => {
@@ -1084,6 +1206,15 @@ const AdsForm = ({
     if (!url) return;
     setSalesImage({uri: url});
     setSalesImageUrl(url);
+    if (
+      pending.generalDetails &&
+      typeof pending.generalDetails === 'object'
+    ) {
+      setSalesImageEditorMeta({
+        generalDetails: pending.generalDetails,
+        sourceImageUrl: pending.sourceImageUrl || null,
+      });
+    }
     salesImageStoryAlreadyCreatedRef.current =
       pending.storyAlreadyCreated === true ||
       pending.feedPostAlreadyCreated === true;
@@ -1115,14 +1246,20 @@ const AdsForm = ({
   const bnbBusinessLogoInputRef = useRef(null);
   const [bnbBusinessLogo, setBnbBusinessLogo] = useState(null);
   const [bnbBusinessLogoUrl, setBnbBusinessLogoUrl] = useState(null);
+  const [bnbLogoCropUri, setBnbLogoCropUri] = useState(null);
+  const [bnbLogoCropVisible, setBnbLogoCropVisible] = useState(false);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
   const [salesImage, setSalesImage] = useState(null);
   const [salesImageUrl, setSalesImageUrl] = useState(null);
+  /** Editable text layers for תמונה מכירתית (re-open post editor). */
+  const [salesImageEditorMeta, setSalesImageEditorMeta] = useState(null);
   /** True when a companion story still needs to be created on publish. */
   const salesImageCompanionPendingRef = useRef(false);
   /** True when PostEditor already published the sales image as a story. */
   const salesImageStoryAlreadyCreatedRef = useRef(false);
+  /** Original sales image URL when edit form opened — backend syncs mirrors on change. */
+  const initialSalesImageUrlRef = useRef(null);
   // Land form radio groups (תב״ע, קרקע במושע, etc.) keyed by field title
   const [landRadioValues, setLandRadioValues] = useState({});
   // פרטים כלליים: כמות מבנים, מספר קומות, כמות דירות (for broker/company category 1)
@@ -1428,6 +1565,7 @@ const AdsForm = ({
         const asset = result.assets[0];
         salesImageCompanionPendingRef.current = true;
         salesImageStoryAlreadyCreatedRef.current = false;
+        setSalesImageEditorMeta(null);
         setSalesImage({
           uri: asset.uri,
           type: asset.type || 'image/jpeg',
@@ -1445,6 +1583,7 @@ const AdsForm = ({
       const file = event.target.files[0];
       salesImageCompanionPendingRef.current = true;
       salesImageStoryAlreadyCreatedRef.current = false;
+      setSalesImageEditorMeta(null);
       setSalesImage({
         uri: URL.createObjectURL(file),
         type: file.type,
@@ -1454,26 +1593,44 @@ const AdsForm = ({
     }
   };
 
+  const openBnbLogoCropper = uri => {
+    if (!uri) return;
+    setBnbLogoCropUri(uri);
+    setBnbLogoCropVisible(true);
+  };
+
+  const handleBnbLogoCropConfirm = result => {
+    if (result?.uri) {
+      setBnbBusinessLogo({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `bnb-logo-${Date.now()}.jpg`,
+      });
+    }
+    setBnbLogoCropVisible(false);
+    setBnbLogoCropUri(null);
+  };
+
+  const handleBnbLogoCropCancel = () => {
+    setBnbLogoCropVisible(false);
+    setBnbLogoCropUri(null);
+  };
+
   const handleBnbBusinessLogoUpload = async () => {
     if (Platform.OS === 'web' && bnbBusinessLogoInputRef.current) {
       bnbBusinessLogoInputRef.current.click();
       return;
     }
     try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.92,
+        allowsEditing: false,
+        quality: 1,
       });
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setBnbBusinessLogo({
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.filename || `bnb-logo-${Date.now()}.jpg`,
-          file: asset,
-        });
+        openBnbLogoCropper(result.assets[0].uri);
       }
     } catch (error) {
       alert('שגיאה בבחירת לוגו: ' + (error.message || ''));
@@ -1483,12 +1640,7 @@ const AdsForm = ({
   const handleBnbBusinessLogoChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      setBnbBusinessLogo({
-        uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file,
-      });
+      openBnbLogoCropper(URL.createObjectURL(file));
     }
   };
 
@@ -1614,10 +1766,17 @@ const AdsForm = ({
       }
       if (needsProjectNameAndAddress) {
         if (!String(projectName || '').trim()) {
-          publishErrors.push('הזינו שם פרויקט');
+          publishErrors.push(
+            uploadProjectWording('הזינו שם פרויקט', currentUser?.subscription_type),
+          );
         }
         if (!String(address || '').trim()) {
-          publishErrors.push('הזינו כתובת פרויקט');
+          publishErrors.push(
+            uploadProjectWording(
+              'הזינו כתובת פרויקט',
+              currentUser?.subscription_type,
+            ),
+          );
         }
       }
       const needsMainImage =
@@ -1643,7 +1802,10 @@ const AdsForm = ({
         );
         if (!anyOn) {
           publishErrors.push(
-            'בחרו לפחות סוג דירה אחד ב"הפרויקט מציע", או הפעילו שוב שורה שהוסרה.',
+            uploadProjectWording(
+              'בחרו לפחות סוג דירה אחד ב"הפרויקט מציע", או הפעילו שוב שורה שהוסרה.',
+              currentUser?.subscription_type,
+            ),
           );
           break;
         }
@@ -1668,10 +1830,22 @@ const AdsForm = ({
     videoFile,
     videoUrl,
     projectOfferGroupsOn,
+    currentUser?.subscription_type,
+    offersSectionTitle,
   ]);
 
   /** Mandatory fields satisfied — yellow asset + press enabled (still respects uploading). */
   const formReadyToPublish = publishBlockingErrors.length === 0;
+
+  const isEditingAd = useMemo(() => {
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const rawId =
+      initialListing?.id != null && initialListing.id !== ''
+        ? String(initialListing.id).trim()
+        : '';
+    return rawId.length > 0 && uuidRe.test(rawId);
+  }, [initialListing?.id]);
 
   const uploadAdsMedia = async (fileObj, folder, progressKey, options = {}) => {
     if (!hasLocalMediaFile(fileObj)) return null;
@@ -1719,6 +1893,10 @@ const AdsForm = ({
         ...(guestCount > 0 ? {guest_count: Number(guestCount)} : {}),
         ...(checkInDate ? {check_in_date: checkInDate} : {}),
         ...(checkOutDate ? {check_out_date: checkOutDate} : {}),
+        ...(salesImageEditorMeta?.generalDetails &&
+        typeof salesImageEditorMeta.generalDetails === 'object'
+          ? {sales_image_editor: salesImageEditorMeta.generalDetails}
+          : {}),
       };
       const accommodationOffersPayload =
         guestCount || checkInDate || checkOutDate
@@ -1756,6 +1934,20 @@ const AdsForm = ({
       let uploadedVideoUrl = null;
       if (initialListing && mainImage?.uri && !hasLocalMediaFile(mainImage)) {
         uploadedMainImageUrl = mainImage.uri || mainImageUrl;
+      } else if (
+        initialListing &&
+        !mainImage?.uri &&
+        (mainImageUrl ||
+          initialListing.main_image_url ||
+          initialListing.mainImageUrl)
+      ) {
+        // Keep existing main image on update if local state was briefly lost
+        // (e.g. navigating to PostEditor before keep-alive was added).
+        uploadedMainImageUrl =
+          mainImageUrl ||
+          initialListing.main_image_url ||
+          initialListing.mainImageUrl ||
+          null;
       }
       if (initialListing && videoFile?.uri && !hasLocalMediaFile(videoFile)) {
         uploadedVideoUrl = videoFile.uri || videoUrl;
@@ -1950,8 +2142,10 @@ const AdsForm = ({
       }
 
       // Prepare listing data with uploaded Supabase URLs
-      const listingCategory =
-        parseInt(category) || (initialCategory ? parseInt(initialCategory) : 1);
+      const listingCategory = parseListingCategoryId(
+        category,
+        parseListingCategoryId(initialCategory, 10),
+      );
 
       // For category 3, use different data structure
       const listingData =
@@ -2116,14 +2310,26 @@ const AdsForm = ({
         ? await updateListing(existingListingId, listingData)
         : await createListing(listingData);
 
-      // Mirror תמונה מכירתית as both a home story (bottom strip) AND a feed
-      // post in the same category as the ad.
+      // Mirror תמונה מכירתית as a home story (+ companion feed post on first
+      // create). On edit replace: PUT deletes the old story via
+      // syncSalesImageMirrors, then we create a fresh story with the new image.
       const publisherSubId = resolveSubscriptionId(currentUser);
+      const prevSalesUrl = initialSalesImageUrlRef.current
+        ? String(initialSalesImageUrlRef.current).trim()
+        : '';
+      const nextSalesUrl = uploadedSalesImageUrl
+        ? String(uploadedSalesImageUrl).trim()
+        : '';
+      const salesImageChangedOnEdit =
+        Boolean(existingListingId && prevSalesUrl && nextSalesUrl) &&
+        prevSalesUrl !== nextSalesUrl;
+      // Publish a home story for תמונה מכירתית whenever it's new/pending or replaced.
       const shouldCreateSalesImageStory =
-        uploadedSalesImageUrl &&
+        !!uploadedSalesImageUrl &&
         fieldKeys.includes('salesimage') &&
-        !salesImageStoryAlreadyCreatedRef.current &&
-        (hasLocalMediaFile(salesImage) || salesImageCompanionPendingRef.current);
+        (salesImageChangedOnEdit ||
+          salesImageCompanionPendingRef.current ||
+          !salesImageStoryAlreadyCreatedRef.current);
       if (shouldCreateSalesImageStory) {
         if (!publisherSubId) {
           console.warn(
@@ -2134,6 +2340,11 @@ const AdsForm = ({
             await createSalesImageStory({
               imageUrl: uploadedSalesImageUrl,
               subscriptionId: publisherSubId,
+              generalDetails:
+                salesImageEditorMeta?.generalDetails &&
+                typeof salesImageEditorMeta.generalDetails === 'object'
+                  ? salesImageEditorMeta.generalDetails
+                  : null,
             });
           } catch (mirrorErr) {
             console.warn(
@@ -2141,28 +2352,53 @@ const AdsForm = ({
               errorMessageFromUnknown(mirrorErr, 'Unknown error'),
             );
           }
-          // Also publish the sales image as a feed post in the ad's category.
-          try {
-            await createListing({
-              category: listingCategory,
-              status: 'published',
-              subscriptionId: publisherSubId,
-              subscriptionType: currentUser?.subscription_type || null,
-              mainImageUrl: uploadedSalesImageUrl,
-              description: description.trim() || 'פוסט',
-              feedPost: true,
-              feed_post: true,
-              propertyType: 'post',
-              price: 0,
-            });
-          } catch (postErr) {
-            console.warn(
-              '[AdsForm] Companion sales-image post failed:',
-              errorMessageFromUnknown(postErr, 'Unknown error'),
-            );
+          // First-time sales image only — companion feed post. On replace, PUT
+          // sync updates the existing companion post's media URL.
+          if (!salesImageChangedOnEdit) {
+            try {
+              const salesUrlStr = String(uploadedSalesImageUrl).trim();
+              const salesIsVideo =
+                /\.(mp4|m3u8|webm|mov|m4v)(\?|$)/i.test(salesUrlStr) ||
+                /\/videos?\//i.test(salesUrlStr);
+              const salesEditorGd =
+                salesImageEditorMeta?.generalDetails &&
+                typeof salesImageEditorMeta.generalDetails === 'object'
+                  ? salesImageEditorMeta.generalDetails
+                  : undefined;
+              await createListing({
+                category: listingCategory,
+                status: 'published',
+                subscriptionId: publisherSubId,
+                subscriptionType: currentUser?.subscription_type || null,
+                ...(salesIsVideo
+                  ? {
+                      videoUrl: salesUrlStr,
+                      hasVideo: true,
+                      feedDisplayPriority: 'video',
+                    }
+                  : {mainImageUrl: salesUrlStr}),
+                // Neutral description — the ad's name/description must never
+                // appear as text on the companion post.
+                description: 'פוסט',
+                feedPost: true,
+                feed_post: true,
+                propertyType: 'post',
+                price: 0,
+                // Keeps text overlays (video) / re-edit meta (baked photo).
+                generalDetails: salesEditorGd,
+              });
+            } catch (postErr) {
+              console.warn(
+                '[AdsForm] Companion sales-image post failed:',
+                errorMessageFromUnknown(postErr, 'Unknown error'),
+              );
+            }
           }
           salesImageCompanionPendingRef.current = false;
           salesImageStoryAlreadyCreatedRef.current = true;
+          initialSalesImageUrlRef.current = String(
+            uploadedSalesImageUrl,
+          ).trim();
           setSalesImage({uri: uploadedSalesImageUrl});
           setSalesImageUrl(uploadedSalesImageUrl);
         }
@@ -2172,6 +2408,7 @@ const AdsForm = ({
       if (onPublish) {
         onPublish({
           ...listingData,
+          isUpdate: !!existingListingId,
           id: result.id || result.listing?.id,
           mainImage: uploadedMainImageUrl ? {uri: uploadedMainImageUrl} : null,
           additionalImages: uploadedAdditionalImageUrls
@@ -2179,11 +2416,6 @@ const AdsForm = ({
             .map(url => ({uri: url})),
           video: uploadedVideoUrl ? {uri: uploadedVideoUrl} : null,
         });
-      }
-
-      // Close the screen
-      if (onClose) {
-        onClose();
       }
     } catch (error) {
       const errorMessage =
@@ -2200,6 +2432,7 @@ const AdsForm = ({
       onPress={handlePublish}
       uploading={uploading}
       ready={formReadyToPublish}
+      isEditing={isEditingAd}
     />
   );
 
@@ -2435,6 +2668,7 @@ const AdsForm = ({
                     setPhone={setPhone}
                     description={description}
                     setDescription={setDescription}
+                    subscriptionType={currentUser?.subscription_type}
                   />
                 );
               case 'generaldetails': {
@@ -2571,6 +2805,8 @@ const AdsForm = ({
                     handleSalesImageChange={handleSalesImageChange}
                     salesImageInputRef={salesImageInputRef}
                     uploadProgress={uploadProgress}
+                    isEditing={isEditingAd}
+                    salesImageEditorMeta={salesImageEditorMeta}
                     onPressCreateSalesImage={
                       onOpenPostEditor
                         ? () => {
@@ -2586,7 +2822,19 @@ const AdsForm = ({
                                     fromInitial > 0
                                   ? fromInitial
                                   : null;
-                            onOpenPostEditor(listingCat);
+                            const salesUrl =
+                              salesImageUrl ||
+                              (salesImage?.uri
+                                ? String(salesImage.uri).trim()
+                                : '') ||
+                              null;
+                            onOpenPostEditor({
+                              categoryId: listingCat,
+                              salesImageUrl: salesUrl,
+                              isEditingAd,
+                              salesImageEditorMeta,
+                              adListing: initialListing,
+                            });
                           }
                         : undefined
                     }
@@ -2598,6 +2846,7 @@ const AdsForm = ({
                     key="saleatpresale"
                     isSelected={saleAtPresale}
                     onToggle={setSaleAtPresale}
+                    subscriptionType={currentUser?.subscription_type}
                   />
                 );
               case 'sharedspacescompany':
@@ -2616,7 +2865,7 @@ const AdsForm = ({
                 /** פרטים כלליים / הפרויקט מציע / כל בלוק דומה — שורות סגורות כברירת מחדל */
                 const accordionForRadioGroups = companyOfficeGeneralDetailsFigma
                   ? false
-                  : !toggleable || field.groups?.title === 'הפרויקט מציע';
+                  : !toggleable || field.groups?.title === offersSectionTitle;
                 return (
                   <GeneralDetailsWithRadio
                     key={`generaldetailswithradio-${index}`}
@@ -2688,6 +2937,13 @@ const AdsForm = ({
         visible={publishValidationVisible}
         messages={publishValidationMessages}
         onClose={() => setPublishValidationVisible(false)}
+      />
+      <CircleImageCropModal
+        visible={bnbLogoCropVisible}
+        imageUri={bnbLogoCropUri}
+        onCancel={handleBnbLogoCropCancel}
+        onConfirm={handleBnbLogoCropConfirm}
+        title="חתוך את לוגו העסק"
       />
     </View>
   );

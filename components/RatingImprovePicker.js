@@ -1,22 +1,43 @@
 import React, {useCallback, useMemo, useState} from 'react';
-import {View, Pressable, StyleSheet, Text, Platform} from 'react-native';
+import {
+  View,
+  Pressable,
+  StyleSheet,
+  Text,
+  Platform,
+  I18nManager,
+  Image,
+} from 'react-native';
 import {SvgXml} from '../utils/svgXml';
 import {FIGMA_RATING_STARS} from '../assets/improve/figmaRatingStarSvgs';
+import {forceLtrStyle} from '../utils/rtlLayout';
+
+const STAR_VALUES = [1, 2, 3, 4, 5];
+const RATING_PICKER_STAR_FIVE = require('../assets/starts/5.png');
+
+/** Under forceRTL, flex rows mirror on native — reverse so 1 is physical left. */
+const getStarPickerOrder = () =>
+  Platform.OS !== 'web' && I18nManager.isRTL
+    ? [...STAR_VALUES].reverse()
+    : STAR_VALUES;
 
 /**
  * Figma node 8:78507 — five discrete star/rating options (1…5).
  * Scales down on narrow containers so the row stays on screen.
  */
 const BASE_STAR_SIZE = 34.892;
-const BASE_STAR_SIZE_5 = 50.892;
+const BASE_STAR_SIZE_5 = 46;
 const BASE_TILE_PAD = 10;
 const BASE_RADIUS = 12;
-const BASE_GAP = 24;
+const BASE_GAP = 18;
 const BASE_NUM_SIZE = 20;
 const NUM_COLOR = '#1E1D27';
 
 const BASE_TILE_WIDTH = BASE_STAR_SIZE + BASE_TILE_PAD * 2;
-const BASE_ROW_WIDTH = BASE_TILE_WIDTH * 5 + BASE_GAP * 4;
+/** 5th star art is larger than its tile — include overflow so scaling fits the screen. */
+const BASE_STAR_FIVE_OVERFLOW = (BASE_STAR_SIZE_5 - BASE_STAR_SIZE) / 2;
+const BASE_ROW_WIDTH =
+  BASE_TILE_WIDTH * 5 + BASE_GAP * 4 + BASE_STAR_FIVE_OVERFLOW;
 
 function scaleDim(value, scale) {
   return Math.max(1, Math.round(value * scale * 1000) / 1000);
@@ -66,15 +87,25 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
     if (w > 0) setContainerWidth(w);
   }, []);
 
+  const starOrder = useMemo(() => getStarPickerOrder(), []);
+
   return (
     <View
-      style={[styles.wrap, style]}
+      style={[
+        styles.wrap,
+        Platform.OS === 'web' ? forceLtrStyle : null,
+        style,
+      ]}
       onLayout={onWrapLayout}
       collapsable={false}>
       <View
-        style={[styles.row, {gap: dims.gap, maxWidth: BASE_ROW_WIDTH * scale}]}
+        style={[
+          styles.row,
+          Platform.OS === 'web' ? forceLtrStyle : null,
+          {gap: dims.gap, maxWidth: BASE_ROW_WIDTH * scale},
+        ]}
         accessible={false}>
-        {[1, 2, 3, 4, 5].map(n => {
+        {starOrder.map(n => {
           const selected = v === n;
           const isFifth = n === 5;
           const starXml = FIGMA_RATING_STARS[n - 1];
@@ -121,10 +152,13 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
                       },
                     ]}
                     pointerEvents="none">
-                    <SvgXml
-                      xml={starXml}
-                      width={dims.starSize5}
-                      height={dims.starSize5}
+                    <Image
+                      source={RATING_PICKER_STAR_FIVE}
+                      style={{
+                        width: dims.starSize5,
+                        height: dims.starSize5,
+                      }}
+                      resizeMode="contain"
                     />
                   </View>
                 ) : (
@@ -135,15 +169,17 @@ const RatingImprovePicker = ({value = 0, onChange, style}) => {
                     style={styles.starSvg}
                   />
                 )}
-                <View style={styles.starNumberWrap} pointerEvents="none">
-                  <Text
-                    style={[
-                      styles.starNumber,
-                      {fontSize: dims.numSize, lineHeight: dims.numSize},
-                    ]}>
-                    {String(n)}
-                  </Text>
-                </View>
+                {!isFifth ? (
+                  <View style={styles.starNumberWrap} pointerEvents="none">
+                    <Text
+                      style={[
+                        styles.starNumber,
+                        {fontSize: dims.numSize, lineHeight: dims.numSize},
+                      ]}>
+                      {String(n)}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </Pressable>
           );
@@ -167,7 +203,6 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
     alignSelf: 'center',
     overflow: 'hidden',
-    direction: 'ltr',
   },
   tile: {
     backgroundColor: '#2B2A39',

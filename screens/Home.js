@@ -22,6 +22,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
 import HomeIntroModal from '../components/HomeIntroModal';
 import {TouchableOpacity} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
@@ -35,6 +36,9 @@ import {
 import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
+const HOME_FEATURE_AD_STATE_KEY = 'homeFeatureAdRotationState';
+/** After this many full video plays of the same feature ad, pick another. */
+const HOME_FEATURE_AD_RUNS_BEFORE_ROTATE = 3;
 
 const isFeedPostListing = listing =>
   listing?.feed_post === true ||
@@ -43,7 +47,7 @@ const isFeedPostListing = listing =>
 
 const listingHasVideo = listing => !!firstVideoUrl(listing);
 
-const pickRandomCompanyProjectListing = listings => {
+const pickRandomCompanyProjectListing = (listings, excludeId = null) => {
   const candidates = (Array.isArray(listings) ? listings : []).filter(
     listing =>
       !isFeedPostListing(listing) &&
@@ -53,8 +57,59 @@ const pickRandomCompanyProjectListing = listings => {
       listingHasVideo(listing),
   );
   if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)] || null;
+  let pool = candidates;
+  if (excludeId != null && String(excludeId).trim() !== '') {
+    const others = candidates.filter(
+      listing => String(listing?.id) !== String(excludeId),
+    );
+    if (others.length > 0) pool = others;
+  }
+  return pool[Math.floor(Math.random() * pool.length)] || null;
 };
+
+const filterCompanyVideoListings = listings =>
+  (Array.isArray(listings) ? listings : []).filter(
+    listing =>
+      !isFeedPostListing(listing) &&
+      String(listing?.subscription_type || '')
+        .trim()
+        .toLowerCase() === 'company' &&
+      listingHasVideo(listing),
+  );
+
+async function readFeatureAdRotationState() {
+  try {
+    const raw = await AsyncStorage.getItem(HOME_FEATURE_AD_STATE_KEY);
+    if (!raw) return {listingId: null, playCount: 0};
+    const parsed = JSON.parse(raw);
+    // Prefer playCount (video loops). Fall back to legacy viewCount.
+    const playCount = Math.max(
+      0,
+      Number(parsed?.playCount ?? parsed?.viewCount) || 0,
+    );
+    return {
+      listingId:
+        parsed?.listingId != null ? String(parsed.listingId) : null,
+      playCount,
+    };
+  } catch {
+    return {listingId: null, playCount: 0};
+  }
+}
+
+async function writeFeatureAdRotationState(state) {
+  try {
+    await AsyncStorage.setItem(
+      HOME_FEATURE_AD_STATE_KEY,
+      JSON.stringify({
+        listingId: state?.listingId != null ? String(state.listingId) : null,
+        playCount: Math.max(0, Number(state?.playCount) || 0),
+      }),
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
 
 const resolveFeatureProjectVideoMedia = listing => {
   if (!listing) return null;
@@ -75,6 +130,23 @@ const getFeatureProjectName = listing => {
 };
 
 
+/**
+ * Home hero video: full container width (edge-to-edge), letterbox top/bottom if needed.
+ * Same idea as story videos — never crop the left/right sides.
+ */
+function heroVideoLayout(containerW, naturalW, naturalH) {
+  const cw = Math.max(1, Number(containerW) || 1);
+  const w = Number(naturalW) || 0;
+  const h = Number(naturalH) || 0;
+  if (w <= 0 || h <= 0) {
+    return {width: cw, height: cw};
+  }
+  return {
+    width: cw,
+    height: cw * (h / w),
+  };
+}
+
 const FeatureHeroMedia = memo(function FeatureHeroMedia({
   media,
   loading,
@@ -82,19 +154,79 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   fallbackSource,
   isMuted = true,
   onProgressChange,
+  onPlaybackComplete,
 }) {
   const webVideoRef = useRef(null);
   const videoRef = useRef(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [videoLayout, setVideoLayout] = useState(null);
+  const sizedRef = useRef(false);
+  const naturalSizeRef = useRef(null);
+  const lastProgressRef = useRef(0);
+  const lastCompleteAtRef = useRef(0);
+  const onPlaybackCompleteRef = useRef(onPlaybackComplete);
+  onPlaybackCompleteRef.current = onPlaybackComplete;
+
+  const emitPlaybackComplete = useCallback(() => {
+    const now = Date.now();
+    // Loop wrap + didJustFinish can both fire for the same play.
+    if (now - lastCompleteAtRef.current < 800) return;
+    lastCompleteAtRef.current = now;
+    onPlaybackCompleteRef.current?.();
+  }, []);
+
+  const noteProgress = useCallback(
+    progress => {
+      const p = Math.max(0, Math.min(1, Number(progress) || 0));
+      // With isLooping, didJustFinish often never fires — detect wrap-around.
+      if (lastProgressRef.current > 0.82 && p < 0.2) {
+        emitPlaybackComplete();
+      }
+      lastProgressRef.current = p;
+      onProgressChange?.(p);
+    },
+    [emitPlaybackComplete, onProgressChange],
+  );
 
   useEffect(() => {
     setVideoReady(false);
+    setVideoLayout(null);
+    sizedRef.current = false;
+    naturalSizeRef.current = null;
+    lastProgressRef.current = 0;
+    lastCompleteAtRef.current = 0;
     onProgressChange?.(0);
   }, [media?.uri, onProgressChange]);
 
-  const markVideoReady = useCallback(() => {
+  const trySizeVideo = useCallback(() => {
+    const ns = naturalSizeRef.current;
+    if (!ns || containerWidth <= 0 || sizedRef.current) return;
+    const w = Number(ns.w) || 0;
+    const h = Number(ns.h) || 0;
+    if (w <= 0 || h <= 0) return;
+    sizedRef.current = true;
+    setVideoLayout(heroVideoLayout(containerWidth, w, h));
     setVideoReady(true);
-  }, []);
+  }, [containerWidth]);
+
+  const noteNaturalSize = useCallback(
+    (nw, nh) => {
+      naturalSizeRef.current = {w: nw, h: nh};
+      trySizeVideo();
+    },
+    [trySizeVideo],
+  );
+
+  useEffect(() => {
+    sizedRef.current = false;
+    setVideoLayout(null);
+    setVideoReady(false);
+  }, [media?.uri, containerWidth]);
+
+  useEffect(() => {
+    trySizeVideo();
+  }, [trySizeVideo]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -117,26 +249,35 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
     if (!el || media?.type !== 'video') return;
     const onTimeUpdate = () => {
       if (el.duration > 0) {
-        onProgressChange?.(Math.min(1, el.currentTime / el.duration));
+        noteProgress(el.currentTime / el.duration);
       }
     };
+    const onEnded = () => {
+      // Non-loop fallback (loop usually prevents ended).
+      emitPlaybackComplete();
+    };
     el.addEventListener('timeupdate', onTimeUpdate);
-    return () => el.removeEventListener('timeupdate', onTimeUpdate);
-  }, [media?.type, media?.uri, onProgressChange]);
+    el.addEventListener('ended', onEnded);
+    return () => {
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('ended', onEnded);
+    };
+  }, [emitPlaybackComplete, media?.type, media?.uri, noteProgress]);
 
   const handlePlaybackStatusUpdate = useCallback(
     status => {
       if (!status?.isLoaded) return;
       if (status.durationMillis > 0) {
-        onProgressChange?.(
-          Math.min(1, status.positionMillis / status.durationMillis),
-        );
+        noteProgress(status.positionMillis / status.durationMillis);
+      }
+      if (status.didJustFinish) {
+        emitPlaybackComplete();
       }
       if (!status.isPlaying && !paused) {
         videoRef.current?.playAsync().catch(() => {});
       }
     },
-    [onProgressChange, paused],
+    [emitPlaybackComplete, noteProgress, paused],
   );
 
   if (loading) {
@@ -146,9 +287,17 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   }
 
   if (media?.type === 'video' && media.uri) {
+    const sized = videoLayout != null;
+    const onContainerLayout = event => {
+      const w = event?.nativeEvent?.layout?.width;
+      if (w > 0 && Math.abs(w - containerWidth) > 0.5) {
+        setContainerWidth(w);
+      }
+    };
+
     if (Platform.OS === 'web') {
       return (
-        <View style={styles.projectImage}>
+        <View style={styles.projectImage} onLayout={onContainerLayout}>
           {!videoReady ? (
             <View
               style={[
@@ -157,30 +306,37 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
               ]}
             />
           ) : null}
-          <video
-            ref={webVideoRef}
-            src={media.uri}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              borderRadius: 16,
-              opacity: videoReady ? 1 : 0,
-            }}
-            autoPlay={!paused}
-            muted={isMuted}
-            loop
-            playsInline
-            preload="auto"
-            onLoadedData={markVideoReady}
-            onCanPlay={markVideoReady}
-          />
+          <View style={styles.heroVideoClip}>
+            <video
+              ref={webVideoRef}
+              src={media.uri}
+              style={{
+                width: sized ? videoLayout.width : '100%',
+                height: sized ? videoLayout.height : '100%',
+                objectFit: sized ? 'fill' : 'cover',
+                backgroundColor: '#2B2A39',
+                display: 'block',
+                opacity: videoReady ? 1 : 0,
+              }}
+              autoPlay={sized && !paused}
+              muted={isMuted}
+              loop
+              playsInline
+              preload="auto"
+              onLoadedMetadata={e => {
+                const el = e?.target || webVideoRef.current;
+                if (el?.videoWidth && el?.videoHeight) {
+                  noteNaturalSize(el.videoWidth, el.videoHeight);
+                }
+              }}
+            />
+          </View>
         </View>
       );
     }
 
     return (
-      <View style={styles.projectImage}>
+      <View style={styles.projectImage} onLayout={onContainerLayout}>
         {!videoReady ? (
           <View
             style={[
@@ -189,26 +345,44 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
             ]}
           />
         ) : null}
-        <Video
-          ref={videoRef}
-          key={media.uri}
-          source={{uri: media.uri}}
-          style={[
-            StyleSheet.absoluteFillObject,
-            {opacity: videoReady ? 1 : 0},
-          ]}
-          resizeMode={ResizeMode.COVER}
-          shouldPlay={!paused}
-          isMuted={isMuted}
-          isLooping
-          useNativeControls={false}
-          usePoster={false}
-          progressUpdateIntervalMillis={100}
-          onReadyForDisplay={markVideoReady}
-          onLoad={markVideoReady}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          onError={() => {}}
-        />
+        <View style={styles.heroVideoClip}>
+          <Video
+            ref={videoRef}
+            key={media.uri}
+            source={{uri: media.uri}}
+            style={[
+              sized ? videoLayout : StyleSheet.absoluteFillObject,
+              {opacity: videoReady ? 1 : 0},
+            ]}
+            resizeMode={sized ? ResizeMode.STRETCH : ResizeMode.COVER}
+            shouldPlay={sized && !paused}
+            isMuted={isMuted}
+            isLooping
+            useNativeControls={false}
+            usePoster={false}
+            progressUpdateIntervalMillis={100}
+            onLoad={status => {
+              const ns = status?.naturalSize;
+              if (ns?.width && ns?.height) {
+                let nw = ns.width;
+                let nh = ns.height;
+                if (ns.orientation === 'portrait' && nw > nh) {
+                  nw = ns.height;
+                  nh = ns.width;
+                }
+                noteNaturalSize(nw, nh);
+              }
+            }}
+            onReadyForDisplay={event => {
+              const ns = event?.naturalSize;
+              if (ns?.width && ns?.height) {
+                noteNaturalSize(ns.width, ns.height);
+              }
+            }}
+            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+            onError={() => {}}
+          />
+        </View>
       </View>
     );
   }
@@ -276,6 +450,8 @@ const Home = ({
   const [featureListing, setFeatureListing] = useState(null);
   const [featureMediaLoading, setFeatureMediaLoading] = useState(true);
   const featureListingRef = useRef(null);
+  const featureAdVisitRef = useRef(0);
+  const prevScreenActiveRef = useRef(false);
   const [featureMuted, setFeatureMuted] = useState(true);
   const [featureProgress, setFeatureProgress] = useState(0);
   const logoTapCountRef = useRef(0);
@@ -315,39 +491,119 @@ const Home = ({
     }
   }, []);
 
-  const loadFeatureProjectImage = useCallback(async () => {
-    if (!featureListingRef.current) {
-      setFeatureMediaLoading(true);
-    }
+  const loadFeatureAdListing = useCallback(async ({forceRotate = false} = {}) => {
+    const visitId = ++featureAdVisitRef.current;
+    setFeatureMediaLoading(true);
     try {
       const res = await getListings({
         status: 'published',
         category: 1,
         subscription_type: 'company',
       });
-      const picked = pickRandomCompanyProjectListing(res?.listings);
+      if (visitId !== featureAdVisitRef.current) return;
+
+      const candidates = filterCompanyVideoListings(res?.listings);
+      const stored = await readFeatureAdRotationState();
+      if (visitId !== featureAdVisitRef.current) return;
+
+      let playCount = Math.max(0, Number(stored.playCount) || 0);
+      let listingId = stored.listingId;
+      const currentMissing =
+        listingId &&
+        !candidates.some(item => String(item.id) === String(listingId));
+      const shouldRotate =
+        forceRotate ||
+        currentMissing ||
+        playCount >= HOME_FEATURE_AD_RUNS_BEFORE_ROTATE;
+
+      let picked = null;
+      if (!shouldRotate && listingId) {
+        picked =
+          candidates.find(item => String(item.id) === String(listingId)) ||
+          null;
+      }
+      if (!picked) {
+        picked = pickRandomCompanyProjectListing(
+          candidates,
+          shouldRotate ? listingId : null,
+        );
+        listingId = picked?.id != null ? String(picked.id) : null;
+        playCount = 0;
+      }
+
+      await writeFeatureAdRotationState({listingId, playCount});
+      if (visitId !== featureAdVisitRef.current) return;
+
       featureListingRef.current = picked;
       setFeatureListing(picked);
     } catch (_) {
+      if (visitId !== featureAdVisitRef.current) return;
       featureListingRef.current = null;
       setFeatureListing(null);
     } finally {
-      setFeatureMediaLoading(false);
+      if (visitId === featureAdVisitRef.current) {
+        setFeatureMediaLoading(false);
+      }
     }
   }, []);
+
+  const handleFeaturePlaybackComplete = useCallback(async () => {
+    const currentId =
+      featureListingRef.current?.id != null
+        ? String(featureListingRef.current.id)
+        : null;
+    if (!currentId) return;
+
+    const stored = await readFeatureAdRotationState();
+    // Ignore stale completions after we've already rotated away.
+    if (stored.listingId && stored.listingId !== currentId) return;
+
+    const nextPlayCount = Math.max(0, Number(stored.playCount) || 0) + 1;
+    if (nextPlayCount >= HOME_FEATURE_AD_RUNS_BEFORE_ROTATE) {
+      await writeFeatureAdRotationState({
+        listingId: currentId,
+        playCount: nextPlayCount,
+      });
+      loadFeatureAdListing({forceRotate: true});
+      return;
+    }
+
+    await writeFeatureAdRotationState({
+      listingId: currentId,
+      playCount: nextPlayCount,
+    });
+  }, [loadFeatureAdListing]);
+
+  useEffect(() => {
+    if (!isScreenActive) {
+      prevScreenActiveRef.current = false;
+      return undefined;
+    }
+    const justActivated = !prevScreenActiveRef.current;
+    prevScreenActiveRef.current = true;
+    if (!justActivated) return undefined;
+
+    const runVisit = () => {
+      loadFeatureAdListing();
+    };
+    if (eagerLoad) {
+      runVisit();
+      return undefined;
+    }
+    const task = InteractionManager.runAfterInteractions(runVisit);
+    return () => task.cancel();
+  }, [isScreenActive, eagerLoad, loadFeatureAdListing]);
 
   useEffect(() => {
     if (eagerLoad) {
       loadStories();
-      loadFeatureProjectImage();
       return undefined;
     }
     const task = InteractionManager.runAfterInteractions(() => {
       loadStories();
-      loadFeatureProjectImage();
     });
     return () => task.cancel();
-  }, [eagerLoad, loadStories, loadFeatureProjectImage]);
+  }, [eagerLoad, loadStories]);
 
   useEffect(() => {
     if (!onInitialContentReady || initialReadySentRef.current) return;
@@ -457,7 +713,7 @@ const Home = ({
     [onOpenStoryProfile],
   );
 
-  /** Next ring in strip order (right → left on the home row). */
+  /** Next ring in strip order (left → right on the home row). */
   const handleAdvanceToNextUser = useCallback(() => {
     if (!viewerRing) {
       handleCloseViewer();
@@ -475,7 +731,7 @@ const Home = ({
     handleCloseViewer();
   }, [viewerRing, storyRings, handleCloseViewer]);
 
-  /** Previous ring in strip order (left → right on the home row). */
+  /** Previous ring in strip order (right → left on the home row). */
   const handleAdvanceToPrevUser = useCallback(() => {
     if (!viewerRing) return;
     const currentIndex = storyRings.findIndex(
@@ -573,7 +829,10 @@ const Home = ({
           initialCategoryId={carouselCategoryId}
           onCategorySelect={handleCategorySelect}
         />
-        <View style={[styles.profileBarHeader, {marginTop: 8}]}>
+        {/* Tight header: pull up toward the carousel so the project video
+            card below gains the freed height (grows toward the top). */}
+        <View
+          style={[styles.profileBarHeader, {marginTop: -14, marginBottom: 2}]}>
           <Text style={styles.profileBarHeaderText}>פרויקטים נבחרים</Text>
           <TouchableOpacity
             onPress={() => onOpenSelectedProjects?.()}
@@ -597,6 +856,7 @@ const Home = ({
                 fallbackSource={FALLBACK_PROJECT_IMAGE}
                 isMuted={featureMuted}
                 onProgressChange={handleFeatureProgressChange}
+                onPlaybackComplete={handleFeaturePlaybackComplete}
               />
               {!featureMediaLoading ? (
                 <>
@@ -891,6 +1151,13 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 16,
     backgroundColor: '#2B2A39',
+  },
+  heroVideoClip: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: 16,
   },
   projectImagePlaceholder: {
     backgroundColor: '#2B2A39',

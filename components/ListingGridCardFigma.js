@@ -323,7 +323,7 @@ const ListingGridCardFigma = ({
               <Image
                 source={{uri: commercialLogoUrl}}
                 style={styles.gridCardCommercialLogo}
-                resizeMode="cover"
+                resizeMode="contain"
                 accessibilityLabel="לוגו חברה"
               />
             </View>
@@ -334,7 +334,7 @@ const ListingGridCardFigma = ({
               <Image
                 source={piBadgeImage}
                 style={styles.gridCardPiBadgeImage}
-                resizeMode="cover"
+                resizeMode="contain"
                 accessibilityLabel="דירוג Pi"
               />
               <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>

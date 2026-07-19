@@ -6,12 +6,24 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  I18nManager,
 } from 'react-native';
-import React from 'react';
+import React, {useMemo, useState, useCallback} from 'react';
+import {Video, ResizeMode} from 'expo-av';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
+import PostTextOverlays from '../PostTextOverlays';
+import {parsePostTextOverlayPayload} from '../../utils/postTextOverlay';
+
+/** Same portrait frame as PostEditor / stories — avoids cutting the composition. */
+const PREVIEW_ASPECT = 9 / 16;
+
+const isVideoUri = uri => {
+  const s = String(uri || '').trim();
+  if (!s) return false;
+  return /\.(mp4|m3u8|webm|mov|m4v)(\?|$)/i.test(s) || /\/videos?\//i.test(s);
+};
+
 export const SalesImage = ({
   salesImage,
   handleSalesImageUpload,
@@ -20,23 +32,91 @@ export const SalesImage = ({
   uploadProgress,
   /** Opens Post editor for this category (גלובל / company flows). */
   onPressCreateSalesImage,
+  isEditing = false,
+  /** Overlay meta from PostEditor (`generalDetails` with post_text_overlays). */
+  salesImageEditorMeta = null,
 }) => {
   const uploading = !!(uploadProgress && uploadProgress.salesImage);
+  const createOrEditLabel = isEditing
+    ? 'ערוך תמונה מכירתית'
+    : 'צור תמונה מכירתית';
+  const openSalesImageEditor =
+    isEditing && salesImage && onPressCreateSalesImage
+      ? onPressCreateSalesImage
+      : handleSalesImageUpload;
+
+  const mediaUri = salesImage?.uri ? String(salesImage.uri).trim() : '';
+  const isVideo = isVideoUri(mediaUri);
+
+  const overlayPayload = useMemo(() => {
+    const gd = salesImageEditorMeta?.generalDetails;
+    if (!gd || typeof gd !== 'object') return null;
+    if (gd.post_text_baked === true) return null;
+    return parsePostTextOverlayPayload({general_details: gd});
+  }, [salesImageEditorMeta]);
+
+  const [previewSize, setPreviewSize] = useState({w: 0, h: 0});
+  const onPreviewLayout = useCallback(
+    event => {
+      const {width, height} = event?.nativeEvent?.layout || {};
+      if (
+        width > 0 &&
+        height > 0 &&
+        (Math.abs(width - previewSize.w) > 1 ||
+          Math.abs(height - previewSize.h) > 1)
+      ) {
+        setPreviewSize({w: width, h: height});
+      }
+    },
+    [previewSize.h, previewSize.w],
+  );
+
   return (
     <FormContainer>
       <Title text={'תמונה מכירתית'} />
-      <Text style={[styles.subTitle, {textAlign:'left'}]}>
+      <Text style={[styles.subTitle, {textAlign: 'left'}]}>
         מומלץ להוסיף תמונה מכירתית על מנת להגביר את החשיפה של הפרוייקט שלכם.
       </Text>
       <TouchableOpacity
-        style={styles.fixedImageContainer}
-        onPress={handleSalesImageUpload}>
+        style={[
+          styles.fixedImageContainer,
+          salesImage ? styles.fixedImageContainerFilled : null,
+        ]}
+        onPress={openSalesImageEditor}
+        onLayout={onPreviewLayout}
+        activeOpacity={0.9}>
         {salesImage ? (
-          <Image
-            source={{uri: salesImage.uri}}
-            style={styles.fixedImage}
-            resizeMode="contain"
-          />
+          <View style={styles.previewMediaWrap}>
+            {isVideo ? (
+              <Video
+                source={{uri: mediaUri}}
+                style={styles.fixedImage}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay
+                isLooping
+                isMuted
+                useNativeControls={false}
+              />
+            ) : (
+              <Image
+                source={{uri: mediaUri}}
+                style={styles.fixedImage}
+                resizeMode="cover"
+              />
+            )}
+            {overlayPayload?.overlays?.length &&
+            previewSize.w > 0 &&
+            previewSize.h > 0 ? (
+              <PostTextOverlays
+                overlays={overlayPayload.overlays}
+                previewWidth={overlayPayload.previewWidth}
+                previewHeight={overlayPayload.previewHeight}
+                coordsSpace={overlayPayload.coordsSpace}
+                feedWidth={previewSize.w}
+                feedHeight={previewSize.h}
+              />
+            ) : null}
+          </View>
         ) : (
           <>
             <Image
@@ -52,7 +132,7 @@ export const SalesImage = ({
         )}
         <TouchableOpacity
           style={styles.uploadButtonOverlay}
-          onPress={handleSalesImageUpload}
+          onPress={openSalesImageEditor}
           disabled={uploading}>
           {uploading && <ActivityIndicator size="small" color="#fff" />}
         </TouchableOpacity>
@@ -71,7 +151,7 @@ export const SalesImage = ({
         style={styles.createImageContainer}
         onPress={() => onPressCreateSalesImage?.()}
         disabled={!onPressCreateSalesImage}>
-        <Text style={styles.createImageText}>צור תמונה מכירתית</Text>
+        <Text style={styles.createImageText}>{createOrEditLabel}</Text>
       </TouchableOpacity>
     </FormContainer>
   );
@@ -94,6 +174,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#2B2A39',
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  /** Match PostEditor portrait stage so the finished sales image isn't cropped. */
+  fixedImageContainerFilled: {
+    height: undefined,
+    width: '72%',
+    maxWidth: 300,
+    aspectRatio: PREVIEW_ASPECT,
+  },
+  previewMediaWrap: {
+    ...StyleSheet.absoluteFillObject,
   },
   fixedImage: {
     width: '100%',

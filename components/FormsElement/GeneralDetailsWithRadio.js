@@ -9,6 +9,7 @@ import {Divider} from './Divider';
 import {CardPriceField} from './CardPriceField';
 import {Colors} from '../../constants/styles';
 import {formHeadingStyle, textAlign} from '../../utils/rtlLayout';
+import {isListingOffersSectionTitle} from '../../utils/constant';
 
 export const GeneralDetailsWithRadio = ({
   groups,
@@ -29,7 +30,7 @@ export const GeneralDetailsWithRadio = ({
   const radioOptions = groups;
   const useFigmaStyleForSection =
     radioOptions?.title === 'פרטים כלליים' ||
-    radioOptions?.title === 'הפרויקט מציע' ||
+    isListingOffersSectionTitle(radioOptions?.title) ||
     radioOptions?.title === 'הפרוייקט מציע משרדים בגדלים של' ||
     radioOptions?.title === 'הפרוייקט מציע קומה שלמה';
   const groupIncluded = group => {
@@ -154,7 +155,7 @@ export const GeneralDetailsWithRadio = ({
           ? false
           : toggleableOfferGroups &&
               accordionGroups &&
-              radioOptions.title === 'הפרויקט מציע'
+              isListingOffersSectionTitle(radioOptions?.title)
             ? included && expanded
             : toggleableOfferGroups && !accordionGroups
               ? included

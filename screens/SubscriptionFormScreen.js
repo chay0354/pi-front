@@ -33,7 +33,9 @@ import {
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
+import {checkEmailAvailable} from '../utils/api';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {ProfilePictureUpload} from '../components/FormsElement/ProfilePictureUpload';
 
 /**
  * SubscriptionFormScreen Component
@@ -82,8 +84,11 @@ const SubscriptionFormScreen = ({
   const [companyLogo, setCompanyLogo] = useState(null);
   const [video, setVideo] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [logoCropUri, setLogoCropUri] = useState(null);
-  const [logoCropVisible, setLogoCropVisible] = useState(false);
+  const [circleCropUri, setCircleCropUri] = useState(null);
+  const [circleCropVisible, setCircleCropVisible] = useState(false);
+  /** 'profile' | 'logo' — which field the circle crop writes into */
+  const [circleCropTarget, setCircleCropTarget] = useState('logo');
+  const profilePictureInputRef = useRef(null);
   const profileVideoPreviewRef = useRef(null);
 
   /** Swipe תמונה ↔ סרטון on the pill track (row-reverse: image left, video right). */
@@ -217,19 +222,46 @@ const SubscriptionFormScreen = ({
     input.click();
   };
 
-  // Pick profile picture
-  const pickProfilePicture = async () => {
-    if (Platform.OS === 'web') {
-      openWebImagePicker(fileObj => setProfilePicture(fileObj));
+  const openCircleCropper = (uri, target) => {
+    if (!uri) return;
+    setCircleCropTarget(target);
+    setCircleCropUri(uri);
+    setCircleCropVisible(true);
+  };
+
+  const handleCircleCropConfirm = result => {
+    if (result?.uri) {
+      const stamp = Date.now();
+      setCompanyLogo({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `logo-${stamp}.jpg`,
+      });
+    }
+    setCircleCropVisible(false);
+    setCircleCropUri(null);
+  };
+
+  const handleCircleCropCancel = () => {
+    setCircleCropVisible(false);
+    setCircleCropUri(null);
+  };
+
+  // Pick profile picture — native square crop (default cube editor), no circle modal.
+  const handleProfilePictureUpload = async () => {
+    if (Platform.OS === 'web' && profilePictureInputRef.current) {
+      profilePictureInputRef.current.click();
       return;
     }
 
     try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets?.[0]) {
@@ -240,33 +272,17 @@ const SubscriptionFormScreen = ({
     }
   };
 
-  const openLogoCropper = uri => {
-    if (!uri) return;
-    setLogoCropUri(uri);
-    setLogoCropVisible(true);
-  };
-
-  const handleLogoCropConfirm = result => {
-    if (result?.uri) {
-      setCompanyLogo({
-        uri: result.uri,
-        type: 'image/jpeg',
-        name: `logo-${Date.now()}.jpg`,
-      });
+  const handleProfilePictureChange = event => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setProfilePicture(buildWebPickedFile(file, 'profile'));
     }
-    setLogoCropVisible(false);
-    setLogoCropUri(null);
   };
 
-  const handleLogoCropCancel = () => {
-    setLogoCropVisible(false);
-    setLogoCropUri(null);
-  };
-
-  // Pick company logo
+  // Pick company logo → round cropper
   const pickCompanyLogo = async () => {
     if (Platform.OS === 'web') {
-      openWebImagePicker(fileObj => openLogoCropper(fileObj.uri));
+      openWebImagePicker(fileObj => openCircleCropper(fileObj.uri, 'logo'));
       return;
     }
 
@@ -280,7 +296,7 @@ const SubscriptionFormScreen = ({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        openLogoCropper(result.assets[0].uri);
+        openCircleCropper(result.assets[0].uri, 'logo');
       }
     } catch (error) {
       Alert.alert('שגיאה', `לא ניתן לבחור לוגו: ${error.message}`);
@@ -372,6 +388,19 @@ const SubscriptionFormScreen = ({
         return;
       }
 
+      const registrationEmail =
+        subscriptionType === subscriptionTypes.company
+          ? companyEmail.trim()
+          : email.trim();
+      const emailCheck = await checkEmailAvailable(registrationEmail);
+      if (!emailCheck?.available) {
+        setErrorMessage(
+          emailCheck?.error ||
+            'כתובת המייל כבר רשומה במערכת. התחבר עם המייל הקיים או השתמש במייל אחר.',
+        );
+        return;
+      }
+
       setIsSubmitting(true);
 
       // Prepare form data
@@ -419,7 +448,7 @@ const SubscriptionFormScreen = ({
         deferVerificationEmail: true,
       };
 
-      // Prepare files (profile pic chosen on this screen → uploaded to profile-pics when you press Next)
+      // Prepare files (profile pic / company logo → uploaded when verification continues)
       const files = {};
       const profilePicIsUrl =
         profilePicture?.uri &&
@@ -430,7 +459,9 @@ const SubscriptionFormScreen = ({
         (companyLogo.uri.startsWith('http://') ||
           companyLogo.uri.startsWith('https://'));
 
-      if (activeTab === 'video') {
+      const attachCompanyLogoAsAvatar = () => {
+        // Company registration + broker/pro video tab: logo is the avatar.
+        // Persist on both columns so profile/feed fallbacks always find it.
         if (companyLogoIsUrl) {
           formData.profile_picture_url = companyLogo.uri;
           formData.company_logo_url = companyLogo.uri;
@@ -438,6 +469,13 @@ const SubscriptionFormScreen = ({
           files.profilePicture = companyLogo;
           files.companyLogo = companyLogo;
         }
+      };
+
+      if (subscriptionType === subscriptionTypes.company) {
+        // Company flow has no image/video tabs — only לוגו חברה.
+        attachCompanyLogoAsAvatar();
+      } else if (activeTab === 'video') {
+        attachCompanyLogoAsAvatar();
         if (video) files.video = video;
       } else {
         // Photo profile: only תמונת פרופיל — no separate company logo.
@@ -451,9 +489,9 @@ const SubscriptionFormScreen = ({
       const userEmail =
         subscriptionType === subscriptionTypes.company ? companyEmail : email;
       const localProfileImage =
-        activeTab === 'video'
-          ? (companyLogo?.uri || null)
-          : (profilePicture?.uri || null);
+        subscriptionType === subscriptionTypes.company || activeTab === 'video'
+          ? companyLogo?.uri || null
+          : profilePicture?.uri || null;
 
       // Defer API submit until step 2 "שלח קוד אימות" — avoids email on screen open.
       if (onNext) {
@@ -634,57 +672,15 @@ const SubscriptionFormScreen = ({
           <>
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
-                <>
-                  <Text style={styles.brokerCardTitle}>תמונת פרופיל</Text>
-                  <View style={styles.profileImageWrap}>
-                    {profilePicture ? (
-                      <>
-                        <TouchableOpacity
-                          onPress={pickProfilePicture}
-                          activeOpacity={0.92}
-                          style={styles.profileImageFrame}>
-                          <Image
-                            source={{uri: profilePicture.uri}}
-                            style={styles.profileImageFilled}
-                            resizeMode="cover"
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setProfilePicture(null)}
-                          style={styles.mediaRemoveButton}
-                          accessibilityLabel="הסר תמונה"
-                          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                          <MaterialCommunityIcons
-                            name="close"
-                            size={18}
-                            color={Colors.white100}
-                          />
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <TouchableOpacity
-                        onPress={pickProfilePicture}
-                        activeOpacity={0.92}
-                        style={styles.profileImageFrameEmpty}>
-                        <View style={styles.profileImageEmptyContent}>
-                          <MaterialCommunityIcons
-                            name="account-circle-outline"
-                            size={64}
-                            color="rgba(255,255,255,0.4)"
-                          />
-                          <Text style={styles.profileImagePlaceholderText}>
-                            תמונת פרופיל
-                          </Text>
-                          <View style={styles.brokerUploadButton}>
-                            <Text style={styles.brokerUploadButtonText}>
-                              העלאת תמונה
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </>
+                <ProfilePictureUpload
+                  mainImage={profilePicture}
+                  uploadProgress={{mainImage: false}}
+                  handleMainImageUpload={handleProfilePictureUpload}
+                  handleMainImageChange={handleProfilePictureChange}
+                  mainImageInputRef={profilePictureInputRef}
+                  title="תמונת פרופיל"
+                  required={false}
+                />
               ) : (
                 <>
                   <Text style={styles.brokerCardTitle}>סרטון</Text>
@@ -1280,11 +1276,13 @@ const SubscriptionFormScreen = ({
       </KeyboardAvoidingView>
     </ImageBackground>
     <CircleImageCropModal
-      visible={logoCropVisible}
-      imageUri={logoCropUri}
-      onCancel={handleLogoCropCancel}
-      onConfirm={handleLogoCropConfirm}
-      title="חתוך את לוגו החברה"
+      visible={circleCropVisible}
+      imageUri={circleCropUri}
+      onCancel={handleCircleCropCancel}
+      onConfirm={handleCircleCropConfirm}
+      title={
+        circleCropTarget === 'logo' ? 'חתוך את לוגו החברה' : 'חתוך תמונה'
+      }
     />
     </>
   );
@@ -1476,6 +1474,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 24,
     marginHorizontal: 24,
+    overflow: 'visible',
   },
   sectionTitle: {
     fontSize: FontSizes.fs18,

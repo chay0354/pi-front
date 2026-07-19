@@ -13,8 +13,11 @@ import {
   Platform,
   Alert,
   Share,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import {MaterialCommunityIcons, SimpleLineIcons} from '@expo/vector-icons';
+import {Video, ResizeMode} from 'expo-av';
 import * as Clipboard from 'expo-clipboard';
 import {SvgXml} from 'react-native-svg';
 import {Colors} from '../constants/styles';
@@ -56,6 +59,7 @@ import {
   firstVideoUrl,
 } from '../utils/listingGridCardFigma';
 import {resolveFeedVideoPosterUri} from '../utils/feedVideoPreload';
+import {muxThumbnailUri} from '../utils/videoPlayback';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
   HERO_NAV_BACK_XML,
@@ -138,16 +142,18 @@ const contactEmailIconSource =
   isWeb && typeof window !== 'undefined'
     ? {uri: `${baseUrl}/conections-icons/image%20copy.png`}
     : require('../assets/email-icon.png');
-/** `index` 0…4 = rating 1…5 — use `../assets/starts/1.png` … `5.png` (web: same paths under /starts/). */
+/** `index` 0…4 = rating 1…5 — reviews use `5old.png`; picker uses `5.png`. */
 const ratingStarSources =
   isWeb && typeof window !== 'undefined'
-    ? [1, 2, 3, 4, 5].map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
+    ? [1, 2, 3, 4]
+        .map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
+        .concat([{uri: `${baseUrl}/starts/5old.png`}])
     : [
         require('../assets/starts/1.png'),
         require('../assets/starts/2.png'),
         require('../assets/starts/3.png'),
         require('../assets/starts/4.png'),
-        require('../assets/starts/5.png'),
+        require('../assets/starts/5old.png'),
       ];
 function getStarSource(index) {
   const i = Math.min(4, Math.max(0, index));
@@ -285,9 +291,12 @@ const UserProfileScreen = ({
   const top = insets.top;
   const bottom = insets.bottom;
   const scrollRef = useRef(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   // user = listing from feed: has creator_name, creator_email, profileImageUrl, subscription_id, owner_id (from GET /api/listings). If creator_* missing, we fetch by subscription_id (getSubscription).
   const isListingFromFeed =
-    user && (isAdsListingRecord(user) || isPostListingRecord(user));
+    user &&
+    !user._fromProfessionalsDirectory &&
+    (isAdsListingRecord(user) || isPostListingRecord(user));
   const profile =
     !isListingFromFeed && user
       ? user
@@ -574,17 +583,35 @@ const UserProfileScreen = ({
         null;
     return name && String(name).trim() ? String(name).trim() : null;
   };
-  const getReviewerImageUrl = u => {
-    if (!u) return null;
-    const url =
-      u.profile_picture_url ||
-      u.profilePictureUrl ||
-      u.profile_image_url ||
-      u.profileImageUrl ||
-      u.company_logo_url ||
-      u.creator_profile_image_url ||
-      null;
-    return url && String(url).trim() ? String(url).trim() : null;
+  const getReviewerImageUrl = u => getUserProfileImageUrl(u);
+
+  useEffect(() => {
+    const onShow = event => {
+      const nextHeight = event?.endCoordinates?.height ?? 0;
+      setKeyboardHeight(nextHeight);
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({animated: true});
+      }, Platform.OS === 'ios' ? 80 : 200);
+    };
+    const onHide = () => setKeyboardHeight(0);
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollReviewsIntoView = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({animated: true});
+    }, Platform.OS === 'ios' ? 80 : 200);
   };
 
   const handleRate = async () => {
@@ -746,7 +773,12 @@ const UserProfileScreen = ({
     user?.creator_profile_image_url ||
     user?.creator_image_url ||
     resolvedCreator?.profilePictureUrl ||
-    profile.profileImageUrl;
+    // Company accounts often only persist company_logo_url — still show it as avatar.
+    user?.company_logo_url ||
+    user?.companyLogoUrl ||
+    resolvedCreator?.company_logo_url ||
+    profile.profileImageUrl ||
+    profile?.company_logo_url;
   const displayImage =
     typeof displayImageRaw === 'string' ? displayImageRaw.trim() : '';
   const displayImageSource = displayImage ? {uri: displayImage} : null;
@@ -1070,10 +1102,15 @@ const UserProfileScreen = ({
             ? String(item.video).trim() || null
             : null);
       if (videoUri) {
+        // First frame of the video itself (Mux thumbnail at time=0) beats a
+        // listing photo — the grid preview matches what plays in the feed.
+        const posterUri =
+          muxThumbnailUri(videoUri, {time: 0, width: 480}) ||
+          pickStillPosterUri(item);
         return {
           uri: videoUri,
           isVideo: true,
-          posterUri: pickStillPosterUri(item),
+          posterUri,
         };
       }
       const stillUri = pickStillPosterUri(item);
@@ -1177,6 +1214,17 @@ const UserProfileScreen = ({
             onPress={() => handlePostGridPress(item)}>
             <View
               style={[styles.lastAdGridItemInner, styles.lastAdGridVideoCell]}>
+              {/* Paused muted player: decodes the real first frame of the
+                  video, so the preview is never black even when there's no
+                  usable poster image. */}
+              <Video
+                source={{uri: item.uri}}
+                style={StyleSheet.absoluteFill}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={false}
+                isMuted
+                positionMillis={0}
+              />
               {item.posterUri ? (
                 <Image
                   source={{uri: item.posterUri}}
@@ -1343,6 +1391,9 @@ const UserProfileScreen = ({
       setFollowStatsLoading(false);
       return undefined;
     }
+    const viewingOwnProfile =
+      !!currentSubscriptionId &&
+      viewedSubscriptionId === currentSubscriptionId;
     setFollowStatsLoading(true);
     getFollowStats(viewedSubscriptionId)
       .then(data => {
@@ -1352,7 +1403,10 @@ const UserProfileScreen = ({
           likes: Number(stats.likes || 0),
           followers: Number(stats.followers || 0),
           following: Number(stats.following || 0),
-          pendingRequests: Number(stats.pending_requests || 0),
+          // Incoming follow requests are private — only show on your own profile.
+          pendingRequests: viewingOwnProfile
+            ? Number(stats.pending_requests || 0)
+            : 0,
         });
         setFollowStatsLoading(false);
       })
@@ -1369,7 +1423,7 @@ const UserProfileScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [viewedSubscriptionId, reviews.length]);
+  }, [viewedSubscriptionId, currentSubscriptionId, reviews.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1488,12 +1542,6 @@ const UserProfileScreen = ({
     try {
       await sendFollowRequest(currentSubscriptionId, viewedSubscriptionId);
       setFollowStatus(prev => ({...prev, hasPendingRequest: true}));
-      setFollowStats(prev => ({
-        ...prev,
-        pendingRequests: isOwnProfile
-          ? prev.pendingRequests
-          : prev.pendingRequests + 1,
-      }));
       return true;
     } catch (e) {
       Alert.alert('', e?.message || 'לא הצלחנו לשלוח בקשת מעקב');
@@ -1712,9 +1760,11 @@ const UserProfileScreen = ({
   /**
    * Figma 8:79136 — professional profile always uses the 6-post grid under
    * avatar/stats (own + other), never a listing hero between stats and posts.
+   * Brokers opened from בעלי מקצוע directory use the same layout.
    */
   const showProfessionalFigmaProfile =
-    isProfessional && !isDedicatedListingAdProfile;
+    (isProfessional || (isBroker && openedFromProfessionalsDirectory)) &&
+    !isDedicatedListingAdProfile;
   const showProfessionalStandardPostGrid = showProfessionalFigmaProfile;
   const showProfilePostGridAtTop = showProfessionalStandardPostGrid
     ? true
@@ -1733,12 +1783,13 @@ const UserProfileScreen = ({
   /** Posts-grid profile (incl. own profile): no ad smart-info / neighborhood tools. */
   const showPiAiSmartInfoBlock =
     !openedFromPost &&
-    !isProfessional &&
+    !showProfessionalFigmaProfile &&
     !isDedicatedListingAdProfile &&
     !showProfilePostGridAtTop;
   const showLandProfileContactAndReviews = isLandListingAdProfile;
   const showListingContactAndReviews =
-    !isDedicatedListingAdProfile || showLandProfileContactAndReviews;
+    !isRegularUserAdView &&
+    (!isDedicatedListingAdProfile || showProfileRatingFeatures);
 
   const landListingPayload = React.useMemo(() => {
     if (!isLandListingAdProfile || !lastAd) return lastAd;
@@ -1758,6 +1809,10 @@ const UserProfileScreen = ({
   }, [isLandListingAdProfile, lastAd]);
   const showLocationMap =
     isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile;
+  /** Feed ad hero: hide listing address only on own profile overview (6-post grid),
+   * not when drilling into a specific ad from TikTok/home/projects. */
+  const showListingLocationOnAdHero =
+    !isOwnProfile || forceListingAdProfile || isDedicatedListingAdProfile;
   const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
   /**
    * Figma 8:79136 — every professional profile (own + other) uses the standard
@@ -1872,7 +1927,11 @@ const UserProfileScreen = ({
   ]);
   const hideCompanyPostSpecialtiesBlock = user?._fromTikTokPost && isCompany;
   // Professionals: no listings on other profiles; also hide on your own pro profile.
-  const hideMyPropertiesSection = isProfessional;
+  // Regular users: no "הנכסים שלי" section at all (own profile included).
+  const hideMyPropertiesSection =
+    isProfessional ||
+    isRegularUserAccount ||
+    (isBroker && openedFromProfessionalsDirectory);
   const showCompanyPostSpecialties = openedFromPost && isCompany;
   const firstListingWithGeneral = userListings.find(
     l => l.general_details && typeof l.general_details === 'object',
@@ -2192,92 +2251,103 @@ const UserProfileScreen = ({
 
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
 
-  /** Professionals use the top טלפון/הודעה row (Figma); keep messaging CTA for company/broker only. */
+  /** Phone / Pi chat — bottom of פרטי התקשרות (never duplicate in the header row). */
   const showProfileMessagingCta =
-    !isOwnProfile &&
-    (isCompany || isBroker) &&
-    (!user?._fromTikTokPost || isCompany);
+    !isOwnProfile && showListingContactAndReviews;
 
-  const hideOwnSubscriberProfileCta =
-    isOwnProfile && (isCompany || isProfessional);
-
-  const renderProfileCtaSection = extraStyle => {
-    if (hideOwnSubscriberProfileCta) return null;
+  /** Phone / Pi chat only — never includes דווח (report always renders at scroll bottom). */
+  const renderProfileMessagingCta = extraStyle => {
+    if (!showProfileMessagingCta) return null;
     return (
-    <View style={[styles.profileCtaSection, extraStyle]}>
-      <TouchableOpacity
-        style={styles.profileCtaWarningBtn}
-        onPress={handleReportPress}
-        activeOpacity={0.85}>
-        <Text style={styles.profileCtaWarningText}>דווח</Text>
-        <MaterialCommunityIcons
-          name="alert-outline"
-          size={22}
-          color="#F7F3E6"
-        />
-      </TouchableOpacity>
-      {showProfileMessagingCta ? (
-        <>
-          <View style={styles.profilePiChatWrap}>
-            <TouchableOpacity
-              style={styles.profileCtaChatImageOnlyBtn}
-              onPress={handleChatPress}
-              activeOpacity={0.85}>
-              <Image
-                source={require('../assets/menu/pichat.png')}
-                style={styles.profileCtaChatImageOnlyAsset}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
-            {unreadChatCount > 0 ? (
-              <View
-                style={styles.profilePiChatBadge}
-                pointerEvents="none"
-                accessibilityRole="text"
-                accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
-                <Text
-                  style={styles.profilePiChatBadgeText}
-                  numberOfLines={1}>
-                  {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
+      <View style={[styles.profileCtaSection, extraStyle]}>
+        <View style={styles.profilePiChatWrap}>
           <TouchableOpacity
-            style={styles.profileCtaPhoneBtn}
-            onPress={handleCallPress}
+            style={styles.profileCtaChatImageOnlyBtn}
+            onPress={handleChatPress}
             activeOpacity={0.85}>
             <Image
-              source={require('../assets/phone.png')}
-              style={styles.profileCtaPhoneIcon}
+              source={require('../assets/menu/pichat.png')}
+              style={styles.profileCtaChatImageOnlyAsset}
               resizeMode="contain"
             />
-            <Text
-              style={styles.profileCtaPhoneText}
-              numberOfLines={1}
-              ellipsizeMode="tail">
-              פנייה בטלפון {primaryContactPhone}
-            </Text>
           </TouchableOpacity>
-        </>
-      ) : null}
-    </View>
+          {unreadChatCount > 0 ? (
+            <View
+              style={styles.profilePiChatBadge}
+              pointerEvents="none"
+              accessibilityRole="text"
+              accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
+              <Text style={styles.profilePiChatBadgeText} numberOfLines={1}>
+                {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <TouchableOpacity
+          style={styles.profileCtaPhoneBtn}
+          onPress={handleCallPress}
+          activeOpacity={0.85}>
+          <Image
+            source={require('../assets/phone.png')}
+            style={styles.profileCtaPhoneIcon}
+            resizeMode="contain"
+          />
+          <Text
+            style={styles.profileCtaPhoneText}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            פנייה בטלפון {primaryContactPhone}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  /** דווח — always the last scroll content when shown (all profile / listing types). */
+  const showBottomReportButton = !isOwnProfile;
+  const renderBottomReportButton = () => {
+    if (!showBottomReportButton) return null;
+    return (
+      <View style={[styles.profileCtaSection, styles.profileReportBottomSection]}>
+        <TouchableOpacity
+          style={styles.profileCtaWarningBtn}
+          onPress={handleReportPress}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="דווח">
+          <Text style={styles.profileCtaWarningText}>דווח</Text>
+          <MaterialCommunityIcons
+            name="alert-outline"
+            size={22}
+            color="#F7F3E6"
+          />
+        </TouchableOpacity>
+      </View>
     );
   };
 
   return (
     <View style={[styles.container, {paddingTop: heroNavPaddingTop}]}>
-      <ScrollView
-        ref={scrollRef}
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled={Platform.OS === 'android'}
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {paddingBottom: Math.max(bottom + 10)},
-        ]}
-        showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{flex: 1}}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={heroNavPaddingTop}>
+        <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled={Platform.OS === 'android'}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingBottom: Math.max(
+                bottom + 10,
+                keyboardHeight > 0 ? keyboardHeight + 32 : bottom + 10,
+              ),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}>
         {showStandardProfileHeader &&
           !showCompanyFeedHeroTop &&
           !useFixedListingTopNav && (
@@ -2336,7 +2406,8 @@ const UserProfileScreen = ({
 
         {showStandardProfileHeader &&
           !showCompanyFeedHeroTop &&
-          !isOwnProfile && (
+          !isOwnProfile &&
+          !showProfileMessagingCta && (
             <View style={styles.actionRow}>
               <TouchableOpacity
                 onPress={handleCallPress}
@@ -2468,7 +2539,7 @@ const UserProfileScreen = ({
                         brokerAddress,
                       )}
                       adAddress={adAddress}
-                      onReportPress={handleReportPress}
+                      hideReportButton
                     />
                   ) : isPartnersListingAdProfile ? (
                     <PartnersListingProfileContent
@@ -2480,7 +2551,7 @@ const UserProfileScreen = ({
                         brokerAddress,
                       )}
                       adAddress={adAddress}
-                      onReportPress={handleReportPress}
+                      hideReportButton
                     />
                   ) : isLandListingAdProfile ? (
                     <CompanyLandListingProfileContent
@@ -2498,8 +2569,7 @@ const UserProfileScreen = ({
                         brokerAddress,
                       )}
                       adAddress={adAddress}
-                      onReportPress={handleReportPress}
-                      hideReportButton={showLandProfileContactAndReviews}
+                      hideReportButton
                     />
                   ) : (
                     <>
@@ -2537,14 +2607,20 @@ const UserProfileScreen = ({
                         </Text>
                       )}
                       {(() => {
-                        if (isOwnProfile) return null;
+                        if (!showListingLocationOnAdHero) return null;
                         const addr = firstNonEmpty(
+                          lastAd?.address,
+                          lastAd?.location,
+                          lastAd?.search_address,
+                          lastAd?.land_address,
+                          user?.address,
+                          user?.location,
+                          user?.search_address,
+                          user?.land_address,
                           user?._fromTikTokPost
                             ? user?.creator_business_address
                             : null,
                           user?._fromTikTokPost ? user?.business_address : null,
-                          lastAd.address,
-                          lastAd.location,
                         );
                         if (!addr) return null;
                         return (
@@ -2907,9 +2983,13 @@ const UserProfileScreen = ({
                       ) : null}
                       {showLocationMap ? (
                         <LocationMap
-                          address={
-                            lastAd.address || lastAd.location || brokerAddress
-                          }
+                          address={firstNonEmpty(
+                            lastAd?.address,
+                            lastAd?.location,
+                            lastAd?.search_address,
+                            lastAd?.land_address,
+                            brokerAddress,
+                          )}
                           containerStyle={styles.locationMapContainer}
                         />
                       ) : null}
@@ -2983,7 +3063,7 @@ const UserProfileScreen = ({
         {/* Broker / professional details block + My Properties */}
         {showProfileRatingFeatures &&
           !openedFromPost &&
-          !isProfessional &&
+          !showProfessionalFigmaProfile &&
           !isDedicatedListingAdProfile && (
             <View style={styles.brokerCardOverlayLine} />
           )}
@@ -3000,7 +3080,7 @@ const UserProfileScreen = ({
                   <View style={styles.brokerCardBottomNameBlock}>
                     <Text
                       style={
-                        isProfessional
+                        showProfessionalFigmaProfile
                           ? styles.proBrokerCardBottomName
                           : styles.brokerCardBottomName
                       }>
@@ -3314,9 +3394,7 @@ const UserProfileScreen = ({
                 />
               </TouchableOpacity>
             </View>
-            {(isCompany)
-              ? renderProfileCtaSection(styles.contactDetailsCtaSection)
-              : null}
+            {renderProfileMessagingCta(styles.contactDetailsCtaSection)}
           </View>
         )}
         {!isRegularUserAdView && showListingContactAndReviews && (
@@ -3364,6 +3442,7 @@ const UserProfileScreen = ({
                 onChangeText={setReviewComment}
                 placeholder="הוסף ביקורת"
                 placeholderTextColor="rgba(255,255,255,0.4)"
+                onFocus={scrollReviewsIntoView}
               />
             ) : null}
             {reviewsLoading ? (
@@ -3375,25 +3454,15 @@ const UserProfileScreen = ({
                 <View key={r.id} style={styles.reviewCard}>
                   <View style={styles.reviewCardHeader}>
                     <View style={styles.reviewCardAvatarWrap}>
-                      {r.reviewer_image_url ? (
-                        <Image
-                          source={{uri: r.reviewer_image_url}}
-                          style={styles.reviewCardAvatar}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.reviewCardAvatar,
-                            styles.avatarPlaceholder,
-                          ]}>
-                          <MaterialCommunityIcons
-                            name="account"
-                            size={24}
-                            color="rgba(255,255,255,0.6)"
-                          />
-                        </View>
-                      )}
+                      <ProfileAvatar
+                        uri={r.reviewer_image_url || undefined}
+                        name={r.reviewer_name}
+                        size={60}
+                        subscriptionType={r.reviewer_subscription_type}
+                        imageStyle={
+                          Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
+                        }
+                      />
 
                       <Image
                         source={getStarSource(
@@ -3402,9 +3471,7 @@ const UserProfileScreen = ({
                         style={[
                           r.rating === 1
                             ? styles.reviewCardStarBadgeImage1
-                            : Number(r.rating) === 5
-                              ? styles.reviewCardStarBadgeImage5
-                              : styles.reviewCardStarBadgeImage,
+                            : styles.reviewCardStarBadgeImage,
                         ]}
                         resizeMode="contain"
                       />
@@ -3439,27 +3506,13 @@ const UserProfileScreen = ({
                 <View style={styles.contactDetailsDivider} />
               </View>
             ) : null}
-            {/* Figma pro: דווח sits under reviews (phone/message already in the top row). */}
-            {(!isCompany && !isProfessional) || showProfessionalFigmaProfile
-              ? renderProfileCtaSection()
-              : null}
-          </View>
-        ) : isRegularUserAdView && !isDedicatedListingAdProfile ? (
-          <View style={styles.profileCtaSection}>
-            <TouchableOpacity
-              style={styles.profileCtaWarningBtn}
-              onPress={handleReportPress}
-              activeOpacity={0.85}>
-              <Text style={styles.profileCtaWarningText}>דווח</Text>
-              <MaterialCommunityIcons
-                name="alert-outline"
-                size={22}
-                color="#F7F3E6"
-              />
-            </TouchableOpacity>
           </View>
         ) : null}
-      </ScrollView>
+
+        {/* דווח — always the last element in the profile scroll (all types). */}
+        {renderBottomReportButton()}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {useFixedListingTopNav && (
         <View
@@ -4150,6 +4203,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 14,
   },
+  profileReportBottomSection: {
+    marginTop: 8,
+    marginBottom: 20,
+  },
   profileCtaWarningBtn: {
     height: 40,
     borderRadius: 28,
@@ -4344,15 +4401,6 @@ const styles = StyleSheet.create({
     bottom: -12,
     left: '50%',
     marginLeft: -17.5,
-  },
-  /** 5★ in ביקורות only — larger than 2–4★ badge. */
-  reviewCardStarBadgeImage5: {
-    width: 36,
-    height: 36,
-    position: 'absolute',
-    bottom: -10,
-    left: '50%',
-    marginLeft: -18,
   },
   reviewCardStarBadgeImage: {
     width: 25,

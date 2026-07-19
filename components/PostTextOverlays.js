@@ -1,6 +1,15 @@
 import React from 'react';
-import {View, Text, StyleSheet} from 'react-native';
+import {View, Text, StyleSheet, Platform, I18nManager} from 'react-native';
 import {forceLtrStyle} from '../utils/rtlLayout';
+
+/** Literal textAlign is swapped by Android under forceRTL — map physical side
+ * to the literal value that lands there (same logic as the post editor). */
+const physicalTextAlign = align => {
+  if (Platform.OS === 'web' || !I18nManager.isRTL) return align;
+  if (align === 'left') return 'right';
+  if (align === 'right') return 'left';
+  return 'center';
+};
 import {
   getPostTextVisualStyle,
   POST_TEXT_STYLE_FONTS,
@@ -55,27 +64,39 @@ const PostTextOverlays = ({
                 ],
               },
             ]}>
-            <Text
-              style={[
-                styles.text,
-                {
-                  color: visual.textColor,
-                  fontSize: layout.fontSize,
-                  lineHeight: layout.lineHeight,
-                  textAlign: align,
-                  writingDirection: 'rtl',
-                  fontFamily,
-                },
-                hasBackground && {
-                  backgroundColor: visual.backgroundColor,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 8,
-                  alignSelf: 'center',
-                },
-              ]}>
-              {block.text}
-            </Text>
+            {/* Same hugging-content structure as the editor's
+                DraggableTextBlock so feed placement matches the editor. */}
+            <View
+              style={{
+                alignSelf:
+                  align === 'left'
+                    ? 'flex-start'
+                    : align === 'right'
+                      ? 'flex-end'
+                      : 'center',
+                maxWidth: '100%',
+              }}>
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: visual.textColor,
+                    fontSize: layout.fontSize,
+                    lineHeight: layout.lineHeight,
+                    textAlign: physicalTextAlign(align),
+                    writingDirection: 'rtl',
+                    fontFamily,
+                  },
+                  hasBackground && {
+                    backgroundColor: visual.backgroundColor,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 8,
+                  },
+                ]}>
+                {block.text}
+              </Text>
+            </View>
           </View>
         );
       })}

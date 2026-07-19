@@ -36,6 +36,8 @@ import CreateAdSheet, {
 } from '../components/CreateAdSheet';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {getListings, getBoostQuota, boostListing, deleteListing} from '../utils/api';
+import {listingImageUrls} from '../utils/listingGridCardFigma';
+import {resolveListingEditVideoSourceUrl} from '../utils/videoPlayback';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
 
@@ -447,58 +449,23 @@ const EditPublishAdScreen = ({
         if (result?.success && result?.listings?.length) {
           const list = currentUser?.id == null ? [] : result.listings;
           const transformed = list.map(l => {
-            const imgs = l.listing_images || [];
-            const main = imgs.find(i => i.image_type === 'main');
-            const additional = imgs.filter(i => i.image_type === 'additional');
+            const imageUrls = listingImageUrls(l);
+            const images = imageUrls.map(uri => ({uri}));
             const listingVideos = l.listing_videos || [];
             const videoUrl =
+              resolveListingEditVideoSourceUrl(l) ||
               (l.video_url && String(l.video_url).trim()) ||
               listingVideos[0]?.video_url ||
               null;
-            const images = [];
-            if (main?.image_url && !isVideoMediaUrl(main.image_url)) {
-              images.push({uri: main.image_url});
-            }
-            additional
-              .filter(i => i.image_url && !isVideoMediaUrl(i.image_url))
-              .forEach(i => images.push({uri: i.image_url}));
-            if (
-              !images.length &&
-              l.main_image_url &&
-              !isVideoMediaUrl(l.main_image_url)
-            ) {
-              images.push({uri: l.main_image_url});
-            }
             return {
-              id: l.id,
-              category: l.category,
+              ...l,
               images,
-              image: images[0]?.uri,
+              image: images[0]?.uri ?? l.main_image_url ?? null,
               video_url: videoUrl,
               listing_videos: listingVideos,
-              main_image_url: l.main_image_url,
-              feed_post: l.feed_post,
-              property_type: l.property_type,
-              price: l.price,
-              budget: l.budget,
-              description: l.description,
               views: l.view_count,
-              view_count: l.view_count,
-              like_count: l.like_count != null ? Number(l.like_count) : 0,
-              post_like_count:
-                l.post_like_count != null ? Number(l.post_like_count) : 0,
-              review_count:
-                l.review_count != null ? Number(l.review_count) : 0,
-              comment_count:
-                l.comment_count != null ? Number(l.comment_count) : 0,
               comments: l.comment_count,
               is_frozen: l.is_frozen === true || l.is_frozen === 'true',
-              exposure_level: l.exposure_level || 'medium',
-              created_at: l.created_at || l.inserted_at || null,
-              boost_expires_at: l.boost_expires_at || null,
-              bnb_business_logo_url: l.bnb_business_logo_url ?? null,
-              general_details: l.general_details,
-              cancellation_policy: l.cancellation_policy ?? null,
               hot_deal:
                 l.hot_deal === true ||
                 l.hot_deal === 'true' ||
@@ -739,7 +706,7 @@ const EditPublishAdScreen = ({
     }
     setRemoveSubmitting(true);
     try {
-      await deleteListing(listingId, email);
+      await deleteListing(listingId, email, currentUser?.id);
       const idStr = String(listingId);
       setFetchedListings(prev =>
         prev.filter(l => String(l.id ?? l.ad_number) !== idStr),

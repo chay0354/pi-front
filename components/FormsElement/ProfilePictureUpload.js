@@ -18,10 +18,11 @@ export const ProfilePictureUpload = ({
   handleMainImageChange,
   mainImageInputRef,
   title = 'תמונת נושא או הדמייה',
+  required = true,
 }) => {
   return (
     <>
-      <Title text={title} required />
+      <Title text={title} required={required} />
       <TouchableOpacity
         style={styles.fixedImageContainer}
         onPress={handleMainImageUpload}>
@@ -32,7 +33,7 @@ export const ProfilePictureUpload = ({
             resizeMode="contain"
           />
         ) : (
-          <>
+          <View style={styles.emptyState}>
             <Image
               source={require('../../assets/user-icon.png')}
               style={styles.useImage}
@@ -42,7 +43,7 @@ export const ProfilePictureUpload = ({
             <View style={styles.uploadButtonContainer}>
               <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
             </View>
-          </>
+          </View>
         )}
         <TouchableOpacity
           style={styles.uploadButtonOverlay}
@@ -69,7 +70,7 @@ export const ProfilePictureUpload = ({
 const styles = StyleSheet.create({
   fixedImageContainer: {
     width: '100%',
-    height: 230,
+    minHeight: 230,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
@@ -77,10 +78,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#2B2A39',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    overflow: 'hidden',
   },
   useImage: {
     width: 55,
     height: 55,
+  },
+  emptyState: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
   userImageText: {
     color: '#858585',
@@ -103,7 +113,8 @@ const styles = StyleSheet.create({
   },
   fixedImage: {
     width: '100%',
-    height: '100%',
+    height: 198,
+    maxHeight: 198,
   },
   uploadButtonOverlay: {
     position: 'absolute',

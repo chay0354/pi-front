@@ -79,6 +79,7 @@ import {
   AccessibilityStatementScreen,
 } from './screens';
 import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
+import PublishSuccessToast from './components/PublishSuccessToast';
 import {ContextHook} from './hooks/ContextHook';
 import {PresenceProvider} from './hooks/PresenceContext';
 import {
@@ -91,7 +92,9 @@ import {
   getListings,
   getCurrentUser,
   toSubscriptionId,
+  resolveSubscriptionId,
 } from './utils/api';
+import {resolveSalesImageEditorListing} from './utils/postTextOverlay';
 import {
   getUserProfileImageUrl,
   normalizeUserProfileAliases,
@@ -326,6 +329,38 @@ function App() {
     setCurrentScreen(nextScreen);
   }, []);
 
+  const finishPublishedListing = useCallback(
+    ({returnScreen, categoryId, listingPreview, isUpdate = false}) => {
+      const catNum =
+        categoryId != null ? parseInt(String(categoryId), 10) : NaN;
+      const resolvedCat = Number.isFinite(catNum) ? catNum : null;
+      if (resolvedCat != null) {
+        setSelectedCategory(String(resolvedCat));
+      }
+      if (returnScreen === screenName.editPublishAd) {
+        setEditPublishSourceCategory(
+          resolvedCat != null ? resolvedCat : editPublishSourceCategory,
+        );
+      }
+      if (listingPreview) {
+        setUploadedListings(prev => [...prev, listingPreview]);
+      }
+      setEditingListing(null);
+      setBnbPublishHostType(null);
+      setPostEditorConfig(prev => ({...prev, editingListing: null}));
+      setEditPublishRefreshKey(k => k + 1);
+      setTimeout(() => setTikTokFeedRefreshKey(k => k + 1), 800);
+      replaceCurrentScreen(returnScreen);
+      setPublishSuccessMessage(
+        isUpdate
+          ? 'המודעה שלך עודכנה בהצלחה'
+          : 'המודעה שלכם פורסמה בהצלחה!',
+      );
+      setPublishSuccessVisible(true);
+    },
+    [editPublishSourceCategory, replaceCurrentScreen],
+  );
+
   /** Map auth return token → screen name (fallback when history is empty). */
   const authReturnFallbackScreen = useCallback((back, defaultScreen) => {
     if (back === 'home') return screenName.home;
@@ -442,8 +477,18 @@ function App() {
     listingCategoryId: null,
     /** Existing feed post when editing from EditPublishAdScreen. */
     editingListing: null,
+    /** Sales-image edit: do not create a new story slide on finish. */
+    skipStoryPublish: false,
   }));
   const [editPublishRefreshKey, setEditPublishRefreshKey] = useState(0);
+  /** Where AdsForm returns after cancel or successful publish. */
+  const [adsFormReturnScreen, setAdsFormReturnScreen] = useState(
+    screenName.tikTokFeed,
+  );
+  const [publishSuccessVisible, setPublishSuccessVisible] = useState(false);
+  const [publishSuccessMessage, setPublishSuccessMessage] = useState(
+    'המודעה שלכם פורסמה בהצלחה!',
+  );
   /** Sales image composed in PostEditor before returning to AdsForm. */
   const [adsFormPendingSalesImage, setAdsFormPendingSalesImage] =
     useState(null);
@@ -1069,10 +1114,12 @@ function App() {
                   onOpenOfficeListing={(category, opts) => {
                     if (category) setSelectedCategory(category);
                     setBnbPublishHostType(opts?.bnbHostType ?? null);
+                    setEditingListing(null);
                     if (!currentUser) {
                       setReturnToScreenAfterAuth('tikTokFeed');
                       setCurrentScreen(screenName.userRegistration);
                     } else {
+                      setAdsFormReturnScreen(screenName.tikTokFeed);
                       setCurrentScreen(screenName.adsForm);
                     }
                   }}
@@ -1273,10 +1320,16 @@ function App() {
                 currentUser={currentUser}
                 onClose={() => setCurrentScreen(screenName.home)}
                 onOpenProfessional={professional => {
+                  const subType = String(
+                    professional?.subscription_type || '',
+                  )
+                    .trim()
+                    .toLowerCase();
                   setProfileReturnScreen(screenName.professionalsDirectory);
                   setProfileUser({
                     ...professional,
                     _fromProfessionalsDirectory: true,
+                    _forceListingAdProfile: false,
                     subscription_id: professional?.id || null,
                     owner_id: professional?.id || null,
                     creator_name:
@@ -1285,7 +1338,16 @@ function App() {
                       professional?.profile_image_url || null,
                     profile_picture_url:
                       professional?.profile_image_url || null,
-                    subscription_type: subscriptionTypes.professional,
+                    // Brokers from this directory must stay brokers (מתווך + אזורי פעילות).
+                    subscription_type:
+                      subType === 'broker'
+                        ? subscriptionTypes.broker
+                        : subscriptionTypes.professional,
+                    activity_regions:
+                      professional?.activity_regions ||
+                      (subType === 'broker'
+                        ? professional?.specializations
+                        : null),
                   });
                   setCurrentScreen(screenName.userProfile);
                 }}
@@ -1702,6 +1764,11 @@ function App() {
               visible={showCompanyReportSuccess}
               onDismiss={() => setShowCompanyReportSuccess(false)}
             />
+            <PublishSuccessToast
+              visible={publishSuccessVisible}
+              message={publishSuccessMessage}
+              onDismiss={() => setPublishSuccessVisible(false)}
+            />
             {currentScreen === screenName.followHub && (
               <FollowHubScreen
                 onClose={() => goBack(followHubReturnScreen)}
@@ -1741,7 +1808,8 @@ function App() {
                     ...prev,
                     city: normalizeCityFeedFilter(filter),
                   }));
-                  goBack(screenAfterFilter);
+                  // Navigation is via onClose — filter screens call both; a
+                  // second goBack here would skip TikTok and land on Home.
                 }}
               />
             )}
@@ -1759,7 +1827,6 @@ function App() {
                       ? null
                       : raw;
                   setFeedFilters(prev => ({...prev, apartmentType: next}));
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1773,7 +1840,6 @@ function App() {
                     ...prev,
                     rooms: normalizeRoomsFeedFilter(filter),
                   }));
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1784,7 +1850,6 @@ function App() {
                 onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('price', filter);
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1795,7 +1860,6 @@ function App() {
                 onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('type', filter?.type ?? null);
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1836,7 +1900,6 @@ function App() {
                 onSave={filter => {
                   setFeedFilterKey('office', filter ?? null);
                   setFeedFilterKey('meter', null);
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1848,7 +1911,6 @@ function App() {
                 onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('meter', filter?.meter ?? null);
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1864,7 +1926,6 @@ function App() {
                       ? filter
                       : null,
                   );
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
@@ -1874,77 +1935,23 @@ function App() {
                 onClose={() => goBack(screenAfterFilter)}
                 onSave={filter => {
                   setFeedFilterKey('preferences', filter ?? null);
-                  goBack(screenAfterFilter);
                 }}
               />
             )}
-            {currentScreen === screenName.postEditor && (
-              <PostEditorScreen
-                publishTarget={postEditorConfig.publishTarget}
-                selectedCategory={selectedCategory}
-                publishCategoryId={postEditorConfig.listingCategoryId}
-                initialListing={postEditorConfig.editingListing}
-                currentUser={currentUser}
-                onClose={() => {
-                  setPostEditorConfig(prev => ({...prev, editingListing: null}));
-                  setCurrentScreen(postEditorConfig.returnScreen);
-                }}
-                onPublish={payload => {
-                  if (
-                    postEditorConfig.returnScreen === screenName.adsForm &&
-                    payload?.url
-                  ) {
-                    setAdsFormPendingSalesImage({
-                      url: payload.url,
-                      storyAlreadyCreated:
-                        postEditorConfig.publishTarget === 'story',
-                    });
-                  }
-                  if (payload?.isEdit) {
-                    setEditPublishRefreshKey(k => k + 1);
-                    setPostEditorConfig(prev => ({...prev, editingListing: null}));
-                    setTimeout(() => {
-                      setTikTokFeedRefreshKey(prev => prev + 1);
-                    }, 800);
-                    return;
-                  }
-                  if (
-                    postEditorConfig.returnScreen ===
-                      screenName.editPublishAd &&
-                    payload?.url &&
-                    postEditorConfig.publishTarget === 'post'
-                  ) {
-                    const categoryRaw =
-                      payload.category ?? postEditorConfig.listingCategoryId;
-                    const categoryNum =
-                      categoryRaw != null
-                        ? parseInt(String(categoryRaw), 10)
-                        : NaN;
-                    setUploadedListings(prev => [
-                      ...prev,
-                      {
-                        id: payload.id,
-                        category: Number.isFinite(categoryNum)
-                          ? categoryNum
-                          : categoryRaw,
-                        video_url: payload.isVideo ? payload.url : null,
-                        images: payload.isVideo ? [] : [payload.url],
-                        image: payload.isVideo ? null : payload.url,
-                        description: 'פוסט',
-                        feed_post: true,
-                        property_type: 'post',
-                      },
-                    ]);
-                  }
-                  if (postEditorConfig.publishTarget === 'post') {
-                    setTimeout(() => {
-                      setTikTokFeedRefreshKey(prev => prev + 1);
-                    }, 800);
-                  }
-                }}
-              />
-            )}
-            {currentScreen === screenName.adsForm && (
+            {/** Keep AdsForm mounted while composing תמונה מכירתית so main image / draft fields aren't lost. */}
+            {(currentScreen === screenName.adsForm ||
+              (currentScreen === screenName.postEditor &&
+                postEditorConfig.returnScreen === screenName.adsForm)) && (
+              <View
+                style={
+                  currentScreen === screenName.adsForm
+                    ? {flex: 1}
+                    : {display: 'none'}
+                }
+                pointerEvents={
+                  currentScreen === screenName.adsForm ? 'auto' : 'none'
+                }
+                collapsable={false}>
               <AdsForm
                 initialCategory={selectedCategory}
                 initialListing={editingListing}
@@ -1953,22 +1960,59 @@ function App() {
                 onPendingSalesImageConsumed={() =>
                   setAdsFormPendingSalesImage(null)
                 }
-                onOpenPostEditor={listingCategoryId => {
+                onOpenPostEditor={async arg => {
                   if (!currentUser) {
                     setReturnToScreenAfterAuth('adsForm');
                     setCurrentScreen(screenName.userRegistration);
                     return;
                   }
+                  const categoryRaw =
+                    typeof arg === 'object' && arg != null
+                      ? arg.categoryId
+                      : arg;
                   const n =
-                    listingCategoryId != null &&
-                    String(listingCategoryId).trim() !== ''
-                      ? parseInt(String(listingCategoryId).trim(), 10)
+                    categoryRaw != null &&
+                    String(categoryRaw).trim() !== ''
+                      ? parseInt(String(categoryRaw).trim(), 10)
                       : NaN;
                   const listingCat = Number.isFinite(n) && n > 0 ? n : null;
+                  const salesImageUrl =
+                    typeof arg === 'object' && arg != null
+                      ? arg.salesImageUrl
+                      : null;
+                  const salesEditorMeta =
+                    typeof arg === 'object' && arg != null
+                      ? arg.salesImageEditorMeta
+                      : null;
+                  const adListing =
+                    typeof arg === 'object' && arg != null
+                      ? arg.adListing
+                      : null;
+                  const trimmedSales =
+                    salesImageUrl != null &&
+                    String(salesImageUrl).trim() !== ''
+                      ? String(salesImageUrl).trim()
+                      : null;
+
+                  let resolvedEditingListing = null;
+                  if (trimmedSales) {
+                    resolvedEditingListing =
+                      await resolveSalesImageEditorListing({
+                        salesImageUrl: trimmedSales,
+                        subscriptionId: resolveSubscriptionId(currentUser),
+                        editorMeta: salesEditorMeta,
+                        adGeneralDetails: adListing?.general_details ?? null,
+                      });
+                  }
+
                   setPostEditorConfig({
                     publishTarget: 'story',
                     returnScreen: screenName.adsForm,
                     listingCategoryId: listingCat,
+                    // Always defer story upload to ad Publish — so the story
+                    // is created with the final sales image (incl. baked text).
+                    skipStoryPublish: true,
+                    editingListing: resolvedEditingListing,
                   });
                   if (listingCat != null) {
                     setSelectedCategory(String(listingCat));
@@ -1977,46 +2021,104 @@ function App() {
                 }}
                 onClose={() => {
                   setBnbPublishHostType(null);
-                  if (editingListing) {
-                    setEditingListing(null);
-                  }
-                  goBack(
-                    editingListing
-                      ? screenName.editPublishAd
-                      : screenName.tikTokFeed,
-                  );
+                  setEditingListing(null);
+                  goBack(adsFormReturnScreen);
                 }}
-                onPublish={async listingData => {
-                  const wasEditing = !!editingListing;
-                  if (
-                    listingData.category &&
-                    listingData.category !== selectedCategory
-                  ) {
-                    setSelectedCategory(listingData.category.toString());
-                  }
+                onPublish={listingData => {
+                  const returnScreen = adsFormReturnScreen;
+                  const categoryId =
+                    listingData?.category != null
+                      ? parseInt(String(listingData.category), 10)
+                      : NaN;
                   const images = [];
                   if (listingData.mainImage) images.push(listingData.mainImage);
-                  if (listingData.additionalImages?.length)
+                  if (listingData.additionalImages?.length) {
                     images.push(...listingData.additionalImages);
-                  setUploadedListings(prev => [
-                    ...prev,
-                    {
+                  }
+                  finishPublishedListing({
+                    returnScreen,
+                    categoryId: Number.isFinite(categoryId) ? categoryId : null,
+                    isUpdate: listingData?.isUpdate === true,
+                    listingPreview: {
                       id: listingData.id,
                       category: listingData.category,
                       images,
                       price: listingData.price ?? listingData.budget,
                     },
-                  ]);
-                  setEditingListing(null);
-                  setTimeout(
-                    () => setTikTokFeedRefreshKey(prev => prev + 1),
-                    1500,
-                  );
-                  replaceCurrentScreen(
-                    wasEditing
-                      ? screenName.editPublishAd
-                      : screenName.tikTokFeed,
-                  );
+                  });
+                }}
+              />
+              </View>
+            )}
+            {currentScreen === screenName.postEditor && (
+              <PostEditorScreen
+                publishTarget={postEditorConfig.publishTarget}
+                skipStoryPublish={postEditorConfig.skipStoryPublish === true}
+                selectedCategory={selectedCategory}
+                publishCategoryId={postEditorConfig.listingCategoryId}
+                initialListing={postEditorConfig.editingListing}
+                currentUser={currentUser}
+                onClose={() => {
+                  setPostEditorConfig(prev => ({
+                    ...prev,
+                    editingListing: null,
+                    skipStoryPublish: false,
+                  }));
+                  goBack(postEditorConfig.returnScreen);
+                }}
+                onPublish={payload => {
+                  const returnScreen = postEditorConfig.returnScreen;
+
+                  if (
+                    returnScreen === screenName.adsForm &&
+                    payload?.url &&
+                    postEditorConfig.publishTarget === 'story'
+                  ) {
+                    // Story is always created on ad Publish (not here).
+                    setAdsFormPendingSalesImage({
+                      url: payload.url,
+                      storyAlreadyCreated: false,
+                      generalDetails: payload.generalDetails || null,
+                      sourceImageUrl: payload.sourceImageUrl || null,
+                    });
+                    replaceCurrentScreen(screenName.adsForm);
+                    return;
+                  }
+
+                  const categoryRaw =
+                    payload?.category ?? postEditorConfig.listingCategoryId;
+                  const categoryNum =
+                    categoryRaw != null
+                      ? parseInt(String(categoryRaw), 10)
+                      : NaN;
+                  const categoryId = Number.isFinite(categoryNum)
+                    ? categoryNum
+                    : null;
+
+                  let listingPreview = null;
+                  if (
+                    returnScreen === screenName.editPublishAd &&
+                    payload?.url &&
+                    postEditorConfig.publishTarget === 'post' &&
+                    !payload?.isEdit
+                  ) {
+                    listingPreview = {
+                      id: payload.id,
+                      category: categoryId ?? categoryRaw,
+                      video_url: payload.isVideo ? payload.url : null,
+                      images: payload.isVideo ? [] : [payload.url],
+                      image: payload.isVideo ? null : payload.url,
+                      description: 'פוסט',
+                      feed_post: true,
+                      property_type: 'post',
+                    };
+                  }
+
+                  finishPublishedListing({
+                    returnScreen,
+                    categoryId,
+                    listingPreview,
+                  });
                 }}
               />
             )}
@@ -2329,6 +2431,8 @@ function App() {
                   setSelectedCategory(String(categoryId));
                   setEditPublishSourceCategory(Number(categoryId));
                   setBnbPublishHostType(opts?.bnbHostType ?? null);
+                  setEditingListing(null);
+                  setAdsFormReturnScreen(screenName.editPublishAd);
                   setCurrentScreen(screenName.adsForm);
                 }}
                 onCreatePost={categoryId => {
@@ -2367,10 +2471,16 @@ function App() {
                 }}
                 onEditAd={listing => {
                   setBnbPublishHostType(null);
-                  setEditPublishSourceCategory(null);
-                  if (listing?.category != null)
-                    setSelectedCategory(String(listing.category));
+                  const listingCat =
+                    listing?.category != null
+                      ? parseInt(String(listing.category), 10)
+                      : NaN;
+                  if (Number.isFinite(listingCat)) {
+                    setSelectedCategory(String(listingCat));
+                    setEditPublishSourceCategory(listingCat);
+                  }
                   setEditingListing(listing ?? null);
+                  setAdsFormReturnScreen(screenName.editPublishAd);
                   setCurrentScreen(screenName.adsForm);
                 }}
                 onBoost={listing => {

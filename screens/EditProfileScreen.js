@@ -16,14 +16,17 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import {ProfileAvatar} from '../components';
+import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {ContextHook} from '../hooks/ContextHook';
 import {subscriptionTypes} from '../utils/constant';
 import {
   getUserProfilePhotoUrl,
   getUserCompanyLogoUrl,
 } from '../utils/userProfileImage';
-import {updateSubscriptionProfile, uploadProfilePicture} from '../utils/api';
+import {updateSubscriptionProfile, uploadProfilePicture, uploadFile} from '../utils/api';
 import {hebrewTextAlign} from '../utils/rtlLayout';
+import {ensureMediaLibraryPermission, AD_VIDEO_PICKER_OPTIONS} from '../utils/mediaLibraryPermission';
+import CircleImageCropModal from '../components/CircleImageCropModal';
 
 const BG = '#27262F';
 const CARD_BG = '#2B2A39';
@@ -132,6 +135,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const isCompany = String(type).toLowerCase() === subscriptionTypes.company;
+  const subTypeLower = String(type).toLowerCase();
+  const canEditProfileVideo =
+    subTypeLower === subscriptionTypes.broker ||
+    subTypeLower === subscriptionTypes.professional;
   // Company brand image lives in company_logo_url; everyone else uses profile_picture_url.
   const photoFieldKey = isCompany ? 'company_logo_url' : 'profile_picture_url';
 
@@ -152,7 +159,16 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         getUserCompanyLogoUrl(currentUser),
   );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [profileVideoUrl, setProfileVideoUrl] = useState(() =>
+    currentUser?.video_url && String(currentUser.video_url).trim()
+      ? String(currentUser.video_url).trim()
+      : null,
+  );
+  const [pendingProfileVideo, setPendingProfileVideo] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cropUri, setCropUri] = useState(null);
+  const [cropVisible, setCropVisible] = useState(false);
 
   const displayName =
     currentUser?.name ||
@@ -164,29 +180,48 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const setField = (key, value) =>
     setForm(prev => ({...prev, [key]: value}));
 
-  const buildPickedImageFile = (asset, namePrefix = 'profile') => ({
+  const buildPickedVideoFile = asset => ({
     uri: asset.uri,
-    type: asset.type || asset.mimeType || 'image/jpeg',
-    name: asset.fileName || asset.filename || `${namePrefix}-${Date.now()}.jpg`,
+    type: asset.type || asset.mimeType || 'video/mp4',
+    name: asset.fileName || asset.filename || `video-${Date.now()}.mp4`,
     file: asset,
   });
 
-  const openWebImagePicker = onPicked => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = e => {
-      const file = e.target.files?.[0];
-      if (file) {
-        onPicked({
-          uri: URL.createObjectURL(file),
-          type: file.type,
-          name: file.name || `profile-${Date.now()}.jpg`,
-          file,
-        });
+  const profileVideoPreviewUri =
+    pendingProfileVideo?.uri || profileVideoUrl || null;
+
+  const handlePickProfileVideo = async () => {
+    if (uploadingVideo || saving || uploadingPhoto) return;
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'video/*';
+      input.onchange = e => {
+        const file = e.target.files?.[0];
+        if (file) {
+          setPendingProfileVideo({
+            uri: URL.createObjectURL(file),
+            type: file.type,
+            name: file.name || `video-${Date.now()}.mp4`,
+            file,
+          });
+        }
+      };
+      input.click();
+      return;
+    }
+    try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync(
+        AD_VIDEO_PICKER_OPTIONS,
+      );
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingProfileVideo(buildPickedVideoFile(result.assets[0]));
       }
-    };
-    input.click();
+    } catch (err) {
+      Alert.alert('שגיאה', `לא ניתן לבחור סרטון: ${err.message}`);
+    }
   };
 
   const uploadPicked = async picked => {
@@ -206,26 +241,51 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     }
   };
 
+  const openPhotoCropper = uri => {
+    if (!uri) return;
+    setCropUri(uri);
+    setCropVisible(true);
+  };
+
+  const handlePhotoCropConfirm = async result => {
+    setCropVisible(false);
+    setCropUri(null);
+    if (!result?.uri) return;
+    await uploadPicked({
+      uri: result.uri,
+      type: 'image/jpeg',
+      name: `profile-${Date.now()}.jpg`,
+    });
+  };
+
+  const handlePhotoCropCancel = () => {
+    setCropVisible(false);
+    setCropUri(null);
+  };
+
   const handlePickPhoto = async () => {
     if (uploadingPhoto || saving) return;
     if (Platform.OS === 'web') {
-      openWebImagePicker(uploadPicked);
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = e => {
+        const file = e.target.files?.[0];
+        if (file) openPhotoCropper(URL.createObjectURL(file));
+      };
+      input.click();
       return;
     }
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== 'granted') {
-        Alert.alert('נדרשת הרשאה', 'נדרשת הרשאה לגישה לתמונות.');
-        return;
-      }
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 1,
       });
       if (!result.canceled && result.assets?.[0]) {
-        await uploadPicked(buildPickedImageFile(result.assets[0]));
+        openPhotoCropper(result.assets[0].uri);
       }
     } catch (err) {
       Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${err.message}`);
@@ -233,7 +293,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   };
 
   const handleSave = async () => {
-    if (saving || uploadingPhoto) return;
+    if (saving || uploadingPhoto || uploadingVideo) return;
     const subId = currentUser?.id || currentUser?.subscription_id;
     if (!subId) {
       Alert.alert('שגיאה', 'לא ניתן לזהות את המשתמש.');
@@ -244,6 +304,37 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
     payload[photoFieldKey] = photoUrl || '';
+
+    let nextVideoUrl = profileVideoUrl;
+    if (canEditProfileVideo && pendingProfileVideo) {
+      setUploadingVideo(true);
+      try {
+        const uploaded = await uploadFile(pendingProfileVideo, 'profile-videos', {
+          timeoutMs: 180000,
+        });
+        if (uploaded?.url) {
+          nextVideoUrl = uploaded.url;
+          setProfileVideoUrl(uploaded.url);
+          setPendingProfileVideo(null);
+        } else {
+          throw new Error('לא התקבלה כתובת סרטון');
+        }
+      } catch (err) {
+        Alert.alert('שגיאה', err?.message || 'העלאת הסרטון נכשלה, נסה/י שוב.');
+        setUploadingVideo(false);
+        return;
+      } finally {
+        setUploadingVideo(false);
+      }
+    }
+
+    const currentVideo =
+      currentUser?.video_url && String(currentUser.video_url).trim()
+        ? String(currentUser.video_url).trim()
+        : null;
+    if (canEditProfileVideo && nextVideoUrl !== currentVideo) {
+      payload.video_url = nextVideoUrl || null;
+    }
 
     setSaving(true);
     try {
@@ -320,6 +411,50 @@ const EditProfileScreen = ({onClose, onSaved}) => {
             </TouchableOpacity>
           </View>
 
+          {canEditProfileVideo ? (
+            <View style={styles.videoSection}>
+              <Text style={styles.fieldLabel}>סרטון פרופיל</Text>
+              {profileVideoPreviewUri ? (
+                <View style={styles.videoPreviewContainer}>
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={handlePickProfileVideo}
+                    style={styles.videoPreviewFrame}>
+                    <VideoPreviewThumb
+                      uri={profileVideoPreviewUri}
+                      style={styles.videoPreviewFill}
+                    />
+                  </TouchableOpacity>
+                  {uploadingVideo ? (
+                    <View style={styles.videoUploadOverlay}>
+                      <ActivityIndicator size="small" color="#FEE787" />
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={handlePickProfileVideo}
+                  style={styles.videoUploadPlaceholder}
+                  activeOpacity={0.85}>
+                  <MaterialCommunityIcons
+                    name="video-outline"
+                    size={48}
+                    color="rgba(255,255,255,0.4)"
+                  />
+                  <Text style={styles.videoUploadText}>העלאת סרטון פרופיל</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={handlePickProfileVideo}
+                activeOpacity={0.7}
+                disabled={uploadingVideo || saving}>
+                <Text style={styles.changePhotoText}>
+                  {profileVideoPreviewUri ? 'החלפת סרטון' : 'בחירת סרטון'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* Read-only email */}
           {currentUser?.email ? (
             <View style={styles.fieldBlock}>
@@ -362,7 +497,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleSave}
-            disabled={saving || uploadingPhoto}
+            disabled={saving || uploadingPhoto || uploadingVideo}
             style={styles.saveBtnWrap}>
             <LinearGradient
               colors={GOLD_GRADIENT}
@@ -371,9 +506,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
               end={{x: 1, y: 1}}
               style={[
                 styles.saveBtn,
-                (saving || uploadingPhoto) && styles.saveBtnDisabled,
+                (saving || uploadingPhoto || uploadingVideo) &&
+                  styles.saveBtnDisabled,
               ]}>
-              {saving ? (
+              {saving || uploadingVideo ? (
                 <ActivityIndicator size="small" color="#1E1D27" />
               ) : (
                 <Text style={styles.saveBtnText}>שמירה</Text>
@@ -389,6 +525,13 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      <CircleImageCropModal
+        visible={cropVisible}
+        imageUri={cropUri}
+        onCancel={handlePhotoCropCancel}
+        onConfirm={handlePhotoCropConfirm}
+        title={isCompany ? 'חתוך את לוגו החברה' : 'חתוך את תמונת הפרופיל'}
+      />
     </View>
   );
 };
@@ -450,6 +593,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
+    textAlign: 'center',
+  },
+  videoSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  videoPreviewContainer: {
+    width: '100%',
+    maxWidth: 280,
+    aspectRatio: 9 / 16,
+    marginBottom: 10,
+    position: 'relative',
+  },
+  videoPreviewFrame: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  videoPreviewFill: {
+    width: '100%',
+    height: '100%',
+  },
+  videoUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 16,
+  },
+  videoUploadPlaceholder: {
+    width: '100%',
+    maxWidth: 280,
+    aspectRatio: 9 / 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    borderStyle: 'dashed',
+    backgroundColor: INPUT_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  videoUploadText: {
+    color: TEXT_SECONDARY,
+    fontSize: 14,
+    fontFamily: 'Rubik-Regular',
     textAlign: 'center',
   },
   fieldBlock: {

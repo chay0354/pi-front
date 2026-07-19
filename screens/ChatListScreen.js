@@ -44,6 +44,8 @@ import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import ProfileAvatar from '../components/ProfileAvatar';
+import CircleImageCropModal from '../components/CircleImageCropModal';
+import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 
 /** Main chats list panel — matches Figma node 8:3115 */
 const CHAT_LIST_PANEL_BG = '#2B2A39';
@@ -619,6 +621,8 @@ const ChatListScreen = ({
   const [groupImageUrl, setGroupImageUrl] = useState(null);
   const [groupImageUploading, setGroupImageUploading] = useState(false);
   const [groupCreating, setGroupCreating] = useState(false);
+  const [groupCropUri, setGroupCropUri] = useState(null);
+  const [groupCropVisible, setGroupCropVisible] = useState(false);
   const groupPickSeq = useRef(0);
   const groupMetaLookupInFlight = useRef(new Set());
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
@@ -842,30 +846,66 @@ const ChatListScreen = ({
     setGroupImageUploading(false);
   }, []);
 
-  const pickGroupAvatar = useCallback(async () => {
-    if (groupImageUploading) return;
+  const uploadGroupAvatarCrop = useCallback(async uri => {
+    if (!uri) return;
+    setGroupImageUploading(true);
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (lib.status !== 'granted') {
-        Alert.alert('', 'נדרשת גישה לתמונות');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
+      const up = await uploadGroupImage({
+        uri,
+        type: 'image/jpeg',
+        name: `group-${Date.now()}.jpg`,
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      const a = result.assets[0];
-      const uri = a.uri;
-      const mime = a.mimeType || 'image/jpeg';
-      const name = a.fileName || `group-${Date.now()}.jpg`;
-      setGroupImageUploading(true);
-      const up = await uploadGroupImage({uri, type: mime, name});
       if (up?.url) setGroupImageUrl(String(up.url).trim());
     } catch (e) {
       Alert.alert('', e?.message ? String(e.message) : 'העלאת התמונה נכשלה');
     } finally {
       setGroupImageUploading(false);
+    }
+  }, []);
+
+  const handleGroupCropConfirm = useCallback(
+    async result => {
+      setGroupCropVisible(false);
+      setGroupCropUri(null);
+      if (result?.uri) await uploadGroupAvatarCrop(result.uri);
+    },
+    [uploadGroupAvatarCrop],
+  );
+
+  const handleGroupCropCancel = useCallback(() => {
+    setGroupCropVisible(false);
+    setGroupCropUri(null);
+  }, []);
+
+  const pickGroupAvatar = useCallback(async () => {
+    if (groupImageUploading) return;
+    try {
+      if (Platform.OS === 'web') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = e => {
+          const file = e.target.files?.[0];
+          if (file) {
+            setGroupCropUri(URL.createObjectURL(file));
+            setGroupCropVisible(true);
+          }
+        };
+        input.click();
+        return;
+      }
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setGroupCropUri(result.assets[0].uri);
+      setGroupCropVisible(true);
+    } catch (e) {
+      Alert.alert('', e?.message ? String(e.message) : 'בחירת התמונה נכשלה');
     }
   }, [groupImageUploading]);
 
@@ -2042,6 +2082,13 @@ const ChatListScreen = ({
           )}
         </View>
       </Modal>
+      <CircleImageCropModal
+        visible={groupCropVisible}
+        imageUri={groupCropUri}
+        onCancel={handleGroupCropCancel}
+        onConfirm={handleGroupCropConfirm}
+        title="חתוך את תמונת הקבוצה"
+      />
     </View>
   );
 };

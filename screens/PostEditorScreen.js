@@ -1,5 +1,6 @@
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -19,12 +20,14 @@ import {
   Platform,
   InteractionManager,
   Animated,
+  Easing,
   PanResponder,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Alert,
   Modal,
   Pressable,
+  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -47,11 +50,16 @@ import {
   buildPostTextGeneralDetails,
   serializePostTextOverlays,
   parsePostTextOverlayPayload,
+  parsePostEditorRestoreInfo,
   extractPostListingMediaUrls,
   parseListingHashtagsForEditor,
   hydratePostEditorBlocksFromOverlays,
 } from '../utils/postTextOverlay';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
+import {
+  PROFILE_RING_COLORS,
+  PROFILE_RING_LOCATIONS,
+} from '../components/ProfileAvatar';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -278,10 +286,12 @@ const inferImageMimeFromUri = uri => {
   return 'image/jpeg';
 };
 
-const postHasVisualOverlays = (textBlocks, mediaImages) =>
-  (Array.isArray(textBlocks) &&
-    textBlocks.some(b => String(b?.text || '').trim().length > 0)) ||
-  (Array.isArray(mediaImages) && mediaImages.length > 0);
+const postHasTextOverlays = textBlocks =>
+  Array.isArray(textBlocks) &&
+  textBlocks.some(b => String(b?.text || '').trim().length > 0);
+
+const postHasStickerOverlays = mediaImages =>
+  Array.isArray(mediaImages) && mediaImages.length > 0;
 
 const lightenColor = (hex, amount = 0.8) => {
   if (typeof hex !== 'string') return hex;
@@ -401,10 +411,26 @@ const EditingTextBox = forwardRef(
 );
 
 const STAGE_TEXT_PAD_Y = 12;
-/** Inset from the stage start edge (LTR coords inside stageLtr). */
-const STAGE_TEXT_PAD_LEFT = 8;
-/** Smaller right inset — keeps the clip border closer to the phone edge. */
+/** Insets from the stage edges — kept small and symmetric so text can sit
+ * right up against both phone edges. */
+const STAGE_TEXT_PAD_LEFT = 2;
 const STAGE_TEXT_PAD_RIGHT = 2;
+
+/**
+ * Literal textAlign values are swapped by Android under forceRTL +
+ * swapLeftAndRightInRTL (literal 'left' paints on the physical right). Map a
+ * *physical* side to the literal value that actually lands there on native.
+ */
+const physicalTextAlign = align => {
+  if (Platform.OS === 'web' || !I18nManager.isRTL) return align;
+  if (align === 'left') return 'right';
+  if (align === 'right') return 'left';
+  return 'center';
+};
+
+/** Physical flex placement for the align mode (containers are forced LTR). */
+const alignToFlexSelf = align =>
+  align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
 
 const getTextBlockBoxWidth = stageWidth =>
   Math.max(
@@ -427,6 +453,26 @@ const clampTextBlockPosition = (x, y, blockW, blockH, stageW, stageH) => {
       STAGE_TEXT_PAD_LEFT,
       Math.min(Number(x) || 0, sw - bw - STAGE_TEXT_PAD_RIGHT),
     ),
+    y: Math.max(
+      STAGE_TEXT_PAD_Y,
+      Math.min(Number(y) || 0, sh - bh - STAGE_TEXT_PAD_Y),
+    ),
+  };
+};
+
+/**
+ * Loose clamp for free-positioned text: the box spans the whole stage, so the
+ * strict clamp above pins x in place. State-level updates keep the dragged x
+ * (the DraggableTextBlock re-clamps precisely against measured glyph bounds);
+ * this just prevents wildly out-of-range values.
+ */
+const clampTextBlockPositionLoose = (x, y, blockW, blockH, stageW, stageH) => {
+  const sw = Math.max(1, Number(stageW) || 1);
+  const sh = Math.max(1, Number(stageH) || 1);
+  const bw = Math.max(1, Number(blockW) || 1);
+  const bh = Math.max(1, Number(blockH) || 1);
+  return {
+    x: Math.max(-bw, Math.min(Number(x) || 0, sw)),
     y: Math.max(
       STAGE_TEXT_PAD_Y,
       Math.min(Number(y) || 0, sh - bh - STAGE_TEXT_PAD_Y),
@@ -469,6 +515,10 @@ const measurePostStageMapping = (previewRef, stageRef) =>
     });
   });
 
+/** Tap vs drag: keep generous so tiny finger jitter still opens the editor. */
+const TEXT_BLOCK_TAP_MOVE_PX = 8;
+const TEXT_BLOCK_TOUCH_PAD = 24;
+
 const DraggableTextBlock = React.memo(
   ({
     block,
@@ -489,23 +539,50 @@ const DraggableTextBlock = React.memo(
     onBringToFrontRef.current = onBringToFront;
     const isBeingEditedRef = useRef(isBeingEdited);
     isBeingEditedRef.current = isBeingEdited;
+    const blockIdRef = useRef(block.id);
+    blockIdRef.current = block.id;
 
-    const touchStartTime = useRef(0);
+    const touchStartRef = useRef({pageX: 0, pageY: 0, x: 0, y: 0});
     const hasMoved = useRef(false);
+    const gestureActive = useRef(false);
     const hasAligned = useRef(false);
     const blockSizeRef = useRef({w: 0, h: 0});
+    /** Rendered text content bounds inside the wide drag box ({x offset, width}). */
+    const textLayoutRef = useRef({x: 0, w: 0});
 
     const stageW = stageWidth > 0 ? stageWidth : 300;
     const stageH = stageHeight > 0 ? stageHeight : 300;
     const boxWidth = getTextBlockBoxWidth(stageW);
 
-    const initialPos = clampTextBlockPosition(
+    /**
+     * Free-drag clamp: the drag box spans the whole stage width, so clamping
+     * the box itself pins x in place. Instead clamp so the *visible text
+     * content* (measured from the inner <Text>) stays inside the stage — the
+     * box may hang past an edge, letting the text move anywhere on screen.
+     */
+    const clampFreePosition = (x, y) => {
+      const blockH = blockSizeRef.current.h || 40;
+      const clampedY = Math.max(
+        STAGE_TEXT_PAD_Y,
+        Math.min(Number(y) || 0, stageH - blockH - STAGE_TEXT_PAD_Y),
+      );
+      const t = textLayoutRef.current;
+      if (!(t.w > 0)) {
+        return {x: Number(x) || 0, y: clampedY};
+      }
+      const minX = STAGE_TEXT_PAD_LEFT - t.x;
+      const maxX = stageW - STAGE_TEXT_PAD_RIGHT - (t.x + t.w);
+      return {
+        x: Math.min(Math.max(Number(x) || 0, minX), Math.max(minX, maxX)),
+        y: clampedY,
+      };
+    };
+    const clampFreePositionRef = useRef(clampFreePosition);
+    clampFreePositionRef.current = clampFreePosition;
+
+    const initialPos = clampFreePosition(
       block.x ?? STAGE_TEXT_PAD_LEFT,
       block.y ?? getDefaultTextBlockY(stageH, blockSizeRef.current.h || 40),
-      boxWidth,
-      40,
-      stageW,
-      stageH,
     );
 
     const position = useRef(
@@ -513,14 +590,11 @@ const DraggableTextBlock = React.memo(
     ).current;
 
     useEffect(() => {
+      if (gestureActive.current) return;
       hasAligned.current = false;
-      const nextPos = clampTextBlockPosition(
+      const nextPos = clampFreePositionRef.current(
         block.x ?? STAGE_TEXT_PAD_LEFT,
         block.y ?? getDefaultTextBlockY(stageH, blockSizeRef.current.h || 40),
-        boxWidth,
-        blockSizeRef.current.h || 40,
-        stageW,
-        stageH,
       );
       position.setValue({x: nextPos.x, y: nextPos.y});
     }, [
@@ -532,57 +606,83 @@ const DraggableTextBlock = React.memo(
       block.align,
       stageWidth,
       stageHeight,
+      position,
+      stageH,
     ]);
+
+    const endGestureAsTapOrDragRef = useRef(() => {});
+    endGestureAsTapOrDragRef.current = () => {
+      if (isBeingEditedRef.current) {
+        gestureActive.current = false;
+        return;
+      }
+      const id = blockIdRef.current;
+      const moved = hasMoved.current;
+      gestureActive.current = false;
+      hasMoved.current = false;
+      if (!moved) {
+        onBringToFrontRef.current?.(id);
+        onPressRef.current?.();
+        return;
+      }
+      onBringToFrontRef.current?.(id);
+      const clamped = clampFreePositionRef.current(
+        position.x._value,
+        position.y._value,
+      );
+      position.setValue({x: clamped.x, y: clamped.y});
+      onUpdatePositionRef.current?.(id, clamped.x, clamped.y);
+    };
+
+    const handleResponderGrant = () => {
+      if (isBeingEditedRef.current) return;
+      gestureActive.current = true;
+      hasMoved.current = false;
+      touchStartRef.current = {
+        pageX: 0,
+        pageY: 0,
+        x: position.x._value,
+        y: position.y._value,
+      };
+    };
+
+    const handleResponderMove = (_, g) => {
+      if (isBeingEditedRef.current) return;
+      if (
+        Math.abs(g.dx) > TEXT_BLOCK_TAP_MOVE_PX ||
+        Math.abs(g.dy) > TEXT_BLOCK_TAP_MOVE_PX
+      ) {
+        hasMoved.current = true;
+      }
+      if (!hasMoved.current) return;
+      const next = clampFreePositionRef.current(
+        touchStartRef.current.x + g.dx,
+        touchStartRef.current.y + g.dy,
+      );
+      position.setValue({x: next.x, y: next.y});
+    };
+
+    const handleResponderRelease = () => {
+      endGestureAsTapOrDragRef.current();
+    };
 
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => !isBeingEditedRef.current,
+        onStartShouldSetPanResponderCapture: () => !isBeingEditedRef.current,
         onMoveShouldSetPanResponder: () => !isBeingEditedRef.current,
-        onPanResponderGrant: () => {
-          if (isBeingEditedRef.current) return;
-          onBringToFrontRef.current?.(block.id);
-          touchStartTime.current = Date.now();
-          hasMoved.current = false;
-          position.setOffset({
-            x: position.x._value,
-            y: position.y._value,
-          });
-          position.setValue({x: 0, y: 0});
-        },
-        onPanResponderMove: (_, g) => {
-          if (isBeingEditedRef.current) return;
-          if (Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5) {
-            hasMoved.current = true;
-          }
-          if (hasMoved.current) {
-            position.setValue({x: g.dx, y: g.dy});
-          }
-        },
-        onPanResponderRelease: () => {
-          if (isBeingEditedRef.current) return;
-          position.flattenOffset();
-          const elapsed = Date.now() - touchStartTime.current;
-          if (!hasMoved.current && elapsed < 400) {
-            onPressRef.current();
-          } else {
-            const blockH = blockSizeRef.current.h || 40;
-            const clamped = clampTextBlockPosition(
-              position.x._value,
-              position.y._value,
-              boxWidth,
-              blockH,
-              stageW,
-              stageH,
-            );
-            position.setValue({x: clamped.x, y: clamped.y});
-            onUpdatePositionRef.current(block.id, clamped.x, clamped.y);
-          }
-        },
+        onMoveShouldSetPanResponderCapture: () => !isBeingEditedRef.current,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: handleResponderGrant,
+        onPanResponderMove: handleResponderMove,
+        onPanResponderRelease: handleResponderRelease,
+        onPanResponderTerminate: handleResponderRelease,
       }),
     ).current;
 
     const handleLayout = e => {
-      if (isBeingEdited) return;
+      if (isBeingEdited || gestureActive.current) return;
 
       const blockH = e.nativeEvent.layout.height;
       blockSizeRef.current = {w: boxWidth, h: blockH};
@@ -595,14 +695,7 @@ const DraggableTextBlock = React.memo(
         block.y ??
         position.y._value ??
         getDefaultTextBlockY(stageH, blockSizeRef.current.h || blockH);
-      const clamped = clampTextBlockPosition(
-        targetX,
-        targetY,
-        boxWidth,
-        blockH,
-        stageW,
-        stageH,
-      );
+      const clamped = clampFreePositionRef.current(targetX, targetY);
 
       if (
         hasAligned.current &&
@@ -617,6 +710,23 @@ const DraggableTextBlock = React.memo(
       onUpdatePositionRef.current(block.id, clamped.x, clamped.y);
     };
 
+    const handleContentLayout = e => {
+      if (gestureActive.current) return;
+      const l = e?.nativeEvent?.layout;
+      if (!l || !(l.width > 0)) return;
+      textLayoutRef.current = {x: l.x, w: l.width};
+      blockSizeRef.current = {
+        w: boxWidth,
+        h: l.height || blockSizeRef.current.h,
+      };
+      const cur = {x: position.x._value, y: position.y._value};
+      const next = clampFreePositionRef.current(cur.x, cur.y);
+      if (Math.abs(next.x - cur.x) > 1 || Math.abs(next.y - cur.y) > 1) {
+        position.setValue(next);
+        onUpdatePositionRef.current(block.id, next.x, next.y);
+      }
+    };
+
     const visual = getTextVisualStyle(
       block.color ?? selectedColor,
       block.bgMode ?? 0,
@@ -626,48 +736,53 @@ const DraggableTextBlock = React.memo(
       <Animated.View
         onLayout={handleLayout}
         pointerEvents={isBeingEdited ? 'none' : 'auto'}
+        collapsable={false}
+        {...(isBeingEdited ? {} : panResponder.panHandlers)}
         style={[
           styles.centerTextWrapper,
           {
             zIndex,
-            // Android video SurfaceView ignores RN zIndex — elevation keeps
-            // text overlays tappable and visible above a playing background.
-            elevation: Platform.OS === 'android' ? Math.max(8, zIndex + 8) : 0,
+            elevation: Platform.OS === 'android' ? Math.max(12, zIndex + 12) : 0,
             left: 0,
             top: 0,
             width: boxWidth,
             maxWidth: boxWidth,
             opacity: isBeingEdited ? 0 : 1,
+            padding: TEXT_BLOCK_TOUCH_PAD,
             transform: position.getTranslateTransform(),
           },
-        ]}
-        {...(isBeingEdited ? {} : panResponder.panHandlers)}>
-        <Text
-          style={[
-            styles.centerText,
-            TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
-            {
-              color: visual.textColor,
-              textAlign: block.align ?? 'center',
-              writingDirection: 'rtl',
-              fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
-              lineHeight: Math.round(
-                (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
-              ),
-            },
-            // Background hugs the text content itself rather than the full
-            // drag-handle width (boxWidth, kept wide on the wrapper above for
-            // a comfortable touch/drag target).
-            visual.backgroundColor !== 'transparent' && {
-              backgroundColor: visual.backgroundColor,
-              alignSelf: 'center',
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-              borderRadius: 8,
-            },
-          ]}>
-          {block.text}
-        </Text>
+        ]}>
+        <View
+          onLayout={handleContentLayout}
+          pointerEvents="none"
+          style={{
+            alignSelf: alignToFlexSelf(block.align ?? 'center'),
+            maxWidth: '100%',
+          }}>
+          <Text
+            pointerEvents="none"
+            style={[
+              styles.centerText,
+              TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
+              {
+                color: visual.textColor,
+                textAlign: physicalTextAlign(block.align ?? 'center'),
+                writingDirection: 'rtl',
+                fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
+                lineHeight: Math.round(
+                  (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
+                ),
+              },
+              visual.backgroundColor !== 'transparent' && {
+                backgroundColor: visual.backgroundColor,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 8,
+              },
+            ]}>
+            {block.text}
+          </Text>
+        </View>
       </Animated.View>
     );
   },
@@ -809,6 +924,8 @@ const PostEditorScreen = ({
   /** Explicit listing category for this editor session (from navigation); overrides stale global feed category */
   publishCategoryId = null,
   publishTarget = 'post',
+  /** When true, story publish is skipped (sales-image edit — story syncs on ad save). */
+  skipStoryPublish = false,
   /** When set, editor opens in edit mode for an existing feed post. */
   initialListing = null,
 }) => {
@@ -817,6 +934,9 @@ const PostEditorScreen = ({
   const bottom = insets.bottom;
   const [activeTab, setActiveTab] = useState(TAB_TEXT);
   const [publishing, setPublishing] = useState(false);
+  const uploadProgressAnim = useRef(new Animated.Value(0)).current;
+  const uploadProgressLoopRef = useRef(null);
+  const [topNavWidth, setTopNavWidth] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [textModeOverlayText, setTextModeOverlayText] = useState('');
   const [textContent, setTextContent] = useState('');
@@ -867,6 +987,35 @@ const PostEditorScreen = ({
   const didHydrateListingRef = useRef(false);
   const didHydrateOverlaysRef = useRef(false);
 
+  const editorSessionKey = useMemo(() => {
+    if (!initialListing) return 'new';
+    const id =
+      initialListing.id != null ? String(initialListing.id).trim() : '';
+    const sales =
+      initialListing.sales_image_url ?? initialListing.salesImageUrl ?? '';
+    const main = initialListing.main_image_url ?? '';
+    return `${id}|${String(sales).trim()}|${String(main).trim()}|${initialListing._preferSalesImage ? 'sales' : 'post'}`;
+  }, [initialListing]);
+
+  useEffect(() => {
+    didHydrateListingRef.current = false;
+    didHydrateOverlaysRef.current = false;
+    originalVideoUrlRef.current = null;
+    originalMainImageUrlRef.current = null;
+    setTextBlocks([]);
+    setEditingTextBlockId(null);
+    editingTextDraftRef.current = '';
+    editingFieldLayoutRef.current = null;
+    editingOriginRef.current = {x: null, y: null};
+    isFinishingEditRef.current = false;
+    setBackgroundImageUri(null);
+    setBackgroundVideoAsset(null);
+    setMediaImages([]);
+    setTextContent('');
+    setTextModeOverlayText('');
+    nextStackOrderRef.current = 1;
+  }, [editorSessionKey]);
+
   const isRemoteMediaUri = uri =>
     /^https?:\/\//i.test(String(uri || '').trim());
 
@@ -914,6 +1063,7 @@ const PostEditorScreen = ({
     if (!initialListing || didHydrateListingRef.current) return;
     didHydrateListingRef.current = true;
     const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
+    const restoreInfo = parsePostEditorRestoreInfo(initialListing);
     originalVideoUrlRef.current = videoUrl;
     originalMainImageUrlRef.current = mainImageUrl;
     setHashtags(parseListingHashtagsForEditor(initialListing));
@@ -925,6 +1075,21 @@ const PostEditorScreen = ({
       });
       setBackgroundImageUri(null);
       setMediaImages([]);
+      activeTabRef.current = TAB_CAMERA;
+      setActiveTab(TAB_CAMERA);
+      return;
+    }
+    // Feed image with text burned in and no clean source stored (e.g. a
+    // text-on-gradient post): never use the baked composite as background —
+    // the hydrated text blocks would appear on top of their own baked copy
+    // (every text shown twice). Restore the gradient background instead.
+    if (restoreInfo.textBaked && !restoreInfo.sourceImageUrl) {
+      originalMainImageUrlRef.current = null;
+      setBackgroundImageUri(null);
+      setBackgroundVideoAsset(null);
+      if (restoreInfo.bgGradientIndex != null) {
+        setSelectedBackgroundGradientIndex(restoreInfo.bgGradientIndex);
+      }
       activeTabRef.current = TAB_CAMERA;
       setActiveTab(TAB_CAMERA);
       return;
@@ -942,21 +1107,109 @@ const PostEditorScreen = ({
       activeTabRef.current = TAB_TEXT;
       setActiveTab(TAB_TEXT);
     }
-  }, [initialListing]);
+  }, [initialListing, editorSessionKey]);
 
   useEffect(() => {
     if (!initialListing || didHydrateOverlaysRef.current) return;
     if (!(stageLayout.width > 0 && stageLayout.height > 0)) return;
     const payload = parsePostTextOverlayPayload(initialListing);
-    if (!payload?.overlays?.length) return;
-    const blocks = hydratePostEditorBlocksFromOverlays(payload, stageLayout);
-    if (!blocks.length) return;
     didHydrateOverlaysRef.current = true;
+    let blocks = payload?.overlays?.length
+      ? hydratePostEditorBlocksFromOverlays(payload, stageLayout).filter(b =>
+          String(b?.text || '').trim(),
+        )
+      : [];
+    // Older posts / sales images may only have description + baked pixels.
+    // Still create a live text layer so tap-to-edit works.
+    if (!blocks.length) {
+      const desc = String(initialListing.description || '').trim();
+      if (desc && desc !== 'פוסט' && desc.toLowerCase() !== 'post') {
+        blocks = [
+          {
+            id: createTextBlockId(),
+            text: desc,
+            color: DEFAULT_TEXT_COLOR,
+            textStyleIndex: 0,
+            fontSize: DEFAULT_FONT_SIZE,
+            align: 'center',
+            x: STAGE_TEXT_PAD_LEFT,
+            y: getDefaultTextBlockY(stageLayout.height, 40),
+            stackOrder: 1,
+            bgMode: 0,
+          },
+        ];
+      }
+    }
+    if (!blocks.length) return;
     nextStackOrderRef.current = blocks.length + 1;
     setTextBlocks(blocks);
     activeTabRef.current = TAB_CAMERA;
     setActiveTab(TAB_CAMERA);
-  }, [initialListing, stageLayout.width, stageLayout.height]);
+  }, [initialListing, stageLayout.width, stageLayout.height, editorSessionKey]);
+
+  useEffect(
+    () => () => {
+      uploadProgressLoopRef.current?.stop?.();
+    },
+    [],
+  );
+
+  const resetUploadProgress = useCallback(() => {
+    uploadProgressLoopRef.current?.stop?.();
+    uploadProgressLoopRef.current = null;
+    uploadProgressAnim.stopAnimation();
+    uploadProgressAnim.setValue(0);
+  }, [uploadProgressAnim]);
+
+  const startUploadProgress = useCallback(() => {
+    resetUploadProgress();
+    uploadProgressLoopRef.current = Animated.sequence([
+      Animated.timing(uploadProgressAnim, {
+        toValue: 0.28,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      Animated.timing(uploadProgressAnim, {
+        toValue: 0.62,
+        duration: 2200,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: false,
+      }),
+      Animated.timing(uploadProgressAnim, {
+        toValue: 0.88,
+        duration: 5200,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }),
+    ]);
+    uploadProgressLoopRef.current.start();
+  }, [resetUploadProgress, uploadProgressAnim]);
+
+  const finishUploadProgress = useCallback(
+    () =>
+      new Promise(resolve => {
+        uploadProgressLoopRef.current?.stop?.();
+        uploadProgressLoopRef.current = null;
+        Animated.timing(uploadProgressAnim, {
+          toValue: 1,
+          duration: 260,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }).start(({finished}) => {
+          if (finished) resolve();
+        });
+      }),
+    [uploadProgressAnim],
+  );
+
+  const showPostUploadProgress =
+    publishing && publishTarget !== 'story';
+
+  const uploadProgressWidth = uploadProgressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, Math.max(topNavWidth, 1)],
+  });
 
   const handlePublish = async () => {
     if (publishing) return;
@@ -970,6 +1223,9 @@ const PostEditorScreen = ({
 
     try {
       setPublishing(true);
+      if (publishTarget !== 'story') {
+        startUploadProgress();
+      }
       Keyboard.dismiss();
       if (editingTextBlockId) {
         finishEditing();
@@ -988,9 +1244,18 @@ const PostEditorScreen = ({
       });
       const listingDescription = postTextMeta.description || 'פוסט';
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
-      const hasVisualOverlays = postHasVisualOverlays(textBlocks, mediaImages);
+      const hasTextOverlays = postHasTextOverlays(textBlocks);
+      const hasStickerOverlays = postHasStickerOverlays(mediaImages);
+      // Stickers always bake. Story photos with text also bake so home stories
+      // show the text (stories have no live overlay layer unless metadata is set).
+      // Feed posts keep live text layers for re-edit without baking.
+      const mustBakeComposite =
+        hasStickerOverlays ||
+        (publishTarget === 'story' && hasTextOverlays && !hasVideoBackground);
       const canUploadPhotoDirectly =
-        Boolean(backgroundImageUri) && !hasVideoBackground && !hasVisualOverlays;
+        Boolean(backgroundImageUri) &&
+        !hasVideoBackground &&
+        !mustBakeComposite;
 
       const capturePreviewToFile = async () => {
         await new Promise(resolve =>
@@ -1039,6 +1304,8 @@ const PostEditorScreen = ({
 
       let mainImageUrl = null;
       let videoUrl = null;
+      let sourceImageUrlForEdit = null;
+      let textBakedIntoImage = false;
 
       if (hasVideoBackground) {
         const sameVideo =
@@ -1084,6 +1351,21 @@ const PostEditorScreen = ({
           }
         }
       } else {
+        // Bake stickers (+ text) into the feed image, but keep a clean source
+        // so re-opening the editor can restore editable text layers.
+        if (backgroundImageUri) {
+          const sameSource =
+            isRemoteMediaUri(backgroundImageUri) &&
+            backgroundImageUri === originalMainImageUrlRef.current;
+          if (sameSource && originalMainImageUrlRef.current) {
+            sourceImageUrlForEdit = originalMainImageUrlRef.current;
+          } else {
+            sourceImageUrlForEdit = await uploadImagePayload(
+              backgroundImageUri,
+              publishTarget,
+            );
+          }
+        }
         let captureUri;
         try {
           captureUri = await capturePreviewToFile();
@@ -1095,6 +1377,11 @@ const PostEditorScreen = ({
           }
         }
         mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
+        // The capture burned the text into the image — the feed must NOT draw
+        // live overlays on top of it (every text would show twice).
+        if (hasTextOverlays) {
+          textBakedIntoImage = true;
+        }
       }
 
       const url = videoUrl || mainImageUrl;
@@ -1111,17 +1398,34 @@ const PostEditorScreen = ({
         return;
       }
 
-      // Overlay layout is only persisted for video posts (text drawn on top in
-      // the feed). Photo posts already have the text baked into the image.
-      const videoOverlayGeneralDetails =
-        videoUrl && postTextMeta.hasText
-          ? buildPostTextGeneralDetails(postTextMeta)
-          : null;
+      // Always persist text overlay layout (photo + video) so coming back to
+      // edit can restore and change the texts. When text was baked into a
+      // composite, store the clean source image URL (photo bg) or the gradient
+      // index (gradient bg) so edit mode can rebuild without the baked copy.
+      const usedGradientBackground =
+        !hasVideoBackground && !backgroundImageUri;
+      const overlayGeneralDetails = buildPostTextGeneralDetails(postTextMeta, {
+        sourceImageUrl: textBakedIntoImage ? sourceImageUrlForEdit : null,
+        textBakedIntoImage,
+        backgroundGradientIndex: usedGradientBackground
+          ? selectedBackgroundGradientIndex
+          : null,
+      });
 
       let createdListing = null;
       let updatedListing = null;
       if (publishTarget === 'story') {
-        await createStory({subscription_id: subId, media_url: url});
+        if (!skipStoryPublish) {
+          await createStory({
+            subscription_id: subId,
+            media_url: url,
+            // Video stories keep live text layers; photo stories bake text into pixels.
+            general_details:
+              hasVideoBackground && hasTextOverlays
+                ? overlayGeneralDetails
+                : undefined,
+          });
+        }
       } else if (isEditMode) {
         const updatePayload = videoUrl
           ? {
@@ -1138,9 +1442,7 @@ const PostEditorScreen = ({
               propertyType: 'post',
               price: 0,
               hashtags,
-              ...(videoOverlayGeneralDetails
-                ? {generalDetails: videoOverlayGeneralDetails}
-                : {}),
+              generalDetails: overlayGeneralDetails,
             }
           : {
               category: resolvedPublishCategory,
@@ -1154,6 +1456,7 @@ const PostEditorScreen = ({
               propertyType: 'post',
               price: 0,
               hashtags,
+              generalDetails: overlayGeneralDetails,
             };
         updatedListing = await updateListing(editingListingId, updatePayload);
       } else if (videoUrl) {
@@ -1171,9 +1474,7 @@ const PostEditorScreen = ({
           propertyType: 'post',
           price: 0,
           hashtags,
-          ...(videoOverlayGeneralDetails
-            ? {generalDetails: videoOverlayGeneralDetails}
-            : {}),
+          generalDetails: overlayGeneralDetails,
         });
       } else {
         createdListing = await createListing({
@@ -1188,7 +1489,12 @@ const PostEditorScreen = ({
           propertyType: 'post',
           price: 0,
           hashtags,
+          generalDetails: overlayGeneralDetails,
         });
+      }
+
+      if (publishTarget !== 'story') {
+        await finishUploadProgress();
       }
 
       onPublish?.({
@@ -1203,8 +1509,10 @@ const PostEditorScreen = ({
           createdListing?.listing?.id ??
           (isEditMode ? editingListingId : null),
         isEdit: isEditMode,
+        // So תמונה מכירתית / story return can reopen with editable text layers.
+        generalDetails: overlayGeneralDetails,
+        sourceImageUrl: sourceImageUrlForEdit || null,
       });
-      onClose?.();
     } catch (error) {
       Alert.alert(
         'שגיאה',
@@ -1213,6 +1521,7 @@ const PostEditorScreen = ({
     } finally {
       setIsCapturing(false);
       setPublishing(false);
+      resetUploadProgress();
     }
   };
 
@@ -1411,7 +1720,9 @@ const PostEditorScreen = ({
       if (!text) {
         return prev.filter(b => b.id !== blockId);
       }
-      const nextPos = clampTextBlockPosition(
+      // Loose clamp: keep the user's free-dragged x (strict clamp would snap
+      // the full-width box back to the stage edge).
+      const nextPos = clampTextBlockPositionLoose(
         restoreX,
         restoreY,
         boxW,
@@ -1443,8 +1754,11 @@ const PostEditorScreen = ({
     Keyboard.dismiss();
   };
 
-  const beginEditTextBlock = id => {
-    const block = textBlocks.find(b => b.id === id);
+  const textBlocksRef = useRef(textBlocks);
+  textBlocksRef.current = textBlocks;
+
+  const beginEditTextBlock = useCallback(id => {
+    const block = textBlocksRef.current.find(b => b.id === id);
     if (!block) return;
     const initialText = block.text ?? '';
     editingTextDraftRef.current = initialText;
@@ -1452,15 +1766,20 @@ const PostEditorScreen = ({
       x: block.x != null ? block.x : null,
       y: block.y != null ? block.y : null,
     };
-    setEditingTextBlockId(id);
     setSelectedTextStyleIndex(block.textStyleIndex ?? 0);
     setSelectedColor(block.color ?? DEFAULT_TEXT_COLOR);
     setTextAlignMode(block.align ?? 'center');
     setSelectedFormat('aa');
-    requestAnimationFrame(() => {
-      if (editingInputRef.current?.focus) editingInputRef.current.focus();
+    setEditingTextBlockId(id);
+    // Focus after the editing input mounts (single rAF is often too early).
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          editingInputRef.current?.focus?.();
+        }, 32);
+      });
     });
-  };
+  }, []);
 
   const updateBlockPosition = (id, x, y) => {
     const sw = stageLayoutRef.current.width || stageLayout.width || 300;
@@ -1469,7 +1788,9 @@ const PostEditorScreen = ({
       stageLayoutRef.current.height ||
       stageLayout.height ||
       300;
-    const clamped = clampTextBlockPosition(
+    // Values arrive already precision-clamped by DraggableTextBlock against
+    // the measured glyph bounds; loose clamp only guards absurd values.
+    const clamped = clampTextBlockPositionLoose(
       x,
       y,
       getTextBlockBoxWidth(sw),
@@ -1787,10 +2108,13 @@ const PostEditorScreen = ({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topNav, {paddingTop: top}]}>
+      <View
+        style={[styles.topNav, {paddingTop: top}]}
+        onLayout={e => setTopNavWidth(e.nativeEvent.layout.width)}>
         <TouchableOpacity
           onPress={onClose}
-          style={styles.backBtn}
+          disabled={publishing}
+          style={[styles.backBtn, publishing && styles.backBtnDisabled]}
           hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
@@ -1823,17 +2147,51 @@ const PostEditorScreen = ({
           onPress={handlePublish}
           disabled={publishing}
           accessibilityRole="button"
-          accessibilityLabel={isEditMode ? 'עדכן פוסט' : 'פרסם והעלה'}
+          accessibilityLabel={
+            publishTarget === 'story'
+              ? 'סיום'
+              : isEditMode
+                ? 'עדכן פוסט'
+                : 'פרסם והעלה'
+          }
           style={[
             styles.publishBtn,
             !canPublish && !publishing && styles.publishBtnMuted,
           ]}>
-          <Image
-            source={require('../assets/camera/postbutton.png')}
-            style={styles.publishBtnImage}
-            resizeMode="contain"
-          />
+          {publishTarget === 'story' ? (
+            // Sales image flow (צור תמונה מכירתית): the editor returns to the
+            // ad form instead of publishing a post — so the action is "סיום".
+            <View style={styles.finishBtnPill}>
+              <Text style={styles.finishBtnText}>סיום</Text>
+            </View>
+          ) : (
+            <Image
+              source={require('../assets/post-button.png')}
+              style={styles.publishBtnImage}
+              resizeMode="contain"
+            />
+          )}
         </TouchableOpacity>
+        {showPostUploadProgress ? (
+          <View style={styles.uploadProgressWrap} pointerEvents="none">
+            <View style={styles.uploadProgressTrack}>
+              <Animated.View
+                style={[
+                  styles.uploadProgressFillOuter,
+                  {width: uploadProgressWidth},
+                ]}>
+                <LinearGradient
+                  colors={PROFILE_RING_COLORS}
+                  locations={PROFILE_RING_LOCATIONS}
+                  start={{x: 0, y: 0.5}}
+                  end={{x: 1, y: 0.5}}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              </Animated.View>
+            </View>
+            <Text style={styles.uploadProgressLabel}>מעלה פוסט...</Text>
+          </View>
+        ) : null}
       </View>
       <View
         ref={postPreviewRef}
@@ -2029,7 +2387,14 @@ const PostEditorScreen = ({
                               }}
                               style={[
                                 styles.editingInputRow,
-                                {bottom: editingInputBottom},
+                                {
+                                  bottom: editingInputBottom,
+                                  // Physically place the input at the stage
+                                  // left/center/right to preview the final
+                                  // block position (row is forced LTR).
+                                  justifyContent:
+                                    alignToFlexSelf(textAlignMode),
+                                },
                               ]}>
                               <EditingTextBox
                                 key={editingTextBlockId}
@@ -2047,7 +2412,7 @@ const PostEditorScreen = ({
                                   {
                                     color: visual.textColor,
                                     backgroundColor: visual.backgroundColor,
-                                    textAlign: textAlignMode,
+                                    textAlign: physicalTextAlign(textAlignMode),
                                     writingDirection: 'rtl',
                                     fontSize: editingFontSize,
                                     lineHeight: Math.round(
@@ -2308,7 +2673,14 @@ const PostEditorScreen = ({
                             ? 'right'
                             : 'left';
                       setTextAlignMode(next);
-                      syncEditingToBlock({align: next});
+                      // Snap the block box back to the stage span so the
+                      // content lands at the true stage left/center/right
+                      // (alignSelf places it physically), keeping the same y.
+                      syncEditingToBlock({align: next, x: STAGE_TEXT_PAD_LEFT});
+                      editingOriginRef.current = {
+                        ...(editingOriginRef.current || {}),
+                        x: STAGE_TEXT_PAD_LEFT,
+                      };
                     }}
                     style={styles.alignBtn}>
                     <View
@@ -2529,6 +2901,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  uploadProgressWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    gap: 4,
+    alignItems: 'center',
+  },
+  uploadProgressTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  uploadProgressFillOuter: {
+    height: '100%',
+    borderRadius: 999,
+    overflow: 'hidden',
+    shadowColor: '#FEE787',
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
+    shadowOffset: {width: 0, height: 0},
+    elevation: 4,
+  },
+  uploadProgressLabel: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: 'Rubik-Regular',
+    letterSpacing: 0.2,
+  },
+  backBtnDisabled: {
+    opacity: 0.35,
   },
   stageLtr: {
     ...StyleSheet.absoluteFillObject,
@@ -2597,8 +3008,23 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   publishBtnImage: {
-    width: 76,
-    height: 30,
+    width: 82,
+    height: 38,
+  },
+  /** "סיום" pill — same footprint as the פרסם post-button.png asset. */
+  finishBtnPill: {
+    width: 82,
+    height: 38,
+    borderRadius: 15,
+    backgroundColor: '#FFC40A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishBtnText: {
+    color: '#000',
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '700',
   },
   tabs: {
     flexDirection: 'row-reverse',

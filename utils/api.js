@@ -563,6 +563,22 @@ export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
     }
   }
 
+  // Company / video-tab flows attach the same cropped file as both profile + logo.
+  // If one pre-upload succeeds and the other fails, keep both columns filled.
+  const sameLogoAsProfile =
+    Boolean(files.companyLogo) &&
+    Boolean(files.profilePicture) &&
+    (files.companyLogo === files.profilePicture ||
+      (profileUri && logoUri && String(profileUri) === String(logoUri)));
+  if (sameLogoAsProfile) {
+    if (data.profile_picture_url && !data.company_logo_url) {
+      data.company_logo_url = data.profile_picture_url;
+    }
+    if (data.company_logo_url && !data.profile_picture_url) {
+      data.profile_picture_url = data.company_logo_url;
+    }
+  }
+
   const videoUri = outFiles.video?.uri;
   if (videoUri && !data.video_url) {
     if (String(videoUri).startsWith('http')) {
@@ -1037,6 +1053,7 @@ export const getSubscription = async subscriptionId => {
 
 /**
  * Update editable profile fields for a subscription (all account types).
+ * Broker/professional may also pass `video_url` to replace the profile intro video.
  * @param {string} subscriptionId - subscription UUID
  * @param {object} fields - whitelist of editable fields (name, phone, description, etc.)
  * @returns {Promise<{success: boolean, subscription?: object, error?: string}>}
@@ -1214,6 +1231,32 @@ export const submitReview = async (targetSubscriptionId, rating, comment = '', r
   } catch (error) {
     console.error('submitReview error:', error);
     return { success: false, error: error.message };
+  }
+};
+
+export const checkEmailAvailable = async email => {
+  const normalizedEmail =
+    email && String(email).trim() ? String(email).trim().toLowerCase() : '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return {success: false, available: false, error: 'כתובת מייל לא תקינה'};
+  }
+  try {
+    const response = await apiFetch(
+      `${apiBase()}/api/subscription/email-available?email=${encodeURIComponent(normalizedEmail)}`,
+      {method: 'GET', headers: {Accept: 'application/json'}},
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        success: false,
+        available: false,
+        error: data?.error || 'לא ניתן לבדוק את המייל',
+      };
+    }
+    return data;
+  } catch (error) {
+    console.error('checkEmailAvailable error:', error);
+    return {success: false, available: false, error: error.message};
   }
 };
 
@@ -1874,14 +1917,18 @@ export const updateListingFreeze = async (listingId, isFrozen) => {
  * Permanently delete a listing owned by the current user.
  * @param {string} listingId - UUID of the listing
  * @param {string} userEmail - owner subscription email
+ * @param {string} [subscriptionId] - logged-in subscription UUID (needed when one email has multiple accounts)
  */
-export const deleteListing = async (listingId, userEmail) => {
+export const deleteListing = async (listingId, userEmail, subscriptionId) => {
   const id = listingId != null ? String(listingId).trim() : '';
   const email = userEmail != null ? String(userEmail).trim() : '';
   if (!id || !email) throw new Error('listingId and userEmail required');
   try {
+    const params = new URLSearchParams({user_email: email});
+    const sub = subscriptionId != null ? String(subscriptionId).trim() : '';
+    if (sub) params.set('subscription_id', sub);
     const response = await apiFetch(
-      `${apiBase()}/api/listings/${encodeURIComponent(id)}?user_email=${encodeURIComponent(email)}`,
+      `${apiBase()}/api/listings/${encodeURIComponent(id)}?${params.toString()}`,
       {method: 'DELETE'},
     );
     const data = await parseApiJsonResponse(response);
@@ -2748,7 +2795,11 @@ export function resolveSubscriptionId(userOrId) {
 }
 
 /** Mirror תמונה מכירתית as a home story ring slide (not a TikTok feed post). */
-export async function createSalesImageStory({imageUrl, subscriptionId}) {
+export async function createSalesImageStory({
+  imageUrl,
+  subscriptionId,
+  generalDetails = null,
+}) {
   const url = String(imageUrl || '').trim();
   if (!url) {
     throw new Error('Sales image URL is required');
@@ -2757,7 +2808,14 @@ export async function createSalesImageStory({imageUrl, subscriptionId}) {
   if (!subId) {
     throw new Error('Valid subscription id is required');
   }
-  return createStory({subscription_id: subId, media_url: url});
+  return createStory({
+    subscription_id: subId,
+    media_url: url,
+    general_details:
+      generalDetails && typeof generalDetails === 'object'
+        ? generalDetails
+        : undefined,
+  });
 }
 
 /**
@@ -2817,13 +2875,23 @@ export const getProfessionalsDirectory = async () => {
 
 /**
  * Create a story slide (separate from ads)
- * @param {{ subscription_id: string, media_url: string }} payload
+ * @param {{ subscription_id: string, media_url: string, general_details?: object }} payload
  */
 export const createStory = async payload => {
+  const body = {
+    subscription_id: payload?.subscription_id,
+    media_url: payload?.media_url,
+  };
+  if (
+    payload?.general_details &&
+    typeof payload.general_details === 'object'
+  ) {
+    body.general_details = payload.general_details;
+  }
   const response = await apiFetch(`${apiBase()}/api/stories`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   if (!response.ok) {

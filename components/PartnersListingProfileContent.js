@@ -117,6 +117,7 @@ export default function PartnersListingProfileContent({
   mapAddress,
   adAddress,
   onReportPress,
+  hideReportButton = false,
 }) {
   const searchKey = firstNonEmpty(
     listing?.search_purpose,
@@ -309,15 +310,22 @@ export default function PartnersListingProfileContent({
         </>
       ) : null}
 
-      <View style={[styles.line, {width: CONTENT_W}]} />
-
-      <TouchableOpacity
-        style={[styles.reportBtn, {width: CONTENT_W}]}
-        onPress={onReportPress}
-        activeOpacity={0.85}>
-        <MaterialCommunityIcons name="alert-outline" size={24} color={CREAM} />
-        <Text style={styles.reportBtnText}>דווח</Text>
-      </TouchableOpacity>
+      {!hideReportButton ? (
+        <>
+          <View style={[styles.line, {width: CONTENT_W}]} />
+          <TouchableOpacity
+            style={[styles.reportBtn, {width: CONTENT_W}]}
+            onPress={onReportPress}
+            activeOpacity={0.85}>
+            <MaterialCommunityIcons
+              name="alert-outline"
+              size={24}
+              color={CREAM}
+            />
+            <Text style={styles.reportBtnText}>דווח</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
     </View>
   );
 }

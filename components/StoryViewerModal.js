@@ -20,7 +20,12 @@ import {
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
 } from './index';
+import PostTextOverlays from './PostTextOverlays';
 import {resolveStorySlideUri} from '../utils/videoPlayback';
+import {forceLtrStyle} from '../utils/rtlLayout';
+import {
+  parsePostTextOverlayPayload,
+} from '../utils/postTextOverlay';
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
@@ -55,10 +60,26 @@ function storyVideoLayout(naturalW, naturalH) {
   };
 }
 
+/** Fit entire image on screen (no crop) — used for תמונה מכירתית / story photos. */
+function storyImageContainLayout(naturalW, naturalH) {
+  const {width: screenW, height: screenH} = Dimensions.get('window');
+  const w = Number(naturalW) || 0;
+  const h = Number(naturalH) || 0;
+  if (w <= 0 || h <= 0) {
+    return {width: screenW, height: screenH};
+  }
+  const scale = Math.min(screenW / w, screenH / h);
+  return {
+    width: Math.max(1, Math.round(w * scale)),
+    height: Math.max(1, Math.round(h * scale)),
+  };
+}
+
 function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
   const webVideoRef = useRef(null);
   const uri = resolveStorySlideUri(slide);
   const [videoLayout, setVideoLayout] = useState(null);
+  const [imageLayout, setImageLayout] = useState(null);
   const sizedRef = useRef(false);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -66,6 +87,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
   useEffect(() => {
     sizedRef.current = false;
     setVideoLayout(null);
+    setImageLayout(null);
   }, [uri]);
 
   useEffect(() => {
@@ -94,6 +116,35 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
       onReadyRef.current?.();
     });
   }, []);
+
+  const applyImageNaturalSize = useCallback((nw, nh) => {
+    if (sizedRef.current) return;
+    const w = Number(nw) || 0;
+    const h = Number(nh) || 0;
+    if (w <= 0 || h <= 0) return;
+    sizedRef.current = true;
+    setImageLayout(storyImageContainLayout(w, h));
+    requestAnimationFrame(() => {
+      onReadyRef.current?.();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (slide?.media_type === 'video' || !uri) return undefined;
+    let cancelled = false;
+    Image.getSize(
+      String(uri),
+      (w, h) => {
+        if (!cancelled) applyImageNaturalSize(w, h);
+      },
+      () => {
+        if (!cancelled) onReadyRef.current?.();
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, slide?.media_type, applyImageNaturalSize]);
 
   if (!uri) {
     return (
@@ -172,15 +223,24 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
     );
   }
 
+  const imageSized = imageLayout != null;
   return (
-    <Image
-      key={String(uri)}
-      source={{uri: String(uri)}}
-      style={styles.mediaFullScreen}
-      resizeMode="cover"
-      onLoadEnd={onReady}
-      onError={onReady}
-    />
+    <View style={styles.mediaVideoClip}>
+      <Image
+        key={String(uri)}
+        source={{uri: String(uri)}}
+        style={[
+          imageSized ? imageLayout : styles.mediaFullScreen,
+          {opacity: imageSized ? 1 : 0},
+        ]}
+        resizeMode={imageSized ? 'stretch' : 'contain'}
+        onLoad={event => {
+          const src = event?.nativeEvent?.source;
+          applyImageNaturalSize(src?.width, src?.height);
+        }}
+        onError={onReady}
+      />
+    </View>
   );
 }
 
@@ -332,6 +392,13 @@ const StoryViewerModal = ({
   if (!ring || total === 0) return null;
 
   const overlayPadTop = Math.max(insets.top, Platform.OS === 'ios' ? 8 : 4);
+  const {width: storyW, height: storyH} = Dimensions.get('window');
+  const storyTextPayload = (() => {
+    const gd = currentSlide?.general_details;
+    if (!gd || typeof gd !== 'object') return null;
+    if (gd.post_text_baked === true) return null;
+    return parsePostTextOverlayPayload({general_details: gd});
+  })();
 
   return (
     <Modal
@@ -348,6 +415,16 @@ const StoryViewerModal = ({
             isPaused={false}
             onReady={handleMediaReady}
           />
+          {storyTextPayload?.overlays?.length ? (
+            <PostTextOverlays
+              overlays={storyTextPayload.overlays}
+              previewWidth={storyTextPayload.previewWidth}
+              previewHeight={storyTextPayload.previewHeight}
+              coordsSpace={storyTextPayload.coordsSpace}
+              feedWidth={storyW}
+              feedHeight={storyH}
+            />
+          ) : null}
           {mediaLoading ? (
             <View style={styles.loadingOverlay} pointerEvents="none">
               <ActivityIndicator color="#FFFFFF" size="large" />
@@ -355,7 +432,7 @@ const StoryViewerModal = ({
           ) : null}
         </View>
 
-        <View style={styles.tapZones} pointerEvents="box-none">
+        <View style={[styles.tapZones, forceLtrStyle]} pointerEvents="box-none">
           <Pressable style={styles.tapZoneLeft} onPress={goPrev} />
           <Pressable style={styles.tapZoneRight} onPress={goNext} />
         </View>
@@ -365,7 +442,7 @@ const StoryViewerModal = ({
           locations={[0, 1]}
           style={[styles.overlayTop, {paddingTop: overlayPadTop}]}
           pointerEvents="box-none">
-          <View style={styles.progressRow}>
+          <View style={[styles.progressRow, forceLtrStyle]}>
             {slides.map((s, i) => {
               let fillWidth = '0%';
               if (i < slideIndex) {

@@ -5,42 +5,42 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {View, Image, Platform, StyleSheet} from 'react-native';
+import {View, Image, Platform, StyleSheet, Pressable} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
-import {isHlsUri} from '../utils/videoPlayback';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {
-  isFeedVideoReady,
-  markFeedVideoReady,
-} from '../utils/feedVideoPreload';
+  fitWidthMediaLayout,
+  normalizeNaturalSize,
+} from '../utils/fitWidthMedia';
 
 const FEED_IMAGE_PROPS =
   Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
 
-/** If naturalSize never arrives (common for some HLS streams), stop waiting. */
-const LAYOUT_FALLBACK_MS = 450;
+/** After a load error, wait before allowing another attempt for this uri. */
+const ERROR_RETRY_MS = 15000;
+const failedUris = new Map();
 
-/**
- * Same as stories: always edge-to-edge horizontally.
- * Top/bottom letterboxing is OK; never leave side bars.
- * Taller-than-screen videos crop top/bottom via overflow hidden.
- */
-function feedVideoLayout(naturalW, naturalH, containerW, containerH) {
-  const w = Number(naturalW) || 0;
-  const h = Number(naturalH) || 0;
-  const cw = Math.max(1, Number(containerW) || 0);
-  const ch = Math.max(1, Number(containerH) || 0);
-  if (w <= 0 || h <= 0 || cw <= 0) {
-    return {width: cw || '100%', height: ch || '100%'};
-  }
-  return {
-    width: cw,
-    height: cw * (h / w),
-  };
+function uriRecentlyFailed(uri) {
+  const at = failedUris.get(uri);
+  return typeof at === 'number' && Date.now() - at < ERROR_RETRY_MS;
 }
 
 /**
- * TikTok-style feed video — Mux HLS preferred, MP4 fallback.
- * Show cover immediately (never blank black); refine to width-fill when sized.
+ * TikTok feed video — Mux HLS (resolution-capped).
+ *
+ * `fitWidth` (listing ads): full container width, letterbox top/bottom — never
+ * crop left/right. Default `cover` keeps feed posts full-bleed TikTok style.
+ *
+ * Zero-spinner architecture: the Mux poster thumbnail (pixel-matched to the
+ * video's first frame) is the ONLY loading state. There is never a spinner —
+ * the poster looks like the video, so the poster→frame swap is invisible.
+ *
+ * `prewarm` mounts the player paused+muted: ExoPlayer buffers and decodes the
+ * first frame while offscreen, so by the time the user swipes in, the frame
+ * is already decoded and playback is instant. TikTokFeedScreen keeps this
+ * component mounted for currentIndex ±1 continuously (no settle-delay gate),
+ * so the neighbor never loses its decoded state while the user is scrolling —
+ * only 3 real players ever exist at once (A07-safe decoder budget).
  */
 const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   {
@@ -48,35 +48,111 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     isActive = false,
     prewarm = false,
     style,
-    placeholderSource = null,
     posterUri = '',
+    children = null,
+    /** Listing ads: edge-to-edge sides, letterbox top/bottom. Posts: cover. */
+    fitWidth = false,
   },
   ref,
 ) {
   const videoRef = useRef(null);
   const webVideoRef = useRef(null);
   const isActiveRef = useRef(isActive);
-  const prewarmRef = useRef(prewarm);
-  const sizedRef = useRef(false);
-  const naturalSizeRef = useRef(null);
-  const containerSizeRef = useRef({width: 0, height: 0});
   const playLockRef = useRef(false);
   const lastPlayAttemptRef = useRef(0);
-  const [ready, setReady] = useState(() => isFeedVideoReady(uri));
+  const hasFrameRef = useRef(false);
+  const userPausedRef = useRef(false);
+  const sizedRef = useRef(false);
+  const naturalSizeRef = useRef(null);
+  const [hasFrame, setHasFrame] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+  const [failed, setFailed] = useState(() => uriRecentlyFailed(uri));
+  const [containerWidth, setContainerWidth] = useState(0);
   const [videoLayout, setVideoLayout] = useState(null);
 
-  const allowPrewarm = prewarm && !(Platform.OS === 'android' && isHlsUri(uri));
-  const shouldPlay = isActive || allowPrewarm;
+  const shouldPlay = isActive && !failed && !userPaused;
+  const shouldLoad = (isActive || prewarm) && !failed;
   const isAudible = isActive;
-  const sized = videoLayout != null;
 
   isActiveRef.current = isActive;
-  prewarmRef.current = allowPrewarm;
+
+  useEffect(() => {
+    userPausedRef.current = userPaused;
+  }, [userPaused]);
+
+  useEffect(() => {
+    if (!isActive) {
+      userPausedRef.current = false;
+      setUserPaused(false);
+    }
+  }, [isActive]);
+
+  useEffect(() => {
+    hasFrameRef.current = false;
+    setHasFrame(false);
+    setFailed(uriRecentlyFailed(uri));
+    sizedRef.current = false;
+    naturalSizeRef.current = null;
+    setVideoLayout(null);
+  }, [uri]);
+
+  useEffect(() => {
+    if (!fitWidth) {
+      setVideoLayout(null);
+      return;
+    }
+    sizedRef.current = false;
+    setVideoLayout(null);
+  }, [fitWidth, containerWidth, uri]);
+
+  const trySizeVideo = useCallback(() => {
+    if (!fitWidth) return;
+    const ns = naturalSizeRef.current;
+    if (!ns || containerWidth <= 0 || sizedRef.current) return;
+    const layout = fitWidthMediaLayout(containerWidth, ns.width, ns.height);
+    if (!layout) return;
+    sizedRef.current = true;
+    setVideoLayout(layout);
+  }, [fitWidth, containerWidth]);
+
+  const noteNaturalSize = useCallback(
+    (nw, nh, orientation) => {
+      if (!fitWidth) return;
+      const normalized = normalizeNaturalSize({
+        width: nw,
+        height: nh,
+        orientation,
+      });
+      if (!normalized) return;
+      naturalSizeRef.current = normalized;
+      trySizeVideo();
+    },
+    [fitWidth, trySizeVideo],
+  );
+
+  useEffect(() => {
+    trySizeVideo();
+  }, [trySizeVideo]);
+
+  const toggleUserPause = useCallback(() => {
+    if (!isActiveRef.current || failed) return;
+    setUserPaused(prev => {
+      const next = !prev;
+      userPausedRef.current = next;
+      return next;
+    });
+  }, [failed]);
+
+  const markFrameReady = useCallback(() => {
+    if (hasFrameRef.current) return;
+    hasFrameRef.current = true;
+    setHasFrame(true);
+  }, []);
 
   const playNow = useCallback(async () => {
+    if (!isActiveRef.current || userPausedRef.current) return;
     const now = Date.now();
-    // Avoid hammering playAsync when status updates fire rapidly (freezes Android).
-    if (now - lastPlayAttemptRef.current < 320) return;
+    if (now - lastPlayAttemptRef.current < 400) return;
     if (playLockRef.current) return;
     lastPlayAttemptRef.current = now;
     playLockRef.current = true;
@@ -84,7 +160,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       if (Platform.OS === 'web') {
         const el = webVideoRef.current;
         if (!el) return;
-        el.muted = !isActiveRef.current;
+        el.muted = false;
         const play = el.play?.();
         if (play && typeof play.catch === 'function') play.catch(() => {});
         return;
@@ -92,11 +168,8 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       const player = videoRef.current;
       if (!player) return;
       try {
-        if (isActiveRef.current) {
-          await player.setIsMutedAsync(false);
-        } else if (prewarmRef.current) {
-          await player.setIsMutedAsync(true);
-        }
+        await player.setIsMutedAsync(false);
+        await player.setVolumeAsync(1.0);
         await player.playAsync();
       } catch (_) {}
     } finally {
@@ -105,21 +178,12 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   }, []);
 
   const pauseNow = useCallback(async () => {
-    if (Platform.OS === 'web') {
-      const el = webVideoRef.current;
-      if (!el) return;
-      el.pause?.();
-      el.muted = true;
-      try {
-        el.currentTime = 0;
-      } catch (_) {}
-      return;
-    }
-    const player = videoRef.current;
-    if (!player) return;
     try {
-      await player.pauseAsync();
-      await player.setIsMutedAsync(true);
+      if (Platform.OS === 'web') {
+        webVideoRef.current?.pause?.();
+        return;
+      }
+      await videoRef.current?.pauseAsync?.();
     } catch (_) {}
   }, []);
 
@@ -129,256 +193,249 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       play: playNow,
       pause: pauseNow,
     }),
-    [pauseNow, playNow],
+    [playNow, pauseNow],
   );
 
-  useEffect(() => {
-    sizedRef.current = false;
-    naturalSizeRef.current = null;
-    setVideoLayout(null);
-    setReady(isFeedVideoReady(uri));
-  }, [uri]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') return undefined;
-    return () => {
-      videoRef.current?.unloadAsync?.().catch(() => {});
-    };
-  }, [uri]);
-
-  const markReady = useCallback(() => {
-    setReady(true);
-    markFeedVideoReady(uri);
-  }, [uri]);
-
-  const tryApplyLayout = useCallback(() => {
-    const natural = naturalSizeRef.current;
-    const {width: cw, height: ch} = containerSizeRef.current;
-    if (!natural || cw <= 0 || ch <= 0) return;
-    const next = feedVideoLayout(natural.w, natural.h, cw, ch);
-    sizedRef.current = true;
-    setVideoLayout(prev => {
-      if (
-        prev &&
-        prev.width === next.width &&
-        prev.height === next.height
-      ) {
-        return prev;
-      }
-      return next;
-    });
-    markReady();
-  }, [markReady]);
-
-  const applyNaturalSize = useCallback(
-    (nw, nh, orientation) => {
-      let w = Number(nw) || 0;
-      let h = Number(nh) || 0;
-      if (w <= 0 || h <= 0) return;
-      if (orientation === 'portrait' && w > h) {
-        const tmp = w;
-        w = h;
-        h = tmp;
-      }
-      naturalSizeRef.current = {w, h};
-      tryApplyLayout();
-    },
-    [tryApplyLayout],
-  );
-
-  const handleContainerLayout = useCallback(
-    event => {
-      const {width, height} = event?.nativeEvent?.layout || {};
-      const w = Math.round(Number(width) || 0);
-      const h = Math.round(Number(height) || 0);
-      if (w <= 0 || h <= 0) return;
-      const prev = containerSizeRef.current;
-      if (prev.width === w && prev.height === h) return;
-      containerSizeRef.current = {width: w, height: h};
-      tryApplyLayout();
-    },
-    [tryApplyLayout],
-  );
-
-  // If naturalSize never arrives, reveal video with cover fill anyway.
-  useEffect(() => {
-    if (sized || !uri) return undefined;
-    const id = setTimeout(() => {
-      if (sizedRef.current) return;
-      const {width: cw, height: ch} = containerSizeRef.current;
-      if (cw > 0 && ch > 0) {
-        naturalSizeRef.current = naturalSizeRef.current || {w: cw, h: ch};
-        sizedRef.current = true;
-        setVideoLayout({width: cw, height: ch});
-      }
-      markReady();
-    }, LAYOUT_FALLBACK_MS);
-    return () => clearTimeout(id);
-  }, [uri, sized, markReady]);
-
-  // Start/stop immediately when focus changes — do not wait for decode/ready.
   useEffect(() => {
     if (shouldPlay) {
       playNow();
     } else {
       pauseNow();
     }
-  }, [shouldPlay, isActive, allowPrewarm, uri, playNow, pauseNow]);
+  }, [shouldPlay, uri, playNow, pauseNow]);
 
   const handleReadyForDisplay = useCallback(
     event => {
-      const ns = event?.naturalSize;
-      if (ns?.width && ns?.height) {
-        applyNaturalSize(ns.width, ns.height, ns.orientation);
+      if (fitWidth) {
+        const ns = event?.naturalSize;
+        if (ns?.width && ns?.height) {
+          noteNaturalSize(ns.width, ns.height, ns.orientation);
+        }
       }
-      markReady();
-      if (isActiveRef.current || prewarmRef.current) {
-        playNow();
-      }
+      markFrameReady();
+      if (isActiveRef.current && !userPausedRef.current) playNow();
     },
-    [applyNaturalSize, markReady, playNow],
+    [fitWidth, noteNaturalSize, markFrameReady, playNow],
   );
 
   const handleLoad = useCallback(
     status => {
-      const ns = status?.naturalSize;
-      if (ns?.width && ns?.height) {
-        applyNaturalSize(ns.width, ns.height, ns.orientation);
+      if (fitWidth) {
+        const ns = status?.naturalSize;
+        if (ns?.width && ns?.height) {
+          noteNaturalSize(ns.width, ns.height, ns.orientation);
+        }
       }
-      markReady();
-      if (isActiveRef.current || prewarmRef.current) {
-        playNow();
-      }
+      if (isActiveRef.current && !userPausedRef.current) playNow();
     },
-    [applyNaturalSize, markReady, playNow],
+    [fitWidth, noteNaturalSize, playNow],
   );
 
-  // Keep poster under the video until a frame is ready — including while active.
-  // (Previously poster hid on isActive, which caused pure black screens.)
-  const showPoster = Boolean(posterUri) && !ready;
-  const showPlaceholder =
-    !posterUri && !ready && placeholderSource;
+  const handleError = useCallback(() => {
+    failedUris.set(uri, Date.now());
+    setFailed(true);
+    videoRef.current?.unloadAsync?.().catch(() => {});
+  }, [uri]);
 
-  if (!uri) {
+  const onContainerLayout = useCallback(
+    e => {
+      if (!fitWidth) return;
+      const w = e?.nativeEvent?.layout?.width;
+      if (w > 0 && Math.abs(w - containerWidth) > 0.5) {
+        setContainerWidth(w);
+      }
+    },
+    [fitWidth, containerWidth],
+  );
+
+  const sized = fitWidth && videoLayout != null;
+  const posterResizeMode = fitWidth ? 'contain' : 'cover';
+
+  const posterVisible = Boolean(posterUri) && (!hasFrame || failed);
+  const posterLayer = posterVisible ? (
+    <Image
+      source={{uri: posterUri}}
+      {...FEED_IMAGE_PROPS}
+      style={fitWidth ? styles.posterContain : styles.poster}
+      resizeMode={posterResizeMode}
+    />
+  ) : null;
+
+  // Post text overlays are part of the post: always visible, over the poster
+  // while loading and over the video once the first frame lands.
+  const overlayLayer = children ? (
+    <View style={styles.overlaySlot} pointerEvents="box-none">
+      {children}
+    </View>
+  ) : null;
+
+  const tapPauseLayer =
+    isActive && !failed ? (
+      <Pressable
+        style={styles.tapLayer}
+        onPress={toggleUserPause}
+        accessibilityRole="button"
+        accessibilityLabel={userPaused ? 'הפעל סרטון' : 'השהה סרטון'}
+      />
+    ) : null;
+
+  const playHintLayer =
+    userPaused && isActive ? (
+      <View style={styles.playHintOverlay} pointerEvents="none">
+        <MaterialCommunityIcons
+          name="play"
+          size={58}
+          color="rgba(255,255,255,0.38)"
+          style={styles.playHintIcon}
+        />
+      </View>
+    ) : null;
+
+  if (!uri || !shouldLoad) {
     return (
-      <View style={[styles.root, style]} onLayout={handleContainerLayout}>
-        {placeholderSource ? (
+      <View style={[styles.root, style]} onLayout={onContainerLayout}>
+        {posterUri ? (
           <Image
-            source={placeholderSource}
-            style={styles.placeholder}
-            resizeMode="contain"
+            source={{uri: posterUri}}
+            {...FEED_IMAGE_PROPS}
+            style={fitWidth ? styles.posterContain : styles.poster}
+            resizeMode={posterResizeMode}
           />
         ) : null}
+        {overlayLayer}
+        {tapPauseLayer}
+        {playHintLayer}
       </View>
     );
   }
 
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.root, style]} onLayout={handleContainerLayout}>
-        {showPoster ? (
-          <Image
-            source={{uri: posterUri}}
-            {...FEED_IMAGE_PROPS}
-            style={styles.poster}
-            resizeMode="cover"
-          />
-        ) : null}
-        {showPlaceholder ? (
-          <Image
-            source={placeholderSource}
-            style={styles.placeholder}
-            resizeMode="contain"
-          />
-        ) : null}
+      <View style={[styles.root, style]} onLayout={onContainerLayout}>
+        {posterLayer}
         <video
           ref={webVideoRef}
           src={uri}
-          style={{
-            width: sized ? videoLayout.width : '100%',
-            height: sized ? videoLayout.height : '100%',
-            objectFit: sized ? 'fill' : 'cover',
-            backgroundColor: 'transparent',
-            display: 'block',
-            // Stay visible with cover until sized — never blank black.
-            opacity: 1,
-          }}
+          style={
+            fitWidth
+              ? {
+                  width: sized ? videoLayout.width : '100%',
+                  height: sized ? videoLayout.height : '100%',
+                  objectFit: sized ? 'fill' : 'contain',
+                  backgroundColor: 'transparent',
+                  display: 'block',
+                  opacity: hasFrame || sized ? 1 : 0,
+                }
+              : styles.webVideo
+          }
           preload="auto"
           playsInline
           loop
           muted={!isAudible}
           onLoadedMetadata={e => {
-            const el = e?.target || webVideoRef.current;
-            if (el?.videoWidth && el?.videoHeight) {
-              applyNaturalSize(el.videoWidth, el.videoHeight);
+            if (fitWidth) {
+              const el = e?.target || webVideoRef.current;
+              if (el?.videoWidth && el?.videoHeight) {
+                noteNaturalSize(el.videoWidth, el.videoHeight);
+              }
             }
-            markReady();
-            if (isActiveRef.current || prewarmRef.current) {
-              playNow();
-            }
+            if (isActiveRef.current && !userPausedRef.current) playNow();
           }}
           onLoadedData={() => {
-            markReady();
-            if (isActiveRef.current || prewarmRef.current) {
-              playNow();
-            }
+            markFrameReady();
+            if (isActiveRef.current && !userPausedRef.current) playNow();
           }}
           onCanPlay={() => {
-            markReady();
-            if (isActiveRef.current || prewarmRef.current) {
-              playNow();
-            }
+            markFrameReady();
+            if (isActiveRef.current && !userPausedRef.current) playNow();
           }}
+          onError={handleError}
         />
+        {overlayLayer}
+        {tapPauseLayer}
+        {playHintLayer}
       </View>
     );
   }
 
   return (
-    <View style={[styles.root, style]} onLayout={handleContainerLayout}>
-      {showPoster ? (
-        <Image
-          source={{uri: posterUri}}
-          {...FEED_IMAGE_PROPS}
-          style={styles.poster}
-          resizeMode="cover"
-        />
-      ) : null}
-      {showPlaceholder ? (
-        <Image
-          source={placeholderSource}
-          style={styles.placeholder}
-          resizeMode="contain"
-        />
-      ) : null}
+    <View style={[styles.root, style]} onLayout={onContainerLayout}>
+      {posterLayer}
       <Video
         key={String(uri)}
         ref={videoRef}
         source={{uri}}
-        style={sized ? videoLayout : styles.videoFill}
-        resizeMode={sized ? ResizeMode.STRETCH : ResizeMode.COVER}
+        style={
+          fitWidth
+            ? [
+                sized ? videoLayout : styles.videoFill,
+                {opacity: hasFrame || sized ? 1 : 0},
+              ]
+            : styles.videoFill
+        }
+        resizeMode={
+          fitWidth
+            ? sized
+              ? ResizeMode.STRETCH
+              : ResizeMode.CONTAIN
+            : ResizeMode.COVER
+        }
         shouldPlay={shouldPlay}
         isLooping
         isMuted={!isAudible}
         volume={isAudible ? 1.0 : 0}
         useNativeControls={false}
         usePoster={false}
-        progressUpdateIntervalMillis={500}
+        progressUpdateIntervalMillis={1000}
         onReadyForDisplay={handleReadyForDisplay}
         onLoad={handleLoad}
+        onError={handleError}
         onPlaybackStatusUpdate={status => {
-          if (!status?.isLoaded || status.isPlaying) return;
-          if (status.isBuffering) return;
-          if (isActiveRef.current || prewarmRef.current) {
+          if (!status?.isLoaded) return;
+          if (status.isPlaying || status.isBuffering) return;
+          if (
+            isActiveRef.current &&
+            !userPausedRef.current &&
+            !status.didJustFinish
+          ) {
             playNow();
           }
         }}
       />
+      {overlayLayer}
+      {tapPauseLayer}
+      {playHintLayer}
     </View>
   );
 });
 
 export const FeedVideoPlayer = React.memo(FeedVideoPlayerInner);
+
+/** Lightweight poster-only placeholder for far-offscreen feed pages (no Video mount, no spinner). */
+export function FeedVideoPosterPlaceholder({
+  posterUri = '',
+  style,
+  children = null,
+  fitWidth = false,
+}) {
+  return (
+    <View style={[styles.root, style]}>
+      {posterUri ? (
+        <Image
+          source={{uri: posterUri}}
+          {...FEED_IMAGE_PROPS}
+          style={fitWidth ? styles.posterContain : styles.poster}
+          resizeMode={fitWidth ? 'contain' : 'cover'}
+        />
+      ) : null}
+      {children ? (
+        <View style={styles.overlaySlot} pointerEvents="box-none">
+          {children}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   root: {
@@ -391,18 +448,40 @@ const styles = StyleSheet.create({
   },
   poster: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 1,
   },
-  placeholder: {
-    ...StyleSheet.absoluteFillObject,
-    width: '60%',
-    height: '60%',
-    alignSelf: 'center',
-    zIndex: 1,
-  },
-  videoFill: {
+  posterContain: {
     width: '100%',
     height: '100%',
+  },
+  overlaySlot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+  },
+  tapLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
+  },
+  playHintOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playHintIcon: {
+    marginLeft: 4,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3,
+  },
+  videoFill: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
+  },
+  webVideo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    backgroundColor: 'transparent',
+    display: 'block',
   },
 });

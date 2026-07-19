@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
-import {uploadProfilePicture, registerRegularUser} from '../utils/api';
+import {uploadProfilePicture, registerRegularUser, checkEmailAvailable} from '../utils/api';
 import {flexStart} from '../utils/rtlLayout';
 import {ProfileAvatar} from '../components';
 import CircleImageCropModal from '../components/CircleImageCropModal';
@@ -190,6 +190,15 @@ const UserRegistrationScreen = ({
     }
     if (password !== confirmPassword) {
       setErrorMessage('הסיסמאות אינן תואמות');
+      return;
+    }
+
+    const emailCheck = await checkEmailAvailable(emailTrim);
+    if (!emailCheck?.available) {
+      setErrorMessage(
+        emailCheck?.error ||
+          'כתובת המייל כבר רשומה במערכת. התחבר עם המייל הקיים או השתמש במייל אחר.',
+      );
       return;
     }
 

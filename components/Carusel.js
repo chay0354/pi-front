@@ -18,13 +18,19 @@ import {
   Animated,
   Vibration,
 } from 'react-native';
-import {Audio, InterruptionModeAndroid, InterruptionModeIOS} from 'expo-av';
 import {userCategories} from '../utils/constant';
 
-const TICK_SOUND = require('../assets/sounds/carousel-tick.wav');
-const TICK_MIN_GAP_MS = 45;
-const TICK_VOLUME = 0.85;
-const TICK_POOL_SIZE = 4;
+/** Min gap between consecutive tick pulses (ms). */
+const TICK_MIN_GAP_MS = 36;
+/** Stagger between multi-step ticks when scroll jumps over several categories. */
+const TICK_STEP_STAGGER_MS = 40;
+/**
+ * One-shot pulse length (ms). Short pulses (<30ms) are often intangible
+ * on budget Android motors (Samsung A0x).
+ */
+const TICK_VIBRATE_MS = 55;
+/** Cap ticks from a single jump so a loop teleport never buzzes forever. */
+const TICK_MAX_STEPS = 8;
 
 const CATEGORY_SLOT_W = 174;
 const CATEGORY_SLOT_H = 212;
@@ -33,7 +39,6 @@ const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
 
 const LOOP_COPIES = 7;
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
-const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
 const SNAP_POSITION_EPSILON = 3;
 const LOOP_EDGE_BUFFER_ITEMS = 1.5;
 
@@ -376,91 +381,71 @@ const Carusel = ({
     onCategorySelectRef.current?.(id);
   }, []);
 
-  const tickPoolRef = useRef([]);
-  const tickPoolCursorRef = useRef(0);
   const lastTickAtRef = useRef(0);
+  const tickTimersRef = useRef([]);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      return undefined;
-    }
-    let mounted = true;
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-          shouldDuckAndroid: false,
-          playThroughEarpieceAndroid: false,
-        });
-        const pool = await Promise.all(
-          Array.from({length: TICK_POOL_SIZE}, async () => {
-            const {sound} = await Audio.Sound.createAsync(TICK_SOUND, {
-              volume: TICK_VOLUME,
-              shouldPlay: false,
-            });
-            return sound;
-          }),
-        );
-        if (mounted) {
-          tickPoolRef.current = pool;
-        } else {
-          await Promise.all(pool.map(s => s.unloadAsync().catch(() => {})));
-        }
-      } catch {
-        /* tick is optional UX polish */
-      }
-    })();
     return () => {
-      mounted = false;
-      const pool = tickPoolRef.current;
-      tickPoolRef.current = [];
-      Promise.all(pool.map(s => s.unloadAsync().catch(() => {}))).catch(
-        () => {},
-      );
+      tickTimersRef.current.forEach(id => clearTimeout(id));
+      tickTimersRef.current = [];
     };
   }, []);
 
   const playTick = useCallback(() => {
+    if (Platform.OS === 'web') return;
     const now = Date.now();
     if (now - lastTickAtRef.current < TICK_MIN_GAP_MS) {
       return;
     }
     lastTickAtRef.current = now;
-    const pool = tickPoolRef.current;
-    if (!pool.length) {
-      return;
+    try {
+      Vibration.vibrate(TICK_VIBRATE_MS);
+    } catch {
+      /* haptic is optional UX polish */
     }
-    const sound = pool[tickPoolCursorRef.current % pool.length];
-    tickPoolCursorRef.current += 1;
-    (async () => {
-      try {
-        const status = await sound.getStatusAsync();
-        if (!status.isLoaded) return;
-        if (status.isPlaying) await sound.stopAsync();
-        await sound.setPositionAsync(0);
-        await sound.playAsync();
-      } catch {
-        /* ignore overlapping tick races */
-      }
-    })();
   }, []);
 
+  /**
+   * Fire one vibration per category slot crossed (not only the landing category).
+   * Uses virtual indices so fast flings that skip scroll frames still tick each pass.
+   */
   const tickIfLogicalChange = useCallback(
     (prevVirtualIndex, nextVirtualIndex) => {
-      if (
-        listLength > 1 &&
-        positiveMod(nextVirtualIndex, listLength) !==
-          positiveMod(prevVirtualIndex, listLength)
-      ) {
-        playTick();
-        // Short haptic pulse on each category change — 20ms is subtle on Android,
-        // iOS uses its system haptics pattern for short durations.
-        if (Platform.OS !== 'web') {
-          Vibration.vibrate(20);
+      if (listLength <= 1) return;
+      if (nextVirtualIndex === prevVirtualIndex) return;
+
+      const delta = nextVirtualIndex - prevVirtualIndex;
+      const absDelta = Math.abs(delta);
+      // Infinite-loop teleports jump by ~listLength copies — sync silently.
+      if (absDelta > listLength) {
+        return;
+      }
+
+      // Count how many distinct logical categories were crossed.
+      let logicalSteps = 0;
+      const dir = delta > 0 ? 1 : -1;
+      for (let s = 1; s <= absDelta; s++) {
+        const from = positiveMod(prevVirtualIndex + dir * (s - 1), listLength);
+        const to = positiveMod(prevVirtualIndex + dir * s, listLength);
+        if (from !== to) {
+          logicalSteps += 1;
+        }
+      }
+      if (logicalSteps <= 0) return;
+
+      const steps = Math.min(logicalSteps, TICK_MAX_STEPS);
+      tickTimersRef.current.forEach(id => clearTimeout(id));
+      tickTimersRef.current = [];
+      for (let i = 0; i < steps; i++) {
+        if (i === 0) {
+          playTick();
+        } else {
+          const id = setTimeout(() => {
+            // Allow staggered multi-pass ticks even if gap would block them.
+            lastTickAtRef.current = 0;
+            playTick();
+          }, i * TICK_STEP_STAGGER_MS);
+          tickTimersRef.current.push(id);
         }
       }
     },
@@ -629,20 +614,6 @@ const Carusel = ({
     [viewportWidth, itemWidth, contentWidth, totalItems],
   );
 
-  const scrollVelocityPxPerMs = useCallback(scrollPosition => {
-    const now =
-      typeof globalThis.performance !== 'undefined' &&
-      typeof globalThis.performance.now === 'function'
-        ? globalThis.performance.now()
-        : Date.now();
-    const prev = lastScrollSampleRef.current;
-    const elapsed = now - prev.t;
-    if (elapsed <= 0) {
-      return 0;
-    }
-    return Math.abs(scrollPosition - prev.x) / elapsed;
-  }, []);
-
   const repositionInfiniteLoopIfNeeded = useCallback(
     scrollPosition => {
       if (!infiniteLoop || listLength <= 1 || !scrollViewRef.current) {
@@ -697,15 +668,10 @@ const Carusel = ({
   );
 
   const updateLitCenterDuringScroll = useCallback(
-    (scrollPosition, velocity) => {
-      if (isDraggingRef.current) {
-        applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
-        return;
-      }
-      if (velocity < MOMENTUM_COAST_FREEZE_VELOCITY) {
-        return;
-      }
-      applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, true));
+    scrollPosition => {
+      // Always track the nearest category with no hysteresis so every category
+      // you pass while dragging or coasting gets a center update + tick.
+      applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
     },
     [applyVirtualCenter, closestVirtualIndexForScroll],
   );
@@ -713,7 +679,6 @@ const Carusel = ({
   const handleScroll = useCallback(
     event => {
       const scrollPosition = event.nativeEvent.contentOffset.x;
-      const velocity = scrollVelocityPxPerMs(scrollPosition);
       const now =
         typeof globalThis.performance !== 'undefined' &&
         typeof globalThis.performance.now === 'function'
@@ -727,11 +692,8 @@ const Carusel = ({
         return;
       }
 
-      updateLitCenterDuringScroll(scrollPosition, velocity);
-
-      if (!isDraggingRef.current) {
-        return;
-      }
+      // Update center (+ tick) on every scroll frame so each category you pass fires.
+      updateLitCenterDuringScroll(scrollPosition);
 
       if (Platform.OS === 'android') {
         if (now < androidScrollNextEmitRef.current) {
@@ -742,11 +704,7 @@ const Carusel = ({
 
       repositionInfiniteLoopIfNeeded(scrollPosition);
     },
-    [
-      updateLitCenterDuringScroll,
-      repositionInfiniteLoopIfNeeded,
-      scrollVelocityPxPerMs,
-    ],
+    [updateLitCenterDuringScroll, repositionInfiniteLoopIfNeeded],
   );
 
   const handleScrollBeginDrag = useCallback(() => {
