@@ -24,7 +24,6 @@ import {
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import {Audio} from 'expo-av';
-import {tryPickChatDocumentNative} from '../utils/pickChatDocument';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -72,6 +71,20 @@ import {
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+/** One shared Realtime client — avoids CHANNEL_ERROR from churning createClient() per chat open. */
+let chatRealtimeClient = null;
+function getChatRealtimeClient() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  if (!chatRealtimeClient) {
+    chatRealtimeClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: {
+        params: {eventsPerSecond: 10},
+      },
+    });
+  }
+  return chatRealtimeClient;
+}
 
 const BG = '#1a1926';
 const CARD_BG = '#252436';
@@ -260,6 +273,20 @@ const toTelUrl = raw => {
   const cleaned = String(raw).replace(/[^\d+]/g, '');
   if (!cleaned || cleaned === '+') return null;
   return `tel:${cleaned}`;
+};
+
+/** Prefer message body (original filename); fall back to URL last segment. */
+const chatFileDisplayName = (body, mediaUrl) => {
+  const fromBody = body != null ? String(body).trim() : '';
+  if (fromBody) return fromBody;
+  try {
+    const path = String(mediaUrl || '').split('?')[0];
+    const last = decodeURIComponent(path.split('/').pop() || '');
+    if (last) return last;
+  } catch (_) {
+    /* ignore */
+  }
+  return 'קובץ מצורף';
 };
 
 /** API + realtime may use camelCase or snake_case; keeps chat bubbles (image/audio) rendering reliably. */
@@ -465,6 +492,8 @@ const ChatScreen = ({
   const voicePlayBeganRef = useRef(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
   const [showDocumentPicker, setShowDocumentPicker] = useState(false);
+  /** True only while postgres_changes subscription is SUBSCRIBED. */
+  const [realtimeOk, setRealtimeOk] = useState(false);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
@@ -1161,57 +1190,114 @@ const ChatScreen = ({
   );
 
   useEffect(() => {
-    if (!conversationId || !myEmail || !SUPABASE_URL || !SUPABASE_ANON_KEY)
-      return;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const channel = supabase
-      .channel(`chat:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        payload => {
-          const row = payload?.new;
-          if (!row || !row.id) return;
-          /** Replica payloads sometimes omit columns — full fetch keeps UI consistent */
-          if (row.sender_id == null && row.body === undefined) {
-            fetchMessagesRef.current();
+    const cid =
+      (groupConversationId && CHAT_PEER_UUID_RE.test(groupConversationId)
+        ? groupConversationId
+        : null) ||
+      (conversationId && CHAT_PEER_UUID_RE.test(conversationId)
+        ? conversationId
+        : null);
+    if (!cid || !myEmail) {
+      setRealtimeOk(false);
+      return undefined;
+    }
+    const supabase = getChatRealtimeClient();
+    if (!supabase) {
+      setRealtimeOk(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let channel = null;
+    let retryTimer = null;
+    let attempt = 0;
+
+    const attach = () => {
+      if (cancelled) return;
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (_) {
+          /* ignore */
+        }
+        channel = null;
+      }
+      channel = supabase
+        .channel(`chat-msg:${cid}:${attempt}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+            filter: `conversation_id=eq.${cid}`,
+          },
+          payload => {
+            const row = payload?.new;
+            if (!row || !row.id) return;
+            /** Replica payloads sometimes omit columns — full fetch keeps UI consistent */
+            if (row.sender_id == null && row.body === undefined) {
+              fetchMessagesRef.current();
+              return;
+            }
+            const senderEmail =
+              row.sender_id != null
+                ? String(row.sender_id).trim().toLowerCase()
+                : '';
+            const newMsg = normalizeChatMessage({
+              id: row.id,
+              senderId: row.sender_id,
+              body: row.body || '',
+              mediaType: row.media_type || null,
+              mediaUrl: row.media_url || null,
+              listingId: row.listing_id != null ? String(row.listing_id) : null,
+              listingShare: row.is_listing_share === true,
+              createdAt: row.created_at,
+              isMe: senderEmail === myEmail,
+            });
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          },
+        )
+        .subscribe(status => {
+          if (cancelled) return;
+          if (status === 'SUBSCRIBED') {
+            setRealtimeOk(true);
             return;
           }
-          const senderEmail =
-            row.sender_id != null
-              ? String(row.sender_id).trim().toLowerCase()
-              : '';
-          const newMsg = normalizeChatMessage({
-            id: row.id,
-            senderId: row.sender_id,
-            body: row.body || '',
-            mediaType: row.media_type || null,
-            mediaUrl: row.media_url || null,
-            listingId: row.listing_id != null ? String(row.listing_id) : null,
-            listingShare: row.is_listing_share === true,
-            createdAt: row.created_at,
-            isMe: senderEmail === myEmail,
-          });
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        },
-      )
-      .subscribe(status => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[ChatScreen] realtime channel:', status);
-        }
-      });
-    return () => {
-      supabase.removeChannel(channel);
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            setRealtimeOk(false);
+            // Usually means chat_messages is not in supabase_realtime publication.
+            if (attempt === 0) {
+              console.warn(
+                '[ChatScreen] realtime CHANNEL_ERROR — enable publication (see migration-chat-messages-realtime.sql). Using poll fallback.',
+              );
+            }
+            if (attempt < 3) {
+              attempt += 1;
+              retryTimer = setTimeout(attach, 1500 * attempt);
+            }
+          }
+        });
     };
-  }, [conversationId, myEmail]);
+
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      setRealtimeOk(false);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    };
+  }, [conversationId, groupConversationId, myEmail]);
 
   useEffect(() => {
     const pending = [];
@@ -1284,14 +1370,20 @@ const ChatScreen = ({
     [],
   );
 
-  /** Fallback polling while chat is open — catches messages if Realtime is unavailable (RLS/publication). */
+  /** Fallback polling while chat is open — faster when Realtime CHANNEL_ERROR / unavailable. */
   useEffect(() => {
     if (!myEmail) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
-    const POLL_MS = 12000;
+    const POLL_MS = realtimeOk ? 12000 : 3000;
     const interval = setInterval(() => fetchMessagesRef.current(), POLL_MS);
     return () => clearInterval(interval);
-  }, [isDirectPeer, isGroupThread, groupConversationId, myEmail]);
+  }, [
+    isDirectPeer,
+    isGroupThread,
+    groupConversationId,
+    myEmail,
+    realtimeOk,
+  ]);
 
   useEffect(() => {
     if (!myEmail) return;
@@ -1657,21 +1749,9 @@ const ChatScreen = ({
         input.click();
         return;
       }
-      // Prefer native picker when the current native binary includes it.
-      // Older / unrebuilt dev clients throw "Cannot find native module ExpoDocumentPicker".
-      const result = await tryPickChatDocumentNative();
-      if (result == null) {
-        setShowDocumentPicker(true);
-        return;
-      }
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      await sendPickedChatFile({
-        uri: asset.uri,
-        mimeType: asset.mimeType || 'application/octet-stream',
-        name: asset.name || `file-${Date.now()}`,
-        size: asset.size,
-      });
+      // Dev client may not include ExpoDocumentPicker yet — always fall back to
+      // the in-app picker silently (no console "unavailable" noise).
+      setShowDocumentPicker(true);
     } catch (e) {
       Alert.alert('', e?.message || 'בחירת הקובץ נכשלה');
       setSending(false);
@@ -2240,6 +2320,9 @@ const ChatScreen = ({
       const hasAudio = msg.mediaType === 'audio' && msg.mediaUrl;
       const hasImage = msg.mediaType === 'image' && msg.mediaUrl;
       const hasFile = msg.mediaType === 'file' && msg.mediaUrl;
+      const fileDisplayName = hasFile
+        ? chatFileDisplayName(bodyTrim, msg.mediaUrl)
+        : '';
       /** True for SharePostSheet (`listing_share`); false stored for normal text with listing_id; undefined = legacy rows. */
       const legacyInferredShare =
         !!msg.listingId &&
@@ -2486,17 +2569,20 @@ const ChatScreen = ({
                     onPress={() => openChatFile(msg.mediaUrl)}
                     style={styles.fileAttachmentBubble}
                     accessibilityRole="button"
-                    accessibilityLabel={`פתח קובץ ${bodyTrim || 'מצורף'}`}>
+                    accessibilityLabel={`פתח קובץ ${fileDisplayName}`}>
                     <View style={styles.fileAttachmentIconWrap}>
                       <MaterialCommunityIcons
-                        name="paperclip"
-                        size={18}
+                        name="file-document-outline"
+                        size={20}
                         color="#fff"
                       />
                     </View>
-                    <Text style={styles.fileAttachmentName} numberOfLines={2}>
-                      {bodyTrim || 'קובץ מצורף'}
-                    </Text>
+                    <View style={styles.fileAttachmentTextCol}>
+                      <Text style={styles.fileAttachmentLabel}>קובץ</Text>
+                      <Text style={styles.fileAttachmentName} numberOfLines={2}>
+                        {fileDisplayName}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 ) : null}
                 {msg.mediaType === 'audio' && msg.mediaUrl ? (
@@ -5292,27 +5378,43 @@ const styles = StyleSheet.create({
   fileAttachmentBubble: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
+    alignSelf: 'stretch',
     gap: 10,
-    maxWidth: 240,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    minWidth: 180,
+    maxWidth: 280,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     marginBottom: 4,
   },
   fileAttachmentIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  fileAttachmentTextCol: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 140,
+    minWidth: 120,
+    justifyContent: 'center',
+  },
+  fileAttachmentLabel: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    textAlign: 'right',
+    marginBottom: 2,
   },
   fileAttachmentName: {
-    flex: 1,
-    minWidth: 0,
     color: '#fff',
     fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
     textAlign: 'right',
   },
   inputPillWrap: {

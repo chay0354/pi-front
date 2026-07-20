@@ -1,37 +1,31 @@
 import {Platform} from 'react-native';
+import {requireOptionalNativeModule} from 'expo-modules-core';
 
 /**
- * Try the native Expo document picker.
- * Returns null when the native module is not linked (old dev client) so callers
- * can fall back to the WebView picker — avoids crashing on requireNativeModule.
- *
- * @returns {Promise<null | {canceled: true, assets: null} | {canceled: false, assets: Array<{uri: string, name?: string, mimeType?: string, size?: number}>}>}
+ * Returns a picked file from the native ExpoDocumentPicker when that module is
+ * linked in the binary. Returns null when unavailable so the app can use the
+ * WebView file picker instead — never throws / warns about missing modules.
  */
 export async function tryPickChatDocumentNative() {
   if (Platform.OS === 'web') return null;
 
+  let native = null;
   try {
-    // Lazy require so a missing native module does not break ChatScreen import.
-    // eslint-disable-next-line global-require
-    const mod = require('expo-document-picker');
-    const getDocumentAsync =
-      typeof mod?.getDocumentAsync === 'function'
-        ? mod.getDocumentAsync
-        : typeof mod?.default?.getDocumentAsync === 'function'
-          ? mod.default.getDocumentAsync
-          : null;
-    if (!getDocumentAsync) return null;
+    native = requireOptionalNativeModule('ExpoDocumentPicker');
+  } catch {
+    return null;
+  }
+  if (!native || typeof native.getDocumentAsync !== 'function') {
+    return null;
+  }
 
-    return await getDocumentAsync({
-      type: '*/*',
+  try {
+    return await native.getDocumentAsync({
+      type: ['*/*'],
       copyToCacheDirectory: true,
       multiple: false,
     });
-  } catch (e) {
-    console.warn(
-      '[pickChatDocument] native ExpoDocumentPicker unavailable:',
-      e?.message || e,
-    );
+  } catch {
     return null;
   }
 }
