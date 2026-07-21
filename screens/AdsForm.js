@@ -1526,6 +1526,7 @@ const AdsForm = ({
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
+          aspect: [4, 3],
           quality: AD_IMAGE_PICKER_QUALITY,
         });
 
@@ -1559,6 +1560,7 @@ const AdsForm = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
+        aspect: [4, 3],
         quality: AD_IMAGE_PICKER_QUALITY,
       });
       if (!result.canceled && result.assets?.[0]) {
@@ -1653,6 +1655,7 @@ const AdsForm = ({
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
+          aspect: [1, 1],
           quality: AD_IMAGE_PICKER_QUALITY,
         });
 

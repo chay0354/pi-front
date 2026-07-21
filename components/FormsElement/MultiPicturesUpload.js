@@ -41,7 +41,7 @@ export const MultiPicturesUpload = ({
               <Image
                 source={{uri: additionalImages[index].uri}}
                 style={styles.uploadedImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             ) : (
               <Text style={styles.plusIcon}>+</Text>
@@ -76,7 +76,7 @@ export const MultiPicturesUpload = ({
           <Image
             source={{uri: mainImage.uri}}
             style={styles.uploadedImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         ) : (
           <View style={styles.uploadButtonContainer}>
@@ -148,6 +148,7 @@ const styles = StyleSheet.create({
   uploadedImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 15,
   },
   uploadButtonContainer: {
     backgroundColor: '#4D4966',
@@ -173,6 +174,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#2B2A39',
     marginBottom: 10,
+    overflow: 'hidden',
   },
   plusIcon: {
     color: Colors.whiteGeneral,
