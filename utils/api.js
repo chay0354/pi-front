@@ -2745,7 +2745,13 @@ export const uploadChatMedia = async (file) => {
     method: 'POST',
     body: formData,
   });
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Upload failed (${response.status})`);
+  }
   if (!response.ok) throw new Error(data.error || data.details || 'Failed to upload media');
   return data;
 };
@@ -2763,7 +2769,13 @@ export const uploadGroupImage = async (file) => {
     method: 'POST',
     body: formData,
   });
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Upload failed (${response.status})`);
+  }
   if (!response.ok) throw new Error(data.error || data.details || 'Failed to upload group image');
   return data;
 };

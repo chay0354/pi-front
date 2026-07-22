@@ -21,6 +21,8 @@ PODS:
     - ExpoModulesCore
   - ExpoCrypto (12.8.1):
     - ExpoModulesCore
+  - ExpoDocumentPicker (11.10.1):
+    - ExpoModulesCore
   - ExpoFileSystem (16.0.9):
     - ExpoModulesCore
   - ExpoImagePicker (14.7.1):
@@ -1128,6 +1130,7 @@ DEPENDENCIES:
   - Expo (from `../node_modules/expo`)
   - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
+  - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
@@ -1222,6 +1225,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-clipboard/ios"
   ExpoCrypto:
     :path: "../node_modules/expo-crypto/ios"
+  ExpoDocumentPicker:
+    :path: "../node_modules/expo-document-picker/ios"
   ExpoFileSystem:
     :path: "../node_modules/expo-file-system/ios"
   ExpoImagePicker:
@@ -1358,6 +1363,7 @@ SPEC CHECKSUMS:
   Expo: 1b33cb8ab60cff9abf805ed6020af3d1846e457c
   ExpoClipboard: 24cc2b881ab6ca2e5b431b1f6d9d4a302adbf9d0
   ExpoCrypto: 9be8806e896380cb18e5d3d2c13a89ce2f36946a
+  ExpoDocumentPicker: 7f6bc79d2bad6d06129b60914085854ae1478d74
   ExpoFileSystem: df58e1eb2a4d6f1006a1ca70bddfbbf63e52fa4f
   ExpoImagePicker: d06822d74f1f0e7fe7cb070ece0fff6e678fa3eb
   ExpoKeepAwake: 3b8cf8533b9212500565a1e41fb080fc5af29918
