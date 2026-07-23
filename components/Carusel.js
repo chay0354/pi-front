@@ -231,59 +231,69 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
   // All animation — including which image is visible — is driven by scrollAnim
   // on the native thread. No JS state is used for image selection, so there is
   // no flash when an item crosses the center point mid-scroll.
-  const {wrapperStyle, centerOpacity, leftOpacity, rightOpacity} = useMemo(() => {
-    const itemCenter = (virtualIndex + 0.5) * itemWidth;
-    const staticOffset = itemCenter - viewportWidth / 2;
-    // offset > 0: item is to the right of viewport center; < 0: to the left
-    const offset = Animated.subtract(staticOffset, scrollAnim);
-    const iW = itemWidth;
-    const scale = offset.interpolate({
-      inputRange: [-2 * iW, -iW, 0, iW, 2 * iW],
-      outputRange: [CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X, 1, CATEGORY_SIDE_SCALE_X, CATEGORY_SIDE_SCALE_X],
-      extrapolate: 'clamp',
-    });
+  const {wrapperStyle, centerOpacity, leftOpacity, rightOpacity} =
+    useMemo(() => {
+      const itemCenter = (virtualIndex + 0.5) * itemWidth;
+      const staticOffset = itemCenter - viewportWidth / 2;
+      // offset > 0: item is to the right of viewport center; < 0: to the left
+      const offset = Animated.subtract(staticOffset, scrollAnim);
+      const iW = itemWidth;
+      const scale = offset.interpolate({
+        inputRange: [-2 * iW, -iW, 0, iW, 2 * iW],
+        outputRange: [
+          CATEGORY_SIDE_SCALE_X,
+          CATEGORY_SIDE_SCALE_X,
+          1,
+          CATEGORY_SIDE_SCALE_X,
+          CATEGORY_SIDE_SCALE_X,
+        ],
+        extrapolate: 'clamp',
+      });
 
-    const translateY = offset.interpolate({
-      inputRange: [-iW, 0, iW],
-      outputRange: [0, -2, 0],
-      extrapolate: 'clamp',
-    });
+      const translateY = offset.interpolate({
+        inputRange: [-iW, 0, iW],
+        outputRange: [0, -2, 0],
+        extrapolate: 'clamp',
+      });
 
-    const overallOpacity = offset.interpolate({
-      inputRange: [-2 * iW, -1.5 * iW, -iW, 0, iW, 1.5 * iW, 2 * iW],
-      outputRange: [0.2, 0.2, 1, 1, 1, 0.2, 0.2],
-      extrapolate: 'clamp',
-    });
+      const overallOpacity = offset.interpolate({
+        inputRange: [-2 * iW, -1.5 * iW, -iW, 0, iW, 1.5 * iW, 2 * iW],
+        outputRange: [0.2, 0.2, 1, 1, 1, 0.2, 0.2],
+        extrapolate: 'clamp',
+      });
 
-    // Image crossfade — driven entirely on the native thread.
-    // Center image becomes fully opaque at ±0.5*iW (slot boundary) so even
-    // during fast flings the correct image is visible before the item settles.
-    // The transition spans 0.5*iW → 0.7*iW on each side to stay smooth.
-    const centerOp = offset.interpolate({
-      inputRange: [-0.7 * iW, -0.5 * iW, 0, 0.5 * iW, 0.7 * iW],
-      outputRange: [0, 1, 1, 1, 0],
-      extrapolate: 'clamp',
-    });
+      // Image crossfade — driven entirely on the native thread.
+      // Center image becomes fully opaque at ±0.5*iW (slot boundary) so even
+      // during fast flings the correct image is visible before the item settles.
+      // The transition spans 0.5*iW → 0.7*iW on each side to stay smooth.
+      const centerOp = offset.interpolate({
+        inputRange: [-0.7 * iW, -0.5 * iW, 0, 0.5 * iW, 0.7 * iW],
+        outputRange: [0, 1, 1, 1, 0],
+        extrapolate: 'clamp',
+      });
 
-    const leftOp = offset.interpolate({
-      inputRange: [-2 * iW, -0.7 * iW, -0.5 * iW, 0],
-      outputRange: [1, 1, 0, 0],
-      extrapolate: 'clamp',
-    });
+      const leftOp = offset.interpolate({
+        inputRange: [-2 * iW, -0.7 * iW, -0.5 * iW, 0],
+        outputRange: [1, 1, 0, 0],
+        extrapolate: 'clamp',
+      });
 
-    const rightOp = offset.interpolate({
-      inputRange: [0, 0.5 * iW, 0.7 * iW, 2 * iW],
-      outputRange: [0, 0, 1, 1],
-      extrapolate: 'clamp',
-    });
+      const rightOp = offset.interpolate({
+        inputRange: [0, 0.5 * iW, 0.7 * iW, 2 * iW],
+        outputRange: [0, 0, 1, 1],
+        extrapolate: 'clamp',
+      });
 
-    return {
-      wrapperStyle: {transform: [{scale}, {translateY}], opacity: overallOpacity},
-      centerOpacity: centerOp,
-      leftOpacity: leftOp,
-      rightOpacity: rightOp,
-    };
-  }, [virtualIndex, itemWidth, viewportWidth, scrollAnim]);
+      return {
+        wrapperStyle: {
+          transform: [{scale}, {translateY}],
+          opacity: overallOpacity,
+        },
+        centerOpacity: centerOp,
+        leftOpacity: leftOp,
+        rightOpacity: rightOp,
+      };
+    }, [virtualIndex, itemWidth, viewportWidth, scrollAnim]);
 
   const onPress = useCallback(() => {
     if (!isCenter) {
@@ -312,14 +322,22 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
           source={item.imageLeft}
           resizeMode="contain"
           fadeDuration={0}
-          style={[styles.tikImageBase, styles.imageOverlay, {opacity: leftOpacity}]}
+          style={[
+            styles.tikImageBase,
+            styles.imageOverlay,
+            {opacity: leftOpacity},
+          ]}
         />
         {/* center image: fades in as this slot reaches the center position */}
         <Animated.Image
           source={item.image}
           resizeMode="contain"
           fadeDuration={0}
-          style={[styles.tikImageBase, styles.imageOverlay, {opacity: centerOpacity}]}
+          style={[
+            styles.tikImageBase,
+            styles.imageOverlay,
+            {opacity: centerOpacity},
+          ]}
         />
       </Animated.View>
     </TouchableOpacity>
@@ -511,28 +529,18 @@ const Carusel = ({
         snapScrollX = nativeCarouselSnapScrollX(closestVirtualIndex, itemWidth);
       }
 
-      const normalized = infiniteLoop
-        ? normalizeInfiniteCarouselPosition(
-            closestVirtualIndex,
-            snapScrollX,
-            listLength,
-            itemWidth,
-          )
-        : {virtualIndex: closestVirtualIndex, scrollX: snapScrollX};
-
       tickIfLogicalChange(
         virtualCenterIndexRef.current,
-        normalized.virtualIndex,
+        closestVirtualIndex,
       );
-      virtualCenterIndexRef.current = normalized.virtualIndex;
-      setVirtualCenterIndex(normalized.virtualIndex);
+      virtualCenterIndexRef.current = closestVirtualIndex;
+      setVirtualCenterIndex(closestVirtualIndex);
 
-      const targetScrollX = normalized.scrollX;
       if (
         scrollViewRef.current &&
-        Math.abs(scrollPosition - targetScrollX) > SNAP_POSITION_EPSILON
+        Math.abs(scrollPosition - snapScrollX) > SNAP_POSITION_EPSILON
       ) {
-        jumpToScrollX(targetScrollX, false);
+        jumpToScrollX(snapScrollX, true);
       }
 
       requestAnimationFrame(() => {
@@ -886,7 +894,9 @@ const Carusel = ({
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate={Platform.OS === 'ios' ? 0.992 : 'normal'}
+        decelerationRate={Platform.OS === 'ios' ? 'fast' : 0.9}
+        snapToInterval={itemWidth}
+        snapToAlignment="center"
         bounces={false}
         pagingEnabled={false}
         onScroll={animatedScrollHandler}
@@ -905,7 +915,6 @@ const Carusel = ({
             itemWidth={itemWidth}
             virtualIndex={virtualIndex}
             virtualCenterIndex={virtualCenterIndex}
-
             onCategorySelect={emitCategorySelect}
             scrollToVirtualIndex={scrollToVirtualIndex}
             scrollAnim={scrollAnimRef.current}
