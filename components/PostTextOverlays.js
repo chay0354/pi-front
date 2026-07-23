@@ -66,37 +66,40 @@ const PostTextOverlays = ({
             ]}>
             {/* Same hugging-content structure as the editor's
                 DraggableTextBlock so feed placement matches the editor. */}
-            <View
-              style={{
-                alignSelf:
-                  align === 'left'
-                    ? 'flex-start'
-                    : align === 'right'
-                      ? 'flex-end'
-                      : 'center',
-                maxWidth: '100%',
-              }}>
-              <Text
+              <View
                 style={[
-                  styles.text,
                   {
-                    color: visual.textColor,
-                    fontSize: layout.fontSize,
-                    lineHeight: layout.lineHeight,
-                    textAlign: physicalTextAlign(align),
-                    writingDirection: 'rtl',
-                    fontFamily,
+                    alignSelf:
+                      align === 'left'
+                        ? 'flex-start'
+                        : align === 'right'
+                          ? 'flex-end'
+                          : 'center',
+                    maxWidth: '100%',
                   },
                   hasBackground && {
                     backgroundColor: visual.backgroundColor,
                     paddingHorizontal: 10,
                     paddingVertical: 4,
                     borderRadius: 8,
+                    overflow: 'hidden',
                   },
                 ]}>
-                {block.text}
-              </Text>
-            </View>
+                <Text
+                  style={[
+                    styles.text,
+                    {
+                      color: visual.textColor,
+                      fontSize: layout.fontSize,
+                      lineHeight: layout.lineHeight,
+                      textAlign: physicalTextAlign(align),
+                      writingDirection: 'rtl',
+                      fontFamily,
+                    },
+                  ]}>
+                  {block.text}
+                </Text>
+              </View>
           </View>
         );
       })}

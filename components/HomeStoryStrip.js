@@ -12,17 +12,20 @@ import {
 import ProfileAvatar, {
   PROFILE_RING_COLORS,
 } from './ProfileAvatar';
-import {forceLtrStyle} from '../utils/rtlLayout';
 
 const OUTER = 76;
 const ITEM_SPACING = 15;
 
 /**
- * App is forceRTL — horizontal FlatList natively starts on the right and
- * scrolls right→left. `inverted` cancels that flip so the strip scrolls
- * left→right (first ring on the left).
+ * App is forceRTL, so a horizontal FlatList naturally starts on the right and
+ * scrolls right→left. We want Instagram-style LTR: first ring on the physical
+ * left, scroll left→right.
+ *
+ * Do NOT combine `inverted` with `direction: 'ltr'` — that double-flips on
+ * Android/iOS. Use the scaleX unwrap instead on native RTL.
  */
-const invertForLtrScroll = I18nManager.isRTL;
+const NATIVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;
+const rtlUnwrapStyle = NATIVE_RTL ? {transform: [{scaleX: -1}]} : null;
 
 const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
   const onPress = useCallback(() => onRingPress(ring), [onRingPress, ring]);
@@ -48,10 +51,15 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
 
 /**
  * Story rings: same gold gradient ring as ProfileAvatar; tap opens viewer.
+ * Always LTR scroll (left → right), independent of app RTL.
  */
 const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
   const renderItem = useCallback(
-    ({item}) => <StoryRingItem ring={item} onRingPress={onRingPress} />,
+    ({item}) => (
+      <View style={rtlUnwrapStyle}>
+        <StoryRingItem ring={item} onRingPress={onRingPress} />
+      </View>
+    ),
     [onRingPress],
   );
 
@@ -66,11 +74,11 @@ const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
   }
 
   return (
-    <View style={[styles.stripWrap, forceLtrStyle]}>
+    <View style={styles.stripWrap}>
       <FlatList
         data={rings}
         horizontal
-        inverted={invertForLtrScroll}
+        inverted={false}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         showsHorizontalScrollIndicator={false}
@@ -78,8 +86,8 @@ const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
         initialNumToRender={8}
         maxToRenderPerBatch={10}
         windowSize={7}
-        style={[styles.list, forceLtrStyle]}
-        contentContainerStyle={[styles.row, forceLtrStyle]}
+        style={[styles.list, rtlUnwrapStyle]}
+        contentContainerStyle={styles.row}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </View>
@@ -90,17 +98,21 @@ const styles = StyleSheet.create({
   stripWrap: {
     width: '100%',
     alignSelf: 'stretch',
+    // Web: CSS direction is enough. Native uses scaleX unwrap above.
+    ...(Platform.OS === 'web' ? {direction: 'ltr'} : null),
   },
   list: {
     width: '100%',
+    ...(Platform.OS === 'web' ? {direction: 'ltr'} : null),
   },
   // NOTE: no `flex: 1` here — pinning the content container to the viewport
   // width made the strip unscrollable (5+ rings were unreachable).
   row: {
     paddingHorizontal: 20,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingVertical: 4,
     flexGrow: 1,
+    ...(Platform.OS === 'web' ? {direction: 'ltr'} : null),
   },
   separator: {
     width: ITEM_SPACING,

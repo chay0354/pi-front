@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
-import {flexEnd} from '../utils/rtlLayout';
+import {flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 
 const CARD_BG = '#2b2a39';
 const CREAM = '#f7f3e6';
@@ -42,7 +42,7 @@ const ExclusiveOfferResponseCard = ({
   loading,
   onAccept,
   onReject,
-  /** 'exclusive' (broker→user) or 'collab' (broker→broker שת״פ) */
+  /** 'exclusive' (broker→user) or 'collab' (broker↔broker/company שת״פ) */
   offerKind = 'exclusive',
 }) => {
   const st = String(decisionStatus || 'pending')
@@ -61,28 +61,26 @@ const ExclusiveOfferResponseCard = ({
   return (
     <View style={styles.wrap}>
       <View style={styles.topCard}>
-        <View style={[styles.topTextCol, {alignItems: flexEnd}]}>
-          <View style={[styles.whitePill, {alignSelf: flexEnd}]}>
+        <View style={[styles.topTextCol, {alignItems: flexStart}]}>
+          <View style={[styles.whitePill, {alignSelf: flexStart}]}>
             <Text style={styles.whitePillText} numberOfLines={1}>
               {pill}
             </Text>
           </View>
           {priceFormatted ? (
-            <Text style={[styles.price, {textAlign: 'left'}]} numberOfLines={1}>
+            <Text style={styles.price} numberOfLines={1}>
               {priceFormatted}
             </Text>
           ) : null}
-          <View style={[styles.addrRow, {justifyContent: flexEnd}]}>
-            <Text
-              style={[styles.address, {textAlign: 'left'}]}
-              numberOfLines={2}>
-              {addressLine || '—'}
-            </Text>
+          <View style={[styles.addrRow, {justifyContent: flexStart}]}>
             <MaterialCommunityIcons
               name="map-marker-outline"
               size={20}
               color="#fff"
             />
+            <Text style={styles.address} numberOfLines={2}>
+              {addressLine || '—'}
+            </Text>
           </View>
         </View>
         <View style={styles.thumbWrap}>
@@ -210,23 +208,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
     color: DEEP,
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   price: {
     fontSize: 18,
     fontFamily: 'Rubik-Medium',
     color: CREAM,
     marginBottom: 8,
+    width: '100%',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    width: '100%',
   },
   address: {
     flex: 1,
     fontSize: 14,
     color: '#fff',
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   thumbWrap: {
     width: 80,
@@ -260,6 +266,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'Rubik-Regular',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   btnRow: {
     flexDirection: 'row',
@@ -279,6 +286,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     writingDirection: 'rtl',
     paddingHorizontal: 8,
+    alignSelf: 'stretch',
   },
   gradBtn: {
     flexDirection: 'row',
@@ -294,6 +302,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
     color: DEEP,
+    writingDirection: 'rtl',
   },
 });
 

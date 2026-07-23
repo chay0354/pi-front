@@ -2846,7 +2846,7 @@ export async function createSalesImageStory({
  * @returns {Promise} API response with listing ID
  */
 /**
- * Home row: subscriptions with profile video (video_url), verified/active
+ * Home row: active story rings (≤24h) — profile mirrors + explicit story slides.
  * @returns {Promise<{ success: boolean, rings?: Array }>}
  */
 export const getStoriesFeed = async ({limit = 80} = {}) => {
@@ -2923,8 +2923,8 @@ export const createStory = async payload => {
 };
 
 /**
- * Profile intro videos are shown from subscription.video_url in the home story ring.
- * Do not mirror them into the stories table — that caused duplicate slides.
+ * Profile intro videos are mirrored into `stories` on the backend when uploaded
+ * (24h TTL, same as other story kinds). Client no longer creates a duplicate row.
  */
 export async function syncSubscriptionProfileStory(_subscription) {
   return null;

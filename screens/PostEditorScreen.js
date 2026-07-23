@@ -759,29 +759,36 @@ const DraggableTextBlock = React.memo(
             alignSelf: alignToFlexSelf(block.align ?? 'center'),
             maxWidth: '100%',
           }}>
-          <Text
-            pointerEvents="none"
-            style={[
-              styles.centerText,
-              TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
-              {
-                color: visual.textColor,
-                textAlign: physicalTextAlign(block.align ?? 'center'),
-                writingDirection: 'rtl',
-                fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
-                lineHeight: Math.round(
-                  (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
-                ),
-              },
-              visual.backgroundColor !== 'transparent' && {
-                backgroundColor: visual.backgroundColor,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: 8,
-              },
-            ]}>
-            {block.text}
-          </Text>
+          <View
+            style={
+              visual.backgroundColor !== 'transparent'
+                ? {
+                    backgroundColor: visual.backgroundColor,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                  }
+                : undefined
+            }>
+            <Text
+              pointerEvents="none"
+              style={[
+                styles.centerText,
+                TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
+                {
+                  color: visual.textColor,
+                  textAlign: physicalTextAlign(block.align ?? 'center'),
+                  writingDirection: 'rtl',
+                  fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
+                  lineHeight: Math.round(
+                    (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
+                  ),
+                },
+              ]}>
+              {block.text}
+            </Text>
+          </View>
         </View>
       </Animated.View>
     );
@@ -2235,8 +2242,11 @@ const PostEditorScreen = ({
         </View>
         <KeyboardAvoidingView
           style={styles.editorKeyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={100}
+          // Toolbar/input already lift with `keyboardInset` (Android path).
+          // iOS `padding` here double-counts keyboard height and floats the
+          // format menu far above the keys — keep behavior disabled.
+          behavior={undefined}
+          keyboardVerticalOffset={0}
         >
           <View style={styles.editorRoot}>
             {!isCapturing && (
@@ -2462,10 +2472,14 @@ const PostEditorScreen = ({
                   keyboardInset > 0 ? {bottom: keyboardInset} : null,
                   {
                     paddingTop: 10,
+                    // When the keyboard is open it covers the home indicator —
+                    // don't add safe-area padding on top of keyboardInset (iOS gap).
                     paddingBottom:
                       Platform.OS === 'web'
                         ? Math.max(bottom, keyboardInset > 0 ? 8 : 10)
-                        : formatToolbarSafeBottom,
+                        : keyboardInset > 0
+                          ? 8
+                          : formatToolbarSafeBottom,
                   },
                 ]}>
                 {selectedFormat === 'aa' && (
@@ -3189,7 +3203,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
     paddingHorizontal: 12,
-    borderRadius: 10,
+    // Match finished overlay chip (View wrapper uses the same radius).
+    borderRadius: 8,
+    overflow: 'hidden',
     paddingVertical: 12,
   },
   keyboardControls: {

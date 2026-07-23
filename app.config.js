@@ -83,6 +83,7 @@ module.exports = {
           'אנחנו צריכים גישה למיקרופון כדי לשלוח הודעות קול',
         NSLocationWhenInUseUsageDescription:
           'אנחנו צריכים גישה למיקום שלך כדי לסנן מודעות לפי מרחק ממך',
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
@@ -119,6 +120,7 @@ module.exports = {
       bundler: 'metro', // one server at / so browser gets the app, not manifest JSON
     },
     plugins: [
+      'expo-dev-client',
       'expo-font',
       'expo-secure-store',
       'expo-document-picker',

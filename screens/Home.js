@@ -16,10 +16,10 @@ import React, {
   memo,
 } from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
+import {FeedVideoPlayer} from '../components/FeedVideoPlayer';
 import HomeIntroModal from '../components/HomeIntroModal';
 import {TouchableOpacity} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,6 +28,8 @@ import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
 import {firstVideoUrl} from '../utils/listingGridCardFigma';
+import {cappedMuxUri, muxThumbnailUri} from '../utils/videoPlayback';
+import {prefetchFeedVideoUri} from '../utils/feedVideoPreload';
 
 import {
   userCategories,
@@ -115,7 +117,10 @@ const resolveFeatureProjectVideoMedia = listing => {
   if (!listing) return null;
   const videoUri = firstVideoUrl(listing);
   if (!videoUri) return null;
-  return {type: 'video', uri: videoUri};
+  // Same Mux path as TikTok feed: capped HLS + first-frame poster.
+  const uri = cappedMuxUri(videoUri, '540p');
+  const posterUri = muxThumbnailUri(uri, {time: 0, width: 720}) || null;
+  return {type: 'video', uri, posterUri};
 };
 
 const getFeatureProjectName = listing => {
@@ -129,24 +134,7 @@ const getFeatureProjectName = listing => {
   ).trim();
 };
 
-
-/**
- * Home hero video: full container width (edge-to-edge), letterbox top/bottom if needed.
- * Same idea as story videos — never crop the left/right sides.
- */
-function heroVideoLayout(containerW, naturalW, naturalH) {
-  const cw = Math.max(1, Number(containerW) || 1);
-  const w = Number(naturalW) || 0;
-  const h = Number(naturalH) || 0;
-  if (w <= 0 || h <= 0) {
-    return {width: cw, height: cw};
-  }
-  return {
-    width: cw,
-    height: cw * (h / w),
-  };
-}
-
+/** Home featured ad — same Mux player stack as TikTok listing ads (fitWidth). */
 const FeatureHeroMedia = memo(function FeatureHeroMedia({
   media,
   loading,
@@ -156,130 +144,6 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   onProgressChange,
   onPlaybackComplete,
 }) {
-  const webVideoRef = useRef(null);
-  const videoRef = useRef(null);
-  const [videoReady, setVideoReady] = useState(false);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [videoLayout, setVideoLayout] = useState(null);
-  const sizedRef = useRef(false);
-  const naturalSizeRef = useRef(null);
-  const lastProgressRef = useRef(0);
-  const lastCompleteAtRef = useRef(0);
-  const onPlaybackCompleteRef = useRef(onPlaybackComplete);
-  onPlaybackCompleteRef.current = onPlaybackComplete;
-
-  const emitPlaybackComplete = useCallback(() => {
-    const now = Date.now();
-    // Loop wrap + didJustFinish can both fire for the same play.
-    if (now - lastCompleteAtRef.current < 800) return;
-    lastCompleteAtRef.current = now;
-    onPlaybackCompleteRef.current?.();
-  }, []);
-
-  const noteProgress = useCallback(
-    progress => {
-      const p = Math.max(0, Math.min(1, Number(progress) || 0));
-      // With isLooping, didJustFinish often never fires — detect wrap-around.
-      if (lastProgressRef.current > 0.82 && p < 0.2) {
-        emitPlaybackComplete();
-      }
-      lastProgressRef.current = p;
-      onProgressChange?.(p);
-    },
-    [emitPlaybackComplete, onProgressChange],
-  );
-
-  useEffect(() => {
-    setVideoReady(false);
-    setVideoLayout(null);
-    sizedRef.current = false;
-    naturalSizeRef.current = null;
-    lastProgressRef.current = 0;
-    lastCompleteAtRef.current = 0;
-    onProgressChange?.(0);
-  }, [media?.uri, onProgressChange]);
-
-  const trySizeVideo = useCallback(() => {
-    const ns = naturalSizeRef.current;
-    if (!ns || containerWidth <= 0 || sizedRef.current) return;
-    const w = Number(ns.w) || 0;
-    const h = Number(ns.h) || 0;
-    if (w <= 0 || h <= 0) return;
-    sizedRef.current = true;
-    setVideoLayout(heroVideoLayout(containerWidth, w, h));
-    setVideoReady(true);
-  }, [containerWidth]);
-
-  const noteNaturalSize = useCallback(
-    (nw, nh) => {
-      naturalSizeRef.current = {w: nw, h: nh};
-      trySizeVideo();
-    },
-    [trySizeVideo],
-  );
-
-  useEffect(() => {
-    sizedRef.current = false;
-    setVideoLayout(null);
-    setVideoReady(false);
-  }, [media?.uri, containerWidth]);
-
-  useEffect(() => {
-    trySizeVideo();
-  }, [trySizeVideo]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const el = webVideoRef.current;
-    if (!el || media?.type !== 'video') return;
-    el.muted = isMuted;
-    if (paused) {
-      el.pause();
-      return;
-    }
-    const playPromise = el.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch(() => {});
-    }
-  }, [paused, media?.type, media?.uri, isMuted, videoReady]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const el = webVideoRef.current;
-    if (!el || media?.type !== 'video') return;
-    const onTimeUpdate = () => {
-      if (el.duration > 0) {
-        noteProgress(el.currentTime / el.duration);
-      }
-    };
-    const onEnded = () => {
-      // Non-loop fallback (loop usually prevents ended).
-      emitPlaybackComplete();
-    };
-    el.addEventListener('timeupdate', onTimeUpdate);
-    el.addEventListener('ended', onEnded);
-    return () => {
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      el.removeEventListener('ended', onEnded);
-    };
-  }, [emitPlaybackComplete, media?.type, media?.uri, noteProgress]);
-
-  const handlePlaybackStatusUpdate = useCallback(
-    status => {
-      if (!status?.isLoaded) return;
-      if (status.durationMillis > 0) {
-        noteProgress(status.positionMillis / status.durationMillis);
-      }
-      if (status.didJustFinish) {
-        emitPlaybackComplete();
-      }
-      if (!status.isPlaying && !paused) {
-        videoRef.current?.playAsync().catch(() => {});
-      }
-    },
-    [emitPlaybackComplete, noteProgress, paused],
-  );
-
   if (loading) {
     return (
       <View style={[styles.projectImage, styles.projectImagePlaceholder]} />
@@ -287,103 +151,18 @@ const FeatureHeroMedia = memo(function FeatureHeroMedia({
   }
 
   if (media?.type === 'video' && media.uri) {
-    const sized = videoLayout != null;
-    const onContainerLayout = event => {
-      const w = event?.nativeEvent?.layout?.width;
-      if (w > 0 && Math.abs(w - containerWidth) > 0.5) {
-        setContainerWidth(w);
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      return (
-        <View style={styles.projectImage} onLayout={onContainerLayout}>
-          {!videoReady ? (
-            <View
-              style={[
-                StyleSheet.absoluteFillObject,
-                styles.projectImagePlaceholder,
-              ]}
-            />
-          ) : null}
-          <View style={styles.heroVideoClip}>
-            <video
-              ref={webVideoRef}
-              src={media.uri}
-              style={{
-                width: sized ? videoLayout.width : '100%',
-                height: sized ? videoLayout.height : '100%',
-                objectFit: sized ? 'fill' : 'cover',
-                backgroundColor: '#2B2A39',
-                display: 'block',
-                opacity: videoReady ? 1 : 0,
-              }}
-              autoPlay={sized && !paused}
-              muted={isMuted}
-              loop
-              playsInline
-              preload="auto"
-              onLoadedMetadata={e => {
-                const el = e?.target || webVideoRef.current;
-                if (el?.videoWidth && el?.videoHeight) {
-                  noteNaturalSize(el.videoWidth, el.videoHeight);
-                }
-              }}
-            />
-          </View>
-        </View>
-      );
-    }
-
     return (
-      <View style={styles.projectImage} onLayout={onContainerLayout}>
-        {!videoReady ? (
-          <View
-            style={[
-              StyleSheet.absoluteFillObject,
-              styles.projectImagePlaceholder,
-            ]}
-          />
-        ) : null}
-        <View style={styles.heroVideoClip}>
-          <Video
-            ref={videoRef}
-            key={media.uri}
-            source={{uri: media.uri}}
-            style={[
-              sized ? videoLayout : StyleSheet.absoluteFillObject,
-              {opacity: videoReady ? 1 : 0},
-            ]}
-            resizeMode={sized ? ResizeMode.STRETCH : ResizeMode.COVER}
-            shouldPlay={sized && !paused}
-            isMuted={isMuted}
-            isLooping
-            useNativeControls={false}
-            usePoster={false}
-            progressUpdateIntervalMillis={100}
-            onLoad={status => {
-              const ns = status?.naturalSize;
-              if (ns?.width && ns?.height) {
-                let nw = ns.width;
-                let nh = ns.height;
-                if (ns.orientation === 'portrait' && nw > nh) {
-                  nw = ns.height;
-                  nh = ns.width;
-                }
-                noteNaturalSize(nw, nh);
-              }
-            }}
-            onReadyForDisplay={event => {
-              const ns = event?.naturalSize;
-              if (ns?.width && ns?.height) {
-                noteNaturalSize(ns.width, ns.height);
-              }
-            }}
-            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            onError={() => {}}
-          />
-        </View>
-      </View>
+      <FeedVideoPlayer
+        uri={media.uri}
+        posterUri={media.posterUri || ''}
+        isActive={!paused}
+        prewarm={paused}
+        fitWidth
+        muted={isMuted}
+        style={styles.projectImage}
+        onProgressChange={onProgressChange}
+        onPlaybackComplete={onPlaybackComplete}
+      />
     );
   }
 
@@ -616,6 +395,15 @@ const Home = ({
     ? resolveFeatureProjectVideoMedia(featureListing)
     : null;
 
+  // Warm poster + first video segments as soon as the ad is picked.
+  useEffect(() => {
+    if (!featureMedia?.uri) return;
+    if (featureMedia.posterUri) {
+      Image.prefetch(String(featureMedia.posterUri)).catch(() => {});
+    }
+    prefetchFeedVideoUri(featureMedia.uri);
+  }, [featureMedia?.uri, featureMedia?.posterUri]);
+
   useEffect(() => {
     setFeatureMuted(true);
     setFeatureProgress(0);
@@ -807,11 +595,11 @@ const Home = ({
         <Image
           ref={logoImageRef}
           source={require('../assets/homeLogo.png')}
-          style={[styles.logo]}
+          style={[styles.logo, !logoRevealed && styles.logoHidden]}
           onLayout={() => {
             // measureInWindow gives absolute screen coords — needed so the
             // intro modal (its own full-screen overlay layer) can animate
-            // its logo to land exactly here.
+            // its logo to land exactly here. Opacity 0 still lays out.
             requestAnimationFrame(() => {
               logoImageRef.current?.measureInWindow?.((x, y, width, height) => {
                 if (width > 0 && height > 0) {
@@ -1091,6 +879,10 @@ const styles = StyleSheet.create({
     marginTop: -36,
     resizeMode: 'contain',
   },
+  /** Hidden until splash intro logo lands here — same asset, seamless handoff. */
+  logoHidden: {
+    opacity: 0,
+  },
   content: {
     flex: 1,
   },
@@ -1112,7 +904,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#E0DEF7',
+    backgroundColor: '#000',
   },
   projectCardDim: {
     ...StyleSheet.absoluteFillObject,

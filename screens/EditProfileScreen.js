@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {ProfileAvatar} from '../components';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {ContextHook} from '../hooks/ContextHook';
-import {subscriptionTypes} from '../utils/constant';
+import {subscriptionTypes, shouldShowProfileGoldRing} from '../utils/constant';
 import {
   getUserProfilePhotoUrl,
   getUserCompanyLogoUrl,
@@ -36,8 +36,10 @@ const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const TEXT_SECONDARY = 'rgba(255,255,255,0.55)';
 const PLACEHOLDER = 'rgba(255,255,255,0.35)';
-/** Matches Pi Chat unread badge + menu notification teal */
-const CHAT_UNREAD_TEAL = '#5EEAD4';
+/** Camera badge on yellow/gold rings (broker / company / professional) — unchanged. */
+const CAMERA_BADGE_TEAL = '#5EEAD4';
+/** Camera badge on blue/teal rings (regular user) — system orange. */
+const CAMERA_BADGE_ORANGE = '#E8B34D';
 
 /** Field definitions per account type. Each: {key, label, placeholder, keyboardType?, multiline?} */
 function getFieldsForType(type) {
@@ -136,6 +138,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const isCompany = String(type).toLowerCase() === subscriptionTypes.company;
   const subTypeLower = String(type).toLowerCase();
+  const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
+  /** Yellow ring → keep teal camera; blue/teal ring → system orange. */
+  const cameraBadgeColor = hasGoldRing ? CAMERA_BADGE_TEAL : CAMERA_BADGE_ORANGE;
   const canEditProfileVideo =
     subTypeLower === subscriptionTypes.broker ||
     subTypeLower === subscriptionTypes.professional;
@@ -222,6 +227,12 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     } catch (err) {
       Alert.alert('שגיאה', `לא ניתן לבחור סרטון: ${err.message}`);
     }
+  };
+
+  const handleRemoveProfileVideo = () => {
+    if (uploadingVideo || saving) return;
+    setPendingProfileVideo(null);
+    setProfileVideoUrl(null);
   };
 
   const uploadPicked = async picked => {
@@ -394,7 +405,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                 subscriptionType={currentUser}
                 fallbackResizeMode="contain"
               />
-              <View style={styles.avatarEditBadge}>
+              <View
+                style={[
+                  styles.avatarEditBadge,
+                  {backgroundColor: cameraBadgeColor},
+                ]}>
                 {uploadingPhoto ? (
                   <ActivityIndicator size="small" color="#1E1D27" />
                 ) : (
@@ -438,20 +453,31 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                   activeOpacity={0.85}>
                   <MaterialCommunityIcons
                     name="video-outline"
-                    size={48}
+                    size={28}
                     color="rgba(255,255,255,0.4)"
                   />
                   <Text style={styles.videoUploadText}>העלאת סרטון פרופיל</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                onPress={handlePickProfileVideo}
-                activeOpacity={0.7}
-                disabled={uploadingVideo || saving}>
-                <Text style={styles.changePhotoText}>
-                  {profileVideoPreviewUri ? 'החלפת סרטון' : 'בחירת סרטון'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.videoActionsRow}>
+                <TouchableOpacity
+                  onPress={handlePickProfileVideo}
+                  activeOpacity={0.7}
+                  disabled={uploadingVideo || saving}>
+                  <Text style={styles.changePhotoText}>
+                    {profileVideoPreviewUri ? 'החלפת סרטון' : 'בחירת סרטון'}
+                  </Text>
+                </TouchableOpacity>
+                {profileVideoPreviewUri ? (
+                  <TouchableOpacity
+                    onPress={handleRemoveProfileVideo}
+                    activeOpacity={0.7}
+                    disabled={uploadingVideo || saving}
+                    hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                    <Text style={styles.removeVideoText}>הסרת סרטון</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -582,7 +608,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: CHAT_UNREAD_TEAL,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -596,21 +621,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   videoSection: {
-    alignItems: 'center',
-    marginBottom: 24,
+    alignItems: 'stretch',
+    marginBottom: 20,
   },
   videoPreviewContainer: {
     width: '100%',
-    maxWidth: 280,
-    aspectRatio: 9 / 16,
-    marginBottom: 10,
+    height: 96,
+    marginBottom: 8,
     position: 'relative',
+    alignSelf: 'center',
+    maxWidth: 220,
   },
   videoPreviewFrame: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
+    backgroundColor: INPUT_BG,
   },
   videoPreviewFill: {
     width: '100%',
@@ -621,26 +648,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 16,
+    borderRadius: 12,
   },
   videoUploadPlaceholder: {
     width: '100%',
-    maxWidth: 280,
-    aspectRatio: 9 / 16,
-    borderRadius: 16,
+    maxWidth: 220,
+    height: 72,
+    alignSelf: 'center',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: DIVIDER,
     borderStyle: 'dashed',
     backgroundColor: INPUT_BG,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-    gap: 8,
+    marginBottom: 8,
+    gap: 4,
+    flexDirection: 'row',
+    paddingHorizontal: 12,
   },
   videoUploadText: {
     color: TEXT_SECONDARY,
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  videoActionsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 2,
+  },
+  removeVideoText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
     textAlign: 'center',
   },
   fieldBlock: {

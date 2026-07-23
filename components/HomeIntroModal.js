@@ -8,19 +8,15 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-const HOLD_BEFORE_MS =300; // stay at full initial size before moving
-const MOVE_MS = 1800; // slow move up + shrink + fade, all together
+const HOLD_BEFORE_MS = 300; // stay at full initial size before moving
+const MOVE_MS = 1800; // slow move up + shrink, all together
 const TARGET_WAIT_MS = 250; // brief wait for Home's real logo measurement
 
-const SPLASH_LOGO_ASPECT = 2187 / 1242; // matches assets/splashLogo.png
-
 /**
- * Brief intro modal shown on Home — same background + logo imagery as the
- * splash screen. The logo holds at full initial size, then slowly moves up,
- * shrinks, and fades (all in one synced animation) to land exactly on
- * Home's real header logo (measured via targetLayout). Only relevant once
- * (per Home mount), not shown while onboarding/terms gate are covering the
- * screen (controlled by the `visible` prop from the parent).
+ * Brief intro modal shown on Home — same logo as the header (`homeLogo.png`).
+ * The logo holds large, then moves + shrinks to the exact measured header
+ * logo rect and stays fully opaque. Home keeps its real logo hidden until
+ * this lands, then we hand off so it feels like one continuous logo.
  */
 export default function HomeIntroModal({
   visible,
@@ -36,37 +32,22 @@ export default function HomeIntroModal({
   // would suddenly map to a different position/scale, looking like a jump.
   const [resolvedTarget, setResolvedTarget] = useState(null);
 
-  // Initial "big logo" presentation — should match how large the logo
-  // appears in the actual native splash screen, i.e. filling most of the
-  // screen, not a small floating box. splashLogo.png's own proportions are
-  // close to a full phone screen, so fit it as large as possible within the
-  // screen bounds (preserving aspect ratio, no distortion) rather than
-  // capping it to a small fixed size.
-  const initialRect = useMemo(() => {
-    // const maxWidth = screenWidth * 0.92;
-    // const maxHeight = screenHeight * 0.8;
-    // let width = maxWidth;
-    // let height = width * SPLASH_LOGO_ASPECT;
-    // if (height > maxHeight) {
-    //   height = maxHeight;
-    //   width = height / SPLASH_LOGO_ASPECT;
-    // }
-    return {
+  // Initial "big logo" — same asset as Home header, just larger / centered.
+  const initialRect = useMemo(
+    () => ({
       x: (screenWidth - 290) / 2,
       y: (screenHeight - 353) / 2,
       width: 290,
       height: 280,
-    };
-  }, [screenWidth, screenHeight]);
+    }),
+    [screenWidth, screenHeight],
+  );
 
   const fallbackTargetRect = useMemo(
     () => ({
       x: screenWidth / 2 - 65,
       y: screenHeight * 0.08,
-      // Matches Home's actual logo style (width:130, height:122) — this is
-      // an estimate of where Home's real logo sits, used only if
-      // measurement hasn't arrived yet, so it should match that target's
-      // shape, not splashLogo.png's own (much taller) aspect ratio.
+      // Matches Home's actual logo style (width:130, height:122).
       width: 130,
       height: 122,
     }),
@@ -76,19 +57,19 @@ export default function HomeIntroModal({
   const {
     translateX,
     translateY,
-    scale,
-    opacity,
+    scaleX,
+    scaleY,
     backgroundScale,
     backgroundOpacity,
   } = useMemo(() => {
     // Always interpolate using *some* target (real once resolved, fallback
     // shape until then) so the transform array's structure never changes
-    // between renders — switching it from [] to populated mid-flight (even
-    // though the interpolated values are identity at progress=0) was
+    // between renders — switching it from [] to populated mid-flight was
     // causing React Native's native driver to visibly reset/re-attach the
     // view for a frame, looking like a jump right as the hold ends.
     const effectiveTarget = resolvedTarget || fallbackTargetRect;
-    const scaleTo = effectiveTarget.width / initialRect.width;
+    const scaleToX = effectiveTarget.width / initialRect.width;
+    const scaleToY = effectiveTarget.height / initialRect.height;
     const initialCenterX = initialRect.x + initialRect.width / 2;
     const initialCenterY = initialRect.y + initialRect.height / 2;
     const targetCenterX = effectiveTarget.x + effectiveTarget.width / 2;
@@ -102,19 +83,16 @@ export default function HomeIntroModal({
         inputRange: [0, 1],
         outputRange: [0, targetCenterY - initialCenterY],
       }),
-      scale: progress.interpolate({
+      // Independent axes so the morph lands exactly on the header rect.
+      scaleX: progress.interpolate({
         inputRange: [0, 1],
-        outputRange: [1, scaleTo],
+        outputRange: [1, scaleToX],
       }),
-      // Logo fades 1 -> 0 in sync with its own move/shrink, not as a
-      // separate step afterward.
-      opacity: progress.interpolate({
+      scaleY: progress.interpolate({
         inputRange: [0, 1],
-        outputRange: [1, 0],
+        outputRange: [1, scaleToY],
       }),
-      // Background gets the same kind of treatment as the logo — its own
-      // scale + fade synced to the same progress, instead of just riding
-      // along on a flat parent opacity.
+      // Background clears so Home shows underneath while the logo stays put.
       backgroundScale: progress.interpolate({
         inputRange: [0, 1],
         outputRange: [1, 1.12],
@@ -145,6 +123,8 @@ export default function HomeIntroModal({
 
     let holdTimer;
     let waitTimer;
+    let handoffFrame1;
+    let handoffFrame2;
 
     const startMove = target => {
       setResolvedTarget(target);
@@ -154,10 +134,15 @@ export default function HomeIntroModal({
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }).start(({finished}) => {
-        if (finished) {
-          setMounted(false);
-          onHidden?.();
-        }
+        if (!finished) return;
+        // Reveal the real header logo first, then drop the overlay after
+        // two frames so they share a paint — no gap, no double logo flash.
+        onHidden?.();
+        handoffFrame1 = requestAnimationFrame(() => {
+          handoffFrame2 = requestAnimationFrame(() => {
+            setMounted(false);
+          });
+        });
       });
     };
 
@@ -177,6 +162,8 @@ export default function HomeIntroModal({
     return () => {
       clearTimeout(holdTimer);
       clearTimeout(waitTimer);
+      if (handoffFrame1) cancelAnimationFrame(handoffFrame1);
+      if (handoffFrame2) cancelAnimationFrame(handoffFrame2);
     };
     // Intentionally run once on mount only, reading `visible`'s value at
     // that moment — NOT reactively on every `visible` change. onShown()
@@ -206,13 +193,13 @@ export default function HomeIntroModal({
             styles.backgroundImage,
             {
               opacity: backgroundOpacity,
-              // Same translateY as the logo — moves up together, in sync.
               transform: [{translateY}, {scale: backgroundScale}],
             },
           ]}
           resizeMode="cover"
           fadeDuration={0}
         />
+        {/* Logo stays fully opaque — it IS the header logo until handoff. */}
         <Animated.View
           pointerEvents="none"
           style={[
@@ -222,12 +209,11 @@ export default function HomeIntroModal({
               top: initialRect.y,
               width: initialRect.width,
               height: initialRect.height,
-              opacity,
-              transform: [{translateX}, {translateY}, {scale}],
+              transform: [{translateX}, {translateY}, {scaleX}, {scaleY}],
             },
           ]}>
           <Image
-            source={require('../assets/logo.png')}
+            source={require('../assets/homeLogo.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />

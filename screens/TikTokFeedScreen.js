@@ -10388,11 +10388,16 @@ const styles = StyleSheet.create({
   commentBodyText: {
     color: '#fff',
     fontSize: 20,
-    lineHeight: 20,
+    // Emojis extend above the font box — lineHeight === fontSize clips the top.
+    lineHeight: 28,
     letterSpacing: 0.2,
     textAlign: 'left',
     writingDirection: 'rtl',
     fontFamily: 'Rubik-Regular',
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      default: {},
+    }),
   },
   commentBodyImage: {
     width: '100%',
@@ -10554,10 +10559,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     color: '#fff',
     paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     fontSize: 20,
+    lineHeight: 28,
     letterSpacing: 0.2,
     textAlign: 'right',
     writingDirection: 'rtl',
+    ...Platform.select({
+      android: {includeFontPadding: false, textAlignVertical: 'center'},
+      default: {},
+    }),
   },
   commentsHomeIndicatorWrap: {
     width: '100%',

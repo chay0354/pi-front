@@ -177,7 +177,7 @@ const sharedPostPreviewText = (cachedListing, bodyTrim) => {
 
 /** Substring used in broker exclusive-offer messages and to detect them in history. */
 const EXCLUSIVE_OFFER_BODY_MARKER = 'להציע בלעדיות על הנכס';
-/** Broker→broker collaboration offer — same flow, different copy. */
+/** Broker→broker / company↔broker collaboration offer — same flow, different copy. */
 const COLLAB_OFFER_BODY_MARKER = 'להציע שיתוף פעולה על הנכס';
 
 const isBrokerOfferBody = body => {
@@ -392,6 +392,17 @@ const ChatScreen = ({
         : '';
     return t1 === 'broker' || t2 === 'broker';
   }, [currentUser?.subscription_type, currentUser?.type]);
+  const isCompanyUser = useMemo(() => {
+    const t1 =
+      currentUser?.subscription_type != null
+        ? String(currentUser.subscription_type).trim().toLowerCase()
+        : '';
+    const t2 =
+      currentUser?.type != null
+        ? String(currentUser.type).trim().toLowerCase()
+        : '';
+    return t1 === 'company' || t2 === 'company';
+  }, [currentUser?.subscription_type, currentUser?.type]);
   const myEmail = useMemo(() => {
     const raw =
       currentUser?.email ||
@@ -433,7 +444,7 @@ const ChatScreen = ({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
-  /** Peer account type for exclusivity (broker→user) vs שת״פ (broker→broker). */
+  /** Peer account type for exclusivity (broker→user) vs שת״פ (broker↔broker/company). */
   const peerSubscriptionType = useMemo(() => {
     const t =
       resolvedDisplay?.subscriptionType ??
@@ -448,10 +459,15 @@ const ChatScreen = ({
   ]);
   const isPeerRegularUser = peerSubscriptionType === 'user';
   const isPeerBroker = peerSubscriptionType === 'broker';
-  /** Broker→broker uses collaboration copy; broker→user uses exclusivity. */
-  const isCollabOfferMode = isBrokerUser && isPeerBroker;
+  const isPeerCompany = peerSubscriptionType === 'company';
+  /** שת״פ: broker↔broker, broker→company, company→broker. */
+  const isCollabOfferMode =
+    (isBrokerUser && (isPeerBroker || isPeerCompany)) ||
+    (isCompanyUser && isPeerBroker);
+  /** Broker→company uses project-focused copy; other שת״פ uses broker↔broker style. */
+  const isCollabToCompany = isCollabOfferMode && isBrokerUser && isPeerCompany;
   const canSendBrokerOffer =
-    isBrokerUser && (isPeerRegularUser || isPeerBroker);
+    isCollabOfferMode || (isBrokerUser && isPeerRegularUser);
   const peerBlocksExclusiveOffers =
     resolvedDisplay?.blockExclusiveOffers === true ||
     conversation?.blockExclusiveOffers === true;
@@ -3007,10 +3023,18 @@ const ChatScreen = ({
       const monthsPhrase =
         safeMonths === 1 ? 'חודש' : `${safeMonths} חודשים`;
       if (isCollabOfferMode) {
-        if (offerIsRent) {
-          return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי שוכר שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא שוכר בתוך ${monthsPhrase}, אשמח לשוחח.`;
+        // Broker → company: project-focused שת״פ — always buyers (never renters).
+        if (isCollabToCompany) {
+          return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. נתקלתי בפרויקט שלכם ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. יש לי קונים פוטנציאליים שמתאימים לפרויקט ואשמח שנעבוד יחד — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
         }
-        return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי קונה שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
+        // Company → broker (and broker → broker): same structure; destination is the broker.
+        const senderRole = isCompanyUser
+          ? 'נציג חברה יזמית'
+          : 'מתווך נדל״ן';
+        if (offerIsRent) {
+          return `היי, שמי ${exclusiveSenderName} ואני ${senderRole}. יש לי שוכר שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא שוכר בתוך ${monthsPhrase}, אשמח לשוחח.`;
+        }
+        return `היי, שמי ${exclusiveSenderName} ואני ${senderRole}. יש לי קונה שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
       }
       if (offerIsRent) {
         return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי בתוך ${monthsPhrase}, אשמח לשוחח.`;
@@ -3021,6 +3045,8 @@ const ChatScreen = ({
       exclusiveSenderName,
       offerLocationText,
       isCollabOfferMode,
+      isCollabToCompany,
+      isCompanyUser,
       offerIsRent,
     ],
   );
@@ -3754,9 +3780,11 @@ const ChatScreen = ({
               </Text>
               <Text style={styles.offerCardSubtitle}>
                 {isCollabOfferMode
-                  ? offerIsRent
-                    ? 'תוך כמה חודשים אתם מתחייבים להביא שוכר?'
-                    : 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
+                  ? isCollabToCompany
+                    ? 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
+                    : offerIsRent
+                      ? 'תוך כמה חודשים אתם מתחייבים להביא שוכר?'
+                      : 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
                   : offerIsRent
                     ? 'תוך כמה חודשים אתם מתחייבים למצוא שוכר?'
                     : 'תוך כמה חודשים אתם מתחייבים למצוא קונה?'}
@@ -3785,7 +3813,11 @@ const ChatScreen = ({
             </View>
 
             <Text style={styles.offerSectionTitle}>
-              {isCollabOfferMode ? 'הודעה למתווך' : 'הודעה לבעל הנכס'}
+              {isCollabOfferMode
+                ? isCollabToCompany
+                  ? 'הודעה לחברה'
+                  : 'הודעה למתווך'
+                : 'הודעה לבעל הנכס'}
             </Text>
             <View
               style={styles.offerMessageInput}
@@ -3793,20 +3825,37 @@ const ChatScreen = ({
                 ? {nativeID: 'pi-chat-offer-message-textarea'}
                 : {})}>
               {isCollabOfferMode ? (
-                <Text style={styles.offerMessageText}>
-                  היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן. יש לי{' '}
-                  {offerIsRent ? 'שוכר' : 'קונה'} שמתאים למודעה שלך ב
-                  {offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס.
-                  אשמח שנעבוד יחד על העסקה — אני מתחייב להביא{' '}
-                  {offerIsRent ? 'שוכר' : 'קונה'}{' '}
-                  <Text style={styles.offerMessageHighlightGold}>
-                    בתוך{' '}
-                    {exclusiveMonths === 1
-                      ? 'חודש'
-                      : `${exclusiveMonths} חודשים`}
+                isCollabToCompany ? (
+                  <Text style={styles.offerMessageText}>
+                    היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן. נתקלתי בפרויקט
+                    שלכם ב{offerLocationText} ואני מעוניין להציע שיתוף פעולה על
+                    הנכס. יש לי קונים פוטנציאליים שמתאימים לפרויקט ואשמח שנעבוד
+                    יחד — אני מתחייב להביא קונה{' '}
+                    <Text style={styles.offerMessageHighlightGold}>
+                      בתוך{' '}
+                      {exclusiveMonths === 1
+                        ? 'חודש'
+                        : `${exclusiveMonths} חודשים`}
+                    </Text>
+                    , אשמח לשוחח.
                   </Text>
-                  , אשמח לשוחח.
-                </Text>
+                ) : (
+                  <Text style={styles.offerMessageText}>
+                    היי, שמי {exclusiveSenderName} ואני{' '}
+                    {isCompanyUser ? 'נציג חברה יזמית' : 'מתווך נדל״ן'}. יש לי{' '}
+                    {offerIsRent ? 'שוכר' : 'קונה'} שמתאים למודעה שלך ב
+                    {offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס.
+                    אשמח שנעבוד יחד על העסקה — אני מתחייב להביא{' '}
+                    {offerIsRent ? 'שוכר' : 'קונה'}{' '}
+                    <Text style={styles.offerMessageHighlightGold}>
+                      בתוך{' '}
+                      {exclusiveMonths === 1
+                        ? 'חודש'
+                        : `${exclusiveMonths} חודשים`}
+                    </Text>
+                    , אשמח לשוחח.
+                  </Text>
+                )
               ) : (
                 <Text style={styles.offerMessageText}>
                   היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי
@@ -3828,7 +3877,9 @@ const ChatScreen = ({
               <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
               <Text style={styles.offerHowText}>
                 {isCollabOfferMode
-                  ? 'ההצעה שלכם תישלח למתווך בעל המודעה והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה על השת״פ.'
+                  ? isCollabToCompany
+                    ? 'ההצעה שלכם תישלח לחברה בעלת הפרויקט והם יוכלו לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתם שיחה על השת״פ.'
+                    : 'ההצעה שלכם תישלח למתווך בעל המודעה והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה על השת״פ.'
                   : 'ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה.'}
               </Text>
             </View>
@@ -4666,14 +4717,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 16,
   },
-  offerListingTextCol: {flex: 1},
+  offerListingTextCol: {
+    flex: 1,
+    alignItems: flexStart,
+  },
   offerTagsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: flexEnd,
+    justifyContent: flexStart,
     gap: 8,
     marginBottom: 10,
     flexWrap: 'wrap',
+    alignSelf: 'stretch',
   },
   offerTagDark: {
     backgroundColor: '#3A3A4A',
@@ -4685,6 +4740,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerTagCategory: {
     backgroundColor: '#5A5972',
@@ -4696,9 +4753,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerPrice: {
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     color: '#F7F3E6',
     fontSize: 34 / 1.55,
     fontFamily: 'Rubik-Medium',
@@ -4707,12 +4767,17 @@ const styles = StyleSheet.create({
   offerLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: flexStart,
+    alignSelf: 'stretch',
     gap: 4,
   },
   offerLocation: {
     color: '#D2D0DC',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    flexShrink: 1,
   },
   offerImageWrap: {
     width: 80,
@@ -4740,13 +4805,15 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerCardSubtitle: {
     color: '#D2D0DC',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerScaleNumbers: {
     flexDirection: 'row',
@@ -4788,7 +4855,8 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     marginTop: 4,
   },
   offerMessageInput: {
@@ -4810,7 +4878,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 28,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerMessageHighlightGold: {
     color: '#FFC40A',
@@ -4826,7 +4895,8 @@ const styles = StyleSheet.create({
     color: '#D2D0DC',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     marginBottom: 10,
   },
   offerHowText: {
@@ -4834,7 +4904,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   offerFooter: {
     position: 'absolute',

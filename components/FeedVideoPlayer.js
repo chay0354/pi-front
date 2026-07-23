@@ -52,6 +52,13 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     children = null,
     /** Listing ads: edge-to-edge sides, letterbox top/bottom. Posts: cover. */
     fitWidth = false,
+    /**
+     * When set, overrides feed mute behavior (`!isActive`).
+     * Home feature card uses this so mute stays under user control.
+     */
+    muted,
+    onProgressChange,
+    onPlaybackComplete,
   },
   ref,
 ) {
@@ -64,6 +71,10 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   const userPausedRef = useRef(false);
   const sizedRef = useRef(false);
   const naturalSizeRef = useRef(null);
+  const lastProgressRef = useRef(0);
+  const lastCompleteAtRef = useRef(0);
+  const onPlaybackCompleteRef = useRef(onPlaybackComplete);
+  onPlaybackCompleteRef.current = onPlaybackComplete;
   const [hasFrame, setHasFrame] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
   const [failed, setFailed] = useState(() => uriRecentlyFailed(uri));
@@ -72,9 +83,28 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
 
   const shouldPlay = isActive && !failed && !userPaused;
   const shouldLoad = (isActive || prewarm) && !failed;
-  const isAudible = isActive;
+  const isAudible = muted === undefined ? isActive : !muted;
 
   isActiveRef.current = isActive;
+
+  const emitPlaybackComplete = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCompleteAtRef.current < 800) return;
+    lastCompleteAtRef.current = now;
+    onPlaybackCompleteRef.current?.();
+  }, []);
+
+  const noteProgress = useCallback(
+    progress => {
+      const p = Math.max(0, Math.min(1, Number(progress) || 0));
+      if (lastProgressRef.current > 0.82 && p < 0.2) {
+        emitPlaybackComplete();
+      }
+      lastProgressRef.current = p;
+      onProgressChange?.(p);
+    },
+    [emitPlaybackComplete, onProgressChange],
+  );
 
   useEffect(() => {
     userPausedRef.current = userPaused;
@@ -94,7 +124,10 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     sizedRef.current = false;
     naturalSizeRef.current = null;
     setVideoLayout(null);
-  }, [uri]);
+    lastProgressRef.current = 0;
+    lastCompleteAtRef.current = 0;
+    onProgressChange?.(0);
+  }, [uri, onProgressChange]);
 
   useEffect(() => {
     if (!fitWidth) {
@@ -160,7 +193,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       if (Platform.OS === 'web') {
         const el = webVideoRef.current;
         if (!el) return;
-        el.muted = false;
+        el.muted = muted === undefined ? false : !!muted;
         const play = el.play?.();
         if (play && typeof play.catch === 'function') play.catch(() => {});
         return;
@@ -168,14 +201,15 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       const player = videoRef.current;
       if (!player) return;
       try {
-        await player.setIsMutedAsync(false);
-        await player.setVolumeAsync(1.0);
+        const audible = muted === undefined ? true : !muted;
+        await player.setIsMutedAsync(!audible);
+        await player.setVolumeAsync(audible ? 1.0 : 0);
         await player.playAsync();
       } catch (_) {}
     } finally {
       playLockRef.current = false;
     }
-  }, []);
+  }, [muted]);
 
   const pauseNow = useCallback(async () => {
     try {
@@ -186,6 +220,36 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       await videoRef.current?.pauseAsync?.();
     } catch (_) {}
   }, []);
+
+  // Keep mute in sync when home toggles volume without remounting.
+  useEffect(() => {
+    if (muted === undefined) return;
+    if (Platform.OS === 'web') {
+      const el = webVideoRef.current;
+      if (el) el.muted = !!muted;
+      return;
+    }
+    const player = videoRef.current;
+    if (!player) return;
+    player.setIsMutedAsync(!!muted).catch(() => {});
+    player.setVolumeAsync(muted ? 0 : 1).catch(() => {});
+  }, [muted, uri]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = webVideoRef.current;
+    if (!el || !uri) return;
+    const onTimeUpdate = () => {
+      if (el.duration > 0) noteProgress(el.currentTime / el.duration);
+    };
+    const onEnded = () => emitPlaybackComplete();
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('ended', onEnded);
+    return () => {
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('ended', onEnded);
+    };
+  }, [uri, noteProgress, emitPlaybackComplete]);
 
   useImperativeHandle(
     ref,
@@ -377,12 +441,18 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
         volume={isAudible ? 1.0 : 0}
         useNativeControls={false}
         usePoster={false}
-        progressUpdateIntervalMillis={1000}
+        progressUpdateIntervalMillis={onProgressChange ? 250 : 1000}
         onReadyForDisplay={handleReadyForDisplay}
         onLoad={handleLoad}
         onError={handleError}
         onPlaybackStatusUpdate={status => {
           if (!status?.isLoaded) return;
+          if (status.durationMillis > 0) {
+            noteProgress(status.positionMillis / status.durationMillis);
+          }
+          if (status.didJustFinish) {
+            emitPlaybackComplete();
+          }
           if (status.isPlaying || status.isBuffering) return;
           if (
             isActiveRef.current &&

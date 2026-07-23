@@ -16,19 +16,14 @@ import {
   Platform,
   Text,
   Animated,
-  Vibration,
 } from 'react-native';
+import {playSoftTick} from '../utils/softHaptics';
 import {userCategories} from '../utils/constant';
 
 /** Min gap between consecutive tick pulses (ms). */
-const TICK_MIN_GAP_MS = 36;
+const TICK_MIN_GAP_MS = Platform.OS === 'ios' ? 48 : 36;
 /** Stagger between multi-step ticks when scroll jumps over several categories. */
-const TICK_STEP_STAGGER_MS = 40;
-/**
- * One-shot pulse length (ms). Short pulses (<30ms) are often intangible
- * on budget Android motors (Samsung A0x).
- */
-const TICK_VIBRATE_MS = 55;
+const TICK_STEP_STAGGER_MS = Platform.OS === 'ios' ? 50 : 40;
 /** Cap ticks from a single jump so a loop teleport never buzzes forever. */
 const TICK_MAX_STEPS = 8;
 
@@ -398,11 +393,7 @@ const Carusel = ({
       return;
     }
     lastTickAtRef.current = now;
-    try {
-      Vibration.vibrate(TICK_VIBRATE_MS);
-    } catch {
-      /* haptic is optional UX polish */
-    }
+    playSoftTick();
   }, []);
 
   /**

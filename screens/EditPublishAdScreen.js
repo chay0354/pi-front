@@ -637,9 +637,9 @@ const EditPublishAdScreen = ({
    *   1. Boost active (boost_expires_at in the future) → 'high'
    *   2. Frozen → 'low'
    *   3. Freshly uploaded:
-   *        - age < 24h  → 'high'
-   *        - age < 48h  → 'medium'
-   *        - age ≥ 48h  → 'low'
+   *        - age < 7 days  → 'high'
+   *        - age < 14 days → 'medium'
+   *        - age ≥ 14 days → 'low'
    */
   const computeExposureLevel = listing => {
     if (!listing) return 'low';
@@ -664,9 +664,9 @@ const EditPublishAdScreen = ({
     if (createdRaw) {
       const createdTs = new Date(createdRaw).getTime();
       if (Number.isFinite(createdTs)) {
-        const ageHours = (Date.now() - createdTs) / (1000 * 60 * 60);
-        if (ageHours < 24) return 'high';
-        if (ageHours < 48) return 'medium';
+        const ageDays = (Date.now() - createdTs) / (1000 * 60 * 60 * 24);
+        if (ageDays < 7) return 'high';
+        if (ageDays < 14) return 'medium';
         return 'low';
       }
     }

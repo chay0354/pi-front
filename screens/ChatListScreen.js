@@ -645,8 +645,8 @@ const ChatListScreen = ({
   const isCompanyUser = currentUserType === subscriptionTypes.company;
   const isRegularUser = isRegularSubscriptionType(currentUserType);
   const canShowListingAdNumber = isBrokerUser || isCompanyUser;
-  /** Brokers: any group. Regular users: regular group (customers) only. */
-  const canOpenGroups = isBrokerUser || isRegularUser;
+  /** Brokers: any group. Companies: customer groups only. Regular users: regular group only. */
+  const canOpenGroups = isBrokerUser || isRegularUser || isCompanyUser;
   const isRegularGroupCreator = isRegularUser && !isBrokerUser;
   const hideMemberPickerSubtitle =
     isRegularGroupCreator && groupFlow === 'customers';
@@ -2168,46 +2168,55 @@ const ChatListScreen = ({
                         />
                       </View>
                     </Pressable>
-                    <View style={styles.ncRowDivider} />
-                    <Pressable
-                      style={({pressed}) => [
-                        styles.ncRow,
-                        pressed && styles.ncRowPressed,
-                      ]}
-                      onPress={() => {
-                        if (!isBrokerUser) {
-                          Alert.alert('', 'רק מתווכים יכולים לפתוח קבוצת מתווכים');
-                          return;
-                        }
-                        dispatchGroupPick({type: 'reset'});
-                        setGroupWizardStep(1);
-                        setGroupNameDraft('');
-                        setGroupImageUrl(null);
-                        setGroupSearch('');
-                        setGroupFlow('brokers');
-                      }}
-                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                      <MaterialCommunityIcons
-                        name="chevron-left"
-                        size={22}
-                        color="#FFFFFF"
-                        style={styles.ncChevron}
-                      />
-                      <View style={styles.ncRowTextWrap}>
-                        <Text style={styles.ncRowTitle}>צור קבוצת מתווכים</Text>
-                        <Text style={styles.ncRowSubtitle}>
-                          שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד
-                          בקבוצה ייעודית.
-                        </Text>
-                      </View>
-                      <View style={styles.ncIconBubble}>
-                        <Image
-                          source={require('../assets/pi-chat/brokers-group.png')}
-                          style={styles.ncIconImage}
-                          resizeMode="contain"
-                        />
-                      </View>
-                    </Pressable>
+                    {isBrokerUser ? (
+                      <>
+                        <View style={styles.ncRowDivider} />
+                        <Pressable
+                          style={({pressed}) => [
+                            styles.ncRow,
+                            pressed && styles.ncRowPressed,
+                          ]}
+                          onPress={() => {
+                            if (!isBrokerUser) {
+                              Alert.alert(
+                                '',
+                                'רק מתווכים יכולים לפתוח קבוצת מתווכים',
+                              );
+                              return;
+                            }
+                            dispatchGroupPick({type: 'reset'});
+                            setGroupWizardStep(1);
+                            setGroupNameDraft('');
+                            setGroupImageUrl(null);
+                            setGroupSearch('');
+                            setGroupFlow('brokers');
+                          }}
+                          android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
+                          <MaterialCommunityIcons
+                            name="chevron-left"
+                            size={22}
+                            color="#FFFFFF"
+                            style={styles.ncChevron}
+                          />
+                          <View style={styles.ncRowTextWrap}>
+                            <Text style={styles.ncRowTitle}>
+                              צור קבוצת מתווכים
+                            </Text>
+                            <Text style={styles.ncRowSubtitle}>
+                              שתף פעולה עם מתווכים על נכסים, אירועי בית פתוח ועוד
+                              בקבוצה ייעודית.
+                            </Text>
+                          </View>
+                          <View style={styles.ncIconBubble}>
+                            <Image
+                              source={require('../assets/pi-chat/brokers-group.png')}
+                              style={styles.ncIconImage}
+                              resizeMode="contain"
+                            />
+                          </View>
+                        </Pressable>
+                      </>
+                    ) : null}
                   </View>
 
                   <Pressable

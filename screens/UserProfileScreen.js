@@ -309,12 +309,14 @@ const UserProfileScreen = ({
           followers: 257,
         };
 
-  // [UserProfile] Log how we resolve user details (filter console by "UserProfile" to see)
+  // Never fall back to listing/post `user.id` as the creator — that can
+  // mis-fetch subscription data when subscription_id / owner_id are missing.
   const creatorId = toSubscriptionId(
     user?.subscription_id ||
       user?.owner_id ||
-      user?.id ||
-      (!isListingFromFeed ? profile?.id : null),
+      (!isListingFromFeed && !isAdsListingRecord(user) && !isPostListingRecord(user)
+        ? user?.id || profile?.id
+        : null),
   );
   if (__DEV__ && isListingFromFeed && user) {
     // console.log('[UserProfile] Incoming listing (user):', {
@@ -2080,6 +2082,15 @@ const UserProfileScreen = ({
   const professionalSpecializationsDisplay = specializationsArray
     .map(tagLabel)
     .filter(t => t && t !== displayName);
+  /**
+   * סוג under the name — only when opened from בעלי מקצוע בתחום הנדל״ן.
+   * Brokers always show "תיווך"; professionals show their types chips.
+   */
+  const directoryTypeLabels = openedFromProfessionalsDirectory
+    ? isBroker
+      ? ['תיווך']
+      : professionalTypesDisplay
+    : [];
   // Professionals → התמחויות from specializations.
   // Brokers → אזור פעילות from activity_regions (not under התמחויות).
   // Company → התמחויות from specializations only (never activity regions).
@@ -2095,17 +2106,26 @@ const UserProfileScreen = ({
     ? 'אין אזורי פעילות'
     : 'אין התמחויות';
 
-  const renderProfessionalTypeTags = extraStyle =>
-    professionalTypesDisplay.length > 0 ? (
+  const renderProfessionalTypeTags = (labels, extraStyle) => {
+    const list = Array.isArray(labels) ? labels : [];
+    if (list.length === 0) return null;
+    return (
       <View
-        style={[styles.brokerCardBottomTags, styles.professionalTypeTags, extraStyle]}>
-        {professionalTypesDisplay.map((typeLabel, i) => (
-          <View key={`pro-type-${i}-${typeLabel}`} style={styles.brokerCardBottomTag}>
+        style={[
+          styles.brokerCardBottomTags,
+          styles.professionalTypeTags,
+          extraStyle,
+        ]}>
+        {list.map((typeLabel, i) => (
+          <View
+            key={`pro-type-${i}-${typeLabel}`}
+            style={styles.brokerCardBottomTag}>
             <Text style={styles.brokerCardBottomTagText}>{typeLabel}</Text>
           </View>
         ))}
       </View>
-    ) : null;
+    );
+  };
   // if (__DEV__) {
   //   console.log('[UserProfile] התמחויות:', {
   //     types: {
@@ -2404,19 +2424,15 @@ const UserProfileScreen = ({
             </View>
           )}
 
+        {/* הודעה / חייג — always for other users; only own profile hides them. */}
         {showStandardProfileHeader &&
           !showCompanyFeedHeroTop &&
-          !isOwnProfile &&
-          !showProfileMessagingCta && (
+          !isOwnProfile && (
             <View style={styles.actionRow}>
               <TouchableOpacity
                 onPress={handleCallPress}
                 activeOpacity={0.8}
-                disabled={isOwnProfile}
-                style={[
-                  styles.actionBtnTouch,
-                  isOwnProfile && styles.actionBtnDisabled,
-                ]}>
+                style={styles.actionBtnTouch}>
                 <Image
                   source={require('../assets/callWithText.png')}
                   style={styles.actionBtnImage}
@@ -2426,11 +2442,7 @@ const UserProfileScreen = ({
               <TouchableOpacity
                 onPress={handleChatPress}
                 activeOpacity={0.8}
-                disabled={isOwnProfile}
-                style={[
-                  styles.actionBtnTouch,
-                  isOwnProfile && styles.actionBtnDisabled,
-                ]}>
+                style={styles.actionBtnTouch}>
                 <Image
                   source={require('../assets/chatWithText.png')}
                   style={styles.actionBtnImage}
@@ -3089,12 +3101,14 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
-                {/* Figma pro: no type chips under the large title — specialties are below. */}
-                {!showProfessionalFigmaProfile &&
-                isProfessional &&
-                !showTikTokProfessionalHeader
-                  ? renderProfessionalTypeTags()
-                  : null}
+                {/* סוג under name — only from בעלי מקצוע בתחום הנדל״ן (brokers → תיווך). */}
+                {openedFromProfessionalsDirectory
+                  ? renderProfessionalTypeTags(directoryTypeLabels)
+                  : !showProfessionalFigmaProfile &&
+                      isProfessional &&
+                      !showTikTokProfessionalHeader
+                    ? renderProfessionalTypeTags(professionalTypesDisplay)
+                    : null}
                 {brokerAddress && !isOwnProfile ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
