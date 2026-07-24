@@ -1288,7 +1288,7 @@ const PostEditorScreen = ({
         }
         return captureRef(postPreviewRef.current, {
           format: 'jpg',
-          quality: publishTarget === 'story' ? 0.95 : 0.9,
+          quality: publishTarget === 'story' ? 0.82 : 0.75,
           result: 'tmpfile',
         });
       };
@@ -1947,7 +1947,7 @@ const PostEditorScreen = ({
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
-      quality: 1,
+      quality: 0.8,
     });
     if (result?.canceled) return;
     applyCameraCaptureAsset(result?.assets?.[0]);
@@ -1981,7 +1981,7 @@ const PostEditorScreen = ({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
-      quality: 1,
+      quality: 0.8,
     });
     if (result?.canceled) return;
     applyCameraCaptureAsset(result?.assets?.[0]);
@@ -1999,7 +1999,7 @@ const PostEditorScreen = ({
           ? ImagePicker.launchCameraAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: false,
-              quality: 1,
+              quality: 0.8,
             })
           : action === 'video'
             ? ImagePicker.launchCameraAsync({
@@ -2011,7 +2011,7 @@ const PostEditorScreen = ({
             : ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.All,
                 allowsEditing: false,
-                quality: 1,
+                quality: 0.8,
               });
       setShowMediaSourceSheet(false);
 
@@ -2097,7 +2097,7 @@ const PostEditorScreen = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
-        quality: 1,
+        quality: 0.8,
       });
 
       // Keep existing background when user cancels.

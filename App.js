@@ -2557,6 +2557,7 @@ function App() {
                 refreshKey={chatListRefreshKey}
                 piWelcomeRead={piWelcomeRead}
                 onOpenChat={conv => {
+                  setSharedListingForChat(null);
                   setSelectedConversation(normalizeConversationForOpen(conv));
                   setChatReturnScreen(screenName.chatList);
                   setCurrentScreen(screenName.chat);

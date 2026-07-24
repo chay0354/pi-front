@@ -460,14 +460,56 @@ const ChatScreen = ({
   const isPeerRegularUser = peerSubscriptionType === 'user';
   const isPeerBroker = peerSubscriptionType === 'broker';
   const isPeerCompany = peerSubscriptionType === 'company';
-  /** שת״פ: broker↔broker, broker→company, company→broker. */
+  /** שת״פ: broker→broker or broker→company only (company cannot offer to broker). */
   const isCollabOfferMode =
-    (isBrokerUser && (isPeerBroker || isPeerCompany)) ||
-    (isCompanyUser && isPeerBroker);
+    isBrokerUser && (isPeerBroker || isPeerCompany);
   /** Broker→company uses project-focused copy; other שת״פ uses broker↔broker style. */
-  const isCollabToCompany = isCollabOfferMode && isBrokerUser && isPeerCompany;
+  const isCollabToCompany = isCollabOfferMode && isPeerCompany;
+  /**
+   * Offer CTA only for the person who opened chat from an ad (sharedListing),
+   * not for the listing owner who received that inquiry.
+   */
+  const openedChatFromAd = Boolean(
+    sharedListing?.id != null && String(sharedListing.id).trim() !== '',
+  );
+  const mySubscriptionId = useMemo(() => {
+    const id =
+      currentUser?.id ||
+      currentUser?.subscription_id ||
+      currentUser?.owner_id;
+    return id != null ? String(id).trim().toLowerCase() : '';
+  }, [currentUser?.id, currentUser?.subscription_id, currentUser?.owner_id]);
+  const listingOwnerSubscriptionId = useMemo(() => {
+    const id =
+      sharedListing?.subscription_id ||
+      sharedListing?.owner_id ||
+      sharedListing?.creator_subscription_id;
+    return id != null ? String(id).trim().toLowerCase() : '';
+  }, [
+    sharedListing?.subscription_id,
+    sharedListing?.owner_id,
+    sharedListing?.creator_subscription_id,
+  ]);
+  const listingOwnerEmail = useMemo(() => {
+    const raw =
+      sharedListing?.creator_email ||
+      sharedListing?.email ||
+      sharedListing?.owner_email;
+    return raw ? String(raw).trim().toLowerCase() : '';
+  }, [
+    sharedListing?.creator_email,
+    sharedListing?.email,
+    sharedListing?.owner_email,
+  ]);
+  const isCurrentUserListingOwner =
+    ( !!mySubscriptionId &&
+      !!listingOwnerSubscriptionId &&
+      mySubscriptionId === listingOwnerSubscriptionId) ||
+    (!!myEmail && !!listingOwnerEmail && myEmail === listingOwnerEmail);
   const canSendBrokerOffer =
-    isCollabOfferMode || (isBrokerUser && isPeerRegularUser);
+    openedChatFromAd &&
+    !isCurrentUserListingOwner &&
+    (isCollabOfferMode || (isBrokerUser && isPeerRegularUser));
   const peerBlocksExclusiveOffers =
     resolvedDisplay?.blockExclusiveOffers === true ||
     conversation?.blockExclusiveOffers === true;
@@ -1519,6 +1561,13 @@ const ChatScreen = ({
   };
 
   const handleSubmitExclusiveOffer = async () => {
+    if (!canSendBrokerOffer) {
+      Alert.alert(
+        '',
+        'ניתן לשלוח הצעה רק ממי שפנה מצ׳אט שנפתח ממודעה (לא בעל המודעה)',
+      );
+      return;
+    }
     const text = String(exclusiveMessage || '').trim();
     if (!text) {
       Alert.alert('', 'כתוב הודעה לפני השליחה');

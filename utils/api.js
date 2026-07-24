@@ -105,7 +105,7 @@ function resolveUploadFileName(file, isVideoFolder) {
   return isVideoFolder ? `video-${Date.now()}.mp4` : `file-${Date.now()}.jpg`;
 }
 
-/** Large videos bypass Vercel body limits — upload directly to Supabase via signed URL. */
+/** Large files bypass Vercel body limits — upload directly to Supabase via signed URL. */
 async function requestUploadSignedUrl(folder, fileName, contentType) {
   const response = await apiFetch(`${apiBase()}/api/upload/signed-url`, {
     method: 'POST',
@@ -126,7 +126,7 @@ async function requestUploadSignedUrl(folder, fileName, contentType) {
   }
   if (!response.ok || !data.signedUrl) {
     throw new Error(
-      errorMessageFromApiBody(data, 'Failed to prepare video upload'),
+      errorMessageFromApiBody(data, 'Failed to prepare upload'),
     );
   }
   return data;
@@ -150,8 +150,8 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
       const preview = String(result.body || '').slice(0, 200);
       throw new Error(
         preview
-          ? `Video upload failed (${result.status}): ${preview}`
-          : `Video upload failed (${result.status})`,
+          ? `Upload failed (${result.status}): ${preview}`
+          : `Upload failed (${result.status})`,
       );
     }
     return;
@@ -159,7 +159,7 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
 
   if (isWeb) {
     const blob = await fetch(uri).then(r => {
-      if (!r.ok) throw new Error('Could not read video file');
+      if (!r.ok) throw new Error('Could not read file for upload');
       return r.blob();
     });
     const putRes = await fetch(signedUrl, {
@@ -171,14 +171,14 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
       const preview = (await putRes.text()).slice(0, 200);
       throw new Error(
         preview
-          ? `Video upload failed (${putRes.status}): ${preview}`
-          : `Video upload failed (${putRes.status})`,
+          ? `Upload failed (${putRes.status}): ${preview}`
+          : `Upload failed (${putRes.status})`,
       );
     }
     return;
   }
 
-  throw new Error('Video upload is not supported on this platform');
+  throw new Error('Direct upload is not supported on this platform');
 }
 
 async function uploadFileViaSignedUrl(file, folder = 'general', options = {}) {
@@ -1703,33 +1703,14 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
     String(file?.type || '').startsWith('video/') ||
     String(file?.type || '').toLowerCase() === 'video';
   try {
-    if (isVideoFolder || isVideoMime) {
+    // Native uploads go straight to Supabase — Vercel returns
+    // "Request Entity Too Large" (~4.5MB) for /api/upload multipart bodies.
+    // Videos always use signed URLs (web + native).
+    if ((isNativeMobile && file?.uri) || isVideoFolder || isVideoMime) {
       return await uploadFileViaSignedUrl(file, folder, options);
     }
 
     const url = `${apiBase()}/api/upload`;
-
-    if (isNativeMobile && file?.uri) {
-      const nativeFile = {
-        uri: file.uri,
-        type: resolveUploadMimeType(file, isVideoFolder),
-        name: resolveUploadFileName(file, isVideoFolder),
-      };
-      const response = await uploadNativeMultipart(
-        url,
-        nativeFile,
-        'file',
-        {folder},
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          errorMessageFromApiBody(data, 'Failed to upload file'),
-        );
-      }
-      return data;
-    }
-
     const formData = new FormData();
     if (isWeb) {
       const filePart = await toFormDataFile(
