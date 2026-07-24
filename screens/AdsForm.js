@@ -2454,7 +2454,7 @@ const AdsForm = ({
 
       <FormScrollProvider
         headerOffset={insets.top + ADS_FORM_HEADER_HEIGHT}
-        footerOffset={ADS_FORM_PUBLISH_FOOTER_HEIGHT + insets.bottom}>
+        footerOffset={ADS_FORM_PUBLISH_FOOTER_HEIGHT}>
         <AdsFormKeyboardScroll
           publishButton={publishButton}
           bottomInset={insets.bottom}>
@@ -2954,6 +2954,11 @@ const AdsForm = ({
 
 function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
   const {scrollRef, keyboardInset, onScroll} = useFormScroll();
+  // iOS: only lift the sticky publish footer (window height stays full).
+  // Android: adjustResize already shrinks the window — do not add inset again.
+  // Never also pad the ScrollView by keyboard height; that double-lifts content.
+  const liftForKeyboard = Platform.OS === 'ios' ? keyboardInset : 0;
+  const keyboardOpen = liftForKeyboard > 0;
 
   return (
     <View style={styles.keyboardAvoid}>
@@ -2962,7 +2967,7 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 24},
+          {paddingBottom: 24},
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"
@@ -2975,8 +2980,9 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
         style={[
           styles.publishFooter,
           {
-            paddingBottom: Math.max(bottomInset, 8),
-            marginBottom: keyboardInset,
+            // Keyboard frame already clears the home indicator — don't add it again.
+            paddingBottom: keyboardOpen ? 8 : Math.max(bottomInset, 8),
+            marginBottom: liftForKeyboard,
           },
         ]}>
         {publishButton}

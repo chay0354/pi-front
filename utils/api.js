@@ -55,6 +55,25 @@ function normalizeNativeFileUri(uri) {
   return `file://${s}`;
 }
 
+/**
+ * FileSystem.uploadAsync on Android only accepts file:// — gallery picks often
+ * return content://. Copy into cache so iOS and Android share the same signed-URL path.
+ */
+async function ensureUploadableLocalUri(uri, hintName = 'upload.bin') {
+  const normalized = normalizeNativeFileUri(uri);
+  if (!normalized) return '';
+  if (Platform.OS !== 'android') return normalized;
+  if (!normalized.startsWith('content://')) return normalized;
+
+  const safe =
+    String(hintName || 'upload.bin')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'upload.bin';
+  const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safe}`;
+  await FileSystem.copyAsync({from: normalized, to: dest});
+  return dest;
+}
+
 /** Avoid alert/console showing "[object Object]" when API or native code returns error objects. */
 export function errorMessageFromUnknown(value, fallback = 'Upload failed') {
   if (value == null || value === '') return fallback;
@@ -133,7 +152,10 @@ async function requestUploadSignedUrl(folder, fileName, contentType) {
 }
 
 async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
-  const uri = normalizeNativeFileUri(file?.uri);
+  const uri = await ensureUploadableLocalUri(
+    file?.uri,
+    resolveUploadFileName(file, String(mimeType || '').startsWith('video/')),
+  );
   if (!uri) {
     throw new Error('No file URI for upload');
   }
@@ -200,7 +222,11 @@ async function uploadFileViaSignedUrl(file, folder = 'general', options = {}) {
 
 /** Native multipart upload — reliable on Android/iOS to Vercel (fetch/XHR FormData often fails). */
 async function uploadNativeMultipart(url, file, fieldName, parameters = {}) {
-  const uri = normalizeNativeFileUri(file?.uri);
+  const uri = await ensureUploadableLocalUri(
+    file?.uri,
+    file?.name ||
+      (String(fieldName).includes('video') ? 'video.mp4' : 'file.jpg'),
+  );
   if (!uri) {
     throw new Error('No file URI for upload');
   }
@@ -1703,8 +1729,8 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
     String(file?.type || '').startsWith('video/') ||
     String(file?.type || '').toLowerCase() === 'video';
   try {
-    // Native uploads go straight to Supabase — Vercel returns
-    // "Request Entity Too Large" (~4.5MB) for /api/upload multipart bodies.
+    // iOS + Android: upload straight to Supabase (signed URL) so Vercel never
+    // sees the file body — avoids "Request Entity Too Large" on large photos.
     // Videos always use signed URLs (web + native).
     if ((isNativeMobile && file?.uri) || isVideoFolder || isVideoMime) {
       return await uploadFileViaSignedUrl(file, folder, options);

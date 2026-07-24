@@ -69,11 +69,17 @@ export function FormScrollProvider({headerOffset = 0, footerOffset = 0, children
       const scrollView = scrollRef.current;
       if (!field || !scrollView) return;
 
+      // iOS: window height stays full; subtract keyboard. Android adjustResize
+      // already shrinks the window — subtracting keyboardInset again overscrolls.
+      // measureInWindow Y is from the top of the window, so do NOT subtract
+      // headerOffset from visibleBottom (that overscrolls the focused field).
       const keyboardHeight =
-        keyboardInset || (Platform.OS === 'ios' ? 320 : 280);
+        Platform.OS === 'ios'
+          ? keyboardInset || 320
+          : 0;
       const windowHeight = Dimensions.get('window').height;
       const visibleBottom =
-        windowHeight - keyboardHeight - headerOffset - footerOffset - 24;
+        windowHeight - keyboardHeight - footerOffset - 24;
 
       field.measureInWindow((_x, fieldTop, _width, fieldHeight) => {
         const fieldBottom = fieldTop + fieldHeight;
@@ -84,7 +90,7 @@ export function FormScrollProvider({headerOffset = 0, footerOffset = 0, children
         });
       });
     },
-    [keyboardInset, headerOffset, footerOffset],
+    [keyboardInset, footerOffset],
   );
 
   useEffect(() => {
