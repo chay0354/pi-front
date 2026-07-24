@@ -35,7 +35,7 @@ import CreateAdSheet, {
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
-import {getListings, getBoostQuota, boostListing, deleteListing} from '../utils/api';
+import {getListings, getBoostQuota, boostListing, deleteListing, resolveSubscriptionId} from '../utils/api';
 import {listingImageUrls} from '../utils/listingGridCardFigma';
 import {resolveListingEditVideoSourceUrl} from '../utils/videoPlayback';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -43,6 +43,36 @@ import {flexStart} from '../utils/rtlLayout';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 
+/** True when a listing/post belongs to the logged-in account (edit/publish mine-only). */
+function listingBelongsToCurrentUser(listing, currentUser) {
+  if (!listing || !currentUser) return false;
+  const mySubId = resolveSubscriptionId(currentUser);
+  // Prefer ownership fields — do not use listing.id (that is the ad UUID).
+  const listingSubRaw =
+    listing.subscription_id ??
+    listing.subscriptionId ??
+    listing.owner_id ??
+    listing.ownerId ??
+    null;
+  const listingSub =
+    listingSubRaw != null && String(listingSubRaw).trim()
+      ? String(listingSubRaw).trim()
+      : '';
+  if (mySubId && listingSub && listingSub === mySubId) {
+    return true;
+  }
+  const myEmail =
+    currentUser.email != null ? String(currentUser.email).trim().toLowerCase() : '';
+  if (!myEmail) return false;
+  const listingEmails = [
+    listing.email,
+    listing.creator_email,
+    listing.owner_email,
+  ]
+    .filter(Boolean)
+    .map(e => String(e).trim().toLowerCase());
+  return listingEmails.includes(myEmail);
+}
 const BG = '#1a1926';
 const CARD_BG = '#2B2A39';
 const BORDER_GOLD = '#D4AF37';
@@ -441,13 +471,25 @@ const EditPublishAdScreen = ({
     const load = async () => {
       setLoadingListings(true);
       try {
+        const mySubId = resolveSubscriptionId(currentUser);
+        // Never load the public feed into edit/publish — require a real owner id.
+        if (!mySubId && !currentUser?.email) {
+          if (!cancelled) setFetchedListings([]);
+          return;
+        }
         const result = await getListings({
           status: 'published',
-          ...(currentUser?.id && {subscription_id: currentUser.id}),
+          ...(mySubId
+            ? {subscription_id: mySubId}
+            : currentUser?.id
+              ? {subscription_id: currentUser.id}
+              : {}),
         });
         if (cancelled) return;
         if (result?.success && result?.listings?.length) {
-          const list = currentUser?.id == null ? [] : result.listings;
+          const list = (result.listings || []).filter(l =>
+            listingBelongsToCurrentUser(l, currentUser),
+          );
           const transformed = list.map(l => {
             const imageUrls = listingImageUrls(l);
             const images = imageUrls.map(uri => ({uri}));
@@ -491,12 +533,21 @@ const EditPublishAdScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id, refreshKey]);
+  }, [currentUser?.id, currentUser?.subscription_id, currentUser?.email, refreshKey]);
+
+  const myUploadedListings = useMemo(
+    () =>
+      (Array.isArray(uploadedListings) ? uploadedListings : []).filter(l =>
+        listingBelongsToCurrentUser(l, currentUser),
+      ),
+    [uploadedListings, currentUser],
+  );
 
   const mergedListings = (() => {
     const byId = new Map();
-    // Fetched first so API data (including is_frozen) wins over uploadedListings
-    [...fetchedListings, ...uploadedListings].forEach(l => {
+    // Fetched first so API data (including is_frozen) wins over local uploads.
+    // Only the current user's uploadedListings are merged (feed cache has everyone).
+    [...fetchedListings, ...myUploadedListings].forEach(l => {
       const id = l.id ?? l.ad_number;
       if (id != null && !byId.has(id)) byId.set(id, l);
     });

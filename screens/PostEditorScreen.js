@@ -2213,7 +2213,9 @@ const PostEditorScreen = ({
             <Video
               source={{uri: backgroundVideoAsset.uri}}
               style={styles.backgroundVideo}
-              resizeMode={ResizeMode.COVER}
+              // Letterbox like the feed/ads (fit full frame; black bars if needed).
+              // COVER was cropping landscape / non-9:16 clips on both iOS and Android.
+              resizeMode={ResizeMode.CONTAIN}
               // Pause while editing text so the video surface / audio focus
               // cannot steal touches or dismiss the keyboard mid-type.
               shouldPlay={!editingTextBlockId}
@@ -2970,6 +2972,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
     elevation: 0,
+    backgroundColor: '#000',
   },
   editorKeyboardAvoid: {
     flex: 1,
