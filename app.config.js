@@ -61,6 +61,7 @@ module.exports = {
     assetBundlePatterns: ['**/*'],
     ios: {
       bundleIdentifier: 'com.pi.frontend',
+      usesAppleSignIn: true,
       supportsTablet: true,
       ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY
         ? {
@@ -124,6 +125,7 @@ module.exports = {
       'expo-font',
       'expo-secure-store',
       'expo-document-picker',
+      'expo-apple-authentication',
       [
         'expo-location',
         {
@@ -143,6 +145,14 @@ module.exports = {
             ndkVersion: '26.1.10909125',
             kotlinVersion: '1.8.22',
           },
+        },
+      ],
+      [
+        '@react-native-google-signin/google-signin',
+        {
+          // Reversed iOS client ID (without .apps.googleusercontent.com)
+          iosUrlScheme:
+            'com.googleusercontent.apps.965378472819-nfjkaacsv3df931eviblavrkcr5hqoga',
         },
       ],
       withAndroidIndexDevEntry,

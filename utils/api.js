@@ -1335,8 +1335,13 @@ export const registerRegularUser = async ({
 
 /**
  * Sign in or register a regular user via Google ID token (verified on pi-back).
+ * Password is not used — Google accounts are passwordless.
+ * Phone is required for new registrations (collected on the registration form).
  */
-export const loginOrRegisterWithGoogle = async (idToken) => {
+export const loginOrRegisterWithGoogle = async (
+  idToken,
+  {phone = null, name = null, businessAddress = null, intent = 'register'} = {},
+) => {
   const token = idToken != null ? String(idToken).trim() : '';
   if (!token) {
     return {success: false, error: 'Missing Google token', subscription: null};
@@ -1345,7 +1350,16 @@ export const loginOrRegisterWithGoogle = async (idToken) => {
     const response = await apiFetch(`${apiBase()}/api/auth/google`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({id_token: token}),
+      body: JSON.stringify({
+        id_token: token,
+        intent: intent === 'login' ? 'login' : 'register',
+        phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
+        name: name != null && String(name).trim() ? String(name).trim() : null,
+        business_address:
+          businessAddress != null && String(businessAddress).trim()
+            ? String(businessAddress).trim()
+            : null,
+      }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -1358,6 +1372,50 @@ export const loginOrRegisterWithGoogle = async (idToken) => {
     return data;
   } catch (error) {
     console.error('loginOrRegisterWithGoogle error:', error);
+    return {success: false, error: error.message, subscription: null};
+  }
+};
+
+/**
+ * Sign in or register a regular user via Apple identity token (verified on pi-back).
+ * Password is not used — Apple accounts are passwordless.
+ * Phone is required for new registrations (collected on the registration form).
+ */
+export const loginOrRegisterWithApple = async (
+  identityToken,
+  {phone = null, name = null, businessAddress = null, intent = 'register'} = {},
+) => {
+  const token = identityToken != null ? String(identityToken).trim() : '';
+  if (!token) {
+    return {success: false, error: 'Missing Apple token', subscription: null};
+  }
+  try {
+    const response = await apiFetch(`${apiBase()}/api/auth/apple`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        identity_token: token,
+        id_token: token,
+        intent: intent === 'login' ? 'login' : 'register',
+        phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
+        name: name != null && String(name).trim() ? String(name).trim() : null,
+        business_address:
+          businessAddress != null && String(businessAddress).trim()
+            ? String(businessAddress).trim()
+            : null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data?.error || 'Apple sign-in failed',
+        subscription: null,
+      };
+    }
+    return data;
+  } catch (error) {
+    console.error('loginOrRegisterWithApple error:', error);
     return {success: false, error: error.message, subscription: null};
   }
 };

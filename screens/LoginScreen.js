@@ -27,6 +27,16 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleTrigger, setGoogleTrigger] = useState(0);
+  const [GoogleAuthComponent, setGoogleAuthComponent] = useState(null);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleTrigger, setAppleTrigger] = useState(0);
+  const [AppleAuthComponent, setAppleAuthComponent] = useState(null);
+
+  const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
+  const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
+  const busy = isLoggingIn || googleLoading || appleLoading;
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -62,7 +72,7 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
       if (error.code === 'NO_PASSWORD_SET') {
         setErrorMessage(
           error.message ||
-            'לא הוגדרה סיסמה לחשבון. הירשמו מחדש והשלימו שליחת קוד אימות עם סיסמה.',
+            'לא הוגדרה סיסמה לחשבון. התחבר עם Google או הירשם מחדש.',
         );
       } else {
         setErrorMessage(error.message || 'נכשל בהתחברות. אנא נסה שוב.');
@@ -70,6 +80,70 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    const webClientId = String(
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+    ).trim();
+    if (!webClientId) {
+      setErrorMessage(
+        'Google Sign-In לא מוגדר. הוסף EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ל-.env והפעל מחדש את Expo.',
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      let AuthComponent = GoogleAuthComponent;
+      if (!AuthComponent) {
+        const mod = await import('../components/GoogleRegistrationAuth');
+        AuthComponent = mod.default;
+        setGoogleAuthComponent(() => AuthComponent);
+      }
+      setGoogleTrigger(n => n + 1);
+    } catch (err) {
+      setGoogleLoading(false);
+      setErrorMessage(
+        err?.message ||
+          'Google Sign-In דורש rebuild של האפליקציה: npm run android',
+      );
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setErrorMessage(null);
+    setAppleLoading(true);
+    try {
+      let AuthComponent = AppleAuthComponent;
+      if (!AuthComponent) {
+        const mod = await import('../components/AppleRegistrationAuth');
+        AuthComponent = mod.default;
+        setAppleAuthComponent(() => AuthComponent);
+      }
+      setAppleTrigger(n => n + 1);
+    } catch (err) {
+      setAppleLoading(false);
+      setErrorMessage(
+        err?.message ||
+          'Apple Sign-In דורש rebuild של האפליקציה: npm run ios',
+      );
+    }
+  };
+
+  const finishSocialLogin = reg => {
+    const sub = reg?.subscription;
+    const status = sub?.status;
+    const canEnter = status === 'verified' || status === 'active';
+    if (canEnter && sub?.id && onLoginSuccess) {
+      onLoginSuccess(sub);
+      return;
+    }
+    setErrorMessage(
+      reg?.error ||
+        'החשבון שלך עדיין לא אומת. אנא השלם את תהליך האימות.',
+    );
   };
 
   return (
@@ -171,10 +245,10 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              disabled={!email.trim() || !password || isLoggingIn}
+              disabled={!email.trim() || !password || busy}
               style={[
                 styles.loginButton,
-                !email.trim() || !password || isLoggingIn
+                !email.trim() || !password || busy
                   ? styles.loginButtonDisabled
                   : null,
               ]}
@@ -186,9 +260,79 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
                 <Text style={styles.loginButtonText}>התחבר</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>או</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <View style={styles.socialWrap}>
+              <TouchableOpacity
+                style={styles.socialButtonImageWrap}
+                onPress={handleGoogleSignIn}
+                disabled={busy}
+                activeOpacity={0.85}>
+                <Image
+                  source={GOOGLE_BUTTON_IMAGE}
+                  style={[
+                    styles.socialButtonImage,
+                    busy && styles.socialButtonDisabled,
+                  ]}
+                  resizeMode="cover"
+                />
+                {googleLoading ? (
+                  <View style={styles.socialLoadingOverlay}>
+                    <ActivityIndicator color="#1E1D27" />
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+
+              {Platform.OS === 'ios' ? (
+                <TouchableOpacity
+                  style={styles.socialButtonImageWrap}
+                  onPress={handleAppleSignIn}
+                  disabled={busy}
+                  activeOpacity={0.85}>
+                  <Image
+                    source={APPLE_BUTTON_IMAGE}
+                    style={[
+                      styles.socialButtonImage,
+                      busy && styles.socialButtonDisabled,
+                    ]}
+                    resizeMode="cover"
+                  />
+                  {appleLoading ? (
+                    <View style={styles.socialLoadingOverlay}>
+                      <ActivityIndicator color="#1E1D27" />
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {GoogleAuthComponent ? (
+        <GoogleAuthComponent
+          triggerNonce={googleTrigger}
+          onTriggerConsumed={() => {}}
+          onLoadingChange={setGoogleLoading}
+          onError={msg => setErrorMessage(msg)}
+          intent="login"
+          onSuccess={finishSocialLogin}
+        />
+      ) : null}
+      {Platform.OS === 'ios' && AppleAuthComponent ? (
+        <AppleAuthComponent
+          triggerNonce={appleTrigger}
+          onTriggerConsumed={() => {}}
+          onLoadingChange={setAppleLoading}
+          onError={msg => setErrorMessage(msg)}
+          intent="login"
+          onSuccess={finishSocialLogin}
+        />
+      ) : null}
     </View>
   );
 };
@@ -255,6 +399,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 366,
+    gap: 14,
   },
   headerTitle: {
     fontSize: 20,
@@ -325,22 +470,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
   },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#3A394A',
-  },
-  dividerText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginHorizontal: 10,
-    fontFamily: 'Rubik-Regular',
-  },
   forgotPasswordBtn: {
     alignSelf: 'flex-start',
     marginTop: 2,
@@ -370,6 +499,51 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Rubik-Medium',
     color: Colors.darkBackground,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 18,
+    width: '100%',
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#343243',
+  },
+  orText: {
+    fontSize: 18,
+    lineHeight: 22,
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  socialWrap: {
+    width: '100%',
+    gap: 14,
+    alignItems: 'center',
+  },
+  socialButtonImageWrap: {
+    width: 326,
+    height: 52,
+    borderRadius: 1000,
+    overflow: 'hidden',
+    position: 'relative',
+    maxWidth: '100%',
+  },
+  socialButtonImage: {
+    width: '100%',
+    height: '100%',
+  },
+  socialButtonDisabled: {
+    opacity: 0.55,
+  },
+  socialLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(43, 42, 57, 0.35)',
   },
 });
 

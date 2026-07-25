@@ -41,6 +41,9 @@ const UserRegistrationScreen = ({
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleTrigger, setGoogleTrigger] = useState(0);
   const [GoogleAuthComponent, setGoogleAuthComponent] = useState(null);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleTrigger, setAppleTrigger] = useState(0);
+  const [AppleAuthComponent, setAppleAuthComponent] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
@@ -260,6 +263,11 @@ const UserRegistrationScreen = ({
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
+    const phoneTrim = phone.trim();
+    if (!phoneTrim) {
+      setErrorMessage('אנא הזן מספר טלפון לפני ההרשמה עם Google');
+      return;
+    }
     const webClientId = String(
       process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
     ).trim();
@@ -288,7 +296,33 @@ const UserRegistrationScreen = ({
     }
   };
 
-  const busy = submitting || googleLoading;
+  const handleAppleSignIn = async () => {
+    setErrorMessage(null);
+    const phoneTrim = phone.trim();
+    if (!phoneTrim) {
+      setErrorMessage('אנא הזן מספר טלפון לפני ההרשמה עם Apple');
+      return;
+    }
+
+    setAppleLoading(true);
+    try {
+      let AuthComponent = AppleAuthComponent;
+      if (!AuthComponent) {
+        const mod = await import('../components/AppleRegistrationAuth');
+        AuthComponent = mod.default;
+        setAppleAuthComponent(() => AuthComponent);
+      }
+      setAppleTrigger(n => n + 1);
+    } catch (err) {
+      setAppleLoading(false);
+      setErrorMessage(
+        err?.message ||
+          'Apple Sign-In דורש rebuild של האפליקציה: npm run ios',
+      );
+    }
+  };
+
+  const busy = submitting || googleLoading || appleLoading;
 
   return (
     <View style={styles.container}>
@@ -515,16 +549,27 @@ const UserRegistrationScreen = ({
                 ) : null}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.socialButtonImageWrap}
-                onPress={() => {}}
-                activeOpacity={0.85}>
-                <Image
-                  source={APPLE_BUTTON_IMAGE}
-                  style={styles.socialButtonImage}
-                  resizeMode="cover"
-                />
-              </TouchableOpacity>
+              {Platform.OS === 'ios' ? (
+                <TouchableOpacity
+                  style={styles.socialButtonImageWrap}
+                  onPress={handleAppleSignIn}
+                  disabled={busy}
+                  activeOpacity={0.85}>
+                  <Image
+                    source={APPLE_BUTTON_IMAGE}
+                    style={[
+                      styles.socialButtonImage,
+                      busy && styles.socialButtonDisabled,
+                    ]}
+                    resizeMode="cover"
+                  />
+                  {appleLoading ? (
+                    <View style={styles.socialLoadingOverlay}>
+                      <ActivityIndicator color="#1E1D27" />
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </View>
@@ -535,7 +580,34 @@ const UserRegistrationScreen = ({
           onTriggerConsumed={() => {}}
           onLoadingChange={setGoogleLoading}
           onError={msg => setErrorMessage(msg)}
-          onSuccess={reg => finishAuthWithSubscription(reg)}
+          phone={phone.trim()}
+          name={fullName.trim() || null}
+          businessAddress={address.trim() || null}
+          onSuccess={reg =>
+            finishAuthWithSubscription(reg, {
+              fallbackPhone: phone.trim(),
+              fallbackName: fullName.trim(),
+              fallbackAddress: address.trim(),
+            })
+          }
+        />
+      ) : null}
+      {Platform.OS === 'ios' && AppleAuthComponent ? (
+        <AppleAuthComponent
+          triggerNonce={appleTrigger}
+          onTriggerConsumed={() => {}}
+          onLoadingChange={setAppleLoading}
+          onError={msg => setErrorMessage(msg)}
+          phone={phone.trim()}
+          name={fullName.trim() || null}
+          businessAddress={address.trim() || null}
+          onSuccess={reg =>
+            finishAuthWithSubscription(reg, {
+              fallbackPhone: phone.trim(),
+              fallbackName: fullName.trim(),
+              fallbackAddress: address.trim(),
+            })
+          }
         />
       ) : null}
       <CircleImageCropModal

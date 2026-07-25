@@ -1,14 +1,14 @@
 import React, {useEffect, useRef} from 'react';
-import {loginOrRegisterWithGoogle} from '../utils/api';
+import {loginOrRegisterWithApple} from '../utils/api';
 import {
-  getGoogleSignInConfigError,
-  signInWithGoogleIdToken,
-} from '../utils/googleAuth';
+  getAppleSignInConfigError,
+  signInWithAppleIdToken,
+} from '../utils/appleAuth';
 
 /**
- * Handles Google sign-in for regular-user registration via the native SDK.
+ * Handles Apple sign-in for regular-user registration / login (iOS).
  */
-export default function GoogleRegistrationAuth({
+export default function AppleRegistrationAuth({
   onSuccess,
   onError,
   onLoadingChange,
@@ -25,7 +25,7 @@ export default function GoogleRegistrationAuth({
     if (!triggerNonce) return;
     if (busyRef.current) return;
 
-    const configError = getGoogleSignInConfigError();
+    const configError = getAppleSignInConfigError();
     if (configError) {
       onError?.(configError);
       onTriggerConsumed?.();
@@ -38,31 +38,32 @@ export default function GoogleRegistrationAuth({
 
     (async () => {
       try {
-        const {idToken} = await signInWithGoogleIdToken();
+        const apple = await signInWithAppleIdToken();
         if (cancelled) return;
-        const reg = await loginOrRegisterWithGoogle(idToken, {
+        const reg = await loginOrRegisterWithApple(apple.identityToken, {
           phone,
-          name,
+          name: name || apple.name || null,
           businessAddress,
           intent,
         });
         if (cancelled) return;
         if (!reg?.success || !reg?.subscription?.id) {
-          onError?.(reg?.error || 'לא הצלחנו להתחבר עם Google. נסה שוב.');
+          onError?.(reg?.error || 'לא הצלחנו להתחבר עם Apple. נסה שוב.');
           return;
         }
         onSuccess?.(reg);
       } catch (err) {
         if (cancelled) return;
         const msg = String(err?.message || err || '');
-        // User closed the picker — not an error toast.
+        const code = err?.code;
+        // User dismissed the sheet — not an error toast.
         if (
-          /SIGN_IN_CANCELLED|canceled|cancelled|12501/i.test(msg) ||
-          err?.code === 'SIGN_IN_CANCELLED'
+          code === 'ERR_REQUEST_CANCELED' ||
+          /ERR_REQUEST_CANCELED|canceled|cancelled/i.test(msg)
         ) {
           return;
         }
-        onError?.(msg || 'התחברות עם Google נכשלה. נסה שוב.');
+        onError?.(msg || 'התחברות עם Apple נכשלה. נסה שוב.');
       } finally {
         busyRef.current = false;
         if (!cancelled) onLoadingChange?.(false);
