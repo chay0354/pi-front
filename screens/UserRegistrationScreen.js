@@ -32,6 +32,7 @@ const UserRegistrationScreen = ({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [socialPhone, setSocialPhone] = useState('');
   const [address, setAddress] = useState('');
   const [profileImage, setProfileImage] = useState(null);
   const [password, setPassword] = useState('');
@@ -45,6 +46,8 @@ const UserRegistrationScreen = ({
   const [appleTrigger, setAppleTrigger] = useState(0);
   const [AppleAuthComponent, setAppleAuthComponent] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [socialPhoneError, setSocialPhoneError] = useState(null);
+  const scrollRef = React.useRef(null);
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
   const MIN_PASSWORD_LENGTH = 8;
@@ -261,20 +264,33 @@ const UserRegistrationScreen = ({
     }
   };
 
+  const showSocialPhoneRequired = providerLabel => {
+    setSocialPhoneError(
+      `אנא הזן מספר טלפון לפני ההרשמה עם ${providerLabel}`,
+    );
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd?.({animated: true});
+    });
+  };
+
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
-    const phoneTrim = phone.trim();
+    setSocialPhoneError(null);
+    const phoneTrim = socialPhone.trim();
     if (!phoneTrim) {
-      setErrorMessage('אנא הזן מספר טלפון לפני ההרשמה עם Google');
+      showSocialPhoneRequired('Google');
       return;
     }
     const webClientId = String(
       process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
     ).trim();
     if (!webClientId) {
-      setErrorMessage(
+      setSocialPhoneError(
         'Google Sign-In לא מוגדר. הוסף EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ל-.env והפעל מחדש את Expo.',
       );
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd?.({animated: true});
+      });
       return;
     }
 
@@ -289,18 +305,22 @@ const UserRegistrationScreen = ({
       setGoogleTrigger(n => n + 1);
     } catch (err) {
       setGoogleLoading(false);
-      setErrorMessage(
+      setSocialPhoneError(
         err?.message ||
           'Google Sign-In דורש rebuild של האפליקציה: npm run android',
       );
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd?.({animated: true});
+      });
     }
   };
 
   const handleAppleSignIn = async () => {
     setErrorMessage(null);
-    const phoneTrim = phone.trim();
+    setSocialPhoneError(null);
+    const phoneTrim = socialPhone.trim();
     if (!phoneTrim) {
-      setErrorMessage('אנא הזן מספר טלפון לפני ההרשמה עם Apple');
+      showSocialPhoneRequired('Apple');
       return;
     }
 
@@ -315,10 +335,13 @@ const UserRegistrationScreen = ({
       setAppleTrigger(n => n + 1);
     } catch (err) {
       setAppleLoading(false);
-      setErrorMessage(
+      setSocialPhoneError(
         err?.message ||
           'Apple Sign-In דורש rebuild של האפליקציה: npm run ios',
       );
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd?.({animated: true});
+      });
     }
   };
 
@@ -337,6 +360,7 @@ const UserRegistrationScreen = ({
         </TouchableOpacity>
       </View>
       <ScrollView
+        ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         contentContainerStyle={[
@@ -529,6 +553,33 @@ const UserRegistrationScreen = ({
             </View>
 
             <View style={styles.socialWrap}>
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>טלפון להרשמה עם Google / Apple</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <View style={styles.phoneRow}>
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder="00 000 0000"
+                    placeholderTextColor="rgba(255,255,255,0.35)"
+                    value={socialPhone}
+                    onChangeText={text => {
+                      setSocialPhone(text);
+                      if (socialPhoneError) setSocialPhoneError(null);
+                    }}
+                    keyboardType="phone-pad"
+                    textAlign="left"
+                  />
+                  <TouchableOpacity
+                    style={styles.countrySelector}
+                    activeOpacity={0.8}>
+                    <Text style={styles.countryChevron}>⌄</Text>
+                    <Text style={styles.countryCode}>IL</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <TouchableOpacity
                 style={styles.socialButtonImageWrap}
                 onPress={handleGoogleSignIn}
@@ -570,6 +621,12 @@ const UserRegistrationScreen = ({
                   ) : null}
                 </TouchableOpacity>
               ) : null}
+
+              {socialPhoneError ? (
+                <View style={styles.socialErrorContainer}>
+                  <Text style={styles.socialErrorText}>{socialPhoneError}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -579,13 +636,18 @@ const UserRegistrationScreen = ({
           triggerNonce={googleTrigger}
           onTriggerConsumed={() => {}}
           onLoadingChange={setGoogleLoading}
-          onError={msg => setErrorMessage(msg)}
-          phone={phone.trim()}
+          onError={msg => {
+            setSocialPhoneError(msg);
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollToEnd?.({animated: true});
+            });
+          }}
+          phone={socialPhone.trim()}
           name={fullName.trim() || null}
           businessAddress={address.trim() || null}
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
-              fallbackPhone: phone.trim(),
+              fallbackPhone: socialPhone.trim(),
               fallbackName: fullName.trim(),
               fallbackAddress: address.trim(),
             })
@@ -597,13 +659,18 @@ const UserRegistrationScreen = ({
           triggerNonce={appleTrigger}
           onTriggerConsumed={() => {}}
           onLoadingChange={setAppleLoading}
-          onError={msg => setErrorMessage(msg)}
-          phone={phone.trim()}
+          onError={msg => {
+            setSocialPhoneError(msg);
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollToEnd?.({animated: true});
+            });
+          }}
+          phone={socialPhone.trim()}
           name={fullName.trim() || null}
           businessAddress={address.trim() || null}
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
-              fallbackPhone: phone.trim(),
+              fallbackPhone: socialPhone.trim(),
               fallbackName: fullName.trim(),
               fallbackAddress: address.trim(),
             })
@@ -887,6 +954,19 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 14,
     alignItems: 'center',
+  },
+  socialErrorContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(255,0,0,0.15)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 2,
+  },
+  socialErrorText: {
+    color: '#ffcccc',
+    fontSize: 14,
+    textAlign: 'center',
+    fontFamily: 'Rubik-Regular',
   },
   socialButtonImageWrap: {
     width: 326,

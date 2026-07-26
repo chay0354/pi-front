@@ -7,6 +7,7 @@ import {
 
 /**
  * Handles Apple sign-in for regular-user registration / login (iOS).
+ * Only triggerNonce starts a new attempt — parent re-renders must not reopen the sheet.
  */
 export default function AppleRegistrationAuth({
   onSuccess,
@@ -20,62 +21,9 @@ export default function AppleRegistrationAuth({
   intent = 'register',
 }) {
   const busyRef = useRef(false);
-
-  useEffect(() => {
-    if (!triggerNonce) return;
-    if (busyRef.current) return;
-
-    const configError = getAppleSignInConfigError();
-    if (configError) {
-      onError?.(configError);
-      onTriggerConsumed?.();
-      return;
-    }
-
-    let cancelled = false;
-    busyRef.current = true;
-    onLoadingChange?.(true);
-
-    (async () => {
-      try {
-        const apple = await signInWithAppleIdToken();
-        if (cancelled) return;
-        const reg = await loginOrRegisterWithApple(apple.identityToken, {
-          phone,
-          name: name || apple.name || null,
-          businessAddress,
-          intent,
-        });
-        if (cancelled) return;
-        if (!reg?.success || !reg?.subscription?.id) {
-          onError?.(reg?.error || 'לא הצלחנו להתחבר עם Apple. נסה שוב.');
-          return;
-        }
-        onSuccess?.(reg);
-      } catch (err) {
-        if (cancelled) return;
-        const msg = String(err?.message || err || '');
-        const code = err?.code;
-        // User dismissed the sheet — not an error toast.
-        if (
-          code === 'ERR_REQUEST_CANCELED' ||
-          /ERR_REQUEST_CANCELED|canceled|cancelled/i.test(msg)
-        ) {
-          return;
-        }
-        onError?.(msg || 'התחברות עם Apple נכשלה. נסה שוב.');
-      } finally {
-        busyRef.current = false;
-        if (!cancelled) onLoadingChange?.(false);
-        onTriggerConsumed?.();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    triggerNonce,
+  const lastHandledNonceRef = useRef(0);
+  const propsRef = useRef({});
+  propsRef.current = {
     onSuccess,
     onError,
     onLoadingChange,
@@ -84,7 +32,72 @@ export default function AppleRegistrationAuth({
     name,
     businessAddress,
     intent,
-  ]);
+  };
+
+  useEffect(() => {
+    if (!triggerNonce) return;
+    if (triggerNonce === lastHandledNonceRef.current) return;
+    if (busyRef.current) return;
+
+    lastHandledNonceRef.current = triggerNonce;
+    busyRef.current = true;
+    propsRef.current.onLoadingChange?.(true);
+
+    const configError = getAppleSignInConfigError();
+    if (configError) {
+      busyRef.current = false;
+      propsRef.current.onLoadingChange?.(false);
+      propsRef.current.onError?.(configError);
+      propsRef.current.onTriggerConsumed?.();
+      return;
+    }
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      busyRef.current = false;
+      propsRef.current.onLoadingChange?.(false);
+      propsRef.current.onTriggerConsumed?.();
+    };
+
+    (async () => {
+      try {
+        const apple = await signInWithAppleIdToken();
+        const {
+          phone: phoneVal,
+          name: nameVal,
+          businessAddress: addressVal,
+          intent: intentVal,
+        } = propsRef.current;
+        const reg = await loginOrRegisterWithApple(apple.identityToken, {
+          phone: phoneVal,
+          name: nameVal || apple.name || null,
+          businessAddress: addressVal,
+          intent: intentVal,
+        });
+        if (!reg?.success || !reg?.subscription?.id) {
+          propsRef.current.onError?.(
+            reg?.error || 'לא הצלחנו להתחבר עם Apple. נסה שוב.',
+          );
+          return;
+        }
+        propsRef.current.onSuccess?.(reg);
+      } catch (err) {
+        const msg = String(err?.message || err || '');
+        const code = err?.code;
+        if (
+          code === 'ERR_REQUEST_CANCELED' ||
+          /ERR_REQUEST_CANCELED|canceled|cancelled/i.test(msg)
+        ) {
+          return;
+        }
+        propsRef.current.onError?.(msg || 'התחברות עם Apple נכשלה. נסה שוב.');
+      } finally {
+        finish();
+      }
+    })();
+  }, [triggerNonce]);
 
   return null;
 }
