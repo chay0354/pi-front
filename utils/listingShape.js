@@ -1,9 +1,43 @@
 /**
+ * True when `u` is a TikTok feed post (not a real-estate ad listing).
+ * Posts must not unlock ad-only chat actions (בלעדיות / שת״פ).
+ */
+export function isFeedPostListingRecord(u) {
+  if (!u || typeof u !== 'object') return false;
+  if (
+    u.feed_post === true ||
+    u.feed_post === 'true' ||
+    u.feed_post === 't' ||
+    u.isPostEntry === true ||
+    u.isTextOnlyPost === true
+  ) {
+    return true;
+  }
+  const type = String(
+    u.propertyType ||
+      u.propertyTypeRaw ||
+      u.apartmentTypeId ||
+      u.type ||
+      '',
+  )
+    .trim()
+    .toLowerCase();
+  return (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    (type.includes('post') && type !== 'postal_code')
+  );
+}
+
+/**
  * True when `u` looks like a row from GET /api/listings (ads), not a bare subscription profile.
  * Do not use `u.images` alone — API uses listing_images + main_image_url.
+ * Feed posts are excluded — they share listing-shaped fields but are not ads.
  */
 export function isAdsListingRecord(u) {
   if (!u || u.id == null || String(u.id).trim() === '') return false;
+  if (isFeedPostListingRecord(u)) return false;
   // Explicit open-from-listing flags (home featured project / company projects grid).
   if (u._forceListingAdProfile || u._fromCompanyProjects || u._fromHomeFeatureProject) {
     return true;

@@ -56,14 +56,19 @@ function normalizeNativeFileUri(uri) {
 }
 
 /**
- * FileSystem.uploadAsync on Android only accepts file:// — gallery picks often
- * return content://. Copy into cache so iOS and Android share the same signed-URL path.
+ * FileSystem.uploadAsync needs a real file:// path. Gallery picks often return
+ * content:// (Android) or ph:// / assets-library:// (iOS) — copy into cache first.
  */
 async function ensureUploadableLocalUri(uri, hintName = 'upload.bin') {
   const normalized = normalizeNativeFileUri(uri);
   if (!normalized) return '';
-  if (Platform.OS !== 'android') return normalized;
-  if (!normalized.startsWith('content://')) return normalized;
+  if (!isNativeMobile) return normalized;
+
+  const needsCopy =
+    normalized.startsWith('content://') ||
+    normalized.startsWith('ph://') ||
+    normalized.startsWith('assets-library://');
+  if (!needsCopy) return normalized;
 
   const safe =
     String(hintName || 'upload.bin')
@@ -72,6 +77,21 @@ async function ensureUploadableLocalUri(uri, hintName = 'upload.bin') {
   const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safe}`;
   await FileSystem.copyAsync({from: normalized, to: dest});
   return dest;
+}
+
+function throwForUploadStatus(status, bodyPreview = '') {
+  const code = Number(status) || 0;
+  if (code === 413) {
+    throw new Error(
+      'הקובץ גדול מדי להעלאה. נסו סרטון קצר יותר או באיכות נמוכה יותר.',
+    );
+  }
+  const preview = String(bodyPreview || '').trim();
+  throw new Error(
+    preview
+      ? `Upload failed (${code}): ${preview}`
+      : `Upload failed (${code})`,
+  );
 }
 
 /** Avoid alert/console showing "[object Object]" when API or native code returns error objects. */
@@ -152,6 +172,34 @@ async function requestUploadSignedUrl(folder, fileName, contentType) {
 }
 
 async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
+  // Web File / Blob (e.g. OfficeListingScreen still attaches `.file`)
+  if (isWeb) {
+    let blob = null;
+    if (file?.file instanceof Blob) blob = file.file;
+    else if (typeof File !== 'undefined' && file instanceof File) blob = file;
+    else if (file instanceof Blob) blob = file;
+
+    if (!blob && file?.uri) {
+      const res = await fetch(file.uri);
+      if (!res.ok) throw new Error('Could not read file for upload');
+      blob = await res.blob();
+    }
+
+    if (!blob) {
+      throw new Error('No file data for upload');
+    }
+
+    const putRes = await fetch(signedUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: {'Content-Type': mimeType},
+    });
+    if (!putRes.ok) {
+      throwForUploadStatus(putRes.status, (await putRes.text()).slice(0, 200));
+    }
+    return;
+  }
+
   const uri = await ensureUploadableLocalUri(
     file?.uri,
     resolveUploadFileName(file, String(mimeType || '').startsWith('video/')),
@@ -169,33 +217,7 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
       },
     });
     if (result.status < 200 || result.status >= 300) {
-      const preview = String(result.body || '').slice(0, 200);
-      throw new Error(
-        preview
-          ? `Upload failed (${result.status}): ${preview}`
-          : `Upload failed (${result.status})`,
-      );
-    }
-    return;
-  }
-
-  if (isWeb) {
-    const blob = await fetch(uri).then(r => {
-      if (!r.ok) throw new Error('Could not read file for upload');
-      return r.blob();
-    });
-    const putRes = await fetch(signedUrl, {
-      method: 'PUT',
-      body: blob,
-      headers: {'Content-Type': mimeType},
-    });
-    if (!putRes.ok) {
-      const preview = (await putRes.text()).slice(0, 200);
-      throw new Error(
-        preview
-          ? `Upload failed (${putRes.status}): ${preview}`
-          : `Upload failed (${putRes.status})`,
-      );
+      throwForUploadStatus(result.status, String(result.body || '').slice(0, 200));
     }
     return;
   }
@@ -1780,71 +1802,10 @@ export const getCurrentUser = async (email = null, subscriberNumber = null) => {
  * @returns {Promise} API response with file URL
  */
 export const uploadFile = async (file, folder = 'general', options = {}) => {
-  const timeoutMs =
-    options.timeoutMs != null ? options.timeoutMs : 120000;
-  const isVideoFolder = String(folder || '').includes('video');
-  const isVideoMime =
-    String(file?.type || '').startsWith('video/') ||
-    String(file?.type || '').toLowerCase() === 'video';
   try {
-    // iOS + Android: upload straight to Supabase (signed URL) so Vercel never
-    // sees the file body — avoids "Request Entity Too Large" on large photos.
-    // Videos always use signed URLs (web + native).
-    if ((isNativeMobile && file?.uri) || isVideoFolder || isVideoMime) {
-      return await uploadFileViaSignedUrl(file, folder, options);
-    }
-
-    const url = `${apiBase()}/api/upload`;
-    const formData = new FormData();
-    if (isWeb) {
-      const filePart = await toFormDataFile(
-        file,
-        isVideoFolder ? 'video' : 'file',
-      );
-      if (filePart instanceof File) {
-        formData.append('file', filePart);
-      } else {
-        throw new Error(
-          'Web upload needs a data: or blob: image URI (or File).',
-        );
-      }
-    } else {
-      formData.append('file', {
-        uri: file.uri,
-        type: file.type || (isVideoFolder ? 'video/mp4' : 'image/jpeg'),
-        name:
-          file.name ||
-          (isVideoFolder ? `video-${Date.now()}.mp4` : 'file.jpg'),
-      });
-    }
-    formData.append('folder', folder);
-
-    const response = await apiFetch(url, {
-      method: 'POST',
-      body: formData,
-      timeoutMs,
-      // Do not set Content-Type — fetch/XHR must add multipart boundary automatically.
-    });
-
-    const responseText = await response.text();
-    let data;
-    try {
-      data = responseText ? JSON.parse(responseText) : {};
-    } catch (_) {
-      throw new Error(
-        response.ok
-          ? 'Invalid response from upload server'
-          : `Upload failed (${response.status}): ${responseText.slice(0, 200)}`,
-      );
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        errorMessageFromApiBody(data, 'Failed to upload file'),
-      );
-    }
-
-    return data;
+    // Always upload straight to Supabase (signed URL). Never POST file bytes
+    // through Vercel — its ~4.5MB body limit causes intermittent 413 on videos.
+    return await uploadFileViaSignedUrl(file, folder, options);
   } catch (error) {
     console.error(
       'Error uploading file:',

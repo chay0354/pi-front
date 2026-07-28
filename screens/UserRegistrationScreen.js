@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {subscriptionTypes} from '../utils/constant';
 import {uploadProfilePicture, registerRegularUser, checkEmailAvailable} from '../utils/api';
+import {useKeyboardInset} from '../utils/formKeyboardScroll';
 import {flexStart} from '../utils/rtlLayout';
 import {ProfileAvatar} from '../components';
 import CircleImageCropModal from '../components/CircleImageCropModal';
@@ -29,10 +31,12 @@ const UserRegistrationScreen = ({
   selectedCategory: _selectedCategory,
 }) => {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [socialPhone, setSocialPhone] = useState('');
+  const [socialName, setSocialName] = useState('');
   const [address, setAddress] = useState('');
   const [profileImage, setProfileImage] = useState(null);
   const [password, setPassword] = useState('');
@@ -46,8 +50,44 @@ const UserRegistrationScreen = ({
   const [appleTrigger, setAppleTrigger] = useState(0);
   const [AppleAuthComponent, setAppleAuthComponent] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [socialPhoneError, setSocialPhoneError] = useState(null);
+  const [socialError, setSocialError] = useState(null);
   const scrollRef = React.useRef(null);
+  const scrollYRef = React.useRef(0);
+
+  const scrollFocusedIntoView = useCallback(
+    event => {
+      const target = event?.target;
+      const run = () => {
+        if (!scrollRef.current) return;
+        // iOS: window stays full height; subtract keyboard. Android resize
+        // already shrinks the window — do not subtract keyboard again.
+        const keyboardHeight =
+          Platform.OS === 'ios' ? keyboardInset || 320 : 0;
+        const visibleBottom =
+          Dimensions.get('window').height - keyboardHeight - 28;
+
+        if (typeof target?.measureInWindow !== 'function') {
+          scrollRef.current.scrollToEnd?.({animated: true});
+          return;
+        }
+
+        target.measureInWindow((_x, fieldTop, _w, fieldHeight) => {
+          const fieldBottom = fieldTop + (fieldHeight || 0);
+          if (fieldBottom <= visibleBottom) return;
+          scrollRef.current.scrollTo({
+            y: scrollYRef.current + (fieldBottom - visibleBottom) + 20,
+            animated: true,
+          });
+        });
+      };
+
+      requestAnimationFrame(run);
+      // Keyboard animation finishes after focus; nudge again.
+      setTimeout(run, Platform.OS === 'android' ? 280 : 100);
+      if (Platform.OS === 'android') setTimeout(run, 450);
+    },
+    [keyboardInset],
+  );
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
   const MIN_PASSWORD_LENGTH = 8;
@@ -264,33 +304,38 @@ const UserRegistrationScreen = ({
     }
   };
 
-  const showSocialPhoneRequired = providerLabel => {
-    setSocialPhoneError(
-      `אנא הזן מספר טלפון לפני ההרשמה עם ${providerLabel}`,
-    );
+  const showSocialError = message => {
+    setSocialError(message);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd?.({animated: true});
     });
   };
 
+  const validateSocialFields = providerLabel => {
+    const nameTrim = socialName.trim();
+    const phoneTrim = socialPhone.trim();
+    if (!nameTrim) {
+      showSocialError(`אנא הזן שם מלא לפני ההרשמה עם ${providerLabel}`);
+      return null;
+    }
+    if (!phoneTrim) {
+      showSocialError(`אנא הזן מספר טלפון לפני ההרשמה עם ${providerLabel}`);
+      return null;
+    }
+    return {nameTrim, phoneTrim};
+  };
+
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
-    setSocialPhoneError(null);
-    const phoneTrim = socialPhone.trim();
-    if (!phoneTrim) {
-      showSocialPhoneRequired('Google');
-      return;
-    }
+    setSocialError(null);
+    if (!validateSocialFields('Google')) return;
     const webClientId = String(
       process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
     ).trim();
     if (!webClientId) {
-      setSocialPhoneError(
+      showSocialError(
         'Google Sign-In לא מוגדר. הוסף EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ל-.env והפעל מחדש את Expo.',
       );
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollToEnd?.({animated: true});
-      });
       return;
     }
 
@@ -305,24 +350,17 @@ const UserRegistrationScreen = ({
       setGoogleTrigger(n => n + 1);
     } catch (err) {
       setGoogleLoading(false);
-      setSocialPhoneError(
+      showSocialError(
         err?.message ||
           'Google Sign-In דורש rebuild של האפליקציה: npm run android',
       );
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollToEnd?.({animated: true});
-      });
     }
   };
 
   const handleAppleSignIn = async () => {
     setErrorMessage(null);
-    setSocialPhoneError(null);
-    const phoneTrim = socialPhone.trim();
-    if (!phoneTrim) {
-      showSocialPhoneRequired('Apple');
-      return;
-    }
+    setSocialError(null);
+    if (!validateSocialFields('Apple')) return;
 
     setAppleLoading(true);
     try {
@@ -335,17 +373,21 @@ const UserRegistrationScreen = ({
       setAppleTrigger(n => n + 1);
     } catch (err) {
       setAppleLoading(false);
-      setSocialPhoneError(
+      showSocialError(
         err?.message ||
           'Apple Sign-In דורש rebuild של האפליקציה: npm run ios',
       );
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollToEnd?.({animated: true});
-      });
     }
   };
 
   const busy = submitting || googleLoading || appleLoading;
+
+  // iOS: add keyboard height to scroll padding only (do not shrink the whole screen).
+  // Android: window already resizes via softwareKeyboardLayoutMode.
+  const bottomPad =
+    Math.max(insets.bottom, 16) +
+    48 +
+    (Platform.OS === 'ios' && keyboardInset > 0 ? keyboardInset : 0);
 
   return (
     <View style={styles.container}>
@@ -362,10 +404,15 @@ const UserRegistrationScreen = ({
       <ScrollView
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScroll={e => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          {paddingBottom: Math.max(insets.bottom, 16) + 48},
+          {paddingBottom: bottomPad},
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
@@ -424,6 +471,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={fullName}
                   onChangeText={setFullName}
+                  onFocus={scrollFocusedIntoView}
                   textAlign="right"
                 />
               </View>
@@ -439,6 +487,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={email}
                   onChangeText={setEmail}
+                  onFocus={scrollFocusedIntoView}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   textAlign="right"
@@ -457,6 +506,7 @@ const UserRegistrationScreen = ({
                     placeholderTextColor="rgba(255,255,255,0.35)"
                     value={password}
                     onChangeText={setPassword}
+                    onFocus={scrollFocusedIntoView}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     textAlign="right"
@@ -485,6 +535,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
+                  onFocus={scrollFocusedIntoView}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   textAlign="right"
@@ -500,6 +551,7 @@ const UserRegistrationScreen = ({
                     placeholderTextColor="rgba(255,255,255,0.35)"
                     value={phone}
                     onChangeText={setPhone}
+                    onFocus={scrollFocusedIntoView}
                     keyboardType="phone-pad"
                     textAlign="left"
                   />
@@ -520,6 +572,7 @@ const UserRegistrationScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={address}
                   onChangeText={setAddress}
+                  onFocus={scrollFocusedIntoView}
                   textAlign="right"
                 />
               </View>
@@ -555,6 +608,25 @@ const UserRegistrationScreen = ({
             <View style={styles.socialWrap}>
               <View style={styles.inputWrap}>
                 <View style={styles.labelRow}>
+                  <Text style={styles.label}>שם מלא להרשמה עם Google / Apple</Text>
+                  <Text style={styles.requiredMark}>*</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="שם פרטי ומשפחה"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={socialName}
+                  onChangeText={text => {
+                    setSocialName(text);
+                    if (socialError) setSocialError(null);
+                  }}
+                  onFocus={scrollFocusedIntoView}
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.inputWrap}>
+                <View style={styles.labelRow}>
                   <Text style={styles.label}>טלפון להרשמה עם Google / Apple</Text>
                   <Text style={styles.requiredMark}>*</Text>
                 </View>
@@ -566,8 +638,9 @@ const UserRegistrationScreen = ({
                     value={socialPhone}
                     onChangeText={text => {
                       setSocialPhone(text);
-                      if (socialPhoneError) setSocialPhoneError(null);
+                      if (socialError) setSocialError(null);
                     }}
+                    onFocus={scrollFocusedIntoView}
                     keyboardType="phone-pad"
                     textAlign="left"
                   />
@@ -622,9 +695,9 @@ const UserRegistrationScreen = ({
                 </TouchableOpacity>
               ) : null}
 
-              {socialPhoneError ? (
+              {socialError ? (
                 <View style={styles.socialErrorContainer}>
-                  <Text style={styles.socialErrorText}>{socialPhoneError}</Text>
+                  <Text style={styles.socialErrorText}>{socialError}</Text>
                 </View>
               ) : null}
             </View>
@@ -636,19 +709,14 @@ const UserRegistrationScreen = ({
           triggerNonce={googleTrigger}
           onTriggerConsumed={() => {}}
           onLoadingChange={setGoogleLoading}
-          onError={msg => {
-            setSocialPhoneError(msg);
-            requestAnimationFrame(() => {
-              scrollRef.current?.scrollToEnd?.({animated: true});
-            });
-          }}
+          onError={msg => showSocialError(msg)}
           phone={socialPhone.trim()}
-          name={fullName.trim() || null}
+          name={socialName.trim() || null}
           businessAddress={address.trim() || null}
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
               fallbackPhone: socialPhone.trim(),
-              fallbackName: fullName.trim(),
+              fallbackName: socialName.trim(),
               fallbackAddress: address.trim(),
             })
           }
@@ -659,19 +727,14 @@ const UserRegistrationScreen = ({
           triggerNonce={appleTrigger}
           onTriggerConsumed={() => {}}
           onLoadingChange={setAppleLoading}
-          onError={msg => {
-            setSocialPhoneError(msg);
-            requestAnimationFrame(() => {
-              scrollRef.current?.scrollToEnd?.({animated: true});
-            });
-          }}
+          onError={msg => showSocialError(msg)}
           phone={socialPhone.trim()}
-          name={fullName.trim() || null}
+          name={socialName.trim() || null}
           businessAddress={address.trim() || null}
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
               fallbackPhone: socialPhone.trim(),
-              fallbackName: fullName.trim(),
+              fallbackName: socialName.trim(),
               fallbackAddress: address.trim(),
             })
           }
@@ -712,7 +775,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 0,
     paddingVertical: 0,
-    minHeight: '100%',
   },
   card: {
     backgroundColor: '#2B2A39',

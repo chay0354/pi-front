@@ -19,6 +19,7 @@ export function isPostListingRecord(item) {
     type.includes('post') ||
     description.toLowerCase() === 'post' ||
     description === 'פוסט' ||
+    description === 'בית פתוח' ||
     item.feed_post === true ||
     item.feed_post === 'true' ||
     item.feed_post === 't' ||

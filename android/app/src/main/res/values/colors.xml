@@ -3,4 +3,6 @@
   <color name="iconBackground">#FFFFFF</color>
   <color name="colorPrimary">#023c69</color>
   <color name="colorPrimaryDark">#252525</color>
+  <!-- Match app chrome so release APKs don't get Android 15's white nav strip. -->
+  <color name="navigationBar">#1E1D27</color>
 </resources>

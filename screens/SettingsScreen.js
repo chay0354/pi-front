@@ -188,7 +188,10 @@ const SettingsScreen = ({
     })
       .then(data => {
         if (cancelled) return;
-        const rows = Array.isArray(data?.rows) ? data.rows : [];
+        // Accepted follows only (exclude pending outgoing requests).
+        const rows = (Array.isArray(data?.rows) ? data.rows : []).filter(
+          row => !row?.outgoing_follow_pending,
+        );
         setFollowingPreviewRows(rows.slice(0, 4));
       })
       .catch(() => {

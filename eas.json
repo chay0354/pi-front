@@ -1,99 +1,67 @@
 {
-
   "cli": {
-
     "version": ">= 7.0.0",
-
     "appVersionSource": "local"
-
   },
-
   "build": {
-
     "development": {
-
       "developmentClient": true,
-
       "distribution": "internal",
-
       "environment": "preview",
-
       "node": "20.18.1",
-
       "env": {
-
-        "_JAVA_OPTIONS": "-Xmx6144m -XX:MaxMetaspaceSize=512m"
-
+        "EXPO_PUBLIC_API_URL": "https://pi-back.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://opxeruasowoaybceskyp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "965378472819-ldlt6e207oh67p0ugcbhi7i4afo1ck49.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "965378472819-gjekb045h12jl9naea66mnpi8gqvtln4.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "965378472819-nfjkaacsv3df931eviblavrkcr5hqoga.apps.googleusercontent.com"
       },
-
       "ios": {
-
         "simulator": false
-
       },
-
       "android": {
-
         "buildType": "apk",
-
         "image": "ubuntu-22.04-jdk-17-ndk-r26b"
-
       }
-
     },
-
     "preview": {
-
       "distribution": "internal",
-
       "environment": "preview",
-
       "node": "20.18.1",
-
       "env": {
-
-        "_JAVA_OPTIONS": "-Xmx6144m -XX:MaxMetaspaceSize=512m"
-
+        "EXPO_PUBLIC_API_URL": "https://pi-back.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://opxeruasowoaybceskyp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "965378472819-ldlt6e207oh67p0ugcbhi7i4afo1ck49.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "965378472819-gjekb045h12jl9naea66mnpi8gqvtln4.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "965378472819-nfjkaacsv3df931eviblavrkcr5hqoga.apps.googleusercontent.com"
       },
-
       "cache": {
-
         "disabled": true
-
       },
-
       "android": {
-
         "buildType": "apk",
-
         "image": "ubuntu-22.04-jdk-17-ndk-r26b"
-
       },
-
       "ios": {
-
         "simulator": false
-
       }
-
     },
-
     "production": {
-
       "environment": "production",
-
       "node": "20.18.1",
-
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://pi-back.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://opxeruasowoaybceskyp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGVydWFzb3dvYXliY2Vza3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MDYyMzcsImV4cCI6MjA4NTA4MjIzN30.pJAaMued3jpnmS9D1pt6zmpNytcvzkhBVBk-TBQFs8w",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "965378472819-ldlt6e207oh67p0ugcbhi7i4afo1ck49.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "965378472819-gjekb045h12jl9naea66mnpi8gqvtln4.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "965378472819-nfjkaacsv3df931eviblavrkcr5hqoga.apps.googleusercontent.com"
+      },
       "android": {
-
         "buildType": "app-bundle"
-
       }
-
     }
-
   }
-
 }
-
-

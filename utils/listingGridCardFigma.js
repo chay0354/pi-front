@@ -4,6 +4,10 @@
  */
 
 import {resolveAdVideoUri} from './videoPlayback';
+import {
+  computeBrokerProfessionalStarRating,
+  isBrokerOrProfessionalSubscriptionType,
+} from './brokerProfessionalStarRating';
 
 export const HEB_M2 = 'מ״ר';
 
@@ -296,16 +300,27 @@ export const clampPiDisplay = n => {
 };
 
 /**
- * Same meaning as `displayPiRating` on `UserProfileScreen`: average of review
- * star ratings (rounded), or broker Pi from the listing when there are no reviews.
- * @param {Array<{rating?: number}>|null|undefined} reviews
- * @param {object|undefined} listing – used for `pi_value` when `reviews` is empty
+ * Same meaning as `displayPiRating` on `UserProfileScreen`.
+ * Company: average of review star ratings (rounded), or `pi_value` when empty.
+ * Broker / professional: tier progression + regression (see brokerProfessionalStarRating).
+ * @param {Array<{rating?: number, created_at?: string}>|null|undefined} reviews
+ * @param {object|undefined} listing – `pi_value` + subscription type for fallbacks
  */
 export const displayPiRatingFromReviews = (reviews, listing) => {
   const broker = brokerPiRatingFromListing(listing);
   if (!reviews || reviews.length === 0) {
     return broker;
   }
+
+  const subType = subscriptionTypeFromListing(listing);
+  if (isBrokerOrProfessionalSubscriptionType(subType)) {
+    const tier = computeBrokerProfessionalStarRating(reviews);
+    if (tier != null) {
+      return tier;
+    }
+    return broker;
+  }
+
   const sum = reviews.reduce(
     (acc, r) => acc + (Number(r?.rating) || 0),
     0,

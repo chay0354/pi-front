@@ -57,6 +57,7 @@ import {
   formatPriceHe,
   firstImageUrl,
   firstVideoUrl,
+  displayPiRatingFromReviews,
 } from '../utils/listingGridCardFigma';
 import {resolveFeedVideoPosterUri} from '../utils/feedVideoPreload';
 import {muxThumbnailUri} from '../utils/videoPlayback';
@@ -2052,18 +2053,14 @@ const UserProfileScreen = ({
   const brokerPiRating =
     user?.pi_value ?? lastAd?.pi_value ?? profile?.pi_value ?? 5;
 
-  // Average of star ratings from reviews (1–5), always whole number; fallback to rounded broker Pi
-  const displayPiRating = React.useMemo(() => {
-    const clampPi = n => {
-      const x = Math.round(Number(n));
-      if (Number.isNaN(x) || !Number.isFinite(x)) return 5;
-      return Math.min(5, Math.max(1, x));
-    };
-    if (!reviews || reviews.length === 0) return clampPi(brokerPiRating);
-    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
-    const avg = sum / reviews.length;
-    return clampPi(avg);
-  }, [reviews, brokerPiRating]);
+  const displayPiRating = React.useMemo(
+    () =>
+      displayPiRatingFromReviews(reviews, {
+        pi_value: brokerPiRating,
+        subscription_type: profileSubscriptionType,
+      }),
+    [reviews, brokerPiRating, profileSubscriptionType],
+  );
 
   // Filter out display name from tags so it doesn't appear as a specialty/region
   const tagLabel = s =>

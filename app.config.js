@@ -48,7 +48,7 @@ module.exports = {
   expo: {
     name: 'pi 2701',
     slug: 'pi-frontend',
-    version: '1.0.9',
+    version: '1.0.10',
     scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/app-icon/icon.png',
@@ -57,6 +57,12 @@ module.exports = {
       image: './assets/SplashScreen.png',
       resizeMode: 'cover',
       backgroundColor: '#252525',
+    },
+    // Dark opaque nav bar; MainActivity pads the app above it so the screen's
+    // bottom border sits exactly where the Android toolbar starts.
+    androidNavigationBar: {
+      backgroundColor: '#1e1d27',
+      barStyle: 'light-content',
     },
     assetBundlePatterns: ['**/*'],
     ios: {
@@ -89,7 +95,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 23,
+      versionCode: 32,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       adaptiveIcon: {
@@ -157,9 +163,12 @@ module.exports = {
       ],
       withAndroidIndexDevEntry,
       withAndroidForceRtl,
+      // Survives EAS prebuild (.easignore drops local android/) — pads app above system nav.
+      './plugins/withAndroidNavBarInset',
     ],
     extra: {
-      apiUrl: process.env.EXPO_PUBLIC_API_URL || '',
+      apiUrl:
+        process.env.EXPO_PUBLIC_API_URL || 'https://pi-back.vercel.app',
       eas: {
         projectId: '76dac87d-af46-4a44-96a6-88fa003f32b0',
       },

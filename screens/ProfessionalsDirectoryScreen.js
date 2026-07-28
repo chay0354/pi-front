@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  FlatList,
   Image,
   ActivityIndicator,
   SafeAreaView,
@@ -16,7 +17,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {getProfessionalsDirectory, toSubscriptionId} from '../utils/api';
-import {resolveAdVideoUri} from '../utils/videoPlayback';
+import {muxThumbnailUri, resolveAdVideoUri} from '../utils/videoPlayback';
 import {
   PROFESSIONAL_FILTER_TYPES,
   getProfessionalSpecializationsForTypes,
@@ -174,11 +175,17 @@ const ProfessionalCard = ({
   muted = true,
   onToggleMute,
   isOwnAccount = false,
+  /** Only the on-screen card should decode/play — others show a still poster. */
+  isVideoActive = false,
 }) => {
   const tags = collectTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const videoUri = resolveProfessionalVideoUri(professional);
+  const posterUri =
+    (videoUri && muxThumbnailUri(videoUri, {width: 480, time: 0})) ||
+    mediaUrl ||
+    null;
   const title = String(
     professional?.display_name ||
       (isBrokerDirectoryItem(professional) ? 'תיווך' : 'בעל מקצוע'),
@@ -187,10 +194,60 @@ const ProfessionalCard = ({
   const description = String(professional?.bio || 'ללא תיאור').trim();
   const webVideoRef = useCallback(
     node => {
-      if (node) node.muted = muted;
+      if (!node) return;
+      node.muted = muted;
+      if (isVideoActive) {
+        const playPromise = node.play?.();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(() => {});
+        }
+      } else {
+        node.pause?.();
+      }
     },
-    [muted],
+    [muted, isVideoActive],
   );
+
+  const renderMedia = () => {
+    if (videoUri && isVideoActive) {
+      if (Platform.OS === 'web') {
+        return (
+          <video
+            ref={webVideoRef}
+            src={videoUri}
+            style={styles.cardMediaWebVideo}
+            autoPlay
+            muted={muted}
+            loop
+            playsInline
+            poster={posterUri || undefined}
+          />
+        );
+      }
+      return (
+        <Video
+          key={videoUri}
+          source={{uri: videoUri}}
+          style={styles.cardMediaImage}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay
+          isMuted={muted}
+          isLooping
+          useNativeControls={false}
+        />
+      );
+    }
+    if (posterUri || mediaUrl) {
+      return (
+        <Image
+          source={{uri: posterUri || mediaUrl}}
+          style={styles.cardMediaImage}
+          resizeMode="contain"
+        />
+      );
+    }
+    return <View style={[styles.cardMediaImage, styles.cardMediaFallback]} />;
+  };
 
   return (
     <TouchableOpacity
@@ -198,39 +255,7 @@ const ProfessionalCard = ({
       onPress={onPress}
       activeOpacity={0.9}>
       <View style={styles.cardMedia}>
-        {videoUri ? (
-          Platform.OS === 'web' ? (
-            <video
-              ref={webVideoRef}
-              src={videoUri}
-              style={styles.cardMediaWebVideo}
-              autoPlay
-              muted={muted}
-              loop
-              playsInline
-              poster={mediaUrl || undefined}
-            />
-          ) : (
-            <Video
-              key={videoUri}
-              source={{uri: videoUri}}
-              style={styles.cardMediaImage}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay
-              isMuted={muted}
-              isLooping
-              useNativeControls={false}
-            />
-          )
-        ) : mediaUrl ? (
-          <Image
-            source={{uri: mediaUrl}}
-            style={styles.cardMediaImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.cardMediaImage, styles.cardMediaFallback]} />
-        )}
+        {renderMedia()}
         <LinearGradient
           colors={['rgba(129,129,129,0)', 'rgba(0,0,0,0.5)']}
           start={{x: 0.5, y: 0}}
@@ -238,7 +263,7 @@ const ProfessionalCard = ({
           style={styles.cardMediaOverlay}
           pointerEvents="none"
         />
-        {videoUri ? (
+        {videoUri && isVideoActive ? (
           <TouchableOpacity
             style={styles.cardMuteButton}
             onPress={e => {
@@ -425,6 +450,28 @@ const ProfessionalsDirectoryScreen = ({
   const [viewMode, setViewMode] = useState('cards');
   /** Only one professional card video may be unmuted at a time. */
   const [unmutedVideoId, setUnmutedVideoId] = useState(null);
+  /** Only the most-visible card mounts/plays a Video — prevents device freeze. */
+  const [activeVideoId, setActiveVideoId] = useState(null);
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55,
+    minimumViewTime: 100,
+  }).current;
+  const onViewableItemsChanged = useRef(({viewableItems}) => {
+    if (viewModeRef.current !== 'cards') {
+      setActiveVideoId(null);
+      return;
+    }
+    const active = (viewableItems || []).find(entry =>
+      resolveProfessionalVideoUri(entry?.item),
+    );
+    const nextId = active?.item?.id ?? null;
+    setActiveVideoId(nextId);
+    setUnmutedVideoId(prev =>
+      prev != null && String(prev) === String(nextId) ? prev : null,
+    );
+  }).current;
   const [showSearchSettings, setShowSearchSettings] = useState(false);
   const [draftLocation, setDraftLocation] = useState('');
   const [appliedLocation, setAppliedLocation] = useState('');
@@ -683,6 +730,7 @@ const ProfessionalsDirectoryScreen = ({
               <TouchableOpacity
                 onPress={() => {
                   setUnmutedVideoId(null);
+                  setActiveVideoId(null);
                   setViewMode(prev => (prev === 'cards' ? 'list' : 'cards'));
                 }}
                 activeOpacity={0.9}>
@@ -712,22 +760,36 @@ const ProfessionalsDirectoryScreen = ({
             <Text style={styles.retryText}>נסה שוב</Text>
           </TouchableOpacity>
         </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>לא נמצאו בעלי מקצוע</Text>
+        </View>
       ) : (
-        <ScrollView
+        <FlatList
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
+          data={filtered}
+          keyExtractor={item => String(item.id)}
+          extraData={`${viewMode}:${activeVideoId}:${unmutedVideoId}`}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          {filtered.length === 0 ? (
-            <Text style={styles.emptyText}>לא נמצאו בעלי מקצוע</Text>
-          ) : (
-            filtered.map(item => {
-              const isOwnAccount = isOwnProfessionalAccount(item, currentUser);
-              return viewMode === 'cards' ? (
+          keyboardShouldPersistTaps="handled"
+          // Keep a small window mounted; off-screen cards must not keep Video alive.
+          initialNumToRender={3}
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          renderItem={({item}) => {
+            const isOwnAccount = isOwnProfessionalAccount(item, currentUser);
+            if (viewMode === 'cards') {
+              return (
                 <ProfessionalCard
-                  key={item.id}
                   professional={item}
                   isOwnAccount={isOwnAccount}
+                  isVideoActive={
+                    String(activeVideoId) === String(item.id)
+                  }
                   muted={String(unmutedVideoId) !== String(item.id)}
                   onToggleMute={() =>
                     setUnmutedVideoId(prev =>
@@ -740,16 +802,16 @@ const ProfessionalsDirectoryScreen = ({
                     onMessageProfessional?.(item);
                   }}
                 />
-              ) : (
-                <ProfessionalListCard
-                  key={item.id}
-                  professional={item}
-                  onPress={() => onOpenProfessional?.(item)}
-                />
               );
-            })
-          )}
-        </ScrollView>
+            }
+            return (
+              <ProfessionalListCard
+                professional={item}
+                onPress={() => onOpenProfessional?.(item)}
+              />
+            );
+          }}
+        />
       )}
 
       {showSearchSettings ? (
@@ -1198,18 +1260,21 @@ const styles = StyleSheet.create({
   cardMedia: {
     height: 212,
     position: 'relative',
-    backgroundColor: '#E0DEF7',
+    // Letterbox fill when media is shorter/taller than the card (no crop).
+    backgroundColor: '#1E1D27',
+    overflow: 'hidden',
   },
   cardMediaImage: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#1E1D27',
   },
   cardMediaWebVideo: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'contain',
     display: 'block',
-    backgroundColor: '#1a1a22',
+    backgroundColor: '#1E1D27',
   },
   cardMediaFallback: {
     backgroundColor: '#5A5670',

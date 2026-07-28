@@ -1,6 +1,11 @@
 import React from 'react';
 import {View, Text, StyleSheet, Platform, I18nManager} from 'react-native';
-import {forceLtrStyle} from '../utils/rtlLayout';
+import {forceLtrStyle, physicalLeftStyle} from '../utils/rtlLayout';
+import {
+  getPostTextVisualStyle,
+  POST_TEXT_STYLE_FONTS,
+  scalePostTextOverlayBlock,
+} from '../utils/postTextOverlay';
 
 /** Literal textAlign is swapped by Android under forceRTL — map physical side
  * to the literal value that lands there (same logic as the post editor). */
@@ -10,16 +15,14 @@ const physicalTextAlign = align => {
   if (align === 'right') return 'left';
   return 'center';
 };
-import {
-  getPostTextVisualStyle,
-  POST_TEXT_STYLE_FONTS,
-  scalePostTextOverlayBlock,
-} from '../utils/postTextOverlay';
 
 /**
- * Renders saved post text blocks over feed media, mirroring the editor layout
- * (position, font, size, color, background). Only used for posts that carry an
- * explicit overlay payload — regular ads never reach this component.
+ * Renders saved post text over feed media.
+ * Prefers normalized nx/ny from measureInWindow at publish (WYSIWYG).
+ *
+ * X position uses physicalLeftStyle: measureInWindow is physical-left based,
+ * but native forceRTL mirrors style `left` — without the pre-flip, every block
+ * lands on the opposite side of the frame.
  */
 const PostTextOverlays = ({
   overlays,
@@ -32,7 +35,7 @@ const PostTextOverlays = ({
   if (!Array.isArray(overlays) || overlays.length === 0) return null;
 
   return (
-    <View style={[styles.root, forceLtrStyle]} pointerEvents="none">
+    <View style={styles.root} pointerEvents="none" collapsable={false}>
       {overlays.map((block, index) => {
         const visual = getPostTextVisualStyle(block.color, block.bgMode);
         const layout = scalePostTextOverlayBlock(block, {
@@ -47,59 +50,60 @@ const PostTextOverlays = ({
           POST_TEXT_STYLE_FONTS[0];
         const hasBackground = visual.backgroundColor !== 'transparent';
         const align = block.align || 'center';
+        const isNormalized = layout.normalized === true;
 
         return (
           <View
             key={`${index}-${String(block.text || '').slice(0, 12)}`}
+            collapsable={false}
             style={[
               styles.blockWrap,
+              physicalLeftStyle(
+                layout.translateX,
+                layout.width,
+                feedWidth,
+              ),
               {
-                left: 0,
-                top: 0,
-                width: layout.width,
-                maxWidth: layout.width,
-                transform: [
-                  {translateX: layout.translateX},
-                  {translateY: layout.translateY},
-                ],
+                top: layout.translateY,
+                padding: layout.padding ?? 0,
               },
             ]}>
-            {/* Same hugging-content structure as the editor's
-                DraggableTextBlock so feed placement matches the editor. */}
-              <View
+            <View
+              style={[
+                forceLtrStyle,
+                {
+                  alignSelf: isNormalized
+                    ? 'stretch'
+                    : align === 'left'
+                      ? 'flex-start'
+                      : align === 'right'
+                        ? 'flex-end'
+                        : 'center',
+                  maxWidth: '100%',
+                },
+                hasBackground && {
+                  backgroundColor: visual.backgroundColor,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                },
+              ]}>
+              <Text
                 style={[
+                  styles.text,
                   {
-                    alignSelf:
-                      align === 'left'
-                        ? 'flex-start'
-                        : align === 'right'
-                          ? 'flex-end'
-                          : 'center',
-                    maxWidth: '100%',
-                  },
-                  hasBackground && {
-                    backgroundColor: visual.backgroundColor,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 8,
-                    overflow: 'hidden',
+                    color: visual.textColor,
+                    fontSize: layout.fontSize,
+                    lineHeight: layout.lineHeight,
+                    textAlign: physicalTextAlign(align),
+                    writingDirection: 'rtl',
+                    fontFamily,
                   },
                 ]}>
-                <Text
-                  style={[
-                    styles.text,
-                    {
-                      color: visual.textColor,
-                      fontSize: layout.fontSize,
-                      lineHeight: layout.lineHeight,
-                      textAlign: physicalTextAlign(align),
-                      writingDirection: 'rtl',
-                      fontFamily,
-                    },
-                  ]}>
-                  {block.text}
-                </Text>
-              </View>
+                {block.text}
+              </Text>
+            </View>
           </View>
         );
       })}

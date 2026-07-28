@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
+  I18nManager,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
@@ -22,13 +23,24 @@ import {
 } from './index';
 import PostTextOverlays from './PostTextOverlays';
 import {resolveStorySlideUri} from '../utils/videoPlayback';
-import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   parsePostTextOverlayPayload,
 } from '../utils/postTextOverlay';
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
+
+/** App uses forceRTL — `row` / authored `left` flip. Stories stay Instagram LTR. */
+const NATIVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;
+const storyLtrRow = NATIVE_RTL ? 'row-reverse' : 'row';
+/** Physical-left / physical-right hit targets under swapLeftAndRightInRTL. */
+const tapZonePrevStyle = NATIVE_RTL
+  ? {position: 'absolute', right: 0, top: 0, bottom: 0, width: '33%'}
+  : {position: 'absolute', left: 0, top: 0, bottom: 0, width: '33%'};
+const tapZoneNextStyle = NATIVE_RTL
+  ? {position: 'absolute', left: 0, top: 0, bottom: 0, width: '67%'}
+  : {position: 'absolute', right: 0, top: 0, bottom: 0, width: '67%'};
+const progressFillAlign = NATIVE_RTL ? 'flex-end' : 'flex-start';
 
 function preloadRingImages(ring) {
   if (!ring?.slides?.length) return;
@@ -60,34 +72,22 @@ function storyVideoLayout(naturalW, naturalH) {
   };
 }
 
-/** Fit entire image on screen (no crop) — used for תמונה מכירתית / story photos. */
-function storyImageContainLayout(naturalW, naturalH) {
-  const {width: screenW, height: screenH} = Dimensions.get('window');
-  const w = Number(naturalW) || 0;
-  const h = Number(naturalH) || 0;
-  if (w <= 0 || h <= 0) {
-    return {width: screenW, height: screenH};
-  }
-  const scale = Math.min(screenW / w, screenH / h);
-  return {
-    width: Math.max(1, Math.round(w * scale)),
-    height: Math.max(1, Math.round(h * scale)),
-  };
-}
-
-function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
+function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
   const webVideoRef = useRef(null);
   const uri = resolveStorySlideUri(slide);
   const [videoLayout, setVideoLayout] = useState(null);
   const [imageLayout, setImageLayout] = useState(null);
   const sizedRef = useRef(false);
   const onReadyRef = useRef(onReady);
+  const onMediaLayoutRef = useRef(onMediaLayout);
   onReadyRef.current = onReady;
+  onMediaLayoutRef.current = onMediaLayout;
 
   useEffect(() => {
     sizedRef.current = false;
     setVideoLayout(null);
     setImageLayout(null);
+    onMediaLayoutRef.current?.(null);
   }, [uri]);
 
   useEffect(() => {
@@ -110,7 +110,9 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
     const h = Number(nh) || 0;
     if (w <= 0 || h <= 0) return;
     sizedRef.current = true;
-    setVideoLayout(storyVideoLayout(w, h));
+    const layout = storyVideoLayout(w, h);
+    setVideoLayout(layout);
+    onMediaLayoutRef.current?.(layout);
     // Reveal only after layout is committed — avoids the cover→sized jump.
     requestAnimationFrame(() => {
       onReadyRef.current?.();
@@ -123,7 +125,10 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady}) {
     const h = Number(nh) || 0;
     if (w <= 0 || h <= 0) return;
     sizedRef.current = true;
-    setImageLayout(storyImageContainLayout(w, h));
+    // Full width like story video — short editor captures were ~50% with contain.
+    const layout = storyVideoLayout(w, h);
+    setImageLayout(layout);
+    onMediaLayoutRef.current?.(layout);
     requestAnimationFrame(() => {
       onReadyRef.current?.();
     });
@@ -259,6 +264,8 @@ const StoryViewerModal = ({
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(true);
+  /** Actual on-screen media box (contain/fit) — overlays must use this, not the window. */
+  const [mediaFrame, setMediaFrame] = useState(null);
   const timerRef = useRef(null);
   const startRef = useRef(0);
   const rafRef = useRef(null);
@@ -296,6 +303,7 @@ const StoryViewerModal = ({
 
   useEffect(() => {
     setMediaLoading(true);
+    setMediaFrame(null);
     if (mediaReadyTimerRef.current) {
       clearTimeout(mediaReadyTimerRef.current);
     }
@@ -316,6 +324,21 @@ const StoryViewerModal = ({
       mediaReadyTimerRef.current = null;
     }
     setMediaLoading(false);
+  }, []);
+
+  const handleMediaLayout = useCallback(layout => {
+    if (
+      layout &&
+      Number(layout.width) > 0 &&
+      Number(layout.height) > 0
+    ) {
+      setMediaFrame({
+        width: Number(layout.width),
+        height: Number(layout.height),
+      });
+      return;
+    }
+    setMediaFrame(null);
   }, []);
 
   const clearTimers = useCallback(() => {
@@ -392,13 +415,23 @@ const StoryViewerModal = ({
   if (!ring || total === 0) return null;
 
   const overlayPadTop = Math.max(insets.top, Platform.OS === 'ios' ? 8 : 4);
-  const {width: storyW, height: storyH} = Dimensions.get('window');
   const storyTextPayload = (() => {
     const gd = currentSlide?.general_details;
     if (!gd || typeof gd !== 'object') return null;
-    if (gd.post_text_baked === true) return null;
+    // Photo sales images / stories bake text into pixels — never redraw live
+    // layers (full-screen scaling made text bigger and wrap to extra lines).
+    const baked = gd.post_text_baked;
+    if (baked === true || baked === 'true' || baked === 't' || baked === 1) {
+      return null;
+    }
     return parsePostTextOverlayPayload({general_details: gd});
   })();
+  const overlayFrameW = mediaFrame?.width || 0;
+  const overlayFrameH = mediaFrame?.height || 0;
+  const showLiveText =
+    !!storyTextPayload?.overlays?.length &&
+    overlayFrameW > 0 &&
+    overlayFrameH > 0;
 
   return (
     <Modal
@@ -414,16 +447,25 @@ const StoryViewerModal = ({
             isMuted={isMuted}
             isPaused={false}
             onReady={handleMediaReady}
+            onMediaLayout={handleMediaLayout}
           />
-          {storyTextPayload?.overlays?.length ? (
-            <PostTextOverlays
-              overlays={storyTextPayload.overlays}
-              previewWidth={storyTextPayload.previewWidth}
-              previewHeight={storyTextPayload.previewHeight}
-              coordsSpace={storyTextPayload.coordsSpace}
-              feedWidth={storyW}
-              feedHeight={storyH}
-            />
+          {showLiveText ? (
+            <View style={styles.textOverlayAlign} pointerEvents="none">
+              <View
+                style={{
+                  width: overlayFrameW,
+                  height: overlayFrameH,
+                }}>
+                <PostTextOverlays
+                  overlays={storyTextPayload.overlays}
+                  previewWidth={storyTextPayload.previewWidth}
+                  previewHeight={storyTextPayload.previewHeight}
+                  coordsSpace={storyTextPayload.coordsSpace}
+                  feedWidth={overlayFrameW}
+                  feedHeight={overlayFrameH}
+                />
+              </View>
+            </View>
           ) : null}
           {mediaLoading ? (
             <View style={styles.loadingOverlay} pointerEvents="none">
@@ -432,9 +474,18 @@ const StoryViewerModal = ({
           ) : null}
         </View>
 
-        <View style={[styles.tapZones, forceLtrStyle]} pointerEvents="box-none">
-          <Pressable style={styles.tapZoneLeft} onPress={goPrev} />
-          <Pressable style={styles.tapZoneRight} onPress={goNext} />
+        {/* Physical LTR: left = previous, right = next (compensates forceRTL swap). */}
+        <View style={styles.tapZones} pointerEvents="box-none">
+          <Pressable
+            style={tapZonePrevStyle}
+            onPress={goPrev}
+            accessibilityLabel="הקודם"
+          />
+          <Pressable
+            style={tapZoneNextStyle}
+            onPress={goNext}
+            accessibilityLabel="הבא"
+          />
         </View>
 
         <LinearGradient
@@ -442,7 +493,7 @@ const StoryViewerModal = ({
           locations={[0, 1]}
           style={[styles.overlayTop, {paddingTop: overlayPadTop}]}
           pointerEvents="box-none">
-          <View style={[styles.progressRow, forceLtrStyle]}>
+          <View style={[styles.progressRow, {flexDirection: storyLtrRow}]}>
             {slides.map((s, i) => {
               let fillWidth = '0%';
               if (i < slideIndex) {
@@ -462,7 +513,10 @@ const StoryViewerModal = ({
                     end={{x: 1, y: 0}}
                     style={[
                       styles.progressFill,
-                      {width: fillWidth},
+                      {
+                        width: fillWidth,
+                        alignSelf: progressFillAlign,
+                      },
                       dimVideoCurrent && {opacity: 0.45},
                     ]}
                   />
@@ -471,9 +525,9 @@ const StoryViewerModal = ({
             })}
           </View>
 
-          <View style={styles.topBar}>
+          <View style={[styles.topBar, {flexDirection: storyLtrRow}]}>
             <TouchableOpacity
-              style={styles.userRow}
+              style={[styles.userRow, {flexDirection: storyLtrRow}]}
               onPress={onPressProfile}
               activeOpacity={0.85}
               accessibilityRole="button"
@@ -488,7 +542,7 @@ const StoryViewerModal = ({
                 {ring.display_name || 'משתמש'}
               </Text>
             </TouchableOpacity>
-            <View style={styles.actionsRow}>
+            <View style={[styles.actionsRow, {flexDirection: storyLtrRow}]}>
               <TouchableOpacity
                 onPress={() => setIsMuted(m => !m)}
                 style={styles.actionBtn}
@@ -528,6 +582,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
   },
+  /** Center live text over the letterboxed media frame (same box as the image). */
+  textOverlayAlign: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mediaFullScreen: {
     width: '100%',
     height: '100%',
@@ -547,14 +607,7 @@ const styles = StyleSheet.create({
   },
   tapZones: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
     zIndex: 5,
-  },
-  tapZoneLeft: {
-    flex: 1,
-  },
-  tapZoneRight: {
-    flex: 2,
   },
   overlayTop: {
     position: 'absolute',
@@ -566,7 +619,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   progressRow: {
-    flexDirection: 'row',
     gap: 4,
     marginBottom: 13,
     marginTop: 4,
@@ -583,13 +635,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   topBar: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
   userRow: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 13,
     flexShrink: 1,
@@ -606,7 +656,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   actionsRow: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },

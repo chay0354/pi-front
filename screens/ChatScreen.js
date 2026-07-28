@@ -68,6 +68,7 @@ import {
   getRangeSliderPercentFromEvent,
   hebrewTextAlign,
 } from '../utils/rtlLayout';
+import {isFeedPostListingRecord} from '../utils/listingShape';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -466,11 +467,13 @@ const ChatScreen = ({
   /** Broker→company uses project-focused copy; other שת״פ uses broker↔broker style. */
   const isCollabToCompany = isCollabOfferMode && isPeerCompany;
   /**
-   * Offer CTA only for the person who opened chat from an ad (sharedListing),
-   * not for the listing owner who received that inquiry.
+   * Offer CTA only for the person who opened chat from a real ad (sharedListing),
+   * not from a feed post, and not for the listing owner who received that inquiry.
    */
   const openedChatFromAd = Boolean(
-    sharedListing?.id != null && String(sharedListing.id).trim() !== '',
+    sharedListing?.id != null &&
+      String(sharedListing.id).trim() !== '' &&
+      !isFeedPostListingRecord(sharedListing),
   );
   const mySubscriptionId = useMemo(() => {
     const id =
@@ -1561,6 +1564,10 @@ const ChatScreen = ({
   };
 
   const handleSubmitExclusiveOffer = async () => {
+    if (isFeedPostListingRecord(sharedListing)) {
+      Alert.alert('', 'לא ניתן לשלוח הצעת בלעדיות או שת״פ מפוסט — רק ממודעה');
+      return;
+    }
     if (!canSendBrokerOffer) {
       Alert.alert(
         '',

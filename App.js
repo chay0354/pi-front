@@ -86,6 +86,9 @@ import {
   subscriptionTypes,
   DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
   canAccessListingAnalysis,
+  DEFAULT_POST_DESCRIPTION,
+  OPEN_HOUSE_POST_DESCRIPTION,
+  isOpenHousePostDescription,
 } from './utils/constant';
 import {
   getChatUnreadCount,
@@ -101,7 +104,10 @@ import {
 } from './utils/userProfileImage';
 import {getChatListingCategoryLabel} from './utils/chatListingCategory';
 import {normalizeConversationForOpen} from './utils/chatDefaults';
-import {isAdsListingRecord} from './utils/listingShape';
+import {
+  isAdsListingRecord,
+  isFeedPostListingRecord,
+} from './utils/listingShape';
 import {enrichListingForUserProfile} from './utils/enrichListingForUserProfile';
 import {
   pickTopViewedListingForProfile,
@@ -489,6 +495,8 @@ function App() {
     editingListing: null,
     /** Sales-image edit: do not create a new story slide on finish. */
     skipStoryPublish: false,
+    /** Stored in `ads.description` when publishing a feed post (פוסט vs בית פתוח). */
+    postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
   }));
   const [editPublishRefreshKey, setEditPublishRefreshKey] = useState(0);
   /** Where AdsForm returns after cancel or successful publish. */
@@ -1180,6 +1188,7 @@ function App() {
                     returnScreen: screenName.tikTokFeed,
                     listingCategoryId: listingCat,
                     editingListing: null,
+                    postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
                   });
                     setCurrentScreen(screenName.postEditor);
                   }}
@@ -1268,7 +1277,11 @@ function App() {
                   }}
                   onShareToConversation={(conv, post) => {
                     if (!conv || !post) return;
-                    setSharedListingForChat(post);
+                    // Feed posts are not ads — never attach as sharedListing or
+                    // the chat will show בלעדיות / שת״פ offer CTAs.
+                    setSharedListingForChat(
+                      isFeedPostListingRecord(post) ? null : post,
+                    );
                     setSelectedConversation({
                       id: conv.otherUserEmail || conv.id || null,
                       conversationId: conv.conversationId || conv.id || null,
@@ -2037,6 +2050,7 @@ function App() {
                     // is created with the final sales image (incl. baked text).
                     skipStoryPublish: true,
                     editingListing: resolvedEditingListing,
+                    postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
                   });
                   if (listingCat != null) {
                     setSelectedCategory(String(listingCat));
@@ -2081,6 +2095,7 @@ function App() {
                 selectedCategory={selectedCategory}
                 publishCategoryId={postEditorConfig.listingCategoryId}
                 initialListing={postEditorConfig.editingListing}
+                defaultPostDescription={postEditorConfig.postDescriptionLabel}
                 currentUser={currentUser}
                 onClose={() => {
                   setPostEditorConfig(prev => ({
@@ -2132,7 +2147,9 @@ function App() {
                       video_url: payload.isVideo ? payload.url : null,
                       images: payload.isVideo ? [] : [payload.url],
                       image: payload.isVideo ? null : payload.url,
-                      description: 'פוסט',
+                      description:
+                        postEditorConfig.postDescriptionLabel ||
+                        DEFAULT_POST_DESCRIPTION,
                       feed_post: true,
                       property_type: 'post',
                     };
@@ -2459,7 +2476,7 @@ function App() {
                   setAdsFormReturnScreen(screenName.editPublishAd);
                   setCurrentScreen(screenName.adsForm);
                 }}
-                onCreatePost={categoryId => {
+                onCreatePost={(categoryId, opts) => {
                   const n =
                     categoryId != null && String(categoryId).trim() !== ''
                       ? parseInt(String(categoryId).trim(), 10)
@@ -2473,6 +2490,9 @@ function App() {
                     returnScreen: screenName.editPublishAd,
                     listingCategoryId: listingCat,
                     editingListing: null,
+                    postDescriptionLabel: opts?.openHouse
+                      ? OPEN_HOUSE_POST_DESCRIPTION
+                      : DEFAULT_POST_DESCRIPTION,
                   });
                   setCurrentScreen(screenName.postEditor);
                 }}
@@ -2490,6 +2510,11 @@ function App() {
                     returnScreen: screenName.editPublishAd,
                     listingCategoryId: listingCat,
                     editingListing: listing ?? null,
+                    postDescriptionLabel: isOpenHousePostDescription(
+                      listing?.description || listing?.desc,
+                    )
+                      ? OPEN_HOUSE_POST_DESCRIPTION
+                      : DEFAULT_POST_DESCRIPTION,
                   });
                   setCurrentScreen(screenName.postEditor);
                 }}

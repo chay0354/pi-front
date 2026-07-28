@@ -32,6 +32,51 @@ export const subscriptionTypes = {
   broker: 'broker',
 };
 
+/** Default feed-post label stored in `ads.description` (Edit/Publish badge). */
+export const DEFAULT_POST_DESCRIPTION = 'פוסט';
+/** Open-house feed posts (company + broker only) — same upload flow as פוסט. */
+export const OPEN_HOUSE_POST_DESCRIPTION = 'בית פתוח';
+
+export function isReservedPostDescription(description) {
+  const t = String(description || '').trim();
+  const lower = t.toLowerCase();
+  return (
+    t === DEFAULT_POST_DESCRIPTION ||
+    t === OPEN_HOUSE_POST_DESCRIPTION ||
+    lower === 'post'
+  );
+}
+
+export function isOpenHousePostDescription(description) {
+  return String(description || '').trim() === OPEN_HOUSE_POST_DESCRIPTION;
+}
+
+export function canCreateOpenHousePost(subscriptionTypeOrUser) {
+  let sub = '';
+  if (subscriptionTypeOrUser == null) {
+    sub = '';
+  } else if (
+    typeof subscriptionTypeOrUser === 'string' ||
+    typeof subscriptionTypeOrUser === 'number'
+  ) {
+    sub = String(subscriptionTypeOrUser).toLowerCase().trim();
+  } else if (typeof subscriptionTypeOrUser === 'object') {
+    sub = String(
+      subscriptionTypeOrUser.subscription_type ||
+        subscriptionTypeOrUser.subscriptionType ||
+        subscriptionTypeOrUser.type ||
+        subscriptionTypeOrUser.subscription?.subscription_type ||
+        '',
+    )
+      .toLowerCase()
+      .trim();
+  }
+  return sub === subscriptionTypes.company || sub === subscriptionTypes.broker;
+}
+
+/** Create-sheet icon for the בית פתוח row (company / broker). */
+export const CREATE_SHEET_OPEN_HOUSE_ICON = require('../assets/upload-ad/broker/house.png');
+
 /** Valid DB `ads.category` ids (gaps 9/11 unused). */
 export const LISTING_CATEGORY_IDS = new Set([
   1, 2, 3, 4, 5, 6, 7, 8, 10, 12,

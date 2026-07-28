@@ -12,6 +12,7 @@ import {
   fitWidthMediaLayout,
   normalizeNaturalSize,
 } from '../utils/fitWidthMedia';
+import {forceLtrStyle} from '../utils/rtlLayout';
 
 const FEED_IMAGE_PROPS =
   Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
@@ -29,7 +30,8 @@ function uriRecentlyFailed(uri) {
  * TikTok feed video — Mux HLS (resolution-capped).
  *
  * `fitWidth` (listing ads): full container width, letterbox top/bottom — never
- * crop left/right. Default `cover` keeps feed posts full-bleed TikTok style.
+ * crop left/right. Default letterboxes feed posts (`contain`) so uploads are
+ * never cropped on iOS/Android.
  *
  * Zero-spinner architecture: the Mux poster thumbnail (pixel-matched to the
  * video's first frame) is the ONLY loading state. There is never a spinner —
@@ -50,7 +52,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     style,
     posterUri = '',
     children = null,
-    /** Listing ads: edge-to-edge sides, letterbox top/bottom. Posts: cover. */
+    /** Listing ads: edge-to-edge sides, letterbox top/bottom. Posts: contain. */
     fitWidth = false,
     /**
      * When set, overrides feed mute behavior (`!isActive`).
@@ -314,22 +316,25 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   );
 
   const sized = fitWidth && videoLayout != null;
-  const posterResizeMode = fitWidth ? 'contain' : 'cover';
 
   const posterVisible = Boolean(posterUri) && (!hasFrame || failed);
   const posterLayer = posterVisible ? (
     <Image
       source={{uri: posterUri}}
       {...FEED_IMAGE_PROPS}
-      style={fitWidth ? styles.posterContain : styles.poster}
-      resizeMode={posterResizeMode}
+      style={styles.posterContain}
+      resizeMode="contain"
     />
   ) : null;
 
   // Post text overlays are part of the post: always visible, over the poster
   // while loading and over the video once the first frame lands.
+  // forceLtr: nx from measureInWindow is physical-left; RTL must not mirror it.
   const overlayLayer = children ? (
-    <View style={styles.overlaySlot} pointerEvents="box-none">
+    <View
+      style={[styles.overlaySlot, forceLtrStyle]}
+      pointerEvents="box-none"
+      collapsable={false}>
       {children}
     </View>
   ) : null;
@@ -353,8 +358,8 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
           <Image
             source={{uri: posterUri}}
             {...FEED_IMAGE_PROPS}
-            style={fitWidth ? styles.posterContain : styles.poster}
-            resizeMode={posterResizeMode}
+            style={styles.posterContain}
+            resizeMode="contain"
           />
         ) : null}
         {overlayLayer}
@@ -433,7 +438,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
             ? sized
               ? ResizeMode.STRETCH
               : ResizeMode.CONTAIN
-            : ResizeMode.COVER
+            : ResizeMode.CONTAIN
         }
         shouldPlay={shouldPlay}
         isLooping
@@ -484,12 +489,15 @@ export function FeedVideoPosterPlaceholder({
         <Image
           source={{uri: posterUri}}
           {...FEED_IMAGE_PROPS}
-          style={fitWidth ? styles.posterContain : styles.poster}
-          resizeMode={fitWidth ? 'contain' : 'cover'}
+          style={styles.posterContain}
+          resizeMode="contain"
         />
       ) : null}
       {children ? (
-        <View style={styles.overlaySlot} pointerEvents="box-none">
+        <View
+          style={[styles.overlaySlot, forceLtrStyle]}
+          pointerEvents="box-none"
+          collapsable={false}>
           {children}
         </View>
       ) : null}
@@ -505,9 +513,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  poster: {
-    ...StyleSheet.absoluteFillObject,
   },
   posterContain: {
     width: '100%',
@@ -536,7 +541,7 @@ const styles = StyleSheet.create({
   webVideo: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'contain',
     backgroundColor: 'transparent',
     display: 'block',
   },

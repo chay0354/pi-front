@@ -21,7 +21,7 @@ import {
 } from '../utils/mediaLibraryPermission';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {uploadFile, createListing, getApiUrl} from '../utils/api';
+import {uploadFile, createListing} from '../utils/api';
 import {categoryImages} from '../utils/constant';
 import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import AmenityQuantityPill from '../components/AmenityQuantityPill';
@@ -479,78 +479,84 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
         return;
       }
 
-      // Upload files to Supabase storage
+      // Upload files directly to Supabase (signed URL) — never through Vercel.
       let uploadedMainImageUrl = null;
       const uploadedAdditionalImageUrls = [];
       let uploadedVideoUrl = null;
 
+      const uploadMedia = async (fileObj, folder, progressKey) => {
+        if (!fileObj?.uri && !fileObj?.file) return null;
+        setUploadProgress(prev => ({...prev, [progressKey]: true}));
+        try {
+          const result = await uploadFile(
+            {
+              uri: fileObj.uri,
+              type: fileObj.type,
+              name: fileObj.name,
+              file: fileObj.file,
+              size: fileObj.file?.size || fileObj.fileSize,
+              fileSize: fileObj.fileSize,
+            },
+            folder,
+            {
+              timeoutMs: String(folder).includes('video') ? 300000 : 120000,
+            },
+          );
+          if (!result?.url) {
+            throw new Error(result?.error || 'Failed to upload file');
+          }
+          return result.url;
+        } finally {
+          setUploadProgress(prev => ({...prev, [progressKey]: false}));
+        }
+      };
+
       // For category 3, upload user's image if provided, otherwise use fixed image
       if (category === 3) {
-        if (mainImage && mainImage.file) {
-          // User uploaded their own image - upload it
+        if (mainImage && (mainImage.uri || mainImage.file)) {
           try {
-            setUploadProgress(prev => ({...prev, mainImage: true}));
-            const formData = new FormData();
-            formData.append('file', mainImage.file);
-            formData.append('folder', 'listings/images');
-
-            const response = await fetch(`${getApiUrl()}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-
-            const data = await response.json();
-            if (data.success && data.url) {
-              uploadedMainImageUrl = data.url;
-            } else {
-              throw new Error(data.error || 'Failed to upload image');
-            }
+            uploadedMainImageUrl = await uploadMedia(
+              mainImage,
+              'listings/images',
+              'mainImage',
+            );
           } catch (error) {
             console.error('Error uploading user image for category 3:', error);
             alert('שגיאה בהעלאת התמונה. נסה שוב.');
             setUploading(false);
             return;
-          } finally {
-            setUploadProgress(prev => ({...prev, mainImage: false}));
           }
         } else {
-          // No user image - upload the fixed image from assets
           try {
             if (Platform.OS === 'web') {
               setUploadProgress(prev => ({...prev, mainImage: true}));
-              // Fetch the image from the asset
               const imageModule = require('../assets/image-insert-2.png');
               const imageUrl =
                 typeof imageModule === 'string'
                   ? imageModule
                   : imageModule.default || imageModule;
-
-              // Fetch the image and convert to blob
               const response = await fetch(imageUrl);
               const blob = await response.blob();
               const file = new File([blob], 'image-insert-2.png', {
                 type: 'image/png',
               });
-
-              const formData = new FormData();
-              formData.append('file', file);
-              formData.append('folder', 'listings/images');
-
-              const uploadResponse = await fetch(`${getApiUrl()}/api/upload`, {
-                method: 'POST',
-                body: formData,
-              });
-
-              const uploadData = await uploadResponse.json();
-              if (uploadData.success && uploadData.url) {
+              const uploadData = await uploadFile(
+                {
+                  uri: URL.createObjectURL(file),
+                  type: 'image/png',
+                  name: 'image-insert-2.png',
+                  file,
+                  size: file.size,
+                },
+                'listings/images',
+              );
+              if (uploadData?.url) {
                 uploadedMainImageUrl = uploadData.url;
               } else {
                 throw new Error(
-                  uploadData.error || 'Failed to upload fixed image',
+                  uploadData?.error || 'Failed to upload fixed image',
                 );
               }
-            } else {
-              // For native, you might need a different approach
             }
           } catch (error) {
             console.error('Error uploading fixed image for category 3:', error);
@@ -564,94 +570,56 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
       }
 
       // Upload main image (skip for category 3)
-      if (category !== 3 && mainImage && mainImage.file) {
+      if (category !== 3 && mainImage && (mainImage.uri || mainImage.file)) {
         try {
-          setUploadProgress(prev => ({...prev, mainImage: true}));
-          const formData = new FormData();
-          formData.append('file', mainImage.file);
-          formData.append('folder', 'listings/images');
-
-          const response = await fetch(`${getApiUrl()}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await response.json();
-          if (data.success && data.url) {
-            uploadedMainImageUrl = data.url;
-          } else {
-            throw new Error(data.error || 'Failed to upload main image');
-          }
+          uploadedMainImageUrl = await uploadMedia(
+            mainImage,
+            'listings/images',
+            'mainImage',
+          );
         } catch (error) {
           console.error('Error uploading main image:', error);
-          alert('שגיאה בהעלאת התמונה הראשית. נסה שוב.');
+          alert(
+            error?.message?.includes('גדול מדי')
+              ? error.message
+              : 'שגיאה בהעלאת התמונה הראשית. נסה שוב.',
+          );
           setUploading(false);
           return;
-        } finally {
-          setUploadProgress(prev => ({...prev, mainImage: false}));
         }
       }
 
       // Upload additional images
       for (let i = 0; i < additionalImages.length; i++) {
-        if (additionalImages[i] && additionalImages[i].file) {
+        if (additionalImages[i] && (additionalImages[i].uri || additionalImages[i].file)) {
           try {
-            setUploadProgress(prev => ({
-              ...prev,
-              [`additional-${i}`]: true,
-            }));
-            const formData = new FormData();
-            formData.append('file', additionalImages[i].file);
-            formData.append('folder', 'listings/images');
-
-            const response = await fetch(`${getApiUrl()}/api/upload`, {
-              method: 'POST',
-              body: formData,
-            });
-
-            const data = await response.json();
-            if (data.success && data.url) {
-              uploadedAdditionalImageUrls[i] = data.url;
-            } else {
-              console.error(
-                `Failed to upload additional image ${i}:`,
-                data.error,
-              );
-            }
+            uploadedAdditionalImageUrls[i] = await uploadMedia(
+              additionalImages[i],
+              'listings/images',
+              `additional-${i}`,
+            );
           } catch (error) {
             console.error(`Error uploading additional image ${i}:`, error);
-          } finally {
-            setUploadProgress(prev => ({
-              ...prev,
-              [`additional-${i}`]: false,
-            }));
           }
         }
       }
 
-      // Upload video if exists
-      if (videoFile && videoFile.file) {
+      // Upload video if exists — signed URL path (large files must not hit Vercel)
+      if (videoFile && (videoFile.uri || videoFile.file)) {
         try {
-          setUploadProgress(prev => ({...prev, video: true}));
-          const formData = new FormData();
-          formData.append('file', videoFile.file);
-          formData.append('folder', 'listings/videos');
-
-          const response = await fetch(`${getApiUrl()}/api/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          const data = await response.json();
-          if (data.success && data.url) {
-            uploadedVideoUrl = data.url;
-          } else {
-            console.error('Failed to upload video:', data.error);
-          }
+          uploadedVideoUrl = await uploadMedia(
+            videoFile,
+            'listings/videos',
+            'video',
+          );
         } catch (error) {
           console.error('Error uploading video:', error);
-        } finally {
-          setUploadProgress(prev => ({...prev, video: false}));
+          alert(
+            error?.message ||
+              'שגיאה בהעלאת הסרטון. נסו סרטון קצר יותר או באיכות נמוכה יותר.',
+          );
+          setUploading(false);
+          return;
         }
       }
 

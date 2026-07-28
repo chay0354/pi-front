@@ -34,6 +34,8 @@ const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
 
 const LOOP_COPIES = 7;
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
+/** Android only — ignore tiny coast motion so center doesn't flicker while slowing. */
+const MOMENTUM_COAST_FREEZE_VELOCITY = 0.35;
 const SNAP_POSITION_EPSILON = 3;
 const LOOP_EDGE_BUFFER_ITEMS = 1.5;
 
@@ -666,11 +668,36 @@ const Carusel = ({
     ],
   );
 
+  const scrollVelocityPxPerMs = useCallback(scrollPosition => {
+    const now =
+      typeof globalThis.performance !== 'undefined' &&
+      typeof globalThis.performance.now === 'function'
+        ? globalThis.performance.now()
+        : Date.now();
+    const prev = lastScrollSampleRef.current;
+    const elapsed = now - prev.t;
+    if (elapsed <= 0) {
+      return 0;
+    }
+    return Math.abs(scrollPosition - prev.x) / elapsed;
+  }, []);
+
   const updateLitCenterDuringScroll = useCallback(
-    scrollPosition => {
-      // Always track the nearest category with no hysteresis so every category
-      // you pass while dragging or coasting gets a center update + tick.
-      applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
+    (scrollPosition, velocity) => {
+      // iOS: update on every frame (current behavior).
+      if (Platform.OS !== 'android') {
+        applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
+        return;
+      }
+      // Android (older feel): track while dragging; freeze center during slow coast.
+      if (isDraggingRef.current) {
+        applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, false));
+        return;
+      }
+      if (velocity < MOMENTUM_COAST_FREEZE_VELOCITY) {
+        return;
+      }
+      applyVirtualCenter(closestVirtualIndexForScroll(scrollPosition, true));
     },
     [applyVirtualCenter, closestVirtualIndexForScroll],
   );
@@ -678,6 +705,7 @@ const Carusel = ({
   const handleScroll = useCallback(
     event => {
       const scrollPosition = event.nativeEvent.contentOffset.x;
+      const velocity = scrollVelocityPxPerMs(scrollPosition);
       const now =
         typeof globalThis.performance !== 'undefined' &&
         typeof globalThis.performance.now === 'function'
@@ -691,8 +719,13 @@ const Carusel = ({
         return;
       }
 
-      // Update center (+ tick) on every scroll frame so each category you pass fires.
-      updateLitCenterDuringScroll(scrollPosition);
+      updateLitCenterDuringScroll(scrollPosition, velocity);
+
+      // Android: only teleport the infinite loop while the finger is down
+      // (older behavior). iOS keeps repositioning during coast too.
+      if (Platform.OS === 'android' && !isDraggingRef.current) {
+        return;
+      }
 
       if (Platform.OS === 'android') {
         if (now < androidScrollNextEmitRef.current) {
@@ -703,7 +736,11 @@ const Carusel = ({
 
       repositionInfiniteLoopIfNeeded(scrollPosition);
     },
-    [updateLitCenterDuringScroll, repositionInfiniteLoopIfNeeded],
+    [
+      updateLitCenterDuringScroll,
+      repositionInfiniteLoopIfNeeded,
+      scrollVelocityPxPerMs,
+    ],
   );
 
   const handleScrollBeginDrag = useCallback(() => {
@@ -894,9 +931,11 @@ const Carusel = ({
         horizontal
         scrollEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate={Platform.OS === 'ios' ? 'fast' : 0.9}
-        snapToInterval={itemWidth}
-        snapToAlignment="center"
+        // iOS keeps current snap feel; Android restores older free-scroll physics.
+        decelerationRate={Platform.OS === 'ios' ? 'fast' : 'normal'}
+        {...(Platform.OS === 'ios'
+          ? {snapToInterval: itemWidth, snapToAlignment: 'center'}
+          : {})}
         bounces={false}
         pagingEnabled={false}
         onScroll={animatedScrollHandler}

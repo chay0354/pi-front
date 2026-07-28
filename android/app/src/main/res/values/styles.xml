@@ -1,5 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-  <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+  <!-- Dark app chrome: Light parent + targetSdk 35 paints a white nav bar in release APKs. -->
+  <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
     <item name="android:textColor">@android:color/black</item>
     <item name="android:editTextStyle">@style/ResetEditText</item>
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
@@ -7,6 +8,13 @@
     <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
     <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     <item name="android:statusBarColor">@android:color/transparent</item>
+    <!-- Opaque dark bar: app content ends above it (MainActivity pads by its height). -->
+    <item name="android:navigationBarColor">@color/navigationBar</item>
+    <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+    <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+    <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+    <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+    <item name="android:navigationBarDividerColor" tools:targetApi="28">@android:color/transparent</item>
     <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
@@ -18,6 +26,6 @@
     <item name="android:windowBackground">@drawable/splashscreen</item>
     <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     <item name="android:statusBarColor">@android:color/transparent</item>
-    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@color/navigationBar</item>
   </style>
 </resources>

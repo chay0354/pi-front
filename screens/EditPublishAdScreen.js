@@ -23,8 +23,13 @@ import {
   brokerCategories,
   canShowListingAdInCreateSheet,
   canAccessListingAnalysis,
+  canCreateOpenHousePost,
+  CREATE_SHEET_OPEN_HOUSE_ICON,
+  DEFAULT_POST_DESCRIPTION,
   getCreateSheetListingIcon,
   getPublishCategoriesStrip,
+  isOpenHousePostDescription,
+  OPEN_HOUSE_POST_DESCRIPTION,
   resolveListingCategoryFromEditProfileUi,
   subscriptionTypes,
   toEditProfileUiCategoryId,
@@ -216,6 +221,7 @@ const isPostListingRecord = item => {
     type.includes('post') ||
     descLower === 'post' ||
     descLower.includes('פוסט') ||
+    isOpenHousePostDescription(description) ||
     descLower.includes('post') ||
     item.feed_post === true ||
     item.feed_post === 'true' ||
@@ -294,20 +300,33 @@ const buildOldestFirstOrdinalMap = listings => {
   return map;
 };
 
-const isCompanyUser = user =>
-  String(user?.subscription_type || '').trim().toLowerCase() ===
-  subscriptionTypes.company;
+const isCompanyUser = user => {
+  const t = String(
+    user?.subscription_type || user?.subscriptionType || '',
+  )
+    .trim()
+    .toLowerCase();
+  return t === subscriptionTypes.company;
+};
 
-const isBrokerUser = user =>
-  String(user?.subscription_type || '').trim().toLowerCase() ===
-  subscriptionTypes.broker;
+const isBrokerUser = user => {
+  const t = String(
+    user?.subscription_type || user?.subscriptionType || '',
+  )
+    .trim()
+    .toLowerCase();
+  return t === subscriptionTypes.broker;
+};
 
 const canOpenListingAnalysis = user =>
   canAccessListingAnalysis(user?.subscription_type);
 
-/** White badge on ad cards: land → קרקע; company → פרויקט; else נכס. */
+/** White badge on ad cards: open house → בית פתוח; post → פוסט; land → קרקע; etc. */
 const getListingTypeBadgeLabel = (listing, currentUser) => {
-  if (isPostListingRecord(listing)) return 'פוסט';
+  if (isOpenHousePostDescription(listing?.description || listing?.desc)) {
+    return OPEN_HOUSE_POST_DESCRIPTION;
+  }
+  if (isPostListingRecord(listing)) return DEFAULT_POST_DESCRIPTION;
   const cat =
     listing?.category != null ? parseInt(String(listing.category), 10) : NaN;
   if (cat === 7) return 'קרקע';
@@ -596,6 +615,11 @@ const EditPublishAdScreen = ({
       ),
     [currentUser?.subscription_type, selectedListingCategoryId],
   );
+  // בית פתוח: company + broker only
+  const showOpenHouseCreateInSheet =
+    isCompanyUser(currentUser) ||
+    isBrokerUser(currentUser) ||
+    canCreateOpenHousePost(currentUser);
   const filteredListings = useMemo(() => {
     if (publishCategoriesStrip.length === 0) {
       return mergedListings;
@@ -1080,10 +1104,10 @@ const EditPublishAdScreen = ({
       onCreateAd(selectedListingCategoryId ?? selectedCategoryId, opts);
   };
 
-  const openCreatePost = () => {
+  const openCreatePost = (opts = {}) => {
     setShowCreateSheet(false);
     onCreatePost &&
-      onCreatePost(selectedListingCategoryId ?? selectedCategoryId);
+      onCreatePost(selectedListingCategoryId ?? selectedCategoryId, opts);
   };
 
   return (
@@ -1320,6 +1344,17 @@ const EditPublishAdScreen = ({
                   />
                 ))}
               {showListingCreateInSheet ? <CreateAdSheetDivider /> : null}
+              {showOpenHouseCreateInSheet ? (
+                <>
+                  <CreateAdSheetRow
+                    title={OPEN_HOUSE_POST_DESCRIPTION}
+                    subtitle="פרסמו אירוע בית פתוח לקהילה"
+                    iconSource={CREATE_SHEET_OPEN_HOUSE_ICON}
+                    onPress={() => openCreatePost({openHouse: true})}
+                  />
+                  <CreateAdSheetDivider />
+                </>
+              ) : null}
               <CreateAdSheetRow
                 title="פוסט"
                 subtitle={
@@ -1328,7 +1363,7 @@ const EditPublishAdScreen = ({
                     : 'שתף מידע או עדכון עם הקהילה'
                 }
                 iconSource={CREATE_SHEET_POST_ICON}
-                onPress={openCreatePost}
+                onPress={() => openCreatePost()}
               />
             </CreateAdSheet>
           </View>

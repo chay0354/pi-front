@@ -14,6 +14,7 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {getReviews, submitReview} from '../utils/api';
+import {displayPiRatingFromReviews} from '../utils/listingGridCardFigma';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import ProfileAvatar from '../components/ProfileAvatar';
 import {flexStart} from '../utils/rtlLayout';
@@ -154,17 +155,14 @@ const ProfessionalFlyerScreen = ({
   const phones = useMemo(() => collectPhones(professional), [professional]);
   const tags = useMemo(() => collectTags(professional), [professional]);
 
-  const averageRating = useMemo(() => {
-    if (!Array.isArray(reviews) || reviews.length === 0) {
-      return Math.max(
-        1,
-        Math.min(5, Math.round(Number(professional?.average_rating) || 5)),
-      );
-    }
-    const sum = reviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
-    const avg = Math.round(sum / reviews.length);
-    return Math.max(1, Math.min(5, avg || 5));
-  }, [reviews, professional?.average_rating]);
+  const averageRating = useMemo(
+    () =>
+      displayPiRatingFromReviews(reviews, {
+        pi_value: professional?.average_rating,
+        subscription_type: professional?.subscription_type,
+      }),
+    [reviews, professional?.average_rating, professional?.subscription_type],
+  );
 
   useEffect(() => {
     let cancelled = false;

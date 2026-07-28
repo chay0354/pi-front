@@ -12,15 +12,40 @@ const HOLD_BEFORE_MS = 300; // stay at full initial size before moving
 const MOVE_MS = 1800; // slow move up + shrink, all together
 const TARGET_WAIT_MS = 250; // brief wait for Home's real logo measurement
 
+/** Must stay in sync with `styles.logo` / menu in Home.js. */
+export const HOME_HEADER_LOGO = {
+  width: 130,
+  height: 122,
+  marginTop: -36,
+  menuMarginTop: 20,
+  menuHeight: 20,
+};
+
+/** Deterministic header-logo rect (avoids measureInWindow through 3D flip). */
+export function getHomeHeaderLogoRect(screenWidth, insetsTop) {
+  const y =
+    (Number(insetsTop) || 0) +
+    HOME_HEADER_LOGO.menuMarginTop +
+    HOME_HEADER_LOGO.menuHeight +
+    HOME_HEADER_LOGO.marginTop;
+  return {
+    x: (screenWidth - HOME_HEADER_LOGO.width) / 2,
+    y,
+    width: HOME_HEADER_LOGO.width,
+    height: HOME_HEADER_LOGO.height,
+  };
+}
+
 /**
  * Brief intro modal shown on Home — same logo as the header (`homeLogo.png`).
- * The logo holds large, then moves + shrinks to the exact measured header
- * logo rect and stays fully opaque. Home keeps its real logo hidden until
- * this lands, then we hand off so it feels like one continuous logo.
+ * The logo holds large, then moves + shrinks to the header logo rect and
+ * stays fully opaque. Home keeps its real logo hidden until this lands,
+ * then we hand off so it feels like one continuous logo.
  */
 export default function HomeIntroModal({
   visible,
   targetLayout,
+  insetsTop = 0,
   onShown,
   onHidden,
 }) {
@@ -44,14 +69,8 @@ export default function HomeIntroModal({
   );
 
   const fallbackTargetRect = useMemo(
-    () => ({
-      x: screenWidth / 2 - 65,
-      y: screenHeight * 0.08,
-      // Matches Home's actual logo style (width:130, height:122).
-      width: 130,
-      height: 122,
-    }),
-    [screenWidth, screenHeight],
+    () => getHomeHeaderLogoRect(screenWidth, insetsTop),
+    [screenWidth, insetsTop],
   );
 
   const {
@@ -104,12 +123,16 @@ export default function HomeIntroModal({
     };
   }, [resolvedTarget, fallbackTargetRect, initialRect, progress]);
 
-  // Always-current targetLayout, readable from inside timers without a
-  // stale closure (the start effect below only depends on `visible`).
+  // Always-current layouts, readable from inside timers without a stale
+  // closure (the start effect below only depends on `visible` / mount).
   const targetLayoutRef = useRef(targetLayout);
+  const computedTargetRef = useRef(fallbackTargetRect);
   useEffect(() => {
     targetLayoutRef.current = targetLayout;
   }, [targetLayout]);
+  useEffect(() => {
+    computedTargetRef.current = fallbackTargetRect;
+  }, [fallbackTargetRect]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -125,6 +148,31 @@ export default function HomeIntroModal({
     let waitTimer;
     let handoffFrame1;
     let handoffFrame2;
+
+    const pickTarget = () => {
+      // Prefer layout math over measureInWindow: the header logo sits inside
+      // a perspective/rotateY flip face, and early measures often report a Y
+      // that's too high — animation lands high, then jumps down on handoff.
+      const measured = targetLayoutRef.current;
+      const computed = computedTargetRef.current;
+      if (
+        measured &&
+        measured.width > 0 &&
+        measured.height > 0 &&
+        Number.isFinite(measured.x) &&
+        Number.isFinite(measured.y) &&
+        Math.abs(measured.y - computed.y) <= 12 &&
+        Math.abs(measured.x - computed.x) <= 24
+      ) {
+        return {
+          x: measured.x,
+          y: measured.y,
+          width: computed.width,
+          height: computed.height,
+        };
+      }
+      return computed;
+    };
 
     const startMove = target => {
       setResolvedTarget(target);
@@ -146,16 +194,15 @@ export default function HomeIntroModal({
       });
     };
 
-    // Hold at full initial size first, then move once we have a real
-    // (or, after a short wait, fallback) target — captured once via
-    // resolvedTarget, never updated again once the animation begins.
+    // Hold at full initial size first, then move to a stable target —
+    // captured once via resolvedTarget, never updated mid-flight.
     holdTimer = setTimeout(() => {
       if (targetLayoutRef.current) {
-        startMove(targetLayoutRef.current);
+        startMove(pickTarget());
         return;
       }
       waitTimer = setTimeout(() => {
-        startMove(targetLayoutRef.current || fallbackTargetRect);
+        startMove(pickTarget());
       }, TARGET_WAIT_MS);
     }, HOLD_BEFORE_MS);
 

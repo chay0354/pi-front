@@ -35,7 +35,6 @@ import {
   createSalesImageStory,
   updateListing,
   resolveSubscriptionId,
-  getResolvedApiUrl,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
@@ -1557,10 +1556,10 @@ const AdsForm = ({
       return;
     }
     try {
+      // Match PostEditor: no system crop — full image, letterboxed in preview.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: AD_IMAGE_PICKER_QUALITY,
       });
       if (!result.canceled && result.assets?.[0]) {
@@ -1983,38 +1982,33 @@ const AdsForm = ({
           try {
             if (Platform.OS === 'web') {
               setUploadProgress(prev => ({...prev, mainImage: true}));
-              // Fetch the image from the asset
               const imageModule = require('../assets/image-insert-2.png');
               const imageUrl =
                 typeof imageModule === 'string'
                   ? imageModule
                   : imageModule.default || imageModule;
 
-              // Fetch the image and convert to blob
               const response = await fetch(imageUrl);
               const blob = await response.blob();
               const file = new File([blob], 'image-insert-2.png', {
                 type: 'image/png',
               });
-
-              const formData = new FormData();
-              formData.append('file', file);
-              formData.append('folder', 'listings/images');
-
-              const uploadResponse = await fetch(
-                `${getResolvedApiUrl()}/api/upload`,
+              // Signed URL — do not POST file bytes through Vercel.
+              const uploadData = await uploadFile(
                 {
-                  method: 'POST',
-                  body: formData,
+                  uri: URL.createObjectURL(file),
+                  type: 'image/png',
+                  name: 'image-insert-2.png',
+                  file,
+                  size: file.size,
                 },
+                'listings/images',
               );
-
-              const uploadData = await uploadResponse.json();
-              if (uploadData.success && uploadData.url) {
+              if (uploadData?.url) {
                 uploadedMainImageUrl = uploadData.url;
               } else {
                 throw new Error(
-                  uploadData.error || 'Failed to upload fixed image',
+                  uploadData?.error || 'Failed to upload fixed image',
                 );
               }
             } else {
@@ -2343,11 +2337,24 @@ const AdsForm = ({
             await createSalesImageStory({
               imageUrl: uploadedSalesImageUrl,
               subscriptionId: publisherSubId,
-              generalDetails:
-                salesImageEditorMeta?.generalDetails &&
-                typeof salesImageEditorMeta.generalDetails === 'object'
-                  ? salesImageEditorMeta.generalDetails
-                  : null,
+              // Photo sales images bake text into pixels. Passing overlay
+              // metadata made the story redraw text at full-screen scale
+              // (bigger + wrapped to 2 lines). Only keep live layers for
+              // non-baked cases (e.g. video + text).
+              generalDetails: (() => {
+                const gd = salesImageEditorMeta?.generalDetails;
+                if (!gd || typeof gd !== 'object') return null;
+                const baked = gd.post_text_baked;
+                if (
+                  baked === true ||
+                  baked === 'true' ||
+                  baked === 't' ||
+                  baked === 1
+                ) {
+                  return null;
+                }
+                return gd;
+              })(),
             });
           } catch (mirrorErr) {
             console.warn(
@@ -2954,10 +2961,10 @@ const AdsForm = ({
 
 function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
   const {scrollRef, keyboardInset, onScroll} = useFormScroll();
-  // iOS: only lift the sticky publish footer (window height stays full).
-  // Android: adjustResize already shrinks the window — do not add inset again.
-  // Never also pad the ScrollView by keyboard height; that double-lifts content.
-  const liftForKeyboard = Platform.OS === 'ios' ? keyboardInset : 0;
+  // iOS: lift sticky publish footer by keyboard height (window stays full).
+  // Android: adjustResize does not reliably clear the sticky footer / bottom
+  // fields in this app — lift the footer the same way (iOS behavior unchanged).
+  const liftForKeyboard = keyboardInset;
   const keyboardOpen = liftForKeyboard > 0;
 
   return (
@@ -2967,7 +2974,10 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingBottom: 24},
+          {
+            // Extra space so the last fields can scroll above the footer + keyboard.
+            paddingBottom: 24 + (Platform.OS === 'android' ? liftForKeyboard : 0),
+          },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"

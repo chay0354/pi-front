@@ -6,6 +6,8 @@ import {
   Animated,
   Platform,
   InteractionManager,
+  TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import React, {
   useCallback,
@@ -20,8 +22,9 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import Carusel from '../components/Carusel';
 import {FeedVideoPlayer} from '../components/FeedVideoPlayer';
-import HomeIntroModal from '../components/HomeIntroModal';
-import {TouchableOpacity} from 'react-native';
+import HomeIntroModal, {
+  getHomeHeaderLogoRect,
+} from '../components/HomeIntroModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
@@ -212,9 +215,17 @@ const Home = ({
   onIntroModalShown,
 }) => {
   const insets = useSafeAreaInsets();
+  const {width: windowWidth} = useWindowDimensions();
   const logoImageRef = useRef(null);
   const [logoRevealed, setLogoRevealed] = useState(!showIntroModal);
-  const [logoTargetLayout, setLogoTargetLayout] = useState(null);
+  // Seed with layout math so the intro never animates to a stale/high measure.
+  const [logoTargetLayout, setLogoTargetLayout] = useState(() =>
+    getHomeHeaderLogoRect(windowWidth, insets.top),
+  );
+
+  useEffect(() => {
+    setLogoTargetLayout(getHomeHeaderLogoRect(windowWidth, insets.top));
+  }, [windowWidth, insets.top]);
   const [storyRings, setStoryRings] = useState([]);
   const [storiesLoading, setStoriesLoading] = useState(eagerLoad);
   const [viewerRing, setViewerRing] = useState(null);
@@ -597,9 +608,8 @@ const Home = ({
           source={require('../assets/homeLogo.png')}
           style={[styles.logo, !logoRevealed && styles.logoHidden]}
           onLayout={() => {
-            // measureInWindow gives absolute screen coords — needed so the
-            // intro modal (its own full-screen overlay layer) can animate
-            // its logo to land exactly here. Opacity 0 still lays out.
+            // Optional refine — only accepted in HomeIntroModal when close to
+            // the computed header rect (3D flip face can skew measureInWindow).
             requestAnimationFrame(() => {
               logoImageRef.current?.measureInWindow?.((x, y, width, height) => {
                 if (width > 0 && height > 0) {
@@ -765,6 +775,7 @@ const Home = ({
       <HomeIntroModal
         visible={showIntroModal}
         targetLayout={logoTargetLayout}
+        insetsTop={insets.top}
         onShown={onIntroModalShown}
         onHidden={() => setLogoRevealed(true)}
       />

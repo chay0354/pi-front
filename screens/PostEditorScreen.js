@@ -18,6 +18,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
   InteractionManager,
   Animated,
   Easing,
@@ -47,6 +48,10 @@ import {
 } from '../utils/api';
 import {forceLtrStyle} from '../utils/rtlLayout';
 import {
+  DEFAULT_POST_DESCRIPTION,
+  isReservedPostDescription,
+} from '../utils/constant';
+import {
   buildPostTextGeneralDetails,
   serializePostTextOverlays,
   parsePostTextOverlayPayload,
@@ -56,6 +61,7 @@ import {
   hydratePostEditorBlocksFromOverlays,
 } from '../utils/postTextOverlay';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
+import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
 import {
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
@@ -519,6 +525,21 @@ const measurePostStageMapping = (previewRef, stageRef) =>
 const TEXT_BLOCK_TAP_MOVE_PX = 8;
 const TEXT_BLOCK_TOUCH_PAD = 24;
 
+const measureNodeInWindow = node =>
+  new Promise(resolve => {
+    if (!node?.measureInWindow) {
+      resolve(null);
+      return;
+    }
+    node.measureInWindow((x, y, w, h) => {
+      if (!(w > 0) || !(h >= 0) || !Number.isFinite(x) || !Number.isFinite(y)) {
+        resolve(null);
+        return;
+      }
+      resolve({x, y, w, h});
+    });
+  });
+
 const DraggableTextBlock = React.memo(
   ({
     block,
@@ -530,6 +551,8 @@ const DraggableTextBlock = React.memo(
     onPress,
     onUpdatePosition,
     onBringToFront,
+    /** Register measureInWindow() for WYSIWYG overlay serialize. */
+    onRegisterMeasure,
   }) => {
     const onPressRef = useRef(onPress);
     onPressRef.current = onPress;
@@ -541,6 +564,8 @@ const DraggableTextBlock = React.memo(
     isBeingEditedRef.current = isBeingEdited;
     const blockIdRef = useRef(block.id);
     blockIdRef.current = block.id;
+    /** Visible glyph box (not the padded drag hit target). */
+    const contentRef = useRef(null);
 
     const touchStartRef = useRef({pageX: 0, pageY: 0, x: 0, y: 0});
     const hasMoved = useRef(false);
@@ -727,6 +752,13 @@ const DraggableTextBlock = React.memo(
       }
     };
 
+    useEffect(() => {
+      if (!onRegisterMeasure) return undefined;
+      const id = block.id;
+      onRegisterMeasure(id, () => measureNodeInWindow(contentRef.current));
+      return () => onRegisterMeasure(id, null);
+    }, [block.id, onRegisterMeasure]);
+
     const visual = getTextVisualStyle(
       block.color ?? selectedColor,
       block.bgMode ?? 0,
@@ -753,8 +785,10 @@ const DraggableTextBlock = React.memo(
           },
         ]}>
         <View
+          ref={contentRef}
           onLayout={handleContentLayout}
           pointerEvents="none"
+          collapsable={false}
           style={{
             alignSelf: alignToFlexSelf(block.align ?? 'center'),
             maxWidth: '100%',
@@ -935,6 +969,8 @@ const PostEditorScreen = ({
   skipStoryPublish = false,
   /** When set, editor opens in edit mode for an existing feed post. */
   initialListing = null,
+  /** Label stored in `ads.description` for a new feed post (פוסט vs בית פתוח). */
+  defaultPostDescription = DEFAULT_POST_DESCRIPTION,
 }) => {
   const insets = useSafeAreaInsets();
   const top = insets.top;
@@ -962,6 +998,11 @@ const PostEditorScreen = ({
   const [editingTextBlockId, setEditingTextBlockId] = useState(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const keyboardInset = useKeyboardInset();
+  const androidKeyboardComposer = useAndroidKeyboardComposer(
+    Platform.OS === 'android',
+  );
+  const androidKeyboardLift = androidKeyboardComposer.bottomOffset;
+  const androidKeyboardPull = androidKeyboardComposer.marginBottom;
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
@@ -969,6 +1010,7 @@ const PostEditorScreen = ({
   const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
+  const backgroundMediaRef = useRef(null);
   const stageRef = useRef(null);
   const editingInputRef = useRef(null);
   const editingFieldLayoutRef = useRef(null);
@@ -980,6 +1022,18 @@ const PostEditorScreen = ({
   const editingTextBlockIdRef = useRef(null);
   const suppressBlurFinishRef = useRef(false);
   const stageLayoutRef = useRef({width: 0, height: 0});
+  /** blockId → () => Promise<{x,y,w,h}|null> for WYSIWYG overlay measure. */
+  const textBlockMeasureRefs = useRef(new Map());
+  const textBlocksRef = useRef(textBlocks);
+  textBlocksRef.current = textBlocks;
+  const registerTextBlockMeasure = useCallback((id, measureFn) => {
+    if (!id) return;
+    if (typeof measureFn === 'function') {
+      textBlockMeasureRefs.current.set(id, measureFn);
+    } else {
+      textBlockMeasureRefs.current.delete(id);
+    }
+  }, []);
   // Track the largest stage height ever observed (i.e. with the keyboard
   // closed). New text blocks are positioned relative to this so they don't
   // end up at the top of the screen once the keyboard dismisses.
@@ -1109,7 +1163,7 @@ const PostEditorScreen = ({
       return;
     }
     const desc = String(initialListing.description || '').trim();
-    if (desc && desc !== 'פוסט' && desc.toLowerCase() !== 'post') {
+    if (desc && !isReservedPostDescription(desc)) {
       setTextContent(desc);
       activeTabRef.current = TAB_TEXT;
       setActiveTab(TAB_TEXT);
@@ -1130,7 +1184,7 @@ const PostEditorScreen = ({
     // Still create a live text layer so tap-to-edit works.
     if (!blocks.length) {
       const desc = String(initialListing.description || '').trim();
-      if (desc && desc !== 'פוסט' && desc.toLowerCase() !== 'post') {
+      if (desc && !isReservedPostDescription(desc)) {
         blocks = [
           {
             id: createTextBlockId(),
@@ -1238,21 +1292,57 @@ const PostEditorScreen = ({
         finishEditing();
         await new Promise(resolve => setTimeout(resolve, 120));
       }
-      setIsCapturing(true);
+      // WYSIWYG: measure the preview + each visible text glyph box WHILE the
+      // editor still looks exactly like what the user composed. Never flip
+      // isCapturing first — that hid the header and jumped every block.
       await new Promise(resolve => requestAnimationFrame(() => resolve()));
+      await new Promise(resolve =>
+        InteractionManager.runAfterInteractions(() => resolve()),
+      );
       const stageMapping = await measurePostStageMapping(
         postPreviewRef,
         stageRef,
       );
-      const postTextMeta = serializePostTextOverlays(textBlocks, stageLayout, {
-        textModeOverlayText,
-        textContent,
-        stageMapping,
-      });
-      const listingDescription = postTextMeta.description || 'פוסט';
+      const previewBox = await measureNodeInWindow(postPreviewRef.current);
+      const blocksForSave = textBlocksRef.current;
+      const measuredContentById = {};
+      await Promise.all(
+        (blocksForSave || []).map(async block => {
+          if (!block?.id || !String(block.text || '').trim()) return;
+          const measureFn = textBlockMeasureRefs.current.get(block.id);
+          if (!measureFn) return;
+          const box = await measureFn();
+          if (box) measuredContentById[block.id] = box;
+        }),
+      );
+      const layoutForSave =
+        stageLayoutRef.current?.width > 0
+          ? stageLayoutRef.current
+          : stageLayout;
+      const postTextMeta = serializePostTextOverlays(
+        blocksForSave,
+        layoutForSave,
+        {
+          textModeOverlayText,
+          textContent,
+          stageMapping,
+          measuredContentById,
+          previewBox,
+        },
+      );
+      const listingDescription =
+        postTextMeta.description || defaultPostDescription;
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
-      const hasTextOverlays = postHasTextOverlays(textBlocks);
+      const hasTextOverlays = postHasTextOverlays(blocksForSave);
       const hasStickerOverlays = postHasStickerOverlays(mediaImages);
+      const usedGradientBackground =
+        !hasVideoBackground && !backgroundImageUri;
+      // Text-on-gradient feed posts: upload the gradient only; feed draws text live.
+      const isGradientTextFeedPost =
+        publishTarget !== 'story' &&
+        usedGradientBackground &&
+        hasTextOverlays &&
+        !hasStickerOverlays;
       // Stickers always bake. Story photos with text also bake so home stories
       // show the text (stories have no live overlay layer unless metadata is set).
       // Feed posts keep live text layers for re-edit without baking.
@@ -1263,14 +1353,31 @@ const PostEditorScreen = ({
         Boolean(backgroundImageUri) &&
         !hasVideoBackground &&
         !mustBakeComposite;
+      const willCapturePreview =
+        !hasVideoBackground && !canUploadPhotoDirectly;
+
+      // Hide editor chrome before any snapshot so tools never land in uploads.
+      if (willCapturePreview) {
+        setIsCapturing(true);
+        await new Promise(resolve => requestAnimationFrame(() => resolve()));
+        if (publishTarget === 'story') {
+          await new Promise(resolve => setTimeout(resolve, 120));
+        }
+      }
 
       const capturePreviewToFile = async () => {
         await new Promise(resolve =>
           InteractionManager.runAfterInteractions(() => resolve()),
         );
-        await new Promise(resolve =>
-          setTimeout(resolve, Platform.OS === 'android' ? 300 : 120),
-        );
+        const storyCaptureDelay =
+          publishTarget === 'story'
+            ? Platform.OS === 'android'
+              ? 400
+              : 200
+            : Platform.OS === 'android'
+              ? 300
+              : 120;
+        await new Promise(resolve => setTimeout(resolve, storyCaptureDelay));
         if (Platform.OS === 'web') {
           const el = resolvePostPreviewDomNode(
             postPreviewRef,
@@ -1286,11 +1393,32 @@ const PostEditorScreen = ({
               : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
           );
         }
+        const win = Dimensions.get('window');
         return captureRef(postPreviewRef.current, {
           format: 'jpg',
-          quality: publishTarget === 'story' ? 0.82 : 0.75,
+          quality: publishTarget === 'story' ? 0.88 : 0.75,
           result: 'tmpfile',
+          ...(publishTarget === 'story'
+            ? {width: win.width, height: win.height}
+            : null),
         });
+      };
+
+      const captureBackgroundToFile = async () => {
+        await new Promise(resolve =>
+          InteractionManager.runAfterInteractions(() => resolve()),
+        );
+        await new Promise(resolve =>
+          setTimeout(resolve, Platform.OS === 'android' ? 300 : 120),
+        );
+        if (Platform.OS !== 'web' && backgroundMediaRef.current) {
+          return captureRef(backgroundMediaRef.current, {
+            format: 'jpg',
+            quality: 0.82,
+            result: 'tmpfile',
+          });
+        }
+        return capturePreviewToFile();
       };
 
       const uploadImagePayload = async (uri, folderPrefix) => {
@@ -1357,9 +1485,13 @@ const PostEditorScreen = ({
             throw new Error('העלאה הצליחה בלי כתובת קובץ');
           }
         }
+      } else if (isGradientTextFeedPost) {
+        const captureUri = await captureBackgroundToFile();
+        mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
+        textBakedIntoImage = false;
       } else {
-        // Bake stickers (+ text) into the feed image, but keep a clean source
-        // so re-opening the editor can restore editable text layers.
+        // Bake stickers (+ text on stories) into the feed image, but keep a clean
+        // source so re-opening the editor can restore editable text layers.
         if (backgroundImageUri) {
           const sameSource =
             isRemoteMediaUri(backgroundImageUri) &&
@@ -1386,7 +1518,7 @@ const PostEditorScreen = ({
         mainImageUrl = await uploadImagePayload(captureUri, publishTarget);
         // The capture burned the text into the image — the feed must NOT draw
         // live overlays on top of it (every text would show twice).
-        if (hasTextOverlays) {
+        if (hasTextOverlays && !isGradientTextFeedPost) {
           textBakedIntoImage = true;
         }
       }
@@ -1409,8 +1541,6 @@ const PostEditorScreen = ({
       // edit can restore and change the texts. When text was baked into a
       // composite, store the clean source image URL (photo bg) or the gradient
       // index (gradient bg) so edit mode can rebuild without the baked copy.
-      const usedGradientBackground =
-        !hasVideoBackground && !backgroundImageUri;
       const overlayGeneralDetails = buildPostTextGeneralDetails(postTextMeta, {
         sourceImageUrl: textBakedIntoImage ? sourceImageUrlForEdit : null,
         textBakedIntoImage,
@@ -1563,6 +1693,7 @@ const PostEditorScreen = ({
   /**
    * Fixed edit slot: sit just above the format toolbar + keyboard so the
    * soft keyboard never covers the text being typed.
+   * iOS path is intentionally unchanged — Android uses adjustResize-aware lift.
    */
   const editingInputBottom = useMemo(() => {
     if (!editingTextBlockId || isCapturing) {
@@ -1572,17 +1703,39 @@ const PostEditorScreen = ({
     if (Platform.OS === 'web') {
       return Math.max(toolbarH, webToolbarInputMarginBottom) + 12;
     }
-    return toolbarH + Math.max(keyboardInset, 0) + 12;
+    if (Platform.OS === 'ios') {
+      return toolbarH + Math.max(keyboardInset, 0) + 12;
+    }
+    // Android: onLayout can lag behind expanded format panels; keep a floor so
+    // the field never sits under the color/font strip. Extra gap clears the
+    // suggestion bar that endCoordinates.height often under-reports.
+    const formatMin =
+      selectedFormat === 'color' ? 220 : selectedFormat === 'aa' ? 130 : 72;
+    const androidToolbarH = Math.max(toolbarH, formatMin);
+    return (
+      androidToolbarH +
+      Math.max(androidKeyboardLift, 0) +
+      (androidKeyboardPull || 0)
+    );
   }, [
     editingTextBlockId,
     isCapturing,
     formatToolbarHeight,
     keyboardInset,
+    androidKeyboardLift,
+    androidKeyboardPull,
+    selectedFormat,
     webToolbarInputMarginBottom,
   ]);
 
   /** Safe-area padding under the format bar (keyboard lift uses `bottom` on Android). */
   const formatToolbarSafeBottom = Math.max(bottom, 8);
+
+  /** Keyboard open inset for the format toolbar — iOS unchanged. */
+  const formatToolbarKeyboardBottom =
+    Platform.OS === 'android' ? androidKeyboardLift : keyboardInset;
+  const formatToolbarKeyboardMarginBottom =
+    Platform.OS === 'android' ? androidKeyboardPull : 0;
 
   useEffect(() => {
     editingTextBlockIdRef.current = editingTextBlockId;
@@ -1760,9 +1913,6 @@ const PostEditorScreen = ({
     editingInputRef.current?.blur?.();
     Keyboard.dismiss();
   };
-
-  const textBlocksRef = useRef(textBlocks);
-  textBlocksRef.current = textBlocks;
 
   const beginEditTextBlock = useCallback(id => {
     const block = textBlocksRef.current.find(b => b.id === id);
@@ -2204,8 +2354,14 @@ const PostEditorScreen = ({
         ref={postPreviewRef}
         nativeID="post-editor-preview-root"
         collapsable={false}
-        style={styles.backgroundContainer}>
+        style={[
+          styles.backgroundContainer,
+          isCapturing &&
+            publishTarget === 'story' &&
+            styles.storyCaptureFill,
+        ]}>
         <View
+          ref={backgroundMediaRef}
           pointerEvents="none"
           collapsable={false}
           style={styles.backgroundMediaLayer}>
@@ -2229,7 +2385,8 @@ const PostEditorScreen = ({
             <Image
               source={{uri: backgroundImageUri}}
               style={styles.backgroundImage}
-              resizeMode="cover"
+              // Match video: letterbox on black — never crop the upload.
+              resizeMode="contain"
               pointerEvents="none"
             />
           ) : (
@@ -2367,6 +2524,7 @@ const PostEditorScreen = ({
                       onPress={() => beginEditTextBlock(block.id)}
                       onUpdatePosition={updateBlockPosition}
                       onBringToFront={bringTextBlockToFront}
+                      onRegisterMeasure={registerTextBlockMeasure}
                     />
                   ))}
 
@@ -2471,7 +2629,12 @@ const PostEditorScreen = ({
                 }}
                 style={[
                   styles.keyboardControls,
-                  keyboardInset > 0 ? {bottom: keyboardInset} : null,
+                  formatToolbarKeyboardBottom > 0
+                    ? {bottom: formatToolbarKeyboardBottom}
+                    : null,
+                  formatToolbarKeyboardMarginBottom !== 0
+                    ? {marginBottom: formatToolbarKeyboardMarginBottom}
+                    : null,
                   {
                     paddingTop: 10,
                     // When the keyboard is open it covers the home indicator —
@@ -2479,8 +2642,9 @@ const PostEditorScreen = ({
                     paddingBottom:
                       Platform.OS === 'web'
                         ? Math.max(bottom, keyboardInset > 0 ? 8 : 10)
-                        : keyboardInset > 0
-                          ? 8
+                        : formatToolbarKeyboardBottom > 0 ||
+                            androidKeyboardComposer.isOpen
+                          ? 0
                           : formatToolbarSafeBottom,
                   },
                 ]}>
@@ -2967,6 +3131,11 @@ const styles = StyleSheet.create({
   backgroundContainer: {
     flex: 1,
     position: 'relative',
+  },
+  /** Story snapshot fills the phone — preview is normally below the top tabs. */
+  storyCaptureFill: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
   },
   backgroundMediaLayer: {
     ...StyleSheet.absoluteFillObject,

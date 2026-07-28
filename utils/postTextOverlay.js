@@ -82,27 +82,46 @@ export const mapStageOverlayToPreview = (
 };
 
 /**
- * Convert the editor's text blocks into a serializable overlay payload plus a
- * plain-text description. Positions are stored in preview-root coordinates so
- * the feed can scale them to any screen size while keeping the exact layout.
+ * Convert editor text blocks into a serializable overlay payload.
+ *
+ * Preferred path (`measuredContentById` + `previewBox` from measureInWindow):
+ * store NORMALIZED coords (nx/ny/nw/nFont in 0–1 of the preview root). The feed
+ * multiplies by its page size — no stage margins, header bands, or touch-pad
+ * guesses. That is the WYSIWYG source of truth.
+ *
+ * Fallback: map stage-local x/y into preview pixels (legacy).
  */
 export const serializePostTextOverlays = (
   textBlocks,
   stageLayout,
-  {textModeOverlayText = '', textContent = '', stageMapping = null} = {},
+  {
+    textModeOverlayText = '',
+    textContent = '',
+    stageMapping = null,
+    /** { [blockId]: { x, y, w, h } } from measureInWindow of visible glyphs */
+    measuredContentById = null,
+    /** { x, y, w, h } measureInWindow of the post preview root */
+    previewBox = null,
+  } = {},
 ) => {
   const blocks = Array.isArray(textBlocks) ? textBlocks : [];
   const stageW = stageLayout?.width > 0 ? stageLayout.width : 0;
   const stageH = stageLayout?.height > 0 ? stageLayout.height : 0;
 
   const previewWidth =
-    stageMapping?.previewWidth > 0
-      ? stageMapping.previewWidth
-      : stageW > 0
-        ? stageW + POST_STAGE_MARGIN_H * 2
-        : 0;
+    previewBox?.w > 0
+      ? previewBox.w
+      : stageMapping?.previewWidth > 0
+        ? stageMapping.previewWidth
+        : stageW > 0
+          ? stageW + POST_STAGE_MARGIN_H * 2
+          : 0;
   const previewHeight =
-    stageMapping?.previewHeight > 0 ? stageMapping.previewHeight : stageH;
+    previewBox?.h > 0
+      ? previewBox.h
+      : stageMapping?.previewHeight > 0
+        ? stageMapping.previewHeight
+        : stageH;
 
   const stageOffsetX =
     stageMapping?.stageOffsetX != null
@@ -121,21 +140,58 @@ export const serializePostTextOverlays = (
       stageMapping?.stageHeight > 0 ? stageMapping.stageHeight : stageH,
   };
 
+  const canNormalize =
+    previewBox?.w > 0 &&
+    previewBox?.h > 0 &&
+    measuredContentById &&
+    typeof measuredContentById === 'object';
+
   const overlays = blocks
     .filter(b => String(b?.text || '').trim())
     .map(b => {
+      const fontSize = b.fontSize ?? DEFAULT_FONT_SIZE;
+      const measured = canNormalize ? measuredContentById[b.id] : null;
       const previewPos = mapStageOverlayToPreview(b, mapping);
-      return {
+
+      const base = {
         text: String(b.text).trim(),
         x: previewPos.x,
         y: previewPos.y,
-        fontSize: b.fontSize ?? DEFAULT_FONT_SIZE,
+        fontSize,
         color: b.color || '#FFFFFF',
         bgMode: b.bgMode ?? 0,
         textStyleIndex: b.textStyleIndex ?? 0,
         align: b.align || 'center',
         maxWidth: previewPos.maxWidth,
       };
+
+      if (
+        measured &&
+        measured.w > 0 &&
+        measured.h >= 0 &&
+        Number.isFinite(measured.x) &&
+        Number.isFinite(measured.y)
+      ) {
+        const nx = (measured.x - previewBox.x) / previewBox.w;
+        const ny = (measured.y - previewBox.y) / previewBox.h;
+        const nw = measured.w / previewBox.w;
+        const nFont = fontSize / previewBox.h;
+        return {
+          ...base,
+          // Absolute px of the measured glyph box in preview space (debug/legacy).
+          x: Math.round(measured.x - previewBox.x),
+          y: Math.round(measured.y - previewBox.y),
+          maxWidth: Math.round(measured.w),
+          // Normalized 0–1 — feed uses these when present.
+          nx: Number(nx.toFixed(5)),
+          ny: Number(ny.toFixed(5)),
+          nw: Number(nw.toFixed(5)),
+          nFont: Number(nFont.toFixed(5)),
+          coords: 'normalized',
+        };
+      }
+
+      return base;
     });
 
   let description = overlays
@@ -152,6 +208,9 @@ export const serializePostTextOverlays = (
     previewWidth,
     previewHeight,
     hasText: overlays.length > 0,
+    coordsSpace: overlays.some(o => o.coords === 'normalized')
+      ? 'normalized'
+      : 'preview',
   };
 };
 
@@ -193,7 +252,16 @@ export const parsePostTextOverlayPayload = listing => {
     Number(gd.post_overlay_preview_h) ||
     Number(gd.post_overlay_stage_h) ||
     0;
-  const coordsSpace = Number(gd.post_overlay_preview_w) > 0 ? 'preview' : 'stage';
+  const hasNormalized = overlays.some(
+    o =>
+      o?.coords === 'normalized' ||
+      (Number.isFinite(Number(o?.nx)) && Number.isFinite(Number(o?.ny))),
+  );
+  const coordsSpace = hasNormalized
+    ? 'normalized'
+    : Number(gd.post_overlay_preview_w) > 0
+      ? 'preview'
+      : 'stage';
 
   return {
     overlays,
@@ -420,11 +488,32 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
   const stageH = stageLayout?.height > 0 ? stageLayout.height : 300;
   const stageOffsetX = POST_STAGE_MARGIN_H;
   const stageOffsetY = POST_STAGE_HEADER_BAND + POST_STAGE_MARGIN_TOP;
+  const previewW =
+    payload.previewWidth > 0
+      ? payload.previewWidth
+      : stageW + POST_STAGE_MARGIN_H * 2;
+  const previewH =
+    payload.previewHeight > 0
+      ? payload.previewHeight
+      : stageH + stageOffsetY;
 
   return payload.overlays.map((overlay, index) => {
     let x = overlay.x ?? STAGE_TEXT_PAD_LEFT;
     let y = overlay.y ?? getDefaultTextBlockY(stageH, 40);
-    if (payload.coordsSpace === 'preview') {
+    const nx = Number(overlay.nx);
+    const ny = Number(overlay.ny);
+    if (
+      (overlay.coords === 'normalized' ||
+        payload.coordsSpace === 'normalized') &&
+      Number.isFinite(nx) &&
+      Number.isFinite(ny)
+    ) {
+      // Normalized is the visible glyph box in preview space. Editor block.x/y
+      // is the outer drag box (24px touch pad), so subtract that pad.
+      const TOUCH_PAD = 24;
+      x = nx * previewW - stageOffsetX - TOUCH_PAD;
+      y = ny * previewH - stageOffsetY - TOUCH_PAD;
+    } else if (payload.coordsSpace === 'preview') {
       x = (overlay.x ?? 0) - stageOffsetX;
       y = (overlay.y ?? 0) - stageOffsetY;
     }
@@ -436,12 +525,16 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
       STAGE_TEXT_PAD_Y,
       Math.min(Number(y) || 0, stageH - 40 - STAGE_TEXT_PAD_Y),
     );
+    const fontSize =
+      Number.isFinite(Number(overlay.nFont)) && Number(overlay.nFont) > 0
+        ? Math.max(10, Math.round(Number(overlay.nFont) * previewH))
+        : overlay.fontSize ?? DEFAULT_FONT_SIZE;
     return {
       id: `block-edit-${index}-${Date.now()}`,
       text: String(overlay.text || '').trim(),
       x,
       y,
-      fontSize: overlay.fontSize ?? DEFAULT_FONT_SIZE,
+      fontSize,
       color: overlay.color || '#FFFFFF',
       bgMode: overlay.bgMode ?? 0,
       textStyleIndex: overlay.textStyleIndex ?? 0,
@@ -451,11 +544,52 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
   });
 }
 
-/** Scale a saved overlay block from preview coords to feed coords. */
+/**
+ * Scale a saved overlay block onto the feed page.
+ * Prefer normalized nx/ny/nw/nFont (WYSIWYG measureInWindow at publish).
+ */
 export const scalePostTextOverlayBlock = (
   block,
   {previewWidth, previewHeight, feedWidth, feedHeight, coordsSpace = 'preview'},
 ) => {
+  const nx = Number(block.nx);
+  const ny = Number(block.ny);
+  const nw = Number(block.nw);
+  const nFont = Number(block.nFont);
+  const hasNormalized =
+    block.coords === 'normalized' ||
+    coordsSpace === 'normalized' ||
+    (Number.isFinite(nx) &&
+      Number.isFinite(ny) &&
+      nx >= -0.5 &&
+      nx <= 1.5 &&
+      ny >= -0.5 &&
+      ny <= 1.5);
+
+  if (hasNormalized && Number.isFinite(nx) && Number.isFinite(ny)) {
+    const fontSize = Math.max(
+      10,
+      Math.round(
+        Number.isFinite(nFont) && nFont > 0
+          ? nFont * feedHeight
+          : (block.fontSize ?? DEFAULT_FONT_SIZE) *
+              (previewHeight > 0 ? feedHeight / previewHeight : 1),
+      ),
+    );
+    return {
+      translateX: Math.round(nx * feedWidth),
+      translateY: Math.round(ny * feedHeight),
+      width: Math.round(
+        Number.isFinite(nw) && nw > 0 ? nw * feedWidth : feedWidth * 0.88,
+      ),
+      padding: 0,
+      fontSize,
+      lineHeight: Math.round(fontSize * 1.15),
+      normalized: true,
+    };
+  }
+
+  // Legacy absolute preview/stage pixels.
   const useStageRemap = coordsSpace === 'stage';
   const mapWidth =
     useStageRemap && previewWidth > 0
@@ -468,10 +602,10 @@ export const scalePostTextOverlayBlock = (
   const hasPreview = mapWidth > 0 && mapHeight > 0;
   const scaleX = hasPreview ? feedWidth / mapWidth : 1;
   const scaleY = hasPreview ? feedHeight / mapHeight : 1;
-  const uniformScale = hasPreview ? Math.min(scaleX, scaleY) : 1;
+  const fontScale = hasPreview ? Math.min(scaleX, scaleY) : 1;
   const fontSize = Math.max(
     10,
-    Math.round((block.fontSize ?? DEFAULT_FONT_SIZE) * uniformScale),
+    Math.round((block.fontSize ?? DEFAULT_FONT_SIZE) * fontScale),
   );
 
   const baseX = useStageRemap
@@ -488,8 +622,10 @@ export const scalePostTextOverlayBlock = (
       block.maxWidth != null && hasPreview
         ? Math.round(block.maxWidth * scaleX)
         : Math.round(feedWidth * 0.88),
+    padding: 0,
     fontSize,
     lineHeight: Math.round(fontSize * 1.15),
+    normalized: false,
   };
 };
 

@@ -91,7 +91,8 @@ export const SalesImage = ({
               <Video
                 source={{uri: mediaUri}}
                 style={styles.fixedImage}
-                resizeMode={ResizeMode.COVER}
+                // Same as PostEditor / feed posts: letterbox, never crop.
+                resizeMode={ResizeMode.CONTAIN}
                 shouldPlay
                 isLooping
                 isMuted
@@ -101,7 +102,8 @@ export const SalesImage = ({
               <Image
                 source={{uri: mediaUri}}
                 style={styles.fixedImage}
-                resizeMode="cover"
+                // Same as PostEditor / feed posts: letterbox, never crop.
+                resizeMode="contain"
               />
             )}
             {overlayPayload?.overlays?.length &&
@@ -177,19 +179,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignSelf: 'center',
   },
-  /** Match PostEditor portrait stage so the finished sales image isn't cropped. */
+  /** Match PostEditor portrait stage; media uses contain on black. */
   fixedImageContainerFilled: {
     height: undefined,
     width: '72%',
     maxWidth: 300,
     aspectRatio: PREVIEW_ASPECT,
+    backgroundColor: '#000000',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderStyle: 'solid',
   },
   previewMediaWrap: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
   },
   fixedImage: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#000000',
   },
   cameraIcon: {
     width: 60,

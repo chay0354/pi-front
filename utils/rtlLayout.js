@@ -51,6 +51,25 @@ export const forceLtrStyle = {direction: 'ltr'};
 export const forceRtlStyle =
   Platform.OS === 'web' ? {} : {direction: 'rtl'};
 
+/**
+ * Absolute `left` that lands on a PHYSICAL x from measureInWindow.
+ *
+ * Native forceRTL + swapLeftAndRightInRTL mirrors authored `left` to the
+ * physical right (0 = physical right). Pre-flip so the view's left edge sits
+ * at physical `x`. Web does not mirror absolute `left` — use `x` as-is.
+ */
+export function physicalLeftStyle(x, width, parentWidth) {
+  const px = Math.round(Number(x) || 0);
+  const w = Math.max(0, Math.round(Number(width) || 0));
+  const parentW = Math.max(0, Math.round(Number(parentWidth) || 0));
+  const nativeRtl = Platform.OS !== 'web' && I18nManager.isRTL;
+  return {
+    left: nativeRtl && parentW > 0 ? parentW - px - w : px,
+    width: w,
+    maxWidth: w,
+  };
+}
+
 /** Bottom safe-area padding for filter sheets / bottom chrome (min 8px). */
 export function getSheetBottomInset(insets, min = 8) {
   return Math.max(Number(insets?.bottom) || 0, min);

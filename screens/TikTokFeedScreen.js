@@ -27,6 +27,7 @@ import {
   Pressable,
 } from 'react-native';
 import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   loadTikTokLikedState,
@@ -996,8 +997,8 @@ const TIKTOK_OVERLAY_ICONS = {
 };
 
 const COMMENT_REACTIONS = ['😂', '🙏', '😀', '👍', '😉', '👌'];
-/** Extra lift so the comment composer clears the soft keyboard comfortably. */
-const COMMENTS_COMPOSER_KEYBOARD_LIFT = 18;
+/** Small cushion above the soft keyboard (iOS only — Android uses adjustResize). */
+const COMMENTS_COMPOSER_KEYBOARD_LIFT = Platform.OS === 'ios' ? 8 : 0;
 const COMMENTS_COMPOSER_SCROLL_PADDING = 210;
 
 /** Shared asset for sidebar rows with `id: 'new'` (חדשות / חדשים). */
@@ -1863,8 +1864,8 @@ const ImageSwiper = ({
     });
   };
 
-  // Feed posts stay full-bleed `cover`. Listing ads use fit-width: edge-to-edge
-  // sides, letterbox top/bottom — never crop left/right.
+  // Feed posts and listing ads both use fit-width: edge-to-edge sides, letterbox
+  // top/bottom — never crop left/right.
   const isPostSlide = isFeedPostVideo(video);
 
   const renderSlideshowSlide = (image, slideKey, single = false) => {
@@ -1883,24 +1884,13 @@ const ImageSwiper = ({
       );
     }
     return (
-      <View
-        style={[
-          styles.swiperImageContainer,
-          {width: pageWidth, height: screenHeight},
-          single && styles.swiperImageContainerSingle,
-        ]}>
-        <Image
-          source={imageSource}
-          {...FEED_IMAGE_PROPS}
-          style={[
-            styles.swiperImage,
-            single && styles.swiperImageSingle,
-            {maxWidth: pageWidth, maxHeight: screenHeight},
-          ]}
-          resizeMode="cover"
-          onError={() => markImageErrored(slideKey)}
-        />
-      </View>
+      <FitWidthFeedImage
+        source={imageSource}
+        pageWidth={pageWidth}
+        screenHeight={screenHeight}
+        single={single}
+        onError={() => markImageErrored(slideKey)}
+      />
     );
   };
 
@@ -1977,11 +1967,7 @@ const ImageSwiper = ({
                       maxHeight: layout.height,
                     },
                   ]}
-                  resizeMode={
-                    isFeedPostVideo(video) && imageCount > 1 && !useFallback
-                      ? 'cover'
-                      : 'contain'
-                  }
+                  resizeMode="contain"
                   onError={() => markImageErrored(collageKey)}
                 />
               </View>
@@ -2251,7 +2237,8 @@ const TikTokFeedScreen = ({
   const [newCommentText, setNewCommentText] = useState('');
   const [commentImageAsset, setCommentImageAsset] = useState(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [commentsKeyboardHeight, setCommentsKeyboardHeight] = useState(0);
+  const [iosCommentsKeyboardHeight, setIosCommentsKeyboardHeight] = useState(0);
+  const androidCommentsComposer = useAndroidKeyboardComposer(showCommentsSheet);
   /** Prefetched with listings so sidebar + appears without per-slide delay. */
   const [followStatusByTargetId, setFollowStatusByTargetId] = useState({});
   const [sidebarSendingFollow, setSidebarSendingFollow] = useState(false);
@@ -3911,31 +3898,42 @@ const TikTokFeedScreen = ({
   };
 
   useEffect(() => {
-    if (!showCommentsSheet) {
-      setCommentsKeyboardHeight(0);
+    if (!showCommentsSheet || Platform.OS !== 'ios') {
+      setIosCommentsKeyboardHeight(0);
       return undefined;
     }
+
     const onShow = event => {
-      setCommentsKeyboardHeight(event?.endCoordinates?.height ?? 0);
+      setIosCommentsKeyboardHeight(event?.endCoordinates?.height ?? 0);
     };
-    const onHide = () => setCommentsKeyboardHeight(0);
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, onShow);
-    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    const onHide = () => setIosCommentsKeyboardHeight(0);
+
+    const showSub = Keyboard.addListener('keyboardWillShow', onShow);
+    const hideSub = Keyboard.addListener('keyboardWillHide', onHide);
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, [showCommentsSheet]);
 
+  const commentsComposerBottom =
+    Platform.OS === 'android'
+      ? androidCommentsComposer.bottomOffset
+      : iosCommentsKeyboardHeight > 0
+        ? iosCommentsKeyboardHeight + COMMENTS_COMPOSER_KEYBOARD_LIFT
+        : 0;
+  const commentsComposerMarginBottom =
+    Platform.OS === 'android' ? androidCommentsComposer.marginBottom : 0;
+  const commentsKeyboardOpen =
+    Platform.OS === 'android'
+      ? androidCommentsComposer.isOpen
+      : iosCommentsKeyboardHeight > 0;
+
   const closeCommentsSheet = () => {
     setShowCommentsSheet(false);
     setNewCommentText('');
     setCommentImageAsset(null);
-    setCommentsKeyboardHeight(0);
+    setIosCommentsKeyboardHeight(0);
   };
 
   const openCommentsForPost = async item => {
@@ -8582,14 +8580,11 @@ const TikTokFeedScreen = ({
             style={[
               styles.commentsBottomSection,
               {
-                bottom:
-                  commentsKeyboardHeight > 0
-                    ? commentsKeyboardHeight + COMMENTS_COMPOSER_KEYBOARD_LIFT
-                    : 0,
-                paddingBottom:
-                  commentsKeyboardHeight > 0
-                    ? 8
-                    : Math.max(insets.bottom, 10),
+                bottom: commentsComposerBottom,
+                marginBottom: commentsComposerMarginBottom,
+                paddingBottom: commentsKeyboardOpen
+                  ? 0
+                  : Math.max(insets.bottom, 10),
               },
             ]}>
             <View style={styles.reactionsRow}>

@@ -497,14 +497,13 @@ const FollowHubScreen = ({
     return `עוקב ${counts.following}`;
   };
 
-  /** Always show the full hub list — on someone else's profile, hide unapproved follow rows. */
+  /** במעקב / עוקב: accepted follows only — never pending outgoing requests. */
   const displayRows = useMemo(() => {
     const list = rows || [];
-    if (isOwnProfile) return list;
     if (activeTab === TAB_FOLLOWING) {
       return list.filter(row => !row?.outgoing_follow_pending);
     }
-    if (activeTab === TAB_FOLLOWERS) {
+    if (!isOwnProfile && activeTab === TAB_FOLLOWERS) {
       return list.filter(row => !row?.request_id);
     }
     return list;
