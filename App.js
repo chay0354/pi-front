@@ -88,6 +88,8 @@ import {
   canAccessListingAnalysis,
   DEFAULT_POST_DESCRIPTION,
   OPEN_HOUSE_POST_DESCRIPTION,
+  OPEN_HOUSE_POST_KIND,
+  isOpenHouseListing,
   isOpenHousePostDescription,
 } from './utils/constant';
 import {
@@ -1301,6 +1303,10 @@ function App() {
                     setReturnToScreenAfterAuth('tikTokFeed');
                     setCurrentScreen(screenName.userRegistration);
                   }}
+                  onOpenCompanyRegistration={() => {
+                    setReturnToScreenAfterAuth('tikTokFeed');
+                    setCurrentScreen(screenName.subscriptionCompany);
+                  }}
                   uploadedListings={uploadedListings}
                   selectedCategory={selectedCategory}
                   feedFilters={feedFilters}
@@ -2152,6 +2158,11 @@ function App() {
                         DEFAULT_POST_DESCRIPTION,
                       feed_post: true,
                       property_type: 'post',
+                      general_details:
+                        postEditorConfig.postDescriptionLabel ===
+                        OPEN_HOUSE_POST_DESCRIPTION
+                          ? {post_kind: OPEN_HOUSE_POST_KIND}
+                          : payload?.generalDetails || null,
                     };
                   }
 
@@ -2510,9 +2521,7 @@ function App() {
                     returnScreen: screenName.editPublishAd,
                     listingCategoryId: listingCat,
                     editingListing: listing ?? null,
-                    postDescriptionLabel: isOpenHousePostDescription(
-                      listing?.description || listing?.desc,
-                    )
+                    postDescriptionLabel: isOpenHouseListing(listing)
                       ? OPEN_HOUSE_POST_DESCRIPTION
                       : DEFAULT_POST_DESCRIPTION,
                   });

@@ -36,6 +36,52 @@ export const subscriptionTypes = {
 export const DEFAULT_POST_DESCRIPTION = 'פוסט';
 /** Open-house feed posts (company + broker only) — same upload flow as פוסט. */
 export const OPEN_HOUSE_POST_DESCRIPTION = 'בית פתוח';
+/** Persisted in `ads.general_details.post_kind` for open-house feed posts. */
+export const OPEN_HOUSE_POST_KIND = 'open_house';
+
+export function parseListingGeneralDetails(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function isOpenHouseListing(listing) {
+  if (!listing) return false;
+  if (isOpenHousePostDescription(listing.description || listing.desc)) {
+    return true;
+  }
+  const gd = parseListingGeneralDetails(listing.general_details);
+  return gd?.post_kind === OPEN_HOUSE_POST_KIND;
+}
+
+/** Badge label on Edit/Publish cards: פוסט vs בית פתוח. */
+export function getFeedPostBadgeLabel(listing) {
+  if (isOpenHouseListing(listing)) return OPEN_HOUSE_POST_DESCRIPTION;
+  return DEFAULT_POST_DESCRIPTION;
+}
+
+/** Card caption when the stored description is the generic post label. */
+export function getFeedPostCardCaption(listing) {
+  const desc = String(listing?.description || listing?.desc || '').trim();
+  if (isOpenHouseListing(listing)) {
+    if (!desc || isReservedPostDescription(desc)) {
+      return OPEN_HOUSE_POST_DESCRIPTION;
+    }
+    return desc;
+  }
+  if (!desc || isReservedPostDescription(desc)) {
+    return DEFAULT_POST_DESCRIPTION;
+  }
+  return desc;
+}
 
 export function isReservedPostDescription(description) {
   const t = String(description || '').trim();
@@ -254,11 +300,11 @@ export const brokerSheetAdListingCategoryIds = new Set([
 /**
  * DB `ads.category` values where **company** (not professional) users see "פרסם מודעה"
  * (ערוך/פרסם מודעה sheet + TikTok feed compose row).
- * Matches product tabs: חדש מקבלן (1), גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7),
+ * Matches product tabs: חדש מקבלן (1), BnB (5), גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7),
  * מסחר (8), משרדים (2). Professional accounts never get this listing row.
  */
 export const companySheetAdListingCategoryIds = new Set([
-  1, 2, 4, 6, 7, 8, 12,
+  1, 2, 4, 5, 6, 7, 8, 12,
 ]);
 
 /** Whether the create sheet shows a listing/ad row (not post-only) for this user + DB category. */

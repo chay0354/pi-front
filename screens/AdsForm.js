@@ -509,7 +509,7 @@ const AdsForm = ({
 }) => {
   const insets = useSafeAreaInsets();
   const [propertyType, setPropertyType] = useState(null);
-  const [serviceAndFacilityType, setServiceAndFacilityType] = useState(null);
+  const [serviceAndFacilities, setServiceAndFacilities] = useState({});
   const [cancellationPolicy, setCancellationPolicy] = useState(null);
   /** מחיר ללילה — "מחיר במבצע" / Hot deal (saved as ads.hot_deal) */
   const [hotDeal, setHotDeal] = useState(false);
@@ -1163,6 +1163,26 @@ const AdsForm = ({
         ? String(cpRaw).trim()
         : null,
     );
+    const sfRaw =
+      initialListing.service_facility ?? initialListing.serviceFacility;
+    if (sfRaw && typeof sfRaw === 'object') {
+      const hydrated = {};
+      if (
+        sfRaw.selected != null &&
+        String(sfRaw.selected).trim() !== '' &&
+        sfRaw.selected !== true
+      ) {
+        hydrated[String(sfRaw.selected).trim()] = true;
+      }
+      Object.keys(sfRaw).forEach(key => {
+        if (key !== 'selected' && sfRaw[key] === true) {
+          hydrated[key] = true;
+        }
+      });
+      setServiceAndFacilities(hydrated);
+    } else {
+      setServiceAndFacilities({});
+    }
     setHotDeal(
       initialListing.hot_deal === true ||
         initialListing.hot_deal === 'true' ||
@@ -1499,6 +1519,17 @@ const AdsForm = ({
         [amenity]: amenitiesWithQuantity.includes(amenity) ? 1 : true,
       });
     }
+  };
+
+  const toggleServiceAndFacility = facilityName => {
+    setServiceAndFacilities(prev => {
+      if (prev[facilityName]) {
+        const next = {...prev};
+        delete next[facilityName];
+        return next;
+      }
+      return {...prev, [facilityName]: true};
+    });
   };
 
   const setAmenityQuantity = (amenity, quantity) => {
@@ -1908,9 +1939,15 @@ const AdsForm = ({
               check_out_date: checkOutDate || null,
             }
           : undefined;
-      const serviceFacilityPayload = serviceAndFacilityType
-        ? {selected: serviceAndFacilityType}
-        : undefined;
+      const selectedServiceFacilities = Object.keys(serviceAndFacilities).filter(
+        key => serviceAndFacilities[key],
+      );
+      const serviceFacilityPayload =
+        selectedServiceFacilities.length > 0
+          ? Object.fromEntries(
+              selectedServiceFacilities.map(key => [key, true]),
+            )
+          : undefined;
       const contactDetailsPayload =
         contactFullName || contactEmail || phone || address || description
           ? {
@@ -2562,6 +2599,9 @@ const AdsForm = ({
                     showBnbBusinessLogo={
                       category === 5 && bnbHostType === 'business'
                     }
+                    isBnbBusinessHost={
+                      category === 5 && bnbHostType === 'business'
+                    }
                     bnbBusinessLogo={bnbBusinessLogo}
                     onBnbBusinessLogoPress={handleBnbBusinessLogoUpload}
                     bnbBusinessLogoInputRef={bnbBusinessLogoInputRef}
@@ -2750,8 +2790,8 @@ const AdsForm = ({
                 return (
                   <ServiceAndFacility
                     key="serviceandfacility"
-                    propertyType={serviceAndFacilityType}
-                    setPropertyType={setServiceAndFacilityType}
+                    facilities={serviceAndFacilities}
+                    toggleFacility={toggleServiceAndFacility}
                     data={field.data || []}
                     title={field.title}
                   />

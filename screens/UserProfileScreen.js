@@ -1831,12 +1831,13 @@ const UserProfileScreen = ({
     isListingFromFeed && openedFromCompaniesDirectory,
   );
   /** Company ad from TikTok, home featured project, or פרויקטים נבחרים — fixed back / share / like top bar (not posts).
-   * Own profile normally uses the standard header, but forced listing opens (home ברושים / company projects) still get the project hero. */
+   * BnB uses the standard company profile header + BnbListingProfileContent body. */
   const showCompanyFeedHeroTop = Boolean(
     isCompany &&
     isListingFromFeed &&
     lastAd &&
     !openedFromPost &&
+    !isBnbListingAdProfile &&
     (fromCompanyProjects ||
       user?._fromTikTokPost ||
       user?._fromHomeFeatureProject ||
@@ -1940,12 +1941,26 @@ const UserProfileScreen = ({
     l => l.general_details && typeof l.general_details === 'object',
   );
   const gd = firstListingWithGeneral?.general_details;
+  const lastAdGeneralDetails =
+    lastAd?.general_details && typeof lastAd.general_details === 'object'
+      ? lastAd.general_details
+      : null;
+  const companyStatsSource =
+    isBnbListingAdProfile && isCompany && lastAdGeneralDetails
+      ? lastAdGeneralDetails
+      : gd;
   const companyBuildingCount =
-    gd?.building_count != null ? Number(gd.building_count) : 0;
+    companyStatsSource?.building_count != null
+      ? Number(companyStatsSource.building_count)
+      : 0;
   const companyFloorCount =
-    gd?.floor_count != null ? Number(gd.floor_count) : 0;
+    companyStatsSource?.floor_count != null
+      ? Number(companyStatsSource.floor_count)
+      : 0;
   const companyApartmentCount =
-    gd?.apartment_count != null ? Number(gd.apartment_count) : 0;
+    companyStatsSource?.apartment_count != null
+      ? Number(companyStatsSource.apartment_count)
+      : 0;
   const specialtiesRaw =
     user?.creator_specialties ??
     user?.specialties ??
@@ -2537,19 +2552,62 @@ const UserProfileScreen = ({
               (isDedicatedListingAdProfile || !isProfessional) && (
                 <View style={styles.lastAdBody}>
                   {isBnbListingAdProfile ? (
-                    <BnbListingProfileContent
-                      listing={lastAd}
-                      mapAddress={firstNonEmpty(
-                        lastAd?.address,
-                        lastAd?.location,
-                        lastAd?.search_address,
-                        lastAd?.contact_details?.address,
-                        user?.address,
-                        brokerAddress,
-                      )}
-                      adAddress={adAddress}
-                      hideReportButton
-                    />
+                    <>
+                      {isCompany ? (
+                        <>
+                          <View style={styles.companyStatsRow}>
+                            <View style={styles.companyStatItem}>
+                              <Image
+                                source={require('../assets/building_icon.png')}
+                                style={styles.companyStatIconImage}
+                                resizeMode="contain"
+                              />
+                              <Text style={styles.companyStatText}>
+                                {formatCompanyBuildingsLabel(
+                                  companyBuildingCount,
+                                )}
+                              </Text>
+                            </View>
+                            <View style={styles.companyStatItem}>
+                              <Image
+                                source={require('../assets/floor_icon.png')}
+                                style={styles.companyStatIconImage}
+                                resizeMode="contain"
+                              />
+                              <Text style={styles.companyStatText}>
+                                {formatCompanyFloorsLabel(companyFloorCount)}
+                              </Text>
+                            </View>
+                            <View style={styles.companyStatItem}>
+                              <Image
+                                source={require('../assets/apartment_icon.png')}
+                                style={styles.companyStatIconImage}
+                                resizeMode="contain"
+                              />
+                              <Text style={styles.companyStatText}>
+                                {formatCompanyApartmentsLabel(
+                                  companyApartmentCount,
+                                )}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.lastAdDivider} />
+                        </>
+                      ) : null}
+                      <BnbListingProfileContent
+                        listing={lastAd}
+                        mapAddress={firstNonEmpty(
+                          lastAd?.address,
+                          lastAd?.location,
+                          lastAd?.search_address,
+                          lastAd?.contact_details?.address,
+                          user?.address,
+                          brokerAddress,
+                        )}
+                        adAddress={adAddress}
+                        hideReportButton
+                      />
+                    </>
                   ) : isPartnersListingAdProfile ? (
                     <PartnersListingProfileContent
                       listing={lastAd}

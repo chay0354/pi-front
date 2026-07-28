@@ -50,6 +50,8 @@ import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   DEFAULT_POST_DESCRIPTION,
   isReservedPostDescription,
+  OPEN_HOUSE_POST_DESCRIPTION,
+  OPEN_HOUSE_POST_KIND,
 } from '../utils/constant';
 import {
   buildPostTextGeneralDetails,
@@ -1330,8 +1332,11 @@ const PostEditorScreen = ({
           previewBox,
         },
       );
+      const customCaption = String(postTextMeta.description || '').trim();
       const listingDescription =
-        postTextMeta.description || defaultPostDescription;
+        customCaption && !isReservedPostDescription(customCaption)
+          ? customCaption
+          : defaultPostDescription;
       const hasVideoBackground = Boolean(backgroundVideoAsset?.uri);
       const hasTextOverlays = postHasTextOverlays(blocksForSave);
       const hasStickerOverlays = postHasStickerOverlays(mediaImages);
@@ -1541,13 +1546,18 @@ const PostEditorScreen = ({
       // edit can restore and change the texts. When text was baked into a
       // composite, store the clean source image URL (photo bg) or the gradient
       // index (gradient bg) so edit mode can rebuild without the baked copy.
-      const overlayGeneralDetails = buildPostTextGeneralDetails(postTextMeta, {
-        sourceImageUrl: textBakedIntoImage ? sourceImageUrlForEdit : null,
-        textBakedIntoImage,
-        backgroundGradientIndex: usedGradientBackground
-          ? selectedBackgroundGradientIndex
-          : null,
-      });
+      const overlayGeneralDetails = {
+        ...buildPostTextGeneralDetails(postTextMeta, {
+          sourceImageUrl: textBakedIntoImage ? sourceImageUrlForEdit : null,
+          textBakedIntoImage,
+          backgroundGradientIndex: usedGradientBackground
+            ? selectedBackgroundGradientIndex
+            : null,
+        }),
+        ...(defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION
+          ? {post_kind: OPEN_HOUSE_POST_KIND}
+          : {}),
+      };
 
       let createdListing = null;
       let updatedListing = null;

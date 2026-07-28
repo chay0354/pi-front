@@ -7,6 +7,7 @@ import {BnbBusinessLogoUpload} from './BnbBusinessLogoUpload';
 
 export const ContactDetails = ({
   showBnbBusinessLogo = false,
+  isBnbBusinessHost = false,
   bnbBusinessLogo = null,
   onBnbBusinessLogoPress,
   bnbBusinessLogoInputRef,
@@ -45,9 +46,11 @@ export const ContactDetails = ({
       <InputBox
         value={contactFullName}
         setValue={safeSetContactFullName}
-        title={'שם פרטי ומשפחה'}
+        title={isBnbBusinessHost ? 'שם בית העסק' : 'שם פרטי ומשפחה'}
         required={true}
-        placeholder={'הזן שם פרטי ומשפחה'}
+        placeholder={
+          isBnbBusinessHost ? 'הזן שם בית העסק' : 'הזן שם פרטי ומשפחה'
+        }
       />
       <InputBox
         value={address}

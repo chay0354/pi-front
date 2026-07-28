@@ -26,9 +26,11 @@ import {
   canCreateOpenHousePost,
   CREATE_SHEET_OPEN_HOUSE_ICON,
   DEFAULT_POST_DESCRIPTION,
+  getFeedPostBadgeLabel,
+  getFeedPostCardCaption,
   getCreateSheetListingIcon,
   getPublishCategoriesStrip,
-  isOpenHousePostDescription,
+  isOpenHouseListing,
   OPEN_HOUSE_POST_DESCRIPTION,
   resolveListingCategoryFromEditProfileUi,
   subscriptionTypes,
@@ -221,7 +223,7 @@ const isPostListingRecord = item => {
     type.includes('post') ||
     descLower === 'post' ||
     descLower.includes('פוסט') ||
-    isOpenHousePostDescription(description) ||
+    isOpenHouseListing(item) ||
     descLower.includes('post') ||
     item.feed_post === true ||
     item.feed_post === 'true' ||
@@ -323,10 +325,9 @@ const canOpenListingAnalysis = user =>
 
 /** White badge on ad cards: open house → בית פתוח; post → פוסט; land → קרקע; etc. */
 const getListingTypeBadgeLabel = (listing, currentUser) => {
-  if (isOpenHousePostDescription(listing?.description || listing?.desc)) {
-    return OPEN_HOUSE_POST_DESCRIPTION;
+  if (isPostListingRecord(listing)) {
+    return getFeedPostBadgeLabel(listing);
   }
-  if (isPostListingRecord(listing)) return DEFAULT_POST_DESCRIPTION;
   const cat =
     listing?.category != null ? parseInt(String(listing.category), 10) : NaN;
   if (cat === 7) return 'קרקע';
@@ -886,7 +887,9 @@ const EditPublishAdScreen = ({
             />
             <View style={{flex: 1}}>
               <Text style={styles.adCardListDescription} numberOfLines={2}>
-                {listing.description || '—'}
+                {postRecord
+                  ? getFeedPostCardCaption(listing)
+                  : listing.description || '—'}
               </Text>
 
               <ListingStatsRow
@@ -1026,7 +1029,9 @@ const EditPublishAdScreen = ({
             />
             <View style={{flex: 1}}>
               <Text style={styles.adDescription} numberOfLines={2}>
-                {listing.description || '—'}
+                {postRecord
+                  ? getFeedPostCardCaption(listing)
+                  : listing.description || '—'}
               </Text>
               <ListingStatsRow listing={listing} postRecord={postRecord} />
             </View>

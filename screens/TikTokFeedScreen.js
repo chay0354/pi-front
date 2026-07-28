@@ -366,6 +366,12 @@ const isNewConditionListing = listing => {
 const isRegularUserListing = listing =>
   String(listing?.subscription_type || '').toLowerCase() === 'user';
 
+/** BnB feed: regular users + company publishers (same listing UX). */
+const isBnbFeedPublisherListing = listing => {
+  const sub = String(listing?.subscription_type || '').toLowerCase();
+  return sub === 'user' || sub === 'company';
+};
+
 /** חדשות sidebar: company ads in active category + all cat-1 ads + regular-user “new” ads (any category). */
 const isNewsSidebarListing = (listing, currentCategoryId) => {
   if (!listing || isFeedPost(listing)) return false;
@@ -2094,6 +2100,8 @@ const TikTokFeedScreen = ({
   currentUser = null,
   /** Guest taps follow + → App opens regular user registration (return to feed after). */
   onOpenUserRegistration = null,
+  /** Guest BnB "פרסם כעסק" → company registration flow. */
+  onOpenCompanyRegistration = null,
   /** Bumped from App (e.g. Favorites search) to open the user search panel on mount, same as the magnify control. */
   userSearchOpenTrigger = 0,
   /** When user presses back to leave the user-search UI, App clears tikTokUserSearchOpenTrigger. */
@@ -2109,6 +2117,7 @@ const TikTokFeedScreen = ({
   isScreenActive = true,
 }) => {
   const insets = useSafeAreaInsets();
+  const isGuest = !currentUser || !String(currentUser?.email || '').trim();
   const profilePostsSubId = profilePostsScope?.subscriptionId
     ? String(profilePostsScope.subscriptionId).trim()
     : '';
@@ -2455,15 +2464,22 @@ const TikTokFeedScreen = ({
 
   /**
    * Center פרסם button: professionals + regular users get the create-ad
-   * drawer right on the feed (Figma מגירת צור מודעה) instead of being sent
-   * to the EditPublishAd page. Companies/brokers keep the manage-ads page;
-   * guests go to registration (handled by App via onOpenEditPublishAdWithCategory).
+   * drawer right on the feed (Figma מגירת צור מודעה). Companies on BnB get
+   * the same in-feed sheet. Other companies/brokers go to EditPublishAd;
+   * guests on BnB also get the in-feed sheet (registration per option).
    */
   const handlePublishButtonPress = () => {
     const sub = (currentUser?.subscription_type || '').toLowerCase();
+    const catNum =
+      selectedCategory != null && selectedCategory !== ''
+        ? parseInt(String(selectedCategory).trim(), 10)
+        : NaN;
+    const isBnbCategory = catNum === 5;
     if (
+      isGuest && isBnbCategory ||
       sub === subscriptionTypes.professional ||
-      sub === subscriptionTypes.user
+      sub === subscriptionTypes.user ||
+      (sub === subscriptionTypes.company && isBnbCategory)
     ) {
       bottomSheetTranslateY.setValue(0);
       setShowBottomSheet(true);
@@ -2474,14 +2490,40 @@ const TikTokFeedScreen = ({
 
   const closeSheetAndOpenListing = opts => {
     setShowBottomSheet(false);
+    const sub = (currentUser?.subscription_type || '').toLowerCase();
+    const catNum =
+      selectedCategory != null && selectedCategory !== ''
+        ? parseInt(String(selectedCategory).trim(), 10)
+        : NaN;
+    const isBnbCategory = catNum === 5;
+    if (isGuest && isBnbCategory) {
+      if (opts?.bnbHostType === 'business') {
+        onOpenCompanyRegistration?.();
+      } else {
+        onOpenUserRegistration?.();
+      }
+      return;
+    }
     const isCompanyOrBroker =
-      currentUser?.subscription_type === subscriptionTypes.company ||
-      currentUser?.subscription_type === subscriptionTypes.broker;
+      sub === subscriptionTypes.company || sub === subscriptionTypes.broker;
+    if (isCompanyOrBroker && isBnbCategory) {
+      onOpenOfficeListing?.(selectedCategory, opts);
+      return;
+    }
     if (isCompanyOrBroker) {
       onOpenEditPublishAdWithCategory?.(selectedCategory, opts);
     } else {
       onOpenOfficeListing?.(selectedCategory, opts);
     }
+  };
+
+  const closeSheetAndOpenPost = () => {
+    setShowBottomSheet(false);
+    if (isGuest) {
+      onOpenUserRegistration?.();
+      return;
+    }
+    onOpenPostEditor?.(selectedCategory);
   };
 
   // Per-user liked IDs (guests: empty so hearts never reflect another session)
@@ -3551,13 +3593,12 @@ const TikTokFeedScreen = ({
                 String(l.searchPurposeKey).trim() === need,
             );
           }
-          // BnB + שותפים: hide non-regular publishers (legacy broker/company ads).
-          // Keep professional posts when the נותני שירות filter is active.
-          if (
-            (selectedCatNum === 3 || selectedCatNum === 5) &&
-            !sidebarWantsProfessionalPosts
-          ) {
+          // שותפים: hide non-regular publishers (legacy broker/company ads).
+          // BnB: regular + company listings (same card UX).
+          if (selectedCatNum === 3 && !sidebarWantsProfessionalPosts) {
             displayListings = displayListings.filter(isRegularUserListing);
+          } else if (selectedCatNum === 5 && !sidebarWantsProfessionalPosts) {
+            displayListings = displayListings.filter(isBnbFeedPublisherListing);
           }
           }
 
@@ -5659,7 +5700,6 @@ const TikTokFeedScreen = ({
   const sidebarViewerEmail = currentUser?.email
     ? String(currentUser.email).trim().toLowerCase()
     : '';
-  const isGuest = !currentUser || !String(currentUser?.email || '').trim();
   const sidebarTargetSubId = resolveListingFollowTargetId(currentVideo);
 
   const shouldShowFollowPlusForVideo = useCallback(
@@ -5698,11 +5738,14 @@ const TikTokFeedScreen = ({
     selectedCategory != null && selectedCategory !== ''
       ? parseInt(String(selectedCategory).trim(), 10)
       : NaN;
-  /** Regular: allowed categories only. Company: companySheetAdListingCategoryIds. Professional: never show listing row. Brokers: unchanged. */
+  /** Regular: allowed categories only. Company: companySheetAdListingCategoryIds. Guest on BnB: private/business rows. Professional: never show listing row. Brokers: unchanged. */
   const showListingPublishInTikTokSheet = useMemo(() => {
     const sub = (currentUser?.subscription_type || '').toLowerCase();
     const n = tikTokSheetListingCategoryNum;
     const ok = Number.isFinite(n);
+    if (isGuest) {
+      return ok && n === 5;
+    }
     if (sub === subscriptionTypes.professional) {
       return false;
     }
@@ -5716,7 +5759,7 @@ const TikTokFeedScreen = ({
       sub !== subscriptionTypes.user ||
       (ok && regularUserAdListingCategoryIds.has(n))
     );
-  }, [currentUser?.subscription_type, tikTokSheetListingCategoryNum]);
+  }, [currentUser?.subscription_type, tikTokSheetListingCategoryNum, isGuest]);
 
   const listingSheetCopy = useMemo(
     () =>
@@ -8411,10 +8454,7 @@ const TikTokFeedScreen = ({
               title="פוסט"
               subtitle="שתף מידע או עדכון עם הקהילה"
               iconSource={CREATE_SHEET_POST_ICON}
-              onPress={() => {
-                setShowBottomSheet(false);
-                onOpenPostEditor?.(selectedCategory);
-              }}
+              onPress={closeSheetAndOpenPost}
             />
           </CreateAdSheet>
         </Animated.View>

@@ -4,8 +4,8 @@ import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
 
 export const ServiceAndFacility = ({
-  propertyType,
-  setPropertyType,
+  facilities = {},
+  toggleFacility,
   data = [],
   title,
 }) => {
@@ -19,15 +19,18 @@ export const ServiceAndFacility = ({
       <View>
         {data.map((item, index) => {
           const isNotLastIndex = index !== data.length - 1;
+          const isSelected = Boolean(facilities[item.name]);
           return (
             <RadioWithText
-              key={index}
+              key={item.name}
               isNotLastIndex={isNotLastIndex}
               title={item.title}
               name={item.name}
-              setName={setPropertyType}
+              setName={toggleFacility}
               index={index}
-              isSelected={item.name === propertyType}
+              isSelected={isSelected}
+              useFigmaStyleIcon
+              styleDevider={{marginTop: 20}}
             />
           );
         })}
