@@ -323,7 +323,7 @@ const isBrokerUser = user => {
 const canOpenListingAnalysis = user =>
   canAccessListingAnalysis(user?.subscription_type);
 
-/** White badge on ad cards: open house → בית פתוח; post → פוסט; land → קרקע; etc. */
+/** White badge on ad cards: open house → בית פתוח; post → פוסט; land → קרקע; BnB → BNB; etc. */
 const getListingTypeBadgeLabel = (listing, currentUser) => {
   if (isPostListingRecord(listing)) {
     return getFeedPostBadgeLabel(listing);
@@ -331,6 +331,7 @@ const getListingTypeBadgeLabel = (listing, currentUser) => {
   const cat =
     listing?.category != null ? parseInt(String(listing.category), 10) : NaN;
   if (cat === 7) return 'קרקע';
+  if (cat === 5) return 'BNB';
   if (isCompanyUser(currentUser)) return 'פרויקט';
   return 'נכס';
 };
@@ -1303,18 +1304,26 @@ const EditPublishAdScreen = ({
               {showListingCreateInSheet &&
                 (isBnbCategory ? (
                   <>
-                    <CreateAdSheetRow
-                      title="פרסם כפרטי"
-                      subtitle="פרסם חדר או אתר נופש פרטי"
-                      iconSource={require('../assets/ad-uplaud/bnb-private.png')}
-                      onPress={() => openCreateListing({bnbHostType: 'private'})}
-                    />
-                    <CreateAdSheetDivider />
+                    {!isCompanyUser(currentUser) ? (
+                      <>
+                        <CreateAdSheetRow
+                          title="פרסם כפרטי"
+                          subtitle="פרסם חדר או אתר נופש פרטי"
+                          iconSource={require('../assets/ad-uplaud/bnb-private.png')}
+                          onPress={() =>
+                            openCreateListing({bnbHostType: 'private'})
+                          }
+                        />
+                        <CreateAdSheetDivider />
+                      </>
+                    ) : null}
                     <CreateAdSheetRow
                       title="פרסם כעסק"
                       subtitle="פרסם חדר או אתר נופש עסקי"
                       iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                      onPress={() => openCreateListing({bnbHostType: 'business'})}
+                      onPress={() =>
+                        openCreateListing({bnbHostType: 'business'})
+                      }
                     />
                   </>
                 ) : (
@@ -1326,9 +1335,11 @@ const EditPublishAdScreen = ({
                           ? 'פרסם מודעה'
                           : isLandListingCategory
                             ? 'קרקע'
-                            : isCompanyUser(currentUser)
-                              ? 'פרויקט'
-                              : 'נכס'
+                            : isBnbCategory
+                              ? 'BNB'
+                              : isCompanyUser(currentUser)
+                                ? 'פרויקט'
+                                : 'נכס'
                     }
                     subtitle={
                       isPartnersCategory

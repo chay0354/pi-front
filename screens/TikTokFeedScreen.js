@@ -137,6 +137,7 @@ import {
   companySheetAdListingCategoryIds,
   getCreateSheetListingIcon,
   getListingSheetCopy,
+  isCompanySubscriptionType,
   regularUserAdListingCategoryIds,
   subscriptionTypes,
 } from '../utils/constant';
@@ -4466,7 +4467,7 @@ const TikTokFeedScreen = ({
           return false;
         }
         const subType = String(l.subscription_type || '').toLowerCase();
-        if (subType === 'company' && !landFeed) {
+        if (subType === 'company' && !landFeed && !bnbFeed) {
           return false;
         }
         if (l.rawPrice == null || l.rawPrice < minPrice) return false;
@@ -8420,15 +8421,19 @@ const TikTokFeedScreen = ({
             {showListingPublishInTikTokSheet &&
               (selectedCategory === 5 || selectedCategory === '5' ? (
                 <>
-                  <CreateAdSheetRow
-                    title="פרסם כפרטי"
-                    subtitle="פרסם חדר או אתר נופש פרטי"
-                    iconSource={require('../assets/ad-uplaud/bnb-private.png')}
-                    onPress={() =>
-                      closeSheetAndOpenListing({bnbHostType: 'private'})
-                    }
-                  />
-                  <CreateAdSheetDivider />
+                  {!isCompanySubscriptionType(currentUser?.subscription_type) ? (
+                    <>
+                      <CreateAdSheetRow
+                        title="פרסם כפרטי"
+                        subtitle="פרסם חדר או אתר נופש פרטי"
+                        iconSource={require('../assets/ad-uplaud/bnb-private.png')}
+                        onPress={() =>
+                          closeSheetAndOpenListing({bnbHostType: 'private'})
+                        }
+                      />
+                      <CreateAdSheetDivider />
+                    </>
+                  ) : null}
                   <CreateAdSheetRow
                     title="פרסם כעסק"
                     subtitle="פרסם חדר או אתר נופש עסקי"
