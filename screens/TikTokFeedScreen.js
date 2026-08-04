@@ -405,7 +405,7 @@ const mergeListingRows = (target, rows) => {
 const isNewsSidebarFilterDef = filter =>
   filter?.id === 'new' && filter?.ads_only === true;
 
-/** הדמיות sidebar: company ads only (no posts), every category. */
+/** הדמיות sidebar: company video ads only (no posts / no image-only), every category. */
 const isRenderingsSidebarFilterDef = filter =>
   filter?.id === 'renderings' &&
   String(filter?.subscription_type || '').toLowerCase() === 'company' &&
@@ -413,7 +413,13 @@ const isRenderingsSidebarFilterDef = filter =>
 
 const isRenderingsSidebarListing = listing => {
   if (!listing || isFeedPost(listing)) return false;
-  return String(listing?.subscription_type || '').toLowerCase() === 'company';
+  if (String(listing?.subscription_type || '').toLowerCase() !== 'company') {
+    return false;
+  }
+  // Prefer transformed feed shape; fall back to raw listing video fields.
+  return (
+    listingHasPlayableVideo(listing) || Boolean(resolveAdVideoUri(listing))
+  );
 };
 
 /** Company ads: `construction_status` from DB may be English keys or Hebrew labels from the form. */
@@ -1014,7 +1020,7 @@ const NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new.png');
 const OFFICE_NEW_SIDEBAR_FILTER_ICON = require('../assets/tiktok/new-2.png');
 
 /**
- * חדש מקבלן (category 1) only — הדמיות first (all company ads, all categories), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
+ * חדש מקבלן (category 1) only — הדמיות first (company video ads), then company “סטטוס” chips (פריסייל / בנוי / בבנייה), + פוסטים / שירות.
  * Do not use as the default for דירות / גלובל / other feeds.
  */
 const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
@@ -1023,6 +1029,7 @@ const NEW_FROM_DEVELOPER_SIDEBAR_FILTERS = [
     label: 'הדמיות',
     subscription_type: 'company',
     ads_only: true,
+    has_video: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1085,6 +1092,7 @@ const APARTMENTS_SIDEBAR_FILTERS = [
     label: 'הדמיות',
     subscription_type: 'company',
     ads_only: true,
+    has_video: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1138,6 +1146,7 @@ const OFFICE_SIDEBAR_FILTERS = [
     label: 'הדמיות',
     subscription_type: 'company',
     ads_only: true,
+    has_video: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1220,6 +1229,7 @@ const COMMERCIAL_SIDEBAR_FILTERS = [
     label: 'הדמיות',
     subscription_type: 'company',
     ads_only: true,
+    has_video: true,
     svg: officeSidebarSvgs.renderings,
   },
   {
@@ -1918,8 +1928,8 @@ const ImageSwiper = ({
       </View>
     ) : null;
 
-  // Collage view — dedicated geometry per image count (2–5): see utils/collageLayouts.js
-  if (displayOption === 'collage' && images.length > 0) {
+  // Collage view — crop/fill cells only for 2+ images; single image uses slideshow fit-width below.
+  if (displayOption === 'collage' && images.length > 1) {
     const slice = images.slice(0, 5);
     const imageCount = slice.length;
     const layouts = getCollageCellLayouts(imageCount, pageWidth, screenHeight);
@@ -1957,24 +1967,15 @@ const ImageSwiper = ({
                     height: layout.height,
                     top: layout.top,
                     left: layout.left,
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    overflow: 'hidden',
                     backgroundColor: '#000',
                   },
                 ]}>
                 <Image
                   source={imageSource}
                   {...FEED_IMAGE_PROPS}
-                  style={[
-                    imageCount === 1
-                      ? styles.collageImageSingle
-                      : styles.collageImage,
-                    imageCount === 1 && {
-                      maxWidth: layout.width,
-                      maxHeight: layout.height,
-                    },
-                  ]}
-                  resizeMode="contain"
+                  style={styles.collageImage}
+                  resizeMode="cover"
                   onError={() => markImageErrored(collageKey)}
                 />
               </View>
@@ -2988,12 +2989,13 @@ const TikTokFeedScreen = ({
           officeFilter?.condition ??
           commercialFilter?.condition ??
           landFilter?.condition;
-        // API has_video only from sidebar filters that still request it (הדמיות no longer does).
+        // API has_video from sidebar filters that request it (incl. הדמיות).
         const hasVideoFromSidebar =
           officeFilter?.has_video === true ||
           landFilter?.has_video === true ||
           commercialFilter?.has_video === true ||
-          legacySidebarFilter?.has_video === true;
+          legacySidebarFilter?.has_video === true ||
+          renderingsSidebarFilterActive;
         const hasVideo = hasVideoFromSidebar;
 
         const sharedListingFetchParams = {
@@ -3034,6 +3036,7 @@ const TikTokFeedScreen = ({
           result = await getListings({
             status: 'published',
             subscription_type: 'company',
+            has_video: true,
             ...(currentUser?.id != null && {user_id: String(currentUser.id)}),
           });
           mergedListings = Array.isArray(result?.listings)
@@ -3561,7 +3564,7 @@ const TikTokFeedScreen = ({
             !isProfilePostsFeed &&
             renderingsSidebarFilterActive
           ) {
-            // הדמיות: all company ads across every category (video, image, etc.), no posts.
+            // הדמיות: company ads with a playable video only (no image-only / posts).
             displayListings = displayListings.filter(isRenderingsSidebarListing);
           }
           if (landFilter?.land_in_mortgage) {
@@ -5273,6 +5276,8 @@ const TikTokFeedScreen = ({
       activateFeedVideoAt(currentIndexRef.current);
       return;
     }
+    // Profile covers the feed — pause+mute every mounted player (players stay
+    // mounted via prewarm so Android does not orphan ExoPlayer audio).
     feedVideoRefs.current.forEach(player => {
       player?.pause?.();
     });
@@ -7458,7 +7463,12 @@ const TikTokFeedScreen = ({
         // stays fixed at 3 real players max (A07-safe decoder budget).
         const isPrewarmNeighbor =
           index === currentIndex + 1 || index === currentIndex - 1;
-        const mustMountVideoPlayer = isActiveVideoPage || isPrewarmNeighbor;
+        // Feed stays mounted under profile. Keep current±1 players mounted
+        // (prewarm) while inactive so we can pause/mute instead of unmounting —
+        // Android ExoPlayer can keep playing audio if Video unmounts mid-stream.
+        const feedVideoActive = isActiveVideoPage && isScreenActive;
+        const inPlayerWindow = isActiveVideoPage || isPrewarmNeighbor;
+        const mustMountVideoPlayer = inPlayerWindow;
         const posterUri = resolveFeedVideoPosterUri(video);
         // Text overlays are passed INTO the player so post + text render as
         // one unit: hidden while the video loads, shown with the first frame.
@@ -7478,8 +7488,8 @@ const TikTokFeedScreen = ({
             ref={node => bindFeedVideoRef(index, node)}
             uri={feedVideoUri}
             posterUri={posterUri}
-            isActive={isActiveVideoPage}
-            prewarm={isPrewarmNeighbor && !isActiveVideoPage}
+            isActive={feedVideoActive}
+            prewarm={inPlayerWindow && !feedVideoActive}
             fitWidth={fitAdWidth}
             style={styles.feedVideoPlayer}>
             {renderPostTextOverlays(video)}
@@ -7510,7 +7520,10 @@ const TikTokFeedScreen = ({
       }
       if (video.images && video.images.length > 0) {
         const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
-        const displayMode = rawOpt === 'collage' ? 'collage' : 'slideshow';
+        const displayMode =
+          rawOpt === 'collage' && video.images.length > 1
+            ? 'collage'
+            : 'slideshow';
         return (
           <>
             <ImageSwiper
@@ -10863,12 +10876,6 @@ const styles = StyleSheet.create({
   collageImage: {
     width: '100%',
     height: '100%',
-  },
-  collageImageSingle: {
-    width: '100%',
-    height: '100%',
-    maxWidth: '100%',
-    maxHeight: '100%',
   },
 });
 

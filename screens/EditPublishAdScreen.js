@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef, useMemo} from 'react';
+import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react';
 import {
   View,
   Text,
@@ -346,11 +346,30 @@ const categoryImageOffset = (categoryImageSize - CATEGORY_ICON_SIZE) / 2;
 const getRightmostStripCategoryId = strip =>
   strip?.length ? strip[0].id : null;
 
+const CATEGORY_STRIP_ITEM_WIDTH = 100;
+const CATEGORY_STRIP_GAP = 22;
+const CATEGORY_STRIP_PADDING = 20;
+
+function computeCategoryStripScrollX(uiCategoryId, strip, contentW, viewportW) {
+  if (!strip?.length || contentW <= 0 || viewportW <= 0) return null;
+  const index = strip.findIndex(cat => cat.id === uiCategoryId);
+  if (index < 0) return null;
+  const stride = CATEGORY_STRIP_ITEM_WIDTH + CATEGORY_STRIP_GAP;
+  const itemStart = CATEGORY_STRIP_PADDING + index * stride;
+  const itemCenter = itemStart + CATEGORY_STRIP_ITEM_WIDTH / 2;
+  const maxScroll = Math.max(0, contentW - viewportW);
+  const ltrTarget = Math.max(0, Math.min(maxScroll, itemCenter - viewportW / 2));
+  // Under forceRTL the strip rests at maxScroll on the first category (חדש מקבלן).
+  return Math.max(0, Math.min(maxScroll, maxScroll - ltrTarget));
+}
+
 const EditPublishAdScreen = ({
   onClose,
   uploadedListings = [],
   currentUser = null,
   initialCategoryId = null,
+  /** Skip strip intro and scroll to category — only when returning from in-flow screens */
+  restoreCategoryStrip = false,
   refreshKey = 0,
   onCreateAd,
   onEditAd,
@@ -363,6 +382,8 @@ const EditPublishAdScreen = ({
   onRemove,
   onOpenListingAnalysis,
   onCreatePost,
+  /** DB listing category when user switches the horizontal category strip */
+  onCategoryChange,
 }) => {
   const insets = useSafeAreaInsets();
 
@@ -378,6 +399,8 @@ const EditPublishAdScreen = ({
   const [selectedCategoryId, setSelectedCategoryId] = useState(
     toEditProfileUiCategoryId(initialCategoryId),
   );
+  const selectedCategoryIdRef = useRef(selectedCategoryId);
+  selectedCategoryIdRef.current = selectedCategoryId;
   const [fetchedListings, setFetchedListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
   const [removeConfirmListing, setRemoveConfirmListing] = useState(null);
@@ -404,9 +427,34 @@ const EditPublishAdScreen = ({
   const didCategorySweepRef = useRef(false);
   const publishCategoriesStripRef = useRef([]);
   const categoryStripScrollXRef = useRef(null);
+  const hasExplicitRestoreCategoryRef = useRef(restoreCategoryStrip);
 
-  const runCategorySweep = () => {
+  const restoreCategoryStripPosition = useCallback(() => {
+    const strip = publishCategoriesStripRef.current;
+    const uiId = selectedCategoryIdRef.current;
+    const contentW = categoryContentWidthRef.current;
+    const viewportW = categoryViewportWidthRef.current;
+    const targetX = computeCategoryStripScrollX(
+      uiId,
+      strip,
+      contentW,
+      viewportW,
+    );
+    if (targetX == null) return false;
+    categorySweepAnim.stopAnimation();
+    didCategorySweepRef.current = true;
+    categoryStripScrollXRef.current = targetX;
+    categorySweepAnim.setValue(targetX);
+    categoryScrollRef.current?.scrollTo({x: targetX, animated: false});
+    return true;
+  }, [categorySweepAnim]);
+
+  const runCategorySweep = useCallback(() => {
     if (didCategorySweepRef.current) return;
+    if (hasExplicitRestoreCategoryRef.current) {
+      restoreCategoryStripPosition();
+      return;
+    }
     const contentW = categoryContentWidthRef.current;
     const viewportW = categoryViewportWidthRef.current;
     const maxScroll = Math.max(0, contentW - viewportW);
@@ -432,27 +480,41 @@ const EditPublishAdScreen = ({
       categorySweepAnim.setValue(maxScroll);
       categoryScrollRef.current?.scrollTo({x: maxScroll, animated: false});
     });
-  };
+  }, [categorySweepAnim, restoreCategoryStripPosition]);
 
-  const onCategoryScrollContentSizeChange = width => {
-    categoryContentWidthRef.current = width || 0;
-    if (categoryStripScrollXRef.current != null) {
-      categoryScrollRef.current?.scrollTo({
-        x: categoryStripScrollXRef.current,
-        animated: false,
-      });
-      return;
-    }
-    if (!didInitialCategoryScrollRef.current) {
-      didInitialCategoryScrollRef.current = true;
-    }
-    runCategorySweep();
-  };
+  const onCategoryScrollContentSizeChange = useCallback(
+    width => {
+      categoryContentWidthRef.current = width || 0;
+      if (categoryStripScrollXRef.current != null) {
+        categoryScrollRef.current?.scrollTo({
+          x: categoryStripScrollXRef.current,
+          animated: false,
+        });
+        return;
+      }
+      if (hasExplicitRestoreCategoryRef.current) {
+        restoreCategoryStripPosition();
+        return;
+      }
+      if (!didInitialCategoryScrollRef.current) {
+        didInitialCategoryScrollRef.current = true;
+      }
+      runCategorySweep();
+    },
+    [restoreCategoryStripPosition, runCategorySweep],
+  );
 
-  const onCategoryScrollLayout = e => {
-    categoryViewportWidthRef.current = e.nativeEvent.layout.width || 0;
-    runCategorySweep();
-  };
+  const onCategoryScrollLayout = useCallback(
+    e => {
+      categoryViewportWidthRef.current = e.nativeEvent.layout.width || 0;
+      if (hasExplicitRestoreCategoryRef.current) {
+        restoreCategoryStripPosition();
+        return;
+      }
+      runCategorySweep();
+    },
+    [restoreCategoryStripPosition, runCategorySweep],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -608,6 +670,41 @@ const EditPublishAdScreen = ({
         : getRightmostStripCategoryId(publishCategoriesStrip);
     setSelectedCategoryId(nextSelectedId);
   }, [initialCategoryId, publishCategoriesStrip]);
+
+  useEffect(() => {
+    hasExplicitRestoreCategoryRef.current = restoreCategoryStrip;
+    if (restoreCategoryStrip) {
+      didCategorySweepRef.current = false;
+      categoryStripScrollXRef.current = null;
+    } else {
+      didCategorySweepRef.current = false;
+      categoryStripScrollXRef.current = null;
+      didInitialCategoryScrollRef.current = false;
+    }
+  }, [restoreCategoryStrip]);
+
+  useEffect(() => {
+    if (
+      !restoreCategoryStrip ||
+      !selectedCategoryId ||
+      publishCategoriesStrip.length === 0
+    ) {
+      return;
+    }
+    restoreCategoryStripPosition();
+  }, [
+    restoreCategoryStrip,
+    selectedCategoryId,
+    publishCategoriesStrip.length,
+    restoreCategoryStripPosition,
+  ]);
+
+  useEffect(() => {
+    if (selectedListingCategoryId == null || typeof onCategoryChange !== 'function') {
+      return;
+    }
+    onCategoryChange(selectedListingCategoryId);
+  }, [selectedListingCategoryId, onCategoryChange]);
 
   const showListingCreateInSheet = useMemo(
     () =>

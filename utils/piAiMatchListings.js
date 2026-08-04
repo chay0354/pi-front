@@ -98,8 +98,276 @@ export function buildListingAiSummary(listing) {
   set('rooms', listing.rooms, 10);
   set('area', listing.area, 12);
   set('floor', listing.floor, 10);
+  set('search_purpose', listing.search_purpose || listing.searchPurposeKey, 20);
   set('description', listing.description, 240);
   return out;
+}
+
+/** Major Israeli cities — longest alias matches first. */
+const ISRAELI_CITIES = [
+  {label: 'תל אביב', keys: ['תל אביב', 'תל-אביב', 'tel aviv', 'tel-aviv', 'ת״א', 'ת"א']},
+  {label: 'ראשון לציון', keys: ['ראשון לציון', 'ראשל״צ', 'ראשל"צ']},
+  {label: 'פתח תקווה', keys: ['פתח תקווה', 'פתח-תקווה', 'פ״ת', 'פ"ת']},
+  {label: 'באר שבע', keys: ['באר שבע', 'beer sheva', 'beersheba']},
+  {label: 'כפר סבא', keys: ['כפר סבא', 'כפר-סבא']},
+  {label: 'ירושלים', keys: ['ירושלים', 'jerusalem']},
+  {label: 'חיפה', keys: ['חיפה', 'haifa']},
+  {label: 'נתניה', keys: ['נתניה', 'netanya']},
+  {label: 'הרצליה', keys: ['הרצליה', 'herzliya']},
+  {label: 'רמת גן', keys: ['רמת גן']},
+  {label: 'גבעתיים', keys: ['גבעתיים']},
+  {label: 'חולון', keys: ['חולון']},
+  {label: 'רעננה', keys: ['רעננה']},
+  {label: 'אשדוד', keys: ['אשדוד']},
+  {label: 'אשקלון', keys: ['אשקלון']},
+  {label: 'מודיעין', keys: ['מודיעין', 'modiin']},
+  {label: 'רחובות', keys: ['רחובות']},
+  {label: 'בני ברק', keys: ['בני ברק']},
+  {label: 'נצרת', keys: ['נצרת']},
+  {label: 'עפולה', keys: ['עפולה']},
+  {label: 'אילת', keys: ['אילת', 'eilat']},
+  {label: 'טבריה', keys: ['טבריה']},
+  {label: 'נהריה', keys: ['נהריה']},
+  {label: 'קרית גת', keys: ['קרית גת', 'קריית גת']},
+];
+
+/**
+ * @param {string} s
+ * @returns {string}
+ */
+export function normalizeHebrewQuery(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[\u0591-\u05c7]/g, '')
+    .replace(/["'״׳]/g, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const CITY_ALIAS_ENTRIES = ISRAELI_CITIES.flatMap(city =>
+  city.keys.map(key => ({
+    label: city.label,
+    keyNorm: normalizeHebrewQuery(key),
+  })),
+).sort((a, b) => b.keyNorm.length - a.keyNorm.length);
+
+const CITY_BY_LABEL = new Map(ISRAELI_CITIES.map(c => [c.label, c]));
+
+/**
+ * @param {string} query
+ * @returns {{ raw: string, city: string|null, purpose: 'rent'|'sale'|null, searchPurpose: 'enter'|'bring_in'|null }}
+ */
+export function parsePiAiQuery(query) {
+  const raw = String(query || '').trim();
+  const q = normalizeHebrewQuery(raw);
+
+  let purpose = null;
+  const wantsRent =
+    /(?:^|\s)(?:דיר(?:ות|ה|ת)?\s*)?(?:ל)?(?:השכ|שכיר|שכור|לשכ)/.test(q) ||
+    q.includes('להשכרה') ||
+    q.includes('לשכור');
+  const wantsSale =
+    /(?:^|\s)(?:דיר(?:ות|ה|ת)?\s*)?(?:ל)?(?:קנ|מכיר)/.test(q) ||
+    q.includes('למכירה') ||
+    q.includes('לקנייה') ||
+    q.includes('לקנות');
+  if (wantsRent && !wantsSale) purpose = 'rent';
+  else if (wantsSale && !wantsRent) purpose = 'sale';
+
+  let searchPurpose = null;
+  if (
+    /(?:^|\s)(?:דיר(?:ה|ת)?\s*)?(?:ל)?(?:הכנס|היכנס)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכנס/.test(
+      q,
+    )
+  ) {
+    searchPurpose = 'enter';
+  } else if (
+    /(?:^|\s)(?:דיר(?:ה|ת)?\s*)?(?:ל)?(?:הכניס)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכניס|שותפ/.test(
+      q,
+    )
+  ) {
+    searchPurpose = 'bring_in';
+  }
+
+  let city = null;
+  for (const entry of CITY_ALIAS_ENTRIES) {
+    if (entry.keyNorm.length >= 2 && q.includes(entry.keyNorm)) {
+      city = entry.label;
+      break;
+    }
+  }
+  if (!city) {
+    const inline = raw.match(/(?:^|\s)ב([\u0590-\u05FF][\u0590-\u05FF\s\-"]{1,24})/);
+    if (inline?.[1]) {
+      const guess = normalizeHebrewQuery(inline[1]);
+      if (guess.length >= 3) {
+        for (const entry of CITY_ALIAS_ENTRIES) {
+          if (
+            entry.keyNorm.includes(guess) ||
+            guess.includes(entry.keyNorm)
+          ) {
+            city = entry.label;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return {raw, city, purpose, searchPurpose};
+}
+
+/**
+ * @param {Record<string, unknown>} listing
+ * @returns {string}
+ */
+function listingLocationBlob(listing) {
+  return normalizeHebrewQuery(
+    [
+      listing.address,
+      listing.search_address,
+      listing.land_address,
+      listing.project_name,
+      listing.description,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+}
+
+/**
+ * @param {Record<string, unknown>} listing
+ * @returns {'rent'|'sale'}
+ */
+function listingPurposeKind(listing) {
+  const raw = String(listing.purpose || '')
+    .trim()
+    .toLowerCase();
+  if (raw === 'rent' || raw === 'להשכרה' || raw.includes('השכר')) {
+    return 'rent';
+  }
+  return 'sale';
+}
+
+/**
+ * @param {Record<string, unknown>} listing
+ * @param {string} cityLabel
+ * @returns {boolean}
+ */
+function listingMatchesCity(listing, cityLabel) {
+  const blob = listingLocationBlob(listing);
+  const cityDef = CITY_BY_LABEL.get(cityLabel);
+  const needles = cityDef
+    ? [normalizeHebrewQuery(cityLabel), ...cityDef.keys.map(normalizeHebrewQuery)]
+    : [normalizeHebrewQuery(cityLabel)];
+  return needles.some(n => n.length >= 2 && blob.includes(n));
+}
+
+/**
+ * @param {Record<string, unknown>} listing
+ * @param {'rent'|'sale'} purpose
+ * @returns {boolean}
+ */
+function listingMatchesPurpose(listing, purpose) {
+  if (Number(listing.category) === 3) return false;
+  return listingPurposeKind(listing) === purpose;
+}
+
+/**
+ * @param {Record<string, unknown>} listing
+ * @param {'enter'|'bring_in'} searchPurpose
+ * @returns {boolean}
+ */
+function listingMatchesSearchPurpose(listing, searchPurpose) {
+  if (Number(listing.category) !== 3) return false;
+  const sp = String(
+    listing.search_purpose || listing.searchPurposeKey || '',
+  )
+    .trim()
+    .toLowerCase();
+  if (searchPurpose === 'enter') {
+    return sp === 'enter';
+  }
+  return sp === 'bring_in' || sp === 'partner';
+}
+
+/**
+ * Hard filters extracted from the Hebrew query (city, rent/sale, שותפים patterns).
+ * @param {Record<string, unknown>[]} listings
+ * @param {ReturnType<typeof parsePiAiQuery>} parsed
+ * @returns {Record<string, unknown>[]}
+ */
+export function filterListingsByParsedQuery(listings, parsed) {
+  if (!parsed) return listings || [];
+  return (listings || []).filter(listing => {
+    if (parsed.city && !listingMatchesCity(listing, parsed.city)) {
+      return false;
+    }
+    if (parsed.searchPurpose) {
+      return listingMatchesSearchPurpose(listing, parsed.searchPurpose);
+    }
+    if (parsed.purpose && !listingMatchesPurpose(listing, parsed.purpose)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * @param {ReturnType<typeof parsePiAiQuery>} parsed
+ * @param {number} totalBefore
+ * @returns {string|null}
+ */
+export function buildPiAiFilterEmptyMessage(parsed, totalBefore) {
+  const parts = [];
+  if (parsed?.city) parts.push(`ב${parsed.city}`);
+  if (parsed?.searchPurpose === 'enter') parts.push('מחפש להכנס');
+  if (parsed?.searchPurpose === 'bring_in') parts.push('מחפש להכניס / שותף');
+  if (parsed?.purpose === 'rent') parts.push('להשכרה');
+  if (parsed?.purpose === 'sale') parts.push('למכירה');
+  if (!parts.length) return null;
+  return `לא נמצאו מודעות ${parts.join(' · ')} מתוך ${totalBefore} מודעות שפורסמו.`;
+}
+
+/**
+ * Dynamic loading copy while Pi AI ranks results.
+ * @param {string} query
+ * @param {ReturnType<typeof parsePiAiQuery>} [parsed]
+ * @returns {string}
+ */
+export function buildPiAiSearchingMessage(query, parsed) {
+  const q = String(query || '').trim();
+  if (!q) return 'מחפש עבורך';
+
+  if (parsed?.searchPurpose === 'enter') {
+    return parsed.city
+      ? `מחפש דירה להכנס ב${parsed.city}`
+      : 'מחפש את ההכנס הנכון עבורך';
+  }
+  if (parsed?.searchPurpose === 'bring_in') {
+    return parsed.city
+      ? `מחפש שותף / להכניס ב${parsed.city}`
+      : 'מחפש את השותף המתאים עבורך';
+  }
+  if (parsed?.city && parsed?.purpose === 'rent') {
+    return `מחפש דירה להשכרה ב${parsed.city}`;
+  }
+  if (parsed?.city && parsed?.purpose === 'sale') {
+    return `מחפש דירה למכירה ב${parsed.city}`;
+  }
+  if (parsed?.city) {
+    return `מחפש ב${parsed.city}`;
+  }
+  if (parsed?.purpose === 'rent') {
+    return 'מחפש דירות להשכרה';
+  }
+  if (parsed?.purpose === 'sale') {
+    return 'מחפש דירות למכירה';
+  }
+
+  const snippet = q.length > 56 ? `${q.slice(0, 53).trim()}…` : q;
+  return `מחפש ${snippet}`;
 }
 
 /**

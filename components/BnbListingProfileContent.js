@@ -10,7 +10,7 @@ import {
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../utils/rtlLayout';
+import {flexStart, flexEnd} from '../utils/rtlLayout';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CONTENT_W = Math.min(366, SCREEN_W - 48);
@@ -20,7 +20,10 @@ const TEXT_SECONDARY = '#D2D0DC';
 const CREAM = '#F7F3E6';
 const DEEP = '#1E1D27';
 const GOLD_BADGE = '#FFC40A';
+const GOLD_PI = '#FFD275';
 const REPORT_BG = '#4D4966';
+const PI_BADGE = require('../assets/pi-badge.png');
+const PI_BADGE_RING = require('../assets/pi-badge-ring.png');
 
 const PROPERTY_TYPE_LABELS = {
   room: 'חדר',
@@ -266,11 +269,26 @@ function InfoChip({label, iconSource, active = true}) {
   );
 }
 
+function PiRatingBadge({rating}) {
+  const n = Math.min(5, Math.max(1, Math.round(Number(rating) || 5)));
+  return (
+    <View style={styles.piBadge}>
+      <Text style={styles.piBadgeText}>{String(n)}</Text>
+      <Image
+        source={n > 4 ? PI_BADGE_RING : PI_BADGE}
+        style={styles.piBadgeImage}
+        resizeMode="cover"
+      />
+    </View>
+  );
+}
+
 /**
  * BnB (category 5) listing detail — Figma 5:413374. Feed ads only (not posts).
  */
 export default function BnbListingProfileContent({
   listing,
+  displayPiRating,
   mapAddress,
   adAddress,
   onReportPress,
@@ -413,44 +431,91 @@ export default function BnbListingProfileContent({
   }, [listing]);
 
   const showStayCard = roomsLine || datesLine || showFreeCancel;
+  const showCompanyPiRating =
+    displayPiRating != null && !Number.isNaN(Number(displayPiRating));
 
   return (
     <View style={styles.wrap}>
       <View style={[styles.sectionTop, {width: CONTENT_W}]}>
-        <View style={styles.tagsRow}>
-          {hotDeal ? (
-            <View style={styles.tagHot}>
-              <Text style={styles.tagHotText}>Hot deal</Text>
+        {showCompanyPiRating ? (
+          <>
+            <View style={styles.companyTopRow}>
+              <View style={styles.companyPriceLocCol}>
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceBig}>{priceStr}</Text>
+                  <View style={styles.priceVertRule} />
+                  <View style={styles.pricePerNightLabels}>
+                    <Text style={styles.pricePerNightSmall}>מחיר </Text>
+                    <Text style={styles.pricePerNightSmall}>ללילה</Text>
+                  </View>
+                </View>
+                {addr ? (
+                  <View style={styles.locRow}>
+                    <SimpleLineIcons
+                      name="location-pin"
+                      size={18}
+                      color={TEXT_SECONDARY}
+                    />
+                    <Text style={styles.locText}>{addr}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.tagWithPiBelow}>
+                {hotDeal ? (
+                  <View style={styles.tagHot}>
+                    <Text style={styles.tagHotText}>Hot deal</Text>
+                  </View>
+                ) : null}
+                <View style={styles.tagWhite}>
+                  <Text style={styles.tagWhiteText}>{unitLabel}</Text>
+                </View>
+                <View style={styles.piBadgeBelowTag}>
+                  <PiRatingBadge rating={displayPiRating} />
+                </View>
+              </View>
             </View>
-          ) : null}
-          <View style={styles.tagWhite}>
-            <Text style={styles.tagWhiteText}>{unitLabel}</Text>
-          </View>
-        </View>
+            {title ? (
+              <Text style={styles.listingTitle}>{title}</Text>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <View style={styles.tagsRow}>
+              {hotDeal ? (
+                <View style={styles.tagHot}>
+                  <Text style={styles.tagHotText}>Hot deal</Text>
+                </View>
+              ) : null}
+              <View style={styles.tagWhite}>
+                <Text style={styles.tagWhiteText}>{unitLabel}</Text>
+              </View>
+            </View>
 
-        <View style={styles.priceBlock}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceBig}>{priceStr}</Text>
-            <View style={styles.priceVertRule} />
-            <View style={styles.pricePerNightLabels}>
-              <Text style={styles.pricePerNightSmall}>מחיר </Text>
-              <Text style={styles.pricePerNightSmall}>ללילה</Text>
+            <View style={styles.priceBlock}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceBig}>{priceStr}</Text>
+                <View style={styles.priceVertRule} />
+                <View style={styles.pricePerNightLabels}>
+                  <Text style={styles.pricePerNightSmall}>מחיר </Text>
+                  <Text style={styles.pricePerNightSmall}>ללילה</Text>
+                </View>
+              </View>
+              {title ? (
+                <Text style={styles.listingTitle}>{title}</Text>
+              ) : null}
+              {addr ? (
+                <View style={styles.locRow}>
+                  <SimpleLineIcons
+                    name="location-pin"
+                    size={18}
+                    color={TEXT_SECONDARY}
+                  />
+                  <Text style={styles.locText}>{addr}</Text>
+                </View>
+              ) : null}
             </View>
-          </View>
-          {title ? (
-            <Text style={styles.listingTitle}>{title}</Text>
-          ) : null}
-          {addr ? (
-            <View style={styles.locRow}>
-              <SimpleLineIcons
-                name="location-pin"
-                size={18}
-                color={TEXT_SECONDARY}
-              />
-              <Text style={styles.locText}>{addr}</Text>
-            </View>
-          ) : null}
-        </View>
+          </>
+        )}
       </View>
 
       <View style={[styles.line, {width: CONTENT_W}]} />
@@ -610,6 +675,49 @@ const styles = StyleSheet.create({
     gap: 20,
     alignItems: flexStart,
     width: '100%',
+  },
+  companyTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    gap: 12,
+  },
+  companyPriceLocCol: {
+    flex: 1,
+    alignItems: flexStart,
+    gap: 10,
+    minWidth: 0,
+  },
+  tagWithPiBelow: {
+    alignItems: flexEnd,
+    gap: 6,
+    flexShrink: 0,
+  },
+  piBadgeBelowTag: {
+    alignSelf: flexEnd,
+    minHeight: 52,
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  piBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 2,
+    minWidth: 48,
+    minHeight: 48,
+  },
+  piBadgeText: {
+    color: GOLD_PI,
+    fontSize: 18,
+    fontFamily: 'Rubik-Medium',
+  },
+  piBadgeImage: {
+    width: 85,
+    height: 85,
+    position: 'absolute',
+    marginLeft: -7,
+    top: -16,
   },
   tagsRow: {
     flexDirection: 'row',

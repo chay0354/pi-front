@@ -359,6 +359,7 @@ function App() {
         setEditPublishSourceCategory(
           resolvedCat != null ? resolvedCat : editPublishSourceCategory,
         );
+        setEditPublishRestoreStrip(true);
       }
       if (listingPreview) {
         setUploadedListings(prev => [...prev, listingPreview]);
@@ -424,9 +425,15 @@ function App() {
   }, []);
   const [uploadedListings, setUploadedListings] = useState([]); // Store uploaded listings for TikTok feed (temporary, for immediate display)
   const [selectedCategory, setSelectedCategory] = useState(null); // Store selected category for TikTok feed
+  /** Home carousel category — restored when returning from TikTok (not hardcoded to דירות). */
+  const [homeCarouselCategoryId, setHomeCarouselCategoryId] = useState(
+    DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
+  );
   // Explicit category context when opening Edit/Publish from TikTok feed
   const [editPublishSourceCategory, setEditPublishSourceCategory] =
     useState(null);
+  /** When true, skip category-strip intro and scroll to saved category (in-flow return only). */
+  const [editPublishRestoreStrip, setEditPublishRestoreStrip] = useState(false);
   /** BnB (category 5): 'private' | 'business' from feed bottom sheet; cleared when leaving AdsForm */
   const [bnbPublishHostType, setBnbPublishHostType] = useState(null);
   const [editingListing, setEditingListing] = useState(null); // When editing an ad from EditPublishAdScreen
@@ -885,6 +892,33 @@ function App() {
     [mergeListingWithProfileContext, profileUser],
   );
 
+  const openTikTokFromHome = useCallback(async category => {
+    setSelectedCategory(category);
+    const catNum =
+      category != null ? parseInt(String(category), 10) : NaN;
+    if (Number.isFinite(catNum) && catNum > 0) {
+      setHomeCarouselCategoryId(catNum);
+    }
+    setTikTokUserSearchOpenTrigger(0);
+    setTikTokFocusListingId(null);
+    setTikTokReturnScreen(screenName.home);
+    try {
+      await AsyncStorage.setItem(
+        TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
+        DEFAULT_TIKTOK_TOP_FILTER,
+      );
+    } catch (_) {}
+    setCurrentScreen(screenName.tikTokFeed);
+  }, []);
+
+  const handleEditPublishCategoryChange = useCallback(categoryId => {
+    const catNum =
+      categoryId != null ? parseInt(String(categoryId), 10) : NaN;
+    if (Number.isFinite(catNum) && catNum > 0) {
+      setEditPublishSourceCategory(catNum);
+    }
+  }, []);
+
   const openCompanyReportFromProfile = useCallback(
     (forcedSubjectType = null) => {
       const u = profileUser;
@@ -1003,7 +1037,7 @@ function App() {
                     !hasShownHomeIntro && !showOnboarding && !showTermsGate
                   }
                   onIntroModalShown={() => setHasShownHomeIntro(true)}
-                  carouselCategoryId={DEFAULT_HOME_CAROUSEL_CATEGORY_ID}
+                  carouselCategoryId={homeCarouselCategoryId}
                   onOpenSelectedProjects={() =>
                     setCurrentScreen(screenName.selectedProjects)
                   }
@@ -1011,23 +1045,7 @@ function App() {
                     setCurrentScreen(screenName.professionalsDirectory)
                   }
                   onOpenSettings={() => setCurrentScreen(screenName.settings)}
-                  onOpenTikTokFeed={async category => {
-                    setSelectedCategory(category);
-                    // Favorites "open user search" bumps tikTokUserSearchOpenTrigger; if we only reset
-                    // on unmount, that value stays >0 and the next feed mount runs the effect that opens
-                    // the search panel. Home category buttons must always land on default feed (pics), not
-                    // search or favorites.
-                    setTikTokUserSearchOpenTrigger(0);
-                    setTikTokFocusListingId(null);
-                    setTikTokReturnScreen(screenName.home);
-                    try {
-                      await AsyncStorage.setItem(
-                        TIKTOK_TOP_BAR_FILTER_STORAGE_KEY,
-                        DEFAULT_TIKTOK_TOP_FILTER,
-                      );
-                    } catch (_) {}
-                    setCurrentScreen(screenName.tikTokFeed);
-                  }}
+                  onOpenTikTokFeed={openTikTokFromHome}
                   onComplete={() => {
                     setShowSplashIntro(false);
                     setHomeIntroReady(false);
@@ -1134,6 +1152,13 @@ function App() {
                   isScreenActive={currentScreen === screenName.tikTokFeed}
                   onClose={() => {
                     setBnbPublishHostType(null);
+                    const catNum =
+                      selectedCategory != null
+                        ? parseInt(String(selectedCategory), 10)
+                        : NaN;
+                    if (Number.isFinite(catNum) && catNum > 0) {
+                      setHomeCarouselCategoryId(catNum);
+                    }
                     // Keep the selected bottom filters so they persist when the
                     // user leaves TikTok and comes back.
                     setTikTokUserSearchOpenTrigger(0);
@@ -1167,6 +1192,7 @@ function App() {
                     setEditPublishSourceCategory(
                       category != null ? Number(category) : null,
                     );
+                    setEditPublishRestoreStrip(true);
                     setBnbPublishHostType(opts?.bnbHostType ?? null);
                     setCurrentScreen(screenName.editPublishAd);
                   }}
@@ -2215,8 +2241,9 @@ function App() {
                     setCurrentScreen(screenName.userRegistration);
                     return;
                   }
-                  setEditPublishSourceCategory(null);
                   setBnbPublishHostType(null);
+                  setEditPublishRestoreStrip(false);
+                  setEditPublishSourceCategory(null);
                   setCurrentScreen(screenName.editPublishAd);
                 }}
                 onOpenChat={async () => {
@@ -2397,6 +2424,7 @@ function App() {
                   setEditPublishSourceCategory(
                     category != null ? Number(category) : null,
                   );
+                  setEditPublishRestoreStrip(true);
                   setBnbPublishHostType(opts?.bnbHostType ?? null);
                   setCurrentScreen(screenName.editPublishAd);
                 }}
@@ -2464,24 +2492,29 @@ function App() {
                 refreshKey={editPublishRefreshKey}
                 onClose={() => {
                   setBnbPublishHostType(null);
+                  setEditPublishRestoreStrip(false);
                   setEditPublishSourceCategory(null);
                   setCurrentScreen(screenName.settings);
                 }}
                 uploadedListings={uploadedListings}
                 currentUser={currentUser}
+                restoreCategoryStrip={editPublishRestoreStrip}
                 initialCategoryId={
-                  editPublishSourceCategory != null
+                  editPublishRestoreStrip && editPublishSourceCategory != null
                     ? Number(editPublishSourceCategory)
                     : null
                 }
+                onCategoryChange={handleEditPublishCategoryChange}
                 onOpenListingAnalysis={() => {
                   if (canAccessListingAnalysis(currentUser?.subscription_type)) {
+                    setEditPublishRestoreStrip(true);
                     setCurrentScreen(screenName.listingAnalysis);
                   }
                 }}
                 onCreateAd={(categoryId, opts) => {
                   setSelectedCategory(String(categoryId));
                   setEditPublishSourceCategory(Number(categoryId));
+                  setEditPublishRestoreStrip(true);
                   setBnbPublishHostType(opts?.bnbHostType ?? null);
                   setEditingListing(null);
                   setAdsFormReturnScreen(screenName.editPublishAd);
@@ -2495,7 +2528,9 @@ function App() {
                   const listingCat = Number.isFinite(n) && n > 0 ? n : null;
                   if (listingCat != null) {
                     setSelectedCategory(String(listingCat));
+                    setEditPublishSourceCategory(listingCat);
                   }
+                  setEditPublishRestoreStrip(true);
                   setPostEditorConfig({
                     publishTarget: 'post',
                     returnScreen: screenName.editPublishAd,
@@ -2515,7 +2550,9 @@ function App() {
                   const listingCat = Number.isFinite(n) && n > 0 ? n : null;
                   if (listingCat != null) {
                     setSelectedCategory(String(listingCat));
+                    setEditPublishSourceCategory(listingCat);
                   }
+                  setEditPublishRestoreStrip(true);
                   setPostEditorConfig({
                     publishTarget: 'post',
                     returnScreen: screenName.editPublishAd,
@@ -2537,6 +2574,7 @@ function App() {
                     setSelectedCategory(String(listingCat));
                     setEditPublishSourceCategory(listingCat);
                   }
+                  setEditPublishRestoreStrip(true);
                   setEditingListing(listing ?? null);
                   setAdsFormReturnScreen(screenName.editPublishAd);
                   setCurrentScreen(screenName.adsForm);
@@ -2547,6 +2585,7 @@ function App() {
                 }}
                 onShare={listing => {
                   setSharedListingForChat(listing ?? null);
+                  setEditPublishRestoreStrip(true);
                   setChatReturnScreen(screenName.editPublishAd);
                   setCurrentScreen(screenName.chat);
                 }}

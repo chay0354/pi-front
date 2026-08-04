@@ -42,8 +42,6 @@ import {flexStart, forceLtrStyle} from '../utils/rtlLayout';
 
 const FALLBACK_PROJECT_IMAGE = require('../assets/category1.png');
 const HOME_FEATURE_AD_STATE_KEY = 'homeFeatureAdRotationState';
-/** After this many full video plays of the same feature ad, pick another. */
-const HOME_FEATURE_AD_RUNS_BEFORE_ROTATE = 3;
 
 const isFeedPostListing = listing =>
   listing?.feed_post === true ||
@@ -296,15 +294,11 @@ const Home = ({
       const stored = await readFeatureAdRotationState();
       if (visitId !== featureAdVisitRef.current) return;
 
-      let playCount = Math.max(0, Number(stored.playCount) || 0);
       let listingId = stored.listingId;
       const currentMissing =
         listingId &&
         !candidates.some(item => String(item.id) === String(listingId));
-      const shouldRotate =
-        forceRotate ||
-        currentMissing ||
-        playCount >= HOME_FEATURE_AD_RUNS_BEFORE_ROTATE;
+      const shouldRotate = forceRotate || currentMissing;
 
       let picked = null;
       if (!shouldRotate && listingId) {
@@ -318,10 +312,9 @@ const Home = ({
           shouldRotate ? listingId : null,
         );
         listingId = picked?.id != null ? String(picked.id) : null;
-        playCount = 0;
       }
 
-      await writeFeatureAdRotationState({listingId, playCount});
+      await writeFeatureAdRotationState({listingId, playCount: 0});
       if (visitId !== featureAdVisitRef.current) return;
 
       featureListingRef.current = picked;
@@ -348,20 +341,7 @@ const Home = ({
     // Ignore stale completions after we've already rotated away.
     if (stored.listingId && stored.listingId !== currentId) return;
 
-    const nextPlayCount = Math.max(0, Number(stored.playCount) || 0) + 1;
-    if (nextPlayCount >= HOME_FEATURE_AD_RUNS_BEFORE_ROTATE) {
-      await writeFeatureAdRotationState({
-        listingId: currentId,
-        playCount: nextPlayCount,
-      });
-      loadFeatureAdListing({forceRotate: true});
-      return;
-    }
-
-    await writeFeatureAdRotationState({
-      listingId: currentId,
-      playCount: nextPlayCount,
-    });
+    loadFeatureAdListing({forceRotate: true});
   }, [loadFeatureAdListing]);
 
   useEffect(() => {

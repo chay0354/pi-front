@@ -153,6 +153,9 @@ export const serializePostTextOverlays = (
       const measured = canNormalize ? measuredContentById[b.id] : null;
       const previewPos = mapStageOverlayToPreview(b, mapping);
 
+      const stageX = Number(b.x);
+      const stageY = Number(b.y);
+      const hasStagePos = Number.isFinite(stageX) && Number.isFinite(stageY);
       const base = {
         text: String(b.text).trim(),
         x: previewPos.x,
@@ -163,6 +166,16 @@ export const serializePostTextOverlays = (
         textStyleIndex: b.textStyleIndex ?? 0,
         align: b.align || 'center',
         maxWidth: previewPos.maxWidth,
+        // Editor drag-box position (stage-local). Re-open uses these so RTL /
+        // center-align pad math cannot shift text when editing an existing post.
+        ...(hasStagePos
+          ? {
+              stage_x: Math.round(stageX),
+              stage_y: Math.round(stageY),
+              stage_w: Math.round(mapping.stageWidth),
+              stage_h: Math.round(mapping.stageHeight),
+            }
+          : null),
       };
 
       if (
@@ -496,28 +509,55 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
     payload.previewHeight > 0
       ? payload.previewHeight
       : stageH + stageOffsetY;
+  const boxWidth = getTextBlockBoxWidth(stageW);
+  const TOUCH_PAD = 24;
+  const innerW = Math.max(1, boxWidth - TOUCH_PAD * 2);
 
   return payload.overlays.map((overlay, index) => {
     let x = overlay.x ?? STAGE_TEXT_PAD_LEFT;
     let y = overlay.y ?? getDefaultTextBlockY(stageH, 40);
+    const align = overlay.align || 'center';
+    const savedStageX = Number(overlay.stage_x);
+    const savedStageY = Number(overlay.stage_y);
+    const savedStageW = Number(overlay.stage_w);
+    const savedStageH = Number(overlay.stage_h);
     const nx = Number(overlay.nx);
     const ny = Number(overlay.ny);
-    if (
+    const nw = Number(overlay.nw);
+
+    if (Number.isFinite(savedStageX) && Number.isFinite(savedStageY)) {
+      // Exact editor drag-box position from publish — scale if stage size changed.
+      const scaleX =
+        savedStageW > 0 && stageW > 0 ? stageW / savedStageW : 1;
+      const scaleY =
+        savedStageH > 0 && stageH > 0 ? stageH / savedStageH : 1;
+      x = savedStageX * scaleX;
+      y = savedStageY * scaleY;
+    } else if (
       (overlay.coords === 'normalized' ||
         payload.coordsSpace === 'normalized') &&
       Number.isFinite(nx) &&
       Number.isFinite(ny)
     ) {
-      // Normalized is the visible glyph box in preview space. Editor block.x/y
-      // is the outer drag box (24px touch pad), so subtract that pad.
-      const TOUCH_PAD = 24;
-      x = nx * previewW - stageOffsetX - TOUCH_PAD;
-      y = ny * previewH - stageOffsetY - TOUCH_PAD;
+      // Normalized is the visible glyph box in preview space. Convert to the
+      // outer drag-box x/y, accounting for align inside the padded box.
+      // (Old posts without stage_x — left-only math shifted center text.)
+      const glyphLeft = nx * previewW - stageOffsetX;
+      const glyphTop = ny * previewH - stageOffsetY;
+      const glyphW =
+        Number.isFinite(nw) && nw > 0 ? nw * previewW : Math.min(innerW, 120);
+      if (align === 'right') {
+        x = glyphLeft - TOUCH_PAD - (innerW - glyphW);
+      } else if (align === 'center') {
+        x = glyphLeft - TOUCH_PAD - (innerW - glyphW) / 2;
+      } else {
+        x = glyphLeft - TOUCH_PAD;
+      }
+      y = glyphTop - TOUCH_PAD;
     } else if (payload.coordsSpace === 'preview') {
       x = (overlay.x ?? 0) - stageOffsetX;
       y = (overlay.y ?? 0) - stageOffsetY;
     }
-    const boxWidth = getTextBlockBoxWidth(stageW);
     // Loose x clamp: text can be freely positioned, so the box may hang past
     // the stage edges; the editor re-clamps precisely against glyph bounds.
     x = Math.max(-boxWidth, Math.min(Number(x) || 0, stageW));
@@ -538,7 +578,7 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
       color: overlay.color || '#FFFFFF',
       bgMode: overlay.bgMode ?? 0,
       textStyleIndex: overlay.textStyleIndex ?? 0,
-      align: overlay.align || 'center',
+      align,
       stackOrder: index + 1,
     };
   });

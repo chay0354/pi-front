@@ -1040,6 +1040,12 @@ const PostEditorScreen = ({
   // closed). New text blocks are positioned relative to this so they don't
   // end up at the top of the screen once the keyboard dismisses.
   const maxStageHeightRef = useRef(0);
+  const [lockedStageHeight, setLockedStageHeight] = useState(0);
+  /** Full preview height with keyboard closed — keeps letterboxed media from
+   * re-centering when adjustResize shrinks the window during text edit. */
+  const maxPreviewHeightRef = useRef(0);
+  const [lockedPreviewHeight, setLockedPreviewHeight] = useState(0);
+  const isKeyboardVisibleRef = useRef(false);
   const activeTabRef = useRef(activeTab);
   const nextStackOrderRef = useRef(1);
   const editingListingId =
@@ -1687,6 +1693,12 @@ const PostEditorScreen = ({
   const showTextFormatToolbar =
     Boolean(editingTextBlockId) && !isCapturing;
 
+  // Keep media + stage at the keyboard-closed size while typing. Android
+  // adjustResize otherwise shrinks the preview and `contain` re-centers the
+  // image — after בוצע the image jumps down relative to the text.
+  const lockPreviewLayout =
+    Boolean(editingTextBlockId) || isKeyboardVisible;
+
   const webToolbarInputMarginBottom = useMemo(() => {
     if (Platform.OS !== 'web' || !editingTextBlockId || isCapturing) {
       return 0;
@@ -1753,9 +1765,11 @@ const PostEditorScreen = ({
 
   useEffect(() => {
     const onShow = () => {
+      isKeyboardVisibleRef.current = true;
       setIsKeyboardVisible(true);
     };
     const onHide = () => {
+      isKeyboardVisibleRef.current = false;
       setIsKeyboardVisible(false);
       // Don't clear format tools mid-edit — video/audio focus can hide the
       // keyboard briefly without the user intending to leave edit mode.
@@ -1879,6 +1893,8 @@ const PostEditorScreen = ({
       origin.x != null && origin.x !== undefined
         ? origin.x
         : STAGE_TEXT_PAD_LEFT;
+    // Existing blocks: restore the pre-edit spot. New Aa blocks: stage
+    // center (typing field sits above the keyboard and is not a position).
     const restoreY =
       origin.y != null && origin.y !== undefined
         ? origin.y
@@ -1918,10 +1934,12 @@ const PostEditorScreen = ({
     editingFieldLayoutRef.current = null;
     editingOriginRef.current = {x: null, y: null};
     editingTextDraftRef.current = '';
-    setEditingTextBlockId(null);
-    isFinishingEditRef.current = false;
+    // Dismiss keyboard first; keep preview locked via isKeyboardVisible until
+    // keyboardDidHide so letterboxed media does not jump on the same frame.
     editingInputRef.current?.blur?.();
     Keyboard.dismiss();
+    setEditingTextBlockId(null);
+    isFinishingEditRef.current = false;
   };
 
   const beginEditTextBlock = useCallback(id => {
@@ -2364,6 +2382,18 @@ const PostEditorScreen = ({
         ref={postPreviewRef}
         nativeID="post-editor-preview-root"
         collapsable={false}
+        onLayout={e => {
+          const h = e.nativeEvent.layout.height;
+          if (
+            h > 0 &&
+            !editingTextBlockIdRef.current &&
+            !isKeyboardVisibleRef.current &&
+            h > maxPreviewHeightRef.current
+          ) {
+            maxPreviewHeightRef.current = h;
+            setLockedPreviewHeight(h);
+          }
+        }}
         style={[
           styles.backgroundContainer,
           isCapturing &&
@@ -2374,7 +2404,15 @@ const PostEditorScreen = ({
           ref={backgroundMediaRef}
           pointerEvents="none"
           collapsable={false}
-          style={styles.backgroundMediaLayer}>
+          style={[
+            styles.backgroundMediaLayer,
+            lockPreviewLayout && lockedPreviewHeight > 0
+              ? styles.backgroundMediaLocked
+              : null,
+            lockPreviewLayout && lockedPreviewHeight > 0
+              ? {height: lockedPreviewHeight}
+              : null,
+          ]}>
           {backgroundVideoAsset?.uri ? (
             <Video
               source={{uri: backgroundVideoAsset.uri}}
@@ -2499,12 +2537,26 @@ const PostEditorScreen = ({
             <View style={styles.stageColumn}>
               <View
                 ref={stageRef}
-                style={styles.stage}
+                style={[
+                  styles.stage,
+                  lockPreviewLayout && lockedStageHeight > 0
+                    ? {
+                        flexGrow: 0,
+                        flexShrink: 0,
+                        height: lockedStageHeight,
+                      }
+                    : null,
+                ]}
                 onLayout={e => {
                   const layout = e.nativeEvent.layout;
                   stageLayoutRef.current = layout;
-                  if (layout.height > maxStageHeightRef.current) {
+                  if (
+                    !editingTextBlockIdRef.current &&
+                    !isKeyboardVisibleRef.current &&
+                    layout.height > maxStageHeightRef.current
+                  ) {
                     maxStageHeightRef.current = layout.height;
+                    setLockedStageHeight(layout.height);
                   }
                   setStageLayout(layout);
                 }}>
@@ -3152,6 +3204,10 @@ const styles = StyleSheet.create({
     zIndex: 0,
     elevation: 0,
     backgroundColor: '#000',
+  },
+  /** Top-anchored fixed height while keyboard is open (see lockPreviewLayout). */
+  backgroundMediaLocked: {
+    bottom: undefined,
   },
   editorKeyboardAvoid: {
     flex: 1,

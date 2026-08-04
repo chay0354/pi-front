@@ -471,7 +471,15 @@ function SwipeableConversationRow({
   );
 
   const shouldSnapOpen = useCallback(
-    finalX => {
+    (finalX, velocityX = 0) => {
+      const flingOpen = isRtl
+        ? velocityX > 0.35
+        : velocityX < -0.35;
+      const flingClose = isRtl
+        ? velocityX < -0.35
+        : velocityX > 0.35;
+      if (flingOpen) return true;
+      if (flingClose) return false;
       return isRtl
         ? finalX > SWIPE_OPEN_THRESHOLD
         : finalX < -SWIPE_OPEN_THRESHOLD;
@@ -499,11 +507,13 @@ function SwipeableConversationRow({
         onMoveShouldSetPanResponder: (_evt, g) => {
           const absDx = Math.abs(g.dx);
           const absDy = Math.abs(g.dy);
+          if (openRef.current && absDx > 4) return true;
           return absDx > 6 && absDx > absDy * 1.15;
         },
         onMoveShouldSetPanResponderCapture: (_evt, g) => {
           const absDx = Math.abs(g.dx);
           const absDy = Math.abs(g.dy);
+          if (openRef.current && absDx > 4) return true;
           return absDx > 8 && absDx > absDy * 1.35;
         },
         onPanResponderTerminationRequest: () => false,
@@ -520,7 +530,7 @@ function SwipeableConversationRow({
             if (openRef.current) snapTo(false);
             return;
           }
-          snapTo(shouldSnapOpen(finalX));
+          snapTo(shouldSnapOpen(finalX, g.vx));
         },
         onPanResponderTerminate: () => snapTo(openRef.current),
       }),
@@ -576,7 +586,6 @@ function SwipeableConversationRow({
           Platform.OS === 'web' ? styles.swipeRowContentWeb : null,
           {transform: [{translateX}]},
         ]}
-        pointerEvents={isOpen ? 'none' : 'auto'}
         {...panResponder.panHandlers}>
         <Pressable
           onPress={() => {

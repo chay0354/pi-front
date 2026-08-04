@@ -76,7 +76,12 @@ import CompanyLandListingProfileContent from '../components/CompanyLandListingPr
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {buildProfileAdFeatureLabels} from '../utils/listingAmenities';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
-import {flexEnd, flexStart, forceRtlStyle} from '../utils/rtlLayout';
+import {
+  flexEnd,
+  flexStart,
+  forceLtrStyle,
+  forceRtlStyle,
+} from '../utils/rtlLayout';
 
 const TEAL = '#2DD4BF';
 const GOLD = '#ffc40a';
@@ -315,6 +320,7 @@ const UserProfileScreen = ({
   const creatorId = toSubscriptionId(
     user?.subscription_id ||
       user?.owner_id ||
+      user?.creator_subscription_id ||
       (!isListingFromFeed && !isAdsListingRecord(user) && !isPostListingRecord(user)
         ? user?.id || profile?.id
         : null),
@@ -523,6 +529,7 @@ const UserProfileScreen = ({
     const subType = (
       resolvedCreator?.subscription_type ||
       user?.subscription_type ||
+      user?.creator_subscription_type ||
       ''
     ).toLowerCase();
     const rateable =
@@ -550,7 +557,12 @@ const UserProfileScreen = ({
     return () => {
       cancelled = true;
     };
-  }, [creatorId, resolvedCreator?.subscription_type, user?.subscription_type]);
+  }, [
+    creatorId,
+    resolvedCreator?.subscription_type,
+    user?.subscription_type,
+    user?.creator_subscription_type,
+  ]);
 
   const showAlert = (title, message) => {
     if (
@@ -1001,7 +1013,10 @@ const UserProfileScreen = ({
     return null;
   })();
 
-  /** Profile ad hero: still images only (slideshow); never use listing video URLs on profile. */
+  /**
+   * Profile ad hero gallery: video first (when present), then still images.
+   * LTR swipe — video on the left, swipe left for photos.
+   */
   const lastAdImages = (() => {
     if (!lastAd) return [];
     const isVideoLikeUrl = u => {
@@ -1016,6 +1031,7 @@ const UserProfileScreen = ({
     const pushStill = (arr, u) => {
       const s = String(u || '').trim();
       if (!s || /^text-post-placeholder$/i.test(s) || isVideoLikeUrl(s)) return;
+      if (arr.some(x => String(x.uri).trim() === s)) return;
       arr.push({uri: s});
     };
     const fromRows = rows => {
@@ -1031,16 +1047,34 @@ const UserProfileScreen = ({
       }
       return out;
     };
+    let stills = [];
     if (lastAd.listing_images && lastAd.listing_images.length > 0) {
-      const x = fromRows(lastAd.listing_images);
-      if (x.length > 0) return x;
+      stills = fromRows(lastAd.listing_images);
     }
-    if (lastAd.images && lastAd.images.length > 0) {
-      const x = fromRows(lastAd.images);
-      if (x.length > 0) return x;
+    if (stills.length === 0 && lastAd.images && lastAd.images.length > 0) {
+      stills = fromRows(lastAd.images);
     }
-    return [];
+    const mainStill = String(lastAd.main_image_url || '').trim();
+    if (mainStill) pushStill(stills, mainStill);
+
+    const videoUri = firstVideoUrl(lastAd);
+    if (videoUri) {
+      const posterUri =
+        muxThumbnailUri(videoUri, {time: 0, width: 720}) ||
+        resolveFeedVideoPosterUri(lastAd) ||
+        stills[0]?.uri ||
+        null;
+      const filteredStills = stills.filter(
+        s => String(s.uri || '').trim() !== String(videoUri).trim(),
+      );
+      return [
+        {uri: videoUri, isVideo: true, posterUri},
+        ...filteredStills,
+      ];
+    }
+    return stills;
   })();
+  const lastAdHasVideo = lastAdImages.some(item => item?.isVideo);
   const openedFromPost = isPostListingRecord(user);
   const recentPostGridImages = (() => {
     const rows = Array.isArray(userListings) ? [...userListings] : [];
@@ -1515,6 +1549,8 @@ const UserProfileScreen = ({
   const profileSubscriptionType = (
     resolvedCreator?.subscription_type ||
     user?.subscription_type ||
+    user?.creator_subscription_type ||
+    lastAd?.subscription_type ||
     ''
   ).toLowerCase();
   const isCompany = profileSubscriptionType === 'company';
@@ -1790,9 +1826,13 @@ const UserProfileScreen = ({
     !isDedicatedListingAdProfile &&
     !showProfilePostGridAtTop;
   const showLandProfileContactAndReviews = isLandListingAdProfile;
+  const showCompanyBnbProfileContactAndReviews =
+    isCompany && isBnbListingAdProfile && isListingFromFeed && !openedFromPost;
   const showListingContactAndReviews =
     !isRegularUserAdView &&
-    (!isDedicatedListingAdProfile || showProfileRatingFeatures);
+    (showLandProfileContactAndReviews ||
+      showCompanyBnbProfileContactAndReviews ||
+      (!isDedicatedListingAdProfile || showProfileRatingFeatures));
 
   const landListingPayload = React.useMemo(() => {
     if (!isLandListingAdProfile || !lastAd) return lastAd;
@@ -1817,38 +1857,39 @@ const UserProfileScreen = ({
   const showListingLocationOnAdHero =
     !isOwnProfile || forceListingAdProfile || isDedicatedListingAdProfile;
   const showTikTokProfessionalHeader = user?._fromTikTokPost && isProfessional;
-  /**
-   * Figma 8:79136 — every professional profile (own + other) uses the standard
-   * avatar / email / עוקבים-לייקים header. Other account types unchanged.
-   */
-  const showStandardProfileHeader = isProfessional
-    ? !isDedicatedListingAdProfile
-    : true;
   /** Company profile opened from Selected Projects (פרויקטים נבחרים) → company listing → profile. */
   const openedFromCompaniesDirectory = Boolean(user?._fromCompanyProjects);
   /** Same flow + listing record (hero nav, favorite on listing id). */
   const fromCompanyProjects = Boolean(
     isListingFromFeed && openedFromCompaniesDirectory,
   );
-  /** Company ad from TikTok, home featured project, or פרויקטים נבחרים — fixed back / share / like top bar (not posts).
-   * BnB uses the standard company profile header + BnbListingProfileContent body. */
+  /** Company feed listing (incl. BnB): fixed back / share / like top bar — not avatar/stats header. */
   const showCompanyFeedHeroTop = Boolean(
     isCompany &&
     isListingFromFeed &&
     lastAd &&
     !openedFromPost &&
-    !isBnbListingAdProfile &&
-    (fromCompanyProjects ||
-      user?._fromTikTokPost ||
-      user?._fromHomeFeatureProject ||
-      user?._forceListingAdProfile) &&
-    (!isOwnProfile ||
-      user?._fromHomeFeatureProject ||
-      user?._fromCompanyProjects ||
-      user?._forceListingAdProfile),
+    (isBnbListingAdProfile ||
+      ((fromCompanyProjects ||
+        user?._fromTikTokPost ||
+        user?._fromHomeFeatureProject ||
+        user?._forceListingAdProfile) &&
+        (!isOwnProfile ||
+          user?._fromHomeFeatureProject ||
+          user?._fromCompanyProjects ||
+          user?._forceListingAdProfile))),
   );
+  /**
+   * Figma 8:79136 — every professional profile (own + other) uses the standard
+   * avatar / email / עוקבים-לייקים header. Company feed listings use hero like/share instead.
+   */
+  const showStandardProfileHeader = isProfessional
+    ? !isDedicatedListingAdProfile
+    : !(isCompany && (showCompanyFeedHeroTop || isBnbListingAdProfile));
   const companyListingId =
-    showCompanyFeedHeroTop && user?.id != null ? String(user.id) : null;
+    showCompanyFeedHeroTop && (lastAd?.id ?? user?.id) != null
+      ? String(lastAd?.id ?? user?.id)
+      : null;
   const [companyHeroFavorited, setCompanyHeroFavorited] = useState(false);
   const companyHeroLikePendingRef = useRef(false);
   useEffect(() => {
@@ -1941,26 +1982,12 @@ const UserProfileScreen = ({
     l => l.general_details && typeof l.general_details === 'object',
   );
   const gd = firstListingWithGeneral?.general_details;
-  const lastAdGeneralDetails =
-    lastAd?.general_details && typeof lastAd.general_details === 'object'
-      ? lastAd.general_details
-      : null;
-  const companyStatsSource =
-    isBnbListingAdProfile && isCompany && lastAdGeneralDetails
-      ? lastAdGeneralDetails
-      : gd;
   const companyBuildingCount =
-    companyStatsSource?.building_count != null
-      ? Number(companyStatsSource.building_count)
-      : 0;
+    gd?.building_count != null ? Number(gd.building_count) : 0;
   const companyFloorCount =
-    companyStatsSource?.floor_count != null
-      ? Number(companyStatsSource.floor_count)
-      : 0;
+    gd?.floor_count != null ? Number(gd.floor_count) : 0;
   const companyApartmentCount =
-    companyStatsSource?.apartment_count != null
-      ? Number(companyStatsSource.apartment_count)
-      : 0;
+    gd?.apartment_count != null ? Number(gd.apartment_count) : 0;
   const specialtiesRaw =
     user?.creator_specialties ??
     user?.specialties ??
@@ -2233,7 +2260,12 @@ const UserProfileScreen = ({
   }, [isCompany, lastAd]);
 
   useEffect(() => {
-    if (lastAdImages.length <= 1) return;
+    setLastAdImageIndex(0);
+  }, [lastAd?.id]);
+
+  // Auto-advance stills only — don't interrupt a playing hero video.
+  useEffect(() => {
+    if (lastAdImages.length <= 1 || lastAdHasVideo) return;
     const t = setInterval(() => {
       setLastAdImageIndex(prev => {
         const next = (prev + 1) % lastAdImages.length;
@@ -2245,7 +2277,7 @@ const UserProfileScreen = ({
       });
     }, 4000);
     return () => clearInterval(t);
-  }, [lastAdImages.length, lastAdCardWidth]);
+  }, [lastAdImages.length, lastAdCardWidth, lastAdHasVideo]);
 
   const visibleReviews =
     reviews.length > MAX_VISIBLE_REVIEWS
@@ -2482,6 +2514,8 @@ const UserProfileScreen = ({
                     data={lastAdImages}
                     horizontal
                     pagingEnabled
+                    style={forceLtrStyle}
+                    contentContainerStyle={forceLtrStyle}
                     showsHorizontalScrollIndicator={false}
                     onMomentumScrollEnd={e => {
                       const i = Math.round(
@@ -2489,17 +2523,59 @@ const UserProfileScreen = ({
                       );
                       setLastAdImageIndex(i);
                     }}
-                    renderItem={({item}) => (
-                      <Image
-                        source={item}
-                        style={[styles.lastAdImage, {width: lastAdCardWidth}]}
-                        resizeMode="cover"
-                      />
-                    )}
-                    keyExtractor={(_, i) => String(i)}
+                    renderItem={({item, index}) => {
+                      const slideStyle = [
+                        styles.lastAdImage,
+                        {width: lastAdCardWidth},
+                      ];
+                      if (item.isVideo) {
+                        const isCurrent = index === lastAdImageIndex;
+                        return (
+                          <View style={slideStyle}>
+                            <Video
+                              source={{uri: item.uri}}
+                              style={StyleSheet.absoluteFill}
+                              resizeMode={ResizeMode.COVER}
+                              shouldPlay={
+                                isCurrent && !fullScreenImageModalVisible
+                              }
+                              isLooping
+                              isMuted
+                              useNativeControls={false}
+                            />
+                            {item.posterUri && !isCurrent ? (
+                              <Image
+                                source={{uri: item.posterUri}}
+                                style={StyleSheet.absoluteFill}
+                                resizeMode="cover"
+                              />
+                            ) : null}
+                            <View
+                              style={styles.lastAdHeroVideoBadge}
+                              pointerEvents="none">
+                              <MaterialCommunityIcons
+                                name="play-circle"
+                                size={28}
+                                color="rgba(255,255,255,0.9)"
+                              />
+                            </View>
+                          </View>
+                        );
+                      }
+                      return (
+                        <Image
+                          source={{uri: item.uri}}
+                          style={slideStyle}
+                          resizeMode="cover"
+                        />
+                      );
+                    }}
+                    keyExtractor={(item, i) =>
+                      item.isVideo ? `video-${i}` : `img-${i}-${item.uri}`
+                    }
                   />
                   {lastAdImages.length > 1 && (
-                    <View style={styles.lastAdDots}>
+                    <View style={[styles.lastAdDots, forceLtrStyle]}>
                       {lastAdImages.slice(0, 5).map((_, i) => (
                         <View
                           key={i}
@@ -2552,62 +2628,20 @@ const UserProfileScreen = ({
               (isDedicatedListingAdProfile || !isProfessional) && (
                 <View style={styles.lastAdBody}>
                   {isBnbListingAdProfile ? (
-                    <>
-                      {isCompany ? (
-                        <>
-                          <View style={styles.companyStatsRow}>
-                            <View style={styles.companyStatItem}>
-                              <Image
-                                source={require('../assets/building_icon.png')}
-                                style={styles.companyStatIconImage}
-                                resizeMode="contain"
-                              />
-                              <Text style={styles.companyStatText}>
-                                {formatCompanyBuildingsLabel(
-                                  companyBuildingCount,
-                                )}
-                              </Text>
-                            </View>
-                            <View style={styles.companyStatItem}>
-                              <Image
-                                source={require('../assets/floor_icon.png')}
-                                style={styles.companyStatIconImage}
-                                resizeMode="contain"
-                              />
-                              <Text style={styles.companyStatText}>
-                                {formatCompanyFloorsLabel(companyFloorCount)}
-                              </Text>
-                            </View>
-                            <View style={styles.companyStatItem}>
-                              <Image
-                                source={require('../assets/apartment_icon.png')}
-                                style={styles.companyStatIconImage}
-                                resizeMode="contain"
-                              />
-                              <Text style={styles.companyStatText}>
-                                {formatCompanyApartmentsLabel(
-                                  companyApartmentCount,
-                                )}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.lastAdDivider} />
-                        </>
-                      ) : null}
-                      <BnbListingProfileContent
-                        listing={lastAd}
-                        mapAddress={firstNonEmpty(
-                          lastAd?.address,
-                          lastAd?.location,
-                          lastAd?.search_address,
-                          lastAd?.contact_details?.address,
-                          user?.address,
-                          brokerAddress,
-                        )}
-                        adAddress={adAddress}
-                        hideReportButton
-                      />
-                    </>
+                    <BnbListingProfileContent
+                      listing={lastAd}
+                      displayPiRating={isCompany ? displayPiRating : undefined}
+                      mapAddress={firstNonEmpty(
+                        lastAd?.address,
+                        lastAd?.location,
+                        lastAd?.search_address,
+                        lastAd?.contact_details?.address,
+                        user?.address,
+                        brokerAddress,
+                      )}
+                      adAddress={adAddress}
+                      hideReportButton
+                    />
                   ) : isPartnersListingAdProfile ? (
                     <PartnersListingProfileContent
                       listing={lastAd}
@@ -3696,9 +3730,13 @@ const UserProfileScreen = ({
           <FlatList
             ref={fullScreenCarouselRef}
             data={lastAdImages}
-            keyExtractor={(_, i) => String(i)}
+            keyExtractor={(item, i) =>
+              item.isVideo ? `fs-video-${i}` : `fs-img-${i}-${item.uri}`
+            }
             horizontal
             pagingEnabled
+            style={forceLtrStyle}
+            contentContainerStyle={forceLtrStyle}
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={fullScreenImageIndex}
@@ -3713,7 +3751,7 @@ const UserProfileScreen = ({
               );
               setFullScreenImageIndex(i);
             }}
-            renderItem={({item}) => (
+            renderItem={({item, index}) => (
               <View
                 style={{
                   width: Dimensions.get('window').width,
@@ -3722,14 +3760,26 @@ const UserProfileScreen = ({
                   alignItems: 'center',
                   backgroundColor: '#000',
                 }}>
-                <Image
-                  source={item}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                  }}
-                  resizeMode="contain"
-                />
+                {item.isVideo ? (
+                  <Video
+                    source={{uri: item.uri}}
+                    style={{width: '100%', height: '100%'}}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay={index === fullScreenImageIndex}
+                    isLooping
+                    isMuted={false}
+                    useNativeControls
+                  />
+                ) : (
+                  <Image
+                    source={{uri: item.uri}}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                    }}
+                    resizeMode="contain"
+                  />
+                )}
               </View>
             )}
           />
@@ -3742,7 +3792,7 @@ const UserProfileScreen = ({
           </View>
 
           {lastAdImages.length > 1 && (
-            <View style={styles.fullScreenImageDots}>
+            <View style={[styles.fullScreenImageDots, forceLtrStyle]}>
               {lastAdImages.map((_, i) => (
                 <TouchableOpacity
                   key={i}
@@ -4694,9 +4744,20 @@ const styles = StyleSheet.create({
     bottom: 12,
     left: 0,
     right: 0,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'center',
     gap: 6,
+  },
+  lastAdHeroVideoBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   lastAdDot: {
     width: 6,
@@ -5056,7 +5117,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 0,
     right: 0,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
   },

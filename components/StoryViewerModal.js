@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useCallback, useRef, useMemo} from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,9 @@ import {
   ActivityIndicator,
   Dimensions,
   I18nManager,
+  Animated,
+  PanResponder,
+  Easing,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
@@ -29,10 +32,49 @@ import {
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
+const SCREEN_W = Dimensions.get('window').width;
+const SWIPE_COMMIT_FRACTION = 0.25;
+const SWIPE_COMMIT_VELOCITY = 0.35;
+const USER_SWITCH_MS = 280;
+const PAGER_RUBBER_BAND = 0.32;
 
 /** App uses forceRTL — `row` / authored `left` flip. Stories stay Instagram LTR. */
 const NATIVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;
 const storyLtrRow = NATIVE_RTL ? 'row-reverse' : 'row';
+const storyPagerLtrStyle =
+  Platform.OS === 'web' ? {direction: 'ltr'} : null;
+
+/** Instagram: swipe finger left → next user; finger right → previous user. */
+function storyPanDx(dx) {
+  return dx;
+}
+
+function buildPanelScale(translateX, panelIndex, currentPanelIndex) {
+  const base = -currentPanelIndex * SCREEN_W;
+  const dist = panelIndex - currentPanelIndex;
+  if (dist === -1) {
+    return translateX.interpolate({
+      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
+      outputRange: [1, 0.86, 0.86],
+      extrapolate: 'clamp',
+    });
+  }
+  if (dist === 0) {
+    return translateX.interpolate({
+      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
+      outputRange: [0.92, 1, 0.92],
+      extrapolate: 'clamp',
+    });
+  }
+  if (dist === 1) {
+    return translateX.interpolate({
+      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
+      outputRange: [0.86, 0.86, 1],
+      extrapolate: 'clamp',
+    });
+  }
+  return 0.86;
+}
 /** Physical-left / physical-right hit targets under swapLeftAndRightInRTL. */
 const tapZonePrevStyle = NATIVE_RTL
   ? {position: 'absolute', right: 0, top: 0, bottom: 0, width: '33%'}
@@ -134,6 +176,18 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
     });
   }, []);
 
+  const applyImageFallbackLayout = useCallback(() => {
+    if (sizedRef.current) return;
+    sizedRef.current = true;
+    const {width: screenW, height: screenH} = Dimensions.get('window');
+    const layout = {width: screenW, height: screenH};
+    setImageLayout(layout);
+    onMediaLayoutRef.current?.(layout);
+    requestAnimationFrame(() => {
+      onReadyRef.current?.();
+    });
+  }, []);
+
   useEffect(() => {
     if (slide?.media_type === 'video' || !uri) return undefined;
     let cancelled = false;
@@ -143,13 +197,13 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
         if (!cancelled) applyImageNaturalSize(w, h);
       },
       () => {
-        if (!cancelled) onReadyRef.current?.();
+        if (!cancelled) applyImageFallbackLayout();
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [uri, slide?.media_type, applyImageNaturalSize]);
+  }, [uri, slide?.media_type, applyImageNaturalSize, applyImageFallbackLayout]);
 
   if (!uri) {
     return (
@@ -236,15 +290,146 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
         source={{uri: String(uri)}}
         style={[
           imageSized ? imageLayout : styles.mediaFullScreen,
-          {opacity: imageSized ? 1 : 0},
+          styles.storyImageVisible,
         ]}
-        resizeMode={imageSized ? 'stretch' : 'contain'}
+        resizeMode={imageSized ? 'stretch' : 'cover'}
         onLoad={event => {
           const src = event?.nativeEvent?.source;
-          applyImageNaturalSize(src?.width, src?.height);
+          if (src?.width && src?.height) {
+            applyImageNaturalSize(src.width, src.height);
+            return;
+          }
+          applyImageFallbackLayout();
         }}
-        onError={onReady}
+        onError={applyImageFallbackLayout}
       />
+    </View>
+  );
+}
+
+function StoryRingSlidePanel({
+  ring,
+  slideIndex = 0,
+  isMuted,
+  isPaused,
+  isActive,
+  onReady,
+  onMediaLayout,
+}) {
+  const slides = ring?.slides || [];
+  const slide = slides[slideIndex] || slides[0] || null;
+  const [mediaLoading, setMediaLoading] = useState(isActive);
+  const [mediaFrame, setMediaFrame] = useState(null);
+  const mediaReadyTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      setMediaLoading(false);
+      return undefined;
+    }
+    setMediaLoading(true);
+    setMediaFrame(null);
+    if (mediaReadyTimerRef.current) {
+      clearTimeout(mediaReadyTimerRef.current);
+    }
+    mediaReadyTimerRef.current = setTimeout(() => {
+      setMediaLoading(false);
+    }, MEDIA_READY_TIMEOUT_MS);
+    return () => {
+      if (mediaReadyTimerRef.current) {
+        clearTimeout(mediaReadyTimerRef.current);
+        mediaReadyTimerRef.current = null;
+      }
+    };
+  }, [isActive, slideIndex, slide ? resolveStorySlideUri(slide) : null]);
+
+  const handleMediaReady = useCallback(() => {
+    if (mediaReadyTimerRef.current) {
+      clearTimeout(mediaReadyTimerRef.current);
+      mediaReadyTimerRef.current = null;
+    }
+    setMediaLoading(false);
+    if (isActive) onReady?.();
+  }, [isActive, onReady]);
+
+  const handleMediaLayout = useCallback(
+    layout => {
+      if (
+        layout &&
+        Number(layout.width) > 0 &&
+        Number(layout.height) > 0
+      ) {
+        const frame = {
+          width: Number(layout.width),
+          height: Number(layout.height),
+        };
+        setMediaFrame(frame);
+        if (isActive) onMediaLayout?.(frame);
+        return;
+      }
+      setMediaFrame(null);
+      if (isActive) onMediaLayout?.(null);
+    },
+    [isActive, onMediaLayout],
+  );
+
+  const storyTextPayload = (() => {
+    if (!isActive || !slide) return null;
+    const gd = slide?.general_details;
+    if (!gd || typeof gd !== 'object') return null;
+    const baked = gd.post_text_baked;
+    if (baked === true || baked === 'true' || baked === 't' || baked === 1) {
+      return null;
+    }
+    return parsePostTextOverlayPayload({general_details: gd});
+  })();
+  const overlayFrameW = mediaFrame?.width || 0;
+  const overlayFrameH = mediaFrame?.height || 0;
+  const showLiveText =
+    !!storyTextPayload?.overlays?.length &&
+    overlayFrameW > 0 &&
+    overlayFrameH > 0;
+
+  if (!slide) {
+    return (
+      <View style={[styles.mediaFullScreen, styles.mediaPlaceholder]}>
+        <Text style={styles.placeholderText}>אין מדיה</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.panelFill}>
+      <StorySlideMedia
+        slide={slide}
+        isMuted={isMuted}
+        isPaused={isPaused || !isActive}
+        onReady={handleMediaReady}
+        onMediaLayout={handleMediaLayout}
+      />
+      {showLiveText ? (
+        <View style={styles.textOverlayAlign} pointerEvents="none">
+          <View
+            style={{
+              width: overlayFrameW,
+              height: overlayFrameH,
+            }}>
+            <PostTextOverlays
+              overlays={storyTextPayload.overlays}
+              previewWidth={storyTextPayload.previewWidth}
+              previewHeight={storyTextPayload.previewHeight}
+              coordsSpace={storyTextPayload.coordsSpace}
+              feedWidth={overlayFrameW}
+              feedHeight={overlayFrameH}
+            />
+          </View>
+        </View>
+      ) : null}
+      {isActive && mediaLoading ? (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator color="#FFFFFF" size="large" />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -263,20 +448,59 @@ const StoryViewerModal = ({
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [mediaLoading, setMediaLoading] = useState(true);
-  /** Actual on-screen media box (contain/fit) — overlays must use this, not the window. */
-  const [mediaFrame, setMediaFrame] = useState(null);
+  const [isUserPanning, setIsUserPanning] = useState(false);
+  const [isUserSwitching, setIsUserSwitching] = useState(false);
   const timerRef = useRef(null);
   const startRef = useRef(0);
   const rafRef = useRef(null);
-  const mediaReadyTimerRef = useRef(null);
   const slideIndexRef = useRef(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const baseOffsetRef = useRef(0);
+  const dragStartOffsetRef = useRef(0);
+  const isSwitchingRef = useRef(false);
 
   const slides = ring?.slides || [];
   const total = slides.length;
   const currentSlide = total ? slides[slideIndex] : null;
+  const hasPrevUser = Boolean(prevRing?.slides?.length);
+  const hasNextUser = Boolean(nextRing?.slides?.length);
+
+  const pagerPanels = useMemo(() => {
+    const panels = [];
+    if (hasPrevUser) {
+      panels.push({key: `prev-${prevRing.subscription_id}`, ring: prevRing});
+    }
+    if (ring) {
+      panels.push({key: `current-${ring.subscription_id}`, ring});
+    }
+    if (hasNextUser) {
+      panels.push({key: `next-${nextRing.subscription_id}`, ring: nextRing});
+    }
+    return panels;
+  }, [hasPrevUser, hasNextUser, prevRing, nextRing, ring]);
+
+  const currentPanelIndex = hasPrevUser ? 1 : 0;
 
   slideIndexRef.current = slideIndex;
+
+  const syncBaseOffset = useCallback(
+    (animated = false) => {
+      const base = -currentPanelIndex * SCREEN_W;
+      baseOffsetRef.current = base;
+      dragStartOffsetRef.current = base;
+      if (animated) {
+        Animated.timing(translateX, {
+          toValue: base,
+          duration: USER_SWITCH_MS,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      } else {
+        translateX.setValue(base);
+      }
+    },
+    [currentPanelIndex, translateX],
+  );
 
   useEffect(() => {
     preloadRingImages(ring);
@@ -292,54 +516,22 @@ const StoryViewerModal = ({
       slideIndexRef.current = 0;
       setSlideIndex(0);
       setProgress(0);
-      setMediaLoading(false);
+      setIsUserPanning(false);
+      setIsUserSwitching(false);
+      isSwitchingRef.current = false;
       return;
     }
     slideIndexRef.current = 0;
     setSlideIndex(0);
     setProgress(0);
-    setMediaLoading(true);
+    setIsUserSwitching(false);
+    isSwitchingRef.current = false;
   }, [visible, ring?.subscription_id, total]);
 
   useEffect(() => {
-    setMediaLoading(true);
-    setMediaFrame(null);
-    if (mediaReadyTimerRef.current) {
-      clearTimeout(mediaReadyTimerRef.current);
-    }
-    mediaReadyTimerRef.current = setTimeout(() => {
-      setMediaLoading(false);
-    }, MEDIA_READY_TIMEOUT_MS);
-    return () => {
-      if (mediaReadyTimerRef.current) {
-        clearTimeout(mediaReadyTimerRef.current);
-        mediaReadyTimerRef.current = null;
-      }
-    };
-  }, [slideIndex, currentSlide ? resolveStorySlideUri(currentSlide) : null]);
-
-  const handleMediaReady = useCallback(() => {
-    if (mediaReadyTimerRef.current) {
-      clearTimeout(mediaReadyTimerRef.current);
-      mediaReadyTimerRef.current = null;
-    }
-    setMediaLoading(false);
-  }, []);
-
-  const handleMediaLayout = useCallback(layout => {
-    if (
-      layout &&
-      Number(layout.width) > 0 &&
-      Number(layout.height) > 0
-    ) {
-      setMediaFrame({
-        width: Number(layout.width),
-        height: Number(layout.height),
-      });
-      return;
-    }
-    setMediaFrame(null);
-  }, []);
+    if (!visible) return;
+    syncBaseOffset(false);
+  }, [visible, ring?.subscription_id, currentPanelIndex, syncBaseOffset]);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -362,14 +554,153 @@ const StoryViewerModal = ({
     }
   }, [prevRing, onAdvanceToPrevUser]);
 
+  const commitUserSwitch = useCallback(
+    (direction, releaseVelocity = 0) => {
+      if (isSwitchingRef.current) return;
+      isSwitchingRef.current = true;
+      setIsUserSwitching(true);
+      const base = baseOffsetRef.current;
+      const target =
+        direction === 'next'
+          ? base - SCREEN_W
+          : direction === 'prev'
+            ? base + SCREEN_W
+            : base;
+
+      Animated.spring(translateX, {
+        toValue: target,
+        velocity: releaseVelocity,
+        useNativeDriver: true,
+        tension: 148,
+        friction: 22,
+        restDisplacementThreshold: 0.5,
+        restSpeedThreshold: 0.5,
+      }).start(({finished}) => {
+        isSwitchingRef.current = false;
+        setIsUserSwitching(false);
+        if (!finished) {
+          syncBaseOffset(false);
+          return;
+        }
+        if (direction === 'next') {
+          advanceToNextUser();
+        } else if (direction === 'prev') {
+          advanceToPrevUser();
+        }
+        syncBaseOffset(false);
+      });
+    },
+    [advanceToNextUser, advanceToPrevUser, syncBaseOffset, translateX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          !isSwitchingRef.current &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          Math.abs(gestureState.dx) > 10,
+        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+          !isSwitchingRef.current &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          Math.abs(gestureState.dx) > 10,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          setIsUserPanning(true);
+          clearTimers();
+          translateX.stopAnimation(value => {
+            dragStartOffsetRef.current =
+              typeof value === 'number' ? value : baseOffsetRef.current;
+          });
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const dx = storyPanDx(gestureState.dx);
+          let next = dragStartOffsetRef.current + dx;
+          const base = baseOffsetRef.current;
+          const minX = -(pagerPanels.length - 1) * SCREEN_W;
+          const maxX = 0;
+          if (!hasPrevUser && next > base) {
+            next = base + dx * PAGER_RUBBER_BAND;
+          } else if (!hasNextUser && next < base) {
+            next = base + dx * PAGER_RUBBER_BAND;
+          } else {
+            next = Math.max(minX, Math.min(maxX, next));
+          }
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          setIsUserPanning(false);
+          const dx = storyPanDx(gestureState.dx);
+          const vx = storyPanDx(gestureState.vx);
+          const threshold = SCREEN_W * SWIPE_COMMIT_FRACTION;
+          const flingNext = vx <= -SWIPE_COMMIT_VELOCITY;
+          const flingPrev = vx >= SWIPE_COMMIT_VELOCITY;
+          const releaseVelocity = vx * 1000;
+
+          if ((dx <= -threshold || flingNext) && hasNextUser) {
+            commitUserSwitch('next', releaseVelocity);
+            return;
+          }
+          if ((dx >= threshold || flingPrev) && hasPrevUser) {
+            commitUserSwitch('prev', releaseVelocity);
+            return;
+          }
+          if ((dx <= -threshold || flingNext) && !hasNextUser) {
+            Animated.timing(translateX, {
+              toValue: baseOffsetRef.current - SCREEN_W * PAGER_RUBBER_BAND,
+              duration: USER_SWITCH_MS,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start(({finished}) => {
+              if (finished) onClose?.();
+              else syncBaseOffset(false);
+            });
+            return;
+          }
+
+          Animated.spring(translateX, {
+            toValue: baseOffsetRef.current,
+            velocity: releaseVelocity,
+            useNativeDriver: true,
+            tension: 148,
+            friction: 22,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          setIsUserPanning(false);
+          Animated.spring(translateX, {
+            toValue: baseOffsetRef.current,
+            useNativeDriver: true,
+            tension: 148,
+            friction: 22,
+          }).start();
+        },
+      }),
+    [
+      clearTimers,
+      commitUserSwitch,
+      hasNextUser,
+      hasPrevUser,
+      onClose,
+      pagerPanels.length,
+      syncBaseOffset,
+      translateX,
+    ],
+  );
+
   const goNext = useCallback(() => {
     const i = slideIndexRef.current;
     if (i + 1 >= total) {
-      advanceToNextUser();
+      if (hasNextUser) {
+        commitUserSwitch('next');
+      } else {
+        advanceToNextUser();
+      }
       return;
     }
     setSlideIndex(i + 1);
-  }, [total, advanceToNextUser]);
+  }, [total, advanceToNextUser, hasNextUser, commitUserSwitch]);
 
   const goPrev = useCallback(() => {
     const i = slideIndexRef.current;
@@ -377,11 +708,15 @@ const StoryViewerModal = ({
       setSlideIndex(i - 1);
       return;
     }
-    advanceToPrevUser();
-  }, [advanceToPrevUser]);
+    if (hasPrevUser) {
+      commitUserSwitch('prev');
+    } else {
+      advanceToPrevUser();
+    }
+  }, [advanceToPrevUser, hasPrevUser, commitUserSwitch]);
 
   useEffect(() => {
-    if (!visible || !ring || !total) return;
+    if (!visible || !ring || !total || isUserPanning || isUserSwitching) return;
     clearTimers();
     const slide = ring.slides[slideIndex];
     if (slide?.media_type === 'video') {
@@ -404,7 +739,16 @@ const StoryViewerModal = ({
     rafRef.current = requestAnimationFrame(tick);
 
     return clearTimers;
-  }, [visible, slideIndex, total, goNext, clearTimers, ring]);
+  }, [
+    visible,
+    slideIndex,
+    total,
+    goNext,
+    clearTimers,
+    ring,
+    isUserPanning,
+    isUserSwitching,
+  ]);
 
   const onPressProfile = useCallback(() => {
     if (!ring) return;
@@ -415,23 +759,7 @@ const StoryViewerModal = ({
   if (!ring || total === 0) return null;
 
   const overlayPadTop = Math.max(insets.top, Platform.OS === 'ios' ? 8 : 4);
-  const storyTextPayload = (() => {
-    const gd = currentSlide?.general_details;
-    if (!gd || typeof gd !== 'object') return null;
-    // Photo sales images / stories bake text into pixels — never redraw live
-    // layers (full-screen scaling made text bigger and wrap to extra lines).
-    const baked = gd.post_text_baked;
-    if (baked === true || baked === 'true' || baked === 't' || baked === 1) {
-      return null;
-    }
-    return parsePostTextOverlayPayload({general_details: gd});
-  })();
-  const overlayFrameW = mediaFrame?.width || 0;
-  const overlayFrameH = mediaFrame?.height || 0;
-  const showLiveText =
-    !!storyTextPayload?.overlays?.length &&
-    overlayFrameW > 0 &&
-    overlayFrameH > 0;
+  const blockTapZones = isUserPanning || isUserSwitching;
 
   return (
     <Modal
@@ -441,41 +769,53 @@ const StoryViewerModal = ({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}>
       <View style={styles.root}>
-        <View style={styles.mediaLayer}>
-          <StorySlideMedia
-            slide={currentSlide}
-            isMuted={isMuted}
-            isPaused={false}
-            onReady={handleMediaReady}
-            onMediaLayout={handleMediaLayout}
-          />
-          {showLiveText ? (
-            <View style={styles.textOverlayAlign} pointerEvents="none">
-              <View
-                style={{
-                  width: overlayFrameW,
-                  height: overlayFrameH,
-                }}>
-                <PostTextOverlays
-                  overlays={storyTextPayload.overlays}
-                  previewWidth={storyTextPayload.previewWidth}
-                  previewHeight={storyTextPayload.previewHeight}
-                  coordsSpace={storyTextPayload.coordsSpace}
-                  feedWidth={overlayFrameW}
-                  feedHeight={overlayFrameH}
-                />
-              </View>
-            </View>
-          ) : null}
-          {mediaLoading ? (
-            <View style={styles.loadingOverlay} pointerEvents="none">
-              <ActivityIndicator color="#FFFFFF" size="large" />
-            </View>
-          ) : null}
+        <View
+          style={[styles.mediaLayer, storyPagerLtrStyle]}
+          {...panResponder.panHandlers}>
+          <Animated.View
+            style={[
+              styles.pagerRow,
+              storyPagerLtrStyle,
+              {
+                flexDirection: storyLtrRow,
+                width: pagerPanels.length * SCREEN_W,
+                transform: [{translateX}],
+              },
+            ]}>
+            {pagerPanels.map((panel, index) => {
+              const isCurrent = index === currentPanelIndex;
+              const panelScale = buildPanelScale(
+                translateX,
+                index,
+                currentPanelIndex,
+              );
+              return (
+                <Animated.View
+                  key={panel.key}
+                  style={[
+                    styles.panelPage,
+                    {
+                      width: SCREEN_W,
+                      transform: [{scale: panelScale}],
+                    },
+                  ]}>
+                  <StoryRingSlidePanel
+                    ring={panel.ring}
+                    slideIndex={isCurrent ? slideIndex : 0}
+                    isMuted={isMuted}
+                    isPaused={!isCurrent || isUserPanning || isUserSwitching}
+                    isActive={isCurrent}
+                  />
+                </Animated.View>
+              );
+            })}
+          </Animated.View>
         </View>
 
-        {/* Physical LTR: left = previous, right = next (compensates forceRTL swap). */}
-        <View style={styles.tapZones} pointerEvents="box-none">
+        {/* Physical LTR: left = previous slide, right = next slide. */}
+        <View
+          style={styles.tapZones}
+          pointerEvents={blockTapZones ? 'none' : 'box-none'}>
           <Pressable
             style={tapZonePrevStyle}
             onPress={goPrev}
@@ -581,6 +921,18 @@ const styles = StyleSheet.create({
   mediaLayer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+  pagerRow: {
+    height: '100%',
+  },
+  panelPage: {
+    height: '100%',
+    overflow: 'hidden',
+  },
+  panelFill: {
+    flex: 1,
+    backgroundColor: '#000',
   },
   /** Center live text over the letterboxed media frame (same box as the image). */
   textOverlayAlign: {
@@ -598,6 +950,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  storyImageVisible: {
+    opacity: 1,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

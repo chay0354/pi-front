@@ -2,10 +2,11 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
-import {View, Image, Platform, StyleSheet} from 'react-native';
+import {View, Platform, StyleSheet, ActivityIndicator} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {
@@ -13,9 +14,6 @@ import {
   normalizeNaturalSize,
 } from '../utils/fitWidthMedia';
 import {forceLtrStyle} from '../utils/rtlLayout';
-
-const FEED_IMAGE_PROPS =
-  Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
 
 /** After a load error, wait before allowing another attempt for this uri. */
 const ERROR_RETRY_MS = 15000;
@@ -33,9 +31,8 @@ function uriRecentlyFailed(uri) {
  * crop left/right. Default letterboxes feed posts (`contain`) so uploads are
  * never cropped on iOS/Android.
  *
- * Zero-spinner architecture: the Mux poster thumbnail (pixel-matched to the
- * video's first frame) is the ONLY loading state. There is never a spinner —
- * the poster looks like the video, so the poster→frame swap is invisible.
+ * While the first frame is decoding, show a gold loading spinner on black —
+ * never the poster/thumbnail image (avoids a flash of still image before play).
  *
  * `prewarm` mounts the player paused+muted: ExoPlayer buffers and decodes the
  * first frame while offscreen, so by the time the user swipes in, the frame
@@ -50,7 +47,8 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     isActive = false,
     prewarm = false,
     style,
-    posterUri = '',
+    /** Kept for call-site compat; poster is never shown while waiting for video. */
+    posterUri: _posterUri = '',
     children = null,
     /** Listing ads: edge-to-edge sides, letterbox top/bottom. Posts: contain. */
     fitWidth = false,
@@ -216,26 +214,85 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   const pauseNow = useCallback(async () => {
     try {
       if (Platform.OS === 'web') {
-        webVideoRef.current?.pause?.();
+        const el = webVideoRef.current;
+        if (el) {
+          el.pause?.();
+          el.muted = true;
+        }
         return;
       }
-      await videoRef.current?.pauseAsync?.();
+      const player = videoRef.current;
+      if (!player) return;
+      // Mute first so audio cannot leak if pause races with a play restart
+      // (e.g. feed stays mounted under the profile screen).
+      await player.setIsMutedAsync?.(true);
+      await player.setVolumeAsync?.(0);
+      await player.pauseAsync?.();
     } catch (_) {}
   }, []);
 
-  // Keep mute in sync when home toggles volume without remounting.
+  const stopNow = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const el = webVideoRef.current;
+        if (el) {
+          el.pause?.();
+          el.muted = true;
+          el.removeAttribute?.('src');
+          el.load?.();
+        }
+        return;
+      }
+      const player = videoRef.current;
+      if (!player) return;
+      await player.setIsMutedAsync?.(true);
+      await player.setVolumeAsync?.(0);
+      await player.pauseAsync?.();
+      await player.unloadAsync?.();
+    } catch (_) {}
+  }, []);
+
+  // Mute/pause before paint when leaving the active page (profile covers feed).
+  useLayoutEffect(() => {
+    if (isActive) return;
+    pauseNow();
+  }, [isActive, pauseNow]);
+
+  // Keep mute in sync with explicit muted prop OR active page (default).
   useEffect(() => {
-    if (muted === undefined) return;
+    const shouldMute = muted !== undefined ? !!muted : !isActive;
     if (Platform.OS === 'web') {
       const el = webVideoRef.current;
-      if (el) el.muted = !!muted;
+      if (el) el.muted = shouldMute;
       return;
     }
     const player = videoRef.current;
     if (!player) return;
-    player.setIsMutedAsync(!!muted).catch(() => {});
-    player.setVolumeAsync(muted ? 0 : 1).catch(() => {});
-  }, [muted, uri]);
+    player.setIsMutedAsync(shouldMute).catch(() => {});
+    player.setVolumeAsync(shouldMute ? 0 : 1).catch(() => {});
+  }, [muted, isActive, uri]);
+
+  // If React unmounts the native player, force unload — otherwise Android can
+  // keep ExoPlayer audio after navigating to profile.
+  useEffect(() => {
+    return () => {
+      const el = webVideoRef.current;
+      if (el) {
+        try {
+          el.pause?.();
+          el.muted = true;
+        } catch (_) {}
+      }
+      const player = videoRef.current;
+      if (!player) return;
+      Promise.resolve()
+        .then(() => player.setIsMutedAsync?.(true))
+        .then(() => player.setVolumeAsync?.(0))
+        .then(() => player.pauseAsync?.())
+        .then(() => player.unloadAsync?.())
+        .catch(() => {});
+    };
+  }, [uri]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -258,9 +315,10 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     () => ({
       play: playNow,
       pause: pauseNow,
+      stop: stopNow,
       togglePause: toggleUserPause,
     }),
-    [playNow, pauseNow, toggleUserPause],
+    [playNow, pauseNow, stopNow, toggleUserPause],
   );
 
   useEffect(() => {
@@ -316,19 +374,15 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   );
 
   const sized = fitWidth && videoLayout != null;
+  const showLoading = !failed && !hasFrame;
 
-  const posterVisible = Boolean(posterUri) && (!hasFrame || failed);
-  const posterLayer = posterVisible ? (
-    <Image
-      source={{uri: posterUri}}
-      {...FEED_IMAGE_PROPS}
-      style={styles.posterContain}
-      resizeMode="contain"
-    />
+  const loadingLayer = showLoading ? (
+    <View style={styles.loadingOverlay} pointerEvents="none">
+      <ActivityIndicator size="large" color="#FFC40A" />
+    </View>
   ) : null;
 
-  // Post text overlays are part of the post: always visible, over the poster
-  // while loading and over the video once the first frame lands.
+  // Post text overlays stay above the loader / video.
   // forceLtr: nx from measureInWindow is physical-left; RTL must not mirror it.
   const overlayLayer = children ? (
     <View
@@ -354,14 +408,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   if (!uri || !shouldLoad) {
     return (
       <View style={[styles.root, style]} onLayout={onContainerLayout}>
-        {posterUri ? (
-          <Image
-            source={{uri: posterUri}}
-            {...FEED_IMAGE_PROPS}
-            style={styles.posterContain}
-            resizeMode="contain"
-          />
-        ) : null}
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#FFC40A" />
+        </View>
         {overlayLayer}
         {playHintLayer}
       </View>
@@ -371,7 +420,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.root, style]} onLayout={onContainerLayout}>
-        {posterLayer}
+        {loadingLayer}
         <video
           ref={webVideoRef}
           src={uri}
@@ -386,7 +435,13 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
                   opacity: hasFrame || sized ? 1 : 0,
                   pointerEvents: 'none',
                 }
-              : [styles.webVideo, {pointerEvents: 'none'}]
+              : [
+                  styles.webVideo,
+                  {
+                    pointerEvents: 'none',
+                    opacity: hasFrame ? 1 : 0,
+                  },
+                ]
           }
           preload="auto"
           playsInline
@@ -419,7 +474,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
 
   return (
     <View style={[styles.root, style]} onLayout={onContainerLayout}>
-      {posterLayer}
+      {loadingLayer}
       <Video
         key={String(uri)}
         ref={videoRef}
@@ -431,7 +486,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
                 sized ? videoLayout : styles.videoFill,
                 {opacity: hasFrame || sized ? 1 : 0},
               ]
-            : styles.videoFill
+            : [styles.videoFill, {opacity: hasFrame ? 1 : 0}]
         }
         resizeMode={
           fitWidth
@@ -476,23 +531,18 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
 
 export const FeedVideoPlayer = React.memo(FeedVideoPlayerInner);
 
-/** Lightweight poster-only placeholder for far-offscreen feed pages (no Video mount, no spinner). */
+/** Lightweight placeholder for far-offscreen feed pages (no Video mount). */
 export function FeedVideoPosterPlaceholder({
-  posterUri = '',
+  posterUri: _posterUri = '',
   style,
   children = null,
-  fitWidth = false,
+  fitWidth: _fitWidth = false,
 }) {
   return (
     <View style={[styles.root, style]}>
-      {posterUri ? (
-        <Image
-          source={{uri: posterUri}}
-          {...FEED_IMAGE_PROPS}
-          style={styles.posterContain}
-          resizeMode="contain"
-        />
-      ) : null}
+      <View style={styles.loadingOverlay} pointerEvents="none">
+        <ActivityIndicator size="large" color="#FFC40A" />
+      </View>
       {children ? (
         <View
           style={[styles.overlaySlot, forceLtrStyle]}
@@ -514,9 +564,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  posterContain: {
-    width: '100%',
-    height: '100%',
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
   },
   overlaySlot: {
     ...StyleSheet.absoluteFillObject,

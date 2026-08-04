@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useEffect, useContext} from 'react';
+import React, {useState, useCallback, useEffect, useContext, useRef} from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Animated,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -30,6 +31,10 @@ import {ContextHook} from '../hooks/ContextHook';
 import {
   rankListingsByQuery,
   buildListingAiSummary,
+  parsePiAiQuery,
+  filterListingsByParsedQuery,
+  buildPiAiFilterEmptyMessage,
+  buildPiAiSearchingMessage,
 } from '../utils/piAiMatchListings';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import ListingGridCardFigma from './ListingGridCardFigma';
@@ -99,6 +104,49 @@ const formatResultsCountHe = n => {
   return `נמצאו ${c} תוצאות`;
 };
 
+/** Animated status line while Pi AI ranks listings for the current query. */
+function PiAiSearchingStatus({message}) {
+  const pulse = useRef(new Animated.Value(0.45)).current;
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setDots(prev => (prev.length >= 3 ? '' : `${prev}.`));
+    }, 380);
+    return () => clearInterval(id);
+  }, [message]);
+
+  if (!message) return null;
+
+  return (
+    <Animated.View style={[styles.searchingStatusWrap, {opacity: pulse}]}>
+      <Text style={styles.searchingStatusText} maxFontSizeMultiplier={1.25}>
+        {message}
+        {dots}
+      </Text>
+    </Animated.View>
+  );
+}
+
 /**
  * Full-screen Pi AI search: describe a property, search published listings,
  * results render as grid cards.
@@ -122,6 +170,7 @@ const PiAiSearchModal = ({
   const [emptyMessage, setEmptyMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchingMessage, setSearchingMessage] = useState('');
   /**
    * Until the first non-empty search, we show the welcome state (no listing cards),
    * even if the catalog is already loaded in `allListings`.
@@ -299,6 +348,8 @@ const PiAiSearchModal = ({
     }
 
     setHasSearchedWithQuery(true);
+    const parsed = parsePiAiQuery(q);
+    setSearchingMessage(buildPiAiSearchingMessage(q, parsed));
     setLoading(true);
     setEmptyMessage('');
     try {
@@ -315,17 +366,32 @@ const PiAiSearchModal = ({
         }
       }
 
+      const filteredPool = filterListingsByParsedQuery(listings, parsed);
+      if (
+        filteredPool.length === 0 &&
+        (parsed.city || parsed.purpose || parsed.searchPurpose)
+      ) {
+        setResults([]);
+        setEmptyMessage(
+          buildPiAiFilterEmptyMessage(parsed, listings.length) ||
+            `חיפשתי ב-${listings.length} מודעות ולא מצאתי התאמה.`,
+        );
+        return;
+      }
+
+      const searchPool = filteredPool.length > 0 ? filteredPool : listings;
+
       // Gemini ranks the catalog against the query; the local keyword ranking
       // is only a fallback when the AI service is unavailable (offline/quota).
       let rows = null;
       let aiSaidNoMatch = false;
       const ai = await piAiSearchListings(
         q,
-        listings.map(buildListingAiSummary),
+        searchPool.map(buildListingAiSummary),
       );
       if (ai.success) {
         const byId = new Map(
-          listings
+          searchPool
             .filter(l => l?.id != null)
             .map(l => [String(l.id), l]),
         );
@@ -339,14 +405,14 @@ const PiAiSearchModal = ({
         }
       }
       if (rows == null && !aiSaidNoMatch) {
-        const rankedResult = rankListingsByQuery(q, listings, {topN: 20});
+        const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
         rows = rankedResult.ranked.map(r => r.listing);
       }
 
       if (!rows || rows.length === 0) {
         setResults([]);
         setEmptyMessage(
-          `חיפשתי ב-${listings.length} מודעות ולא מצאתי התאמה ברורה. נסה לפרט יותר — שם עיר, טווח מחיר, או מספר חדרים.`,
+          `חיפשתי ב-${searchPool.length} מודעות ולא מצאתי התאמה ברורה. נסה לפרט יותר — שם עיר, טווח מחיר, או מספר חדרים.`,
         );
       } else {
         setResults(rows);
@@ -358,6 +424,7 @@ const PiAiSearchModal = ({
       setError(e?.message || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.');
     } finally {
       setLoading(false);
+      setSearchingMessage('');
     }
   }, [
     query,
@@ -722,6 +789,7 @@ const PiAiSearchModal = ({
               <TouchableOpacity
                 onPress={runSearch}
                 disabled={loading}
+                style={styles.searchFieldSearchBtn}
                 hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
                 accessibilityLabel="חיפוש"
                 accessibilityRole="button">
@@ -742,6 +810,10 @@ const PiAiSearchModal = ({
                 value={query}
                 onChangeText={setQuery}
                 editable={!loading}
+                multiline
+                blurOnSubmit={false}
+                scrollEnabled={false}
+                textAlignVertical="center"
                 returnKeyType="search"
                 onSubmitEditing={runSearch}
               />
@@ -814,7 +886,12 @@ const PiAiSearchModal = ({
             dataSet={
               Platform.OS === 'web' ? {class: 'pi-ai-scroll'} : undefined
             }>
-            {loading && results.length === 0 && !emptyMessage ? (
+            {loading && searchingMessage ? (
+              <View style={styles.resultsLoadingWrap}>
+                <ActivityIndicator color={Colors.blue100} size="large" />
+                <PiAiSearchingStatus message={searchingMessage} />
+              </View>
+            ) : loading && results.length === 0 && !emptyMessage ? (
               <View style={styles.resultsLoadingWrap}>
                 <ActivityIndicator color={Colors.blue100} size="large" />
               </View>
@@ -967,20 +1044,24 @@ const styles = StyleSheet.create({
   /** Same pattern as ChatScreen add-members / FollowHub search pill (48px, icon right). */
   searchFieldWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 10,
+    paddingVertical: 8,
     width: '100%',
     minHeight: 48,
-    height: 48,
     borderRadius: 1000,
     borderWidth: 1,
     borderColor: '#8C85B3',
     backgroundColor: CARD_BG,
-    justifyContent: 'center',
     position: 'relative',
   },
+  searchFieldSearchBtn: {
+    alignSelf: 'center',
+    marginTop: 2,
+  },
   searchFieldInput: {
-    minHeight: 48,
+    minHeight: 32,
+    maxHeight: 120,
     color: Colors.white100,
     fontSize: 16,
     flex: 1,
@@ -988,6 +1069,8 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     textAlign: 'right',
     marginLeft: 10,
+    paddingTop: Platform.OS === 'ios' ? 6 : 4,
+    paddingBottom: Platform.OS === 'ios' ? 6 : 4,
   },
   searchFieldLeftArtImage: {
     height: 22,
@@ -1349,6 +1432,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 24,
+    gap: 14,
+  },
+  searchingStatusWrap: {
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  searchingStatusText: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
 
   // Shared (list row chips — grid cards use ListingGridCardFigma)
