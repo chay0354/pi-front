@@ -18,7 +18,11 @@ import * as ImagePicker from 'expo-image-picker';
 import {ProfileAvatar} from '../components';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {ContextHook} from '../hooks/ContextHook';
-import {subscriptionTypes, shouldShowProfileGoldRing} from '../utils/constant';
+import {
+  subscriptionTypes,
+  shouldShowProfileGoldRing,
+  isBrokerLikeSubscriptionType,
+} from '../utils/constant';
 import {
   getUserProfilePhotoUrl,
   getUserCompanyLogoUrl,
@@ -51,13 +55,35 @@ function getFieldsForType(type) {
     multiline: true,
   };
   if (
-    t === subscriptionTypes.company ||
+    t === subscriptionTypes.broker ||
     t === subscriptionTypes.projectMarketer
   ) {
-    const isMarketer = t === subscriptionTypes.projectMarketer;
-    const orgNameLabel = isMarketer ? 'שם המשווק' : 'שם החברה';
     return [
-      {key: 'business_name', label: orgNameLabel, placeholder: orgNameLabel},
+      {key: 'name', label: 'שם איש קשר', placeholder: 'שם מלא'},
+      {key: 'broker_office_name', label: 'שם המשרד', placeholder: 'שם המשרד'},
+      {
+        key: 'brokerage_license_number',
+        label: 'מספר רישיון תיווך',
+        placeholder: 'מספר רישיון',
+      },
+      {
+        key: 'mobile_phone',
+        label: 'טלפון נייד',
+        placeholder: 'מספר טלפון נייד',
+        keyboardType: 'phone-pad',
+      },
+      {
+        key: 'office_phone',
+        label: 'טלפון משרד',
+        placeholder: 'מספר טלפון משרד',
+        keyboardType: 'phone-pad',
+      },
+      about,
+    ];
+  }
+  if (t === subscriptionTypes.company) {
+    return [
+      {key: 'business_name', label: 'שם החברה', placeholder: 'שם החברה'},
       {
         key: 'contact_person_name',
         label: 'איש קשר',
@@ -82,30 +108,6 @@ function getFieldsForType(type) {
         keyboardType: 'url',
       },
       {key: 'business_address', label: 'כתובת', placeholder: 'כתובת העסק'},
-      about,
-    ];
-  }
-  if (t === subscriptionTypes.broker) {
-    return [
-      {key: 'name', label: 'שם איש קשר', placeholder: 'שם מלא'},
-      {key: 'broker_office_name', label: 'שם המשרד', placeholder: 'שם המשרד'},
-      {
-        key: 'brokerage_license_number',
-        label: 'מספר רישיון תיווך',
-        placeholder: 'מספר רישיון',
-      },
-      {
-        key: 'mobile_phone',
-        label: 'טלפון נייד',
-        placeholder: 'מספר טלפון נייד',
-        keyboardType: 'phone-pad',
-      },
-      {
-        key: 'office_phone',
-        label: 'טלפון משרד',
-        placeholder: 'מספר טלפון משרד',
-        keyboardType: 'phone-pad',
-      },
       about,
     ];
   }
@@ -142,17 +144,13 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const subTypeLower = String(type).toLowerCase();
-  // Project marketers register with a logo like companies, so they share the layout.
-  const isCompany =
-    subTypeLower === subscriptionTypes.company ||
-    subTypeLower === subscriptionTypes.projectMarketer;
+  const isCompany = subTypeLower === subscriptionTypes.company;
+  const isBrokerLike = isBrokerLikeSubscriptionType(subTypeLower);
   const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
   /** Yellow ring → keep teal camera; blue/teal ring → system orange. */
   const cameraBadgeColor = hasGoldRing ? CAMERA_BADGE_TEAL : CAMERA_BADGE_ORANGE;
   const canEditProfileVideo =
-    subTypeLower === subscriptionTypes.broker ||
-    subTypeLower === subscriptionTypes.professional;
-  // Company brand image lives in company_logo_url; everyone else uses profile_picture_url.
+    isBrokerLike || subTypeLower === subscriptionTypes.professional;
   const photoFieldKey = isCompany ? 'company_logo_url' : 'profile_picture_url';
 
   const fields = useMemo(() => getFieldsForType(type), [type]);
@@ -160,8 +158,19 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const [form, setForm] = useState(() => {
     const initial = {};
     fields.forEach(f => {
-      initial[f.key] =
+      let val =
         currentUser?.[f.key] != null ? String(currentUser[f.key]) : '';
+      if (
+        f.key === 'broker_office_name' &&
+        !val.trim() &&
+        currentUser?.business_name
+      ) {
+        val = String(currentUser.business_name);
+      }
+      if (f.key === 'name' && !val.trim() && currentUser?.contact_person_name) {
+        val = String(currentUser.contact_person_name);
+      }
+      initial[f.key] = val;
     });
     return initial;
   });

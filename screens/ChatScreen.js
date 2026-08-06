@@ -53,7 +53,7 @@ import {
   respondToExclusiveOffer,
 } from '../utils/api';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
-import {shouldShowProfileGoldRing, isRegularSubscriptionType, subscriptionTypes} from '../utils/constant';
+import {shouldShowProfileGoldRing, isRegularSubscriptionType, isBrokerLikeSubscriptionType, subscriptionTypes} from '../utils/constant';
 import {parsePostTextOverlayPayload} from '../utils/postTextOverlay';
 import PostTextOverlays from '../components/PostTextOverlays';
 import {ProfileAvatar} from '../components';
@@ -389,15 +389,10 @@ const ChatScreen = ({
       !isGroupThread &&
       (!!otherUserEmail || !!directConversationId));
   const isBrokerUser = useMemo(() => {
-    const t1 =
-      currentUser?.subscription_type != null
-        ? String(currentUser.subscription_type).trim().toLowerCase()
-        : '';
-    const t2 =
-      currentUser?.type != null
-        ? String(currentUser.type).trim().toLowerCase()
-        : '';
-    return t1 === 'broker' || t2 === 'broker';
+    return (
+      isBrokerLikeSubscriptionType(currentUser?.subscription_type) ||
+      isBrokerLikeSubscriptionType(currentUser?.type)
+    );
   }, [currentUser?.subscription_type, currentUser?.type]);
   const isCompanyUser = useMemo(() => {
     const t1 =

@@ -28,6 +28,8 @@ import {
   DEFAULT_POST_DESCRIPTION,
   getFeedPostBadgeLabel,
   getFeedPostCardCaption,
+  getCreateSheetListingAssetLabel,
+  getCreateSheetListingAssetSubtitle,
   getCreateSheetListingIcon,
   getPublishCategoriesStrip,
   isCompanySubscriptionType,
@@ -1414,9 +1416,9 @@ const EditPublishAdScreen = ({
                             ? 'קרקע'
                             : isBnbCategory
                               ? 'BNB'
-                              : isCompanySubscriptionType(currentUser?.subscription_type)
-                                ? 'פרויקט'
-                                : 'נכס'
+                              : getCreateSheetListingAssetLabel(
+                                  currentUser?.subscription_type,
+                                )
                     }
                     subtitle={
                       isPartnersCategory
@@ -1425,9 +1427,9 @@ const EditPublishAdScreen = ({
                           ? 'פרסם משרד למכירה או השכרה'
                           : isLandListingCategory
                             ? 'פרסם קרקע'
-                            : isCompanySubscriptionType(currentUser?.subscription_type)
-                              ? 'פרסמו פרויקט'
-                              : 'פרסמו נכס למכירה או להשכרה'
+                            : getCreateSheetListingAssetSubtitle(
+                                currentUser?.subscription_type,
+                              )
                     }
                     iconSource={getCreateSheetListingIcon(
                       selectedListingCategoryId,

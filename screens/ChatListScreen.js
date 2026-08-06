@@ -52,6 +52,7 @@ import CircleImageCropModal from '../components/CircleImageCropModal';
 import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {
   isRegularSubscriptionType,
+  isBrokerLikeSubscriptionType,
   subscriptionTypes,
 } from '../utils/constant';
 
@@ -652,7 +653,7 @@ const ChatListScreen = ({
   const groupPickSeq = useRef(0);
   const groupMetaLookupInFlight = useRef(new Set());
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
-  const isBrokerUser = currentUserType === subscriptionTypes.broker;
+  const isBrokerUser = isBrokerLikeSubscriptionType(currentUserType);
   const isCompanyUser = currentUserType === subscriptionTypes.company;
   const isProfessionalUser = currentUserType === subscriptionTypes.professional;
   const isRegularUser = isRegularSubscriptionType(currentUserType);

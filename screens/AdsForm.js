@@ -99,7 +99,7 @@ import {
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
 import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
 import CircleImageCropModal from '../components/CircleImageCropModal';
-import {ContextHook} from '../hooks/ContextHook';
+import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
 const COMPANY_OFFICE_SIZES_SECTION_TITLE = 'הפרוייקט מציע משרדים בגדלים של';
@@ -537,13 +537,15 @@ const AdsForm = ({
   const {currentUser} = useContext(ContextHook);
   const formList = useMemo(() => {
     const t = resolveSubscriptionType(currentUser);
-    if (t === subscriptionTypes.broker) {
+    if (
+      t === subscriptionTypes.broker ||
+      t === subscriptionTypes.projectMarketer
+    ) {
       return brokerCategoryForm;
     }
     if (
       t === subscriptionTypes.company ||
-      t === subscriptionTypes.professional ||
-      t === subscriptionTypes.projectMarketer
+      t === subscriptionTypes.professional
     ) {
       // companyCategoryForm had no key `1` — merge broker’s חדש מקבלן project form
       return {
@@ -2183,13 +2185,29 @@ const AdsForm = ({
         parseListingCategoryId(initialCategory, 10),
       );
 
+      const uuidRe =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const rawEditId =
+        initialListing?.id != null && initialListing.id !== ''
+          ? String(initialListing.id).trim()
+          : initialListing?.ad_number != null && initialListing.ad_number !== ''
+            ? String(initialListing.ad_number).trim()
+            : '';
+      const existingListingId =
+        rawEditId && uuidRe.test(rawEditId) ? rawEditId : null;
+      const publisher = resolvePublisherIdentityForSave(
+        initialListing,
+        currentUser,
+        {editing: Boolean(existingListingId)},
+      );
+
       // For category 3, use different data structure
       const listingData =
         category === 3
           ? {
               status: 'published',
-              subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: resolveSubscriptionId(currentUser),
+              subscriptionType: publisher.subscriptionType,
+              subscriptionId: publisher.subscriptionId,
               // Category 3 specific fields
               searchPurpose,
               preferredApartmentType,
@@ -2217,8 +2235,8 @@ const AdsForm = ({
             }
           : {
               status: 'published',
-              subscriptionType: currentUser?.subscription_type || null,
-              subscriptionId: resolveSubscriptionId(currentUser),
+              subscriptionType: publisher.subscriptionType,
+              subscriptionId: publisher.subscriptionId,
               // Standard listing fields for other categories
               propertyType,
               area: (() => {
@@ -2331,17 +2349,6 @@ const AdsForm = ({
               }),
             };
 
-      const uuidRe =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const rawEditId =
-        initialListing?.id != null && initialListing.id !== ''
-          ? String(initialListing.id).trim()
-          : initialListing?.ad_number != null && initialListing.ad_number !== ''
-            ? String(initialListing.ad_number).trim()
-            : '';
-      const existingListingId =
-        rawEditId && uuidRe.test(rawEditId) ? rawEditId : null;
-
       const result = existingListingId
         ? await updateListing(existingListingId, listingData)
         : await createListing(listingData);
@@ -2349,7 +2356,7 @@ const AdsForm = ({
       // Mirror תמונה מכירתית as a home story (+ companion feed post on first
       // create). On edit replace: PUT deletes the old story via
       // syncSalesImageMirrors, then we create a fresh story with the new image.
-      const publisherSubId = resolveSubscriptionId(currentUser);
+      const publisherSubId = publisher.subscriptionId;
       const prevSalesUrl = initialSalesImageUrlRef.current
         ? String(initialSalesImageUrlRef.current).trim()
         : '';
@@ -2419,7 +2426,7 @@ const AdsForm = ({
                 category: listingCategory,
                 status: 'published',
                 subscriptionId: publisherSubId,
-                subscriptionType: currentUser?.subscription_type || null,
+                subscriptionType: publisher.subscriptionType,
                 ...(salesIsVideo
                   ? {
                       videoUrl: salesUrlStr,

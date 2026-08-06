@@ -89,6 +89,7 @@ import {ContextHook} from './hooks/ContextHook';
 import {PresenceProvider} from './hooks/PresenceContext';
 import {
   subscriptionTypes,
+  isBrokerLikeSubscriptionType,
   DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
   canAccessListingAnalysis,
   DEFAULT_POST_DESCRIPTION,
@@ -439,6 +440,11 @@ function App() {
   const [marketerPlan, setMarketerPlan] = useState(null);
   /** Team member a marketing manager is currently inspecting (ניהול משווקים). */
   const [agencyMember, setAgencyMember] = useState(null);
+  /** When set, ניתוח מודעות loads this member's listings (manager agency view). */
+  const [listingAnalysisOwnerUser, setListingAnalysisOwnerUser] =
+    useState(null);
+  const [listingAnalysisReturnScreen, setListingAnalysisReturnScreen] =
+    useState(screenName.editPublishAd);
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
   const setCurrentUser = useCallback(u => {
     if (u == null) {
@@ -991,7 +997,7 @@ function App() {
       }
       const st = String(u?.subscription_type || '').toLowerCase();
       const isCompany = st === 'company';
-      const isBroker = st === 'broker';
+      const isBroker = isBrokerLikeSubscriptionType(st);
       const isProfessional = st === 'professional';
       // BnB ad profiles open the dedicated drawer for any host account type.
       if (
@@ -2552,8 +2558,12 @@ function App() {
             )}
             {currentScreen === screenName.listingAnalysis && (
               <ListingAnalysisScreen
-                onClose={() => setCurrentScreen(screenName.editPublishAd)}
+                onClose={() => {
+                  setListingAnalysisOwnerUser(null);
+                  setCurrentScreen(listingAnalysisReturnScreen);
+                }}
                 currentUser={currentUser}
+                listingOwnerUser={listingAnalysisOwnerUser}
               />
             )}
             {currentScreen === screenName.editPublishAd && (
@@ -2577,6 +2587,8 @@ function App() {
                 onOpenListingAnalysis={() => {
                   if (canAccessListingAnalysis(currentUser?.subscription_type)) {
                     setEditPublishRestoreStrip(true);
+                    setListingAnalysisReturnScreen(screenName.editPublishAd);
+                    setListingAnalysisOwnerUser(null);
                     setCurrentScreen(screenName.listingAnalysis);
                   }
                 }}
@@ -3203,6 +3215,19 @@ function App() {
               <AgencyMemberListingsScreen
                 onClose={() => setCurrentScreen(screenName.agencyMembers)}
                 member={agencyMember}
+                currentUser={currentUser}
+                onOpenListingAnalysis={() => {
+                  if (
+                    canAccessListingAnalysis(currentUser?.subscription_type) &&
+                    agencyMember
+                  ) {
+                    setListingAnalysisReturnScreen(
+                      screenName.agencyMemberListings,
+                    );
+                    setListingAnalysisOwnerUser(agencyMember);
+                    setCurrentScreen(screenName.listingAnalysis);
+                  }
+                }}
                 onViewListing={listing =>
                   openListingAdProfile(listing, {
                     returnScreen: screenName.agencyMemberListings,

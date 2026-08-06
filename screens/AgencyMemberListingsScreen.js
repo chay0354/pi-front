@@ -7,13 +7,16 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {getListings} from '../utils/api';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
-import {isOpenHouseListing} from '../utils/constant';
+import {brokerPiRatingFromListing} from '../utils/listingGridCardFigma';
+import {canAccessListingAnalysis, isOpenHouseListing} from '../utils/constant';
+import {agencyMemberDisplayName} from '../utils/agencyMemberDisplay';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 
 const BLUE_100 = '#1e1d27';
@@ -40,12 +43,7 @@ const isPostRecord = item => {
   return desc === 'פוסט';
 };
 
-const memberDisplayName = member =>
-  (member?.name && String(member.name).trim()) ||
-  (member?.contact_person_name && String(member.contact_person_name).trim()) ||
-  (member?.business_name && String(member.business_name).trim()) ||
-  (member?.email && String(member.email).trim()) ||
-  'משווק';
+const memberDisplayName = agencyMemberDisplayName;
 
 /**
  * A marketing manager's read/edit view of one team member's ads and posts.
@@ -54,9 +52,11 @@ const memberDisplayName = member =>
 const AgencyMemberListingsScreen = ({
   onClose,
   member,
+  currentUser,
   onViewListing,
   onEditListing,
   onEditPost,
+  onOpenListingAnalysis,
 }) => {
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
@@ -104,12 +104,16 @@ const AgencyMemberListingsScreen = ({
     return listings;
   }, [listings, tab]);
 
+  const showListingAnalysis =
+    canAccessListingAnalysis(currentUser?.subscription_type) &&
+    typeof onOpenListingAnalysis === 'function';
+
   return (
     <View style={[styles.root, {paddingTop: Math.max(insets.top, 12)}]}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={onClose}
-          style={styles.backButton}
+          style={styles.headerBtn}
           accessibilityRole="button"
           accessibilityLabel="חזור"
           hitSlop={{top: 20, bottom: 20, left: 20, right: 20}}>
@@ -122,7 +126,22 @@ const AgencyMemberListingsScreen = ({
         <Text style={styles.headerTitle} numberOfLines={1}>
           {memberDisplayName(member)}
         </Text>
-        <View style={styles.headerSpacer} />
+        {showListingAnalysis ? (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={onOpenListingAnalysis}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            accessibilityRole="button"
+            accessibilityLabel="ניתוח מודעות">
+            <Image
+              source={require('../assets/action_icons.png')}
+              style={styles.actionImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerBtn} />
+        )}
       </View>
 
       <View style={styles.tabsRow}>
@@ -169,6 +188,7 @@ const AgencyMemberListingsScreen = ({
               <View key={listing.id} style={styles.itemWrap}>
                 <ListingGridCardFigma
                   listing={listing}
+                  displayPi={brokerPiRatingFromListing(listing)}
                   onPress={() => onViewListing?.(listing)}
                 />
                 <View style={styles.actionsRow}>
@@ -216,12 +236,20 @@ const AgencyMemberListingsScreen = ({
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: BLUE_100},
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
     paddingBottom: 8,
   },
-  backButton: {padding: 4},
+  headerBtn: {
+    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionImage: {width: 24, height: 24},
   headerTitle: {
     flex: 1,
     color: Colors.white100,
@@ -230,7 +258,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  headerSpacer: {width: 34},
   tabsRow: {
     flexDirection: 'row-reverse',
     gap: 8,

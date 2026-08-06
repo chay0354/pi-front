@@ -77,7 +77,10 @@ import CompanyLandListingProfileContent from '../components/CompanyLandListingPr
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {buildProfileAdFeatureLabels} from '../utils/listingAmenities';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
-import {isCompanySubscriptionType} from '../utils/constant';
+import {
+  isCompanySubscriptionType,
+  isBrokerLikeSubscriptionType,
+} from '../utils/constant';
 import {
   flexEnd,
   flexStart,
@@ -487,9 +490,13 @@ const UserProfileScreen = ({
         let name = null;
         if (isCompanySubscriptionType(type))
           name = s.business_name || s.name || s.contact_person_name || null;
-        else if (type === 'broker')
+        else if (isBrokerLikeSubscriptionType(type))
           name =
-            s.broker_office_name || s.name || s.contact_person_name || null;
+            s.broker_office_name ||
+            s.business_name ||
+            s.name ||
+            s.contact_person_name ||
+            null;
         else name = s.name || s.business_name || s.contact_person_name || null;
         let activityRegions = null;
         if (s.activity_regions != null) {
@@ -700,8 +707,13 @@ const UserProfileScreen = ({
     let name = null;
     if (isCompanySubscriptionType(t))
       name = u.business_name || u.name || u.contact_person_name || null;
-    else if (t === 'broker')
-      name = u.broker_office_name || u.name || u.contact_person_name || null;
+    else if (isBrokerLikeSubscriptionType(t))
+      name =
+        u.broker_office_name ||
+        u.business_name ||
+        u.name ||
+        u.contact_person_name ||
+        null;
     else if (t === 'professional')
       name = u.name || u.business_name || u.contact_person_name || null;
     else
@@ -1704,7 +1716,7 @@ const UserProfileScreen = ({
     ''
   ).toLowerCase();
   const isCompany = isCompanySubscriptionType(profileSubscriptionType);
-  const isBroker = profileSubscriptionType === 'broker';
+  const isBroker = isBrokerLikeSubscriptionType(profileSubscriptionType);
   const isProfessional = profileSubscriptionType === 'professional';
   const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
   const shouldShowFollowPlus =

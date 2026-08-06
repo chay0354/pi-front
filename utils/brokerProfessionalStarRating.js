@@ -9,7 +9,7 @@ export const isBrokerOrProfessionalSubscriptionType = type => {
   const t = String(type || '')
     .toLowerCase()
     .trim();
-  return t === 'broker' || t === 'professional';
+  return t === 'broker' || t === 'professional' || t === 'project_marketer';
 };
 
 const reviewTimestamp = review => {

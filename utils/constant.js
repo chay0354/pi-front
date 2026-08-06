@@ -63,6 +63,12 @@ export function isProjectMarketerType(type) {
   );
 }
 
+/** Broker + משווק פרויקטים — same upload forms, profiles, feed overlays, and filters. */
+export function isBrokerLikeSubscriptionType(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  return t === subscriptionTypes.broker || t === subscriptionTypes.projectMarketer;
+}
+
 /** Marketing manager: project marketer on a team plan (has seats to fill). */
 export function isMarketingManager(user) {
   if (!user) return false;
@@ -184,10 +190,7 @@ export function canCreateOpenHousePost(subscriptionTypeOrUser) {
 
 /** Ad listing categories for brokers and project marketers (excludes BnB + שותפים). */
 export function usesBrokerAdListingCategories(subscriptionType) {
-  const sub = resolveSubscriptionType(subscriptionType);
-  return (
-    sub === subscriptionTypes.broker || sub === subscriptionTypes.projectMarketer
-  );
+  return isBrokerLikeSubscriptionType(subscriptionType);
 }
 
 /** Create-sheet icon for the בית פתוח row (company / broker / project marketer). */
@@ -227,12 +230,12 @@ export function isRegularSubscriptionType(subscriptionType) {
 }
 
 /**
- * Company accounts use "פרויקט" in upload flows; all other types use "נכס".
- * Project marketers publish projects too, so they share the company wording.
+ * Developer-company accounts use "פרויקט" in upload flows; all other types use "נכס".
+ * Project marketers follow broker UX (נכס), not company project wording.
  */
 export function isCompanySubscriptionType(subscriptionType) {
   const t = resolveSubscriptionType(subscriptionType);
-  return t === subscriptionTypes.company || t === subscriptionTypes.projectMarketer;
+  return t === subscriptionTypes.company;
 }
 
 export const PROJECT_OFFERS_SECTION_TITLE = 'הפרויקט מציע';
@@ -278,12 +281,24 @@ export function localizeUploadFormFields(fields, subscriptionType) {
   return fields.map(f => localizeUploadFormField(f, subscriptionType));
 }
 
+/** Bottom create-sheet listing title: company → פרויקט; marketers and all others → נכס. */
+export function getCreateSheetListingAssetLabel(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  return t === subscriptionTypes.company ? 'פרויקט' : 'נכס';
+}
+
+/** Bottom create-sheet listing subtitle for standard property categories. */
+export function getCreateSheetListingAssetSubtitle(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  return t === subscriptionTypes.company
+    ? 'פרסמו פרויקט'
+    : 'פרסמו נכס למכירה או להשכרה';
+}
+
 /** Title + subtitle for the listing row in the TikTok / create-ad bottom sheet. */
 export function getListingSheetCopy(selectedCategory, subscriptionType) {
   const cat = parseInt(String(selectedCategory ?? '').trim(), 10);
-  const assetLabel = isCompanySubscriptionType(subscriptionType)
-    ? 'פרויקט'
-    : 'נכס';
+  const assetLabel = getCreateSheetListingAssetLabel(subscriptionType);
   if (cat === 10) {
     return {
       title: assetLabel,
@@ -394,10 +409,7 @@ export function canShowListingAdInCreateSheet(
   if (sub === subscriptionTypes.professional) {
     return false;
   }
-  if (
-    sub === subscriptionTypes.broker ||
-    sub === subscriptionTypes.projectMarketer
-  ) {
+  if (isBrokerLikeSubscriptionType(sub)) {
     return brokerSheetAdListingCategoryIds.has(n);
   }
   if (sub === subscriptionTypes.company) {

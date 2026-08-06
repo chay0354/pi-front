@@ -46,6 +46,7 @@ import {
   createStory,
   resolveSubscriptionId,
 } from '../utils/api';
+import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
 import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   DEFAULT_POST_DESCRIPTION,
@@ -1544,7 +1545,13 @@ const PostEditorScreen = ({
         throw new Error('העלאה הצליחה בלי כתובת קובץ');
       }
 
-      const subId = resolveSubscriptionId(currentUser);
+      const publisher = resolvePublisherIdentityForSave(
+        initialListing,
+        currentUser,
+        {editing: isEditMode},
+      );
+      const subId = publisher.subscriptionId;
+      const subType = publisher.subscriptionType;
       if (!subId) {
         Alert.alert(
           'לא ניתן לפרסם',
@@ -1593,7 +1600,7 @@ const PostEditorScreen = ({
               category: resolvedPublishCategory,
               status: 'published',
               subscriptionId: subId,
-              subscriptionType: currentUser?.subscription_type || null,
+              subscriptionType: subType,
               videoUrl,
               hasVideo: true,
               feedDisplayPriority: 'video',
@@ -1609,7 +1616,7 @@ const PostEditorScreen = ({
               category: resolvedPublishCategory,
               status: 'published',
               subscriptionId: subId,
-              subscriptionType: currentUser?.subscription_type || null,
+              subscriptionType: subType,
               mainImageUrl,
               description: listingDescription,
               feedPost: true,
@@ -1625,7 +1632,7 @@ const PostEditorScreen = ({
           category: resolvedPublishCategory,
           status: 'published',
           subscriptionId: subId,
-          subscriptionType: currentUser?.subscription_type || null,
+          subscriptionType: subType,
           videoUrl,
           hasVideo: true,
           feedDisplayPriority: 'video',
@@ -1643,7 +1650,7 @@ const PostEditorScreen = ({
           category: resolvedPublishCategory,
           status: 'published',
           subscriptionId: subId,
-          subscriptionType: currentUser?.subscription_type || null,
+          subscriptionType: subType,
           mainImageUrl,
           description: listingDescription,
           feedPost: true,

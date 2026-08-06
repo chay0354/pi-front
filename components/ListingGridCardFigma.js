@@ -27,6 +27,7 @@ import {
   formatApartmentAreaForDisplay,
   formatApartmentRoomsOrFloorForDisplay,
   formatPriceHe,
+  clampPiDisplay,
   isCompanyListing,
   isPreSaleListing,
   listingImageUrls,
@@ -77,6 +78,7 @@ const ListingGridCardFigma = ({
     showCommercialLogo,
     commercialLogoUrl,
     showPiRating,
+    piDisplay,
     piBadgeImage,
     dotCount,
     buildingsStat,
@@ -116,9 +118,18 @@ const ListingGridCardFigma = ({
     const commercialLogoUrl = showCommercialLogo
       ? getCompanyLogoUrlFromListing(listing)
       : null;
+    const resolvedPi =
+      displayPi != null &&
+      displayPi !== '' &&
+      Number.isFinite(Number(displayPi))
+        ? clampPiDisplay(displayPi)
+        : null;
     const showPi =
-      shouldShowListingPiRating(listing) && !showCommercialLogo;
-    const badgeImg = displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
+      shouldShowListingPiRating(listing) &&
+      !showCommercialLogo &&
+      resolvedPi != null;
+    const badgeImg =
+      resolvedPi != null && resolvedPi > 4 ? piBadgeSourceRing : piBadgeSource;
     const dCount = g.length > 0 ? Math.min(5, g.length) : primary ? 1 : 0;
     const b = st.find(s => s.key === 'buildings');
     const f = st.find(s => s.key === 'floors');
@@ -140,6 +151,7 @@ const ListingGridCardFigma = ({
       showCommercialLogo: showCommercialLogo && !!commercialLogoUrl,
       commercialLogoUrl,
       showPiRating: showPi,
+      piDisplay: resolvedPi,
       piBadgeImage: badgeImg,
       dotCount: dCount,
       buildingsStat: b,
@@ -350,7 +362,7 @@ const ListingGridCardFigma = ({
                 resizeMode="contain"
                 accessibilityLabel="דירוג Pi"
               />
-              <Text style={styles.gridCardPiText}>{String(displayPi)}</Text>
+              <Text style={styles.gridCardPiText}>{String(piDisplay)}</Text>
             </View>
           ) : null}
         </View>

@@ -14,17 +14,13 @@ import {Colors} from '../constants/styles';
 import {getAgencyMembers} from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import ProfileAvatar from '../components/ProfileAvatar';
+import {agencyMemberDisplayName, safeAgencyDisplayText} from '../utils/agencyMemberDisplay';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 
 const BLUE_100 = '#1e1d27';
 const CARD_BG = '#2b2a39';
 
-const memberDisplayName = member =>
-  (member?.name && String(member.name).trim()) ||
-  (member?.contact_person_name && String(member.contact_person_name).trim()) ||
-  (member?.business_name && String(member.business_name).trim()) ||
-  (member?.email && String(member.email).trim()) ||
-  'משווק';
+const memberDisplayName = agencyMemberDisplayName;
 
 /** ניהול משווקים — marketers under the signed-in marketing manager. */
 const AgencyMembersScreen = ({onClose, currentUser, onOpenMember}) => {
@@ -100,9 +96,9 @@ const AgencyMembersScreen = ({onClose, currentUser, onOpenMember}) => {
               tintColor={Colors.white100}
             />
           }>
-          {seatLimit ? (
+          {Number.isFinite(Number(seatLimit)) && Number(seatLimit) > 0 ? (
             <Text style={styles.seatsLine}>
-              {members.length} מתוך {seatLimit} משתמשים
+              {members.length} מתוך {Number(seatLimit)} משתמשים
             </Text>
           ) : null}
 
@@ -131,7 +127,7 @@ const AgencyMembersScreen = ({onClose, currentUser, onOpenMember}) => {
                   {memberDisplayName(member)}
                 </Text>
                 <Text style={styles.memberEmail} numberOfLines={1}>
-                  {member?.email || ''}
+                  {safeAgencyDisplayText(member?.email)}
                 </Text>
               </View>
               <MaterialCommunityIcons

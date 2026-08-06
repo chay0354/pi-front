@@ -132,6 +132,7 @@ import {
   shouldShowListingPiRating,
   isFollowableListing,
   isCompanyListing,
+  isDeveloperCompanyListing,
 } from '../utils/listingGridCardFigma';
 import {
   categoryImages,
@@ -141,6 +142,7 @@ import {
   getCreateSheetListingIcon,
   getListingSheetCopy,
   isCompanySubscriptionType,
+  isBrokerLikeSubscriptionType,
   OPEN_HOUSE_POST_DESCRIPTION,
   subscriptionTypes,
 } from '../utils/constant';
@@ -558,12 +560,12 @@ function resolveCommenterDisplayName(viewer) {
       'משתמש'
     );
   }
-  if (subType === 'broker') {
+  if (subType === 'broker' || subType === 'project_marketer') {
     return (
       viewer.broker_office_name ||
+      viewer.business_name ||
       viewer.name ||
       viewer.contact_person_name ||
-      viewer.business_name ||
       'משתמש'
     );
   }
@@ -2541,8 +2543,7 @@ const TikTokFeedScreen = ({
     }
     const isCompanyOrBroker =
       sub === subscriptionTypes.company ||
-      sub === subscriptionTypes.projectMarketer ||
-      sub === subscriptionTypes.broker;
+      isBrokerLikeSubscriptionType(sub);
     if (isCompanyOrBroker && isBnbCategory) {
       onOpenOfficeListing?.(selectedCategory, opts);
       return;
@@ -3642,7 +3643,9 @@ const TikTokFeedScreen = ({
               activeSidebarFilter: activeSidebarFilter,
             })
           ) {
-            displayListings = displayListings.filter(l => !isCompanyListing(l));
+            displayListings = displayListings.filter(
+              l => !isDeveloperCompanyListing(l),
+            );
           }
           if (selectedCatNum === 3 && !sidebarWantsProfessionalPosts) {
             displayListings = displayListings.filter(isRegularUserListing);
@@ -6077,8 +6080,7 @@ const TikTokFeedScreen = ({
       isCompanyListing && Number(video?.category) === 7;
     const isBrokerListing =
       !isPostListing &&
-      String(video.subscription_type || '').toLowerCase() ===
-        subscriptionTypes.broker;
+      isBrokerLikeSubscriptionType(video.subscription_type);
     const isUserPropertyListing =
       !isPostListing &&
       String(video.subscription_type || '').toLowerCase() ===
@@ -6265,9 +6267,7 @@ const TikTokFeedScreen = ({
       if (creatorTypes[0]) return creatorTypes[0];
       const subType = String(listing?.subscription_type || '').toLowerCase();
       if (subType === subscriptionTypes.company) return 'חברה';
-      if (subType === subscriptionTypes.projectMarketer)
-        return 'משווק פרויקטים';
-      if (subType === subscriptionTypes.broker) return 'תיווך';
+      if (isBrokerLikeSubscriptionType(subType)) return 'תיווך';
       if (subType === subscriptionTypes.professional) return 'נותן שירות';
       return 'משתמש';
     };

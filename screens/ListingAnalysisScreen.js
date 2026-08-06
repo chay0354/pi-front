@@ -17,6 +17,7 @@ import {
   DEFAULT_MONTHLY_LISTING_QUOTA,
   getAnalysisCategoriesStrip,
   canAccessListingAnalysis,
+  isBrokerLikeSubscriptionType,
   resolveListingCategoryFromEditProfileUi,
   resolveSubscriptionType,
   subscriptionTypes,
@@ -94,15 +95,23 @@ const isListingFrozen = l => l?.is_frozen === true || l?.is_frozen === 'true';
 
 const isListingAd = l => !isPostListingRecord(l);
 
-const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
+const ListingAnalysisScreen = ({
+  onClose,
+  currentUser = null,
+  listingOwnerUser = null,
+}) => {
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const subscriptionType = resolveSubscriptionType(currentUser);
-  const isBrokerUser = subscriptionType === subscriptionTypes.broker;
+  const subjectUser = listingOwnerUser || currentUser;
+  const isAgencyMemberAnalysis = listingOwnerUser != null;
+  const subscriptionType = resolveSubscriptionType(subjectUser);
+  const isBrokerUser = isBrokerLikeSubscriptionType(subscriptionType);
   const isRegularUser = subscriptionType === subscriptionTypes.user;
-  const canAccessAnalysis = canAccessListingAnalysis(subscriptionType);
+  const canAccessAnalysis = canAccessListingAnalysis(
+    resolveSubscriptionType(currentUser),
+  );
   const publishedCountLabel = getPublishedCountLabel(subscriptionType);
 
   useEffect(() => {
@@ -132,9 +141,9 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
   );
 
   const quota =
-    currentUser?.max_published_listings ??
-    currentUser?.listing_quota ??
-    currentUser?.max_listings ??
+    subjectUser?.max_published_listings ??
+    subjectUser?.listing_quota ??
+    subjectUser?.max_listings ??
     DEFAULT_LISTING_QUOTA;
 
   useEffect(() => {
@@ -142,13 +151,15 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
     (async () => {
       setLoading(true);
       try {
+        const ownerId =
+          subjectUser?.id != null ? String(subjectUser.id).trim() : '';
         const result = await getListings({
           status: 'published',
-          ...(currentUser?.id && {subscription_id: currentUser.id}),
+          ...(ownerId && {subscription_id: ownerId}),
         });
         if (cancelled) return;
         if (result?.success && Array.isArray(result.listings)) {
-          setListings(currentUser?.id == null ? [] : result.listings);
+          setListings(ownerId ? result.listings : []);
         } else {
           setListings([]);
         }
@@ -161,7 +172,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id]);
+  }, [subjectUser?.id]);
 
   const {countsByCategory, activeTotal} = useMemo(() => {
     const byCat = {};
@@ -216,7 +227,7 @@ const ListingAnalysisScreen = ({onClose, currentUser = null}) => {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {isBrokerUser ? (
+          {isBrokerUser && !isAgencyMemberAnalysis ? (
             <View style={styles.summaryCard}>
               <View style={styles.summaryTopRow}>
                 <Text style={styles.summaryLabel}>מודעות פעילות</Text>
