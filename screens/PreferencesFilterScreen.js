@@ -19,8 +19,9 @@ import {
   forceLtrStyle,
   getRangeSliderPercentFromEvent,
   getSheetBottomInset,
-  rangeSliderFillLtrVisualStyle,
-  rangeSliderThumbLtrVisualStyle,
+  rangeSliderFillRtlVisualStyle,
+  rangeSliderThumbRtlVisualStyle,
+  touchPercentToRangeValuePercent,
 } from '../utils/rtlLayout';
 
 // Figma: node 25:200959 (מגירה - העדפות)
@@ -54,8 +55,8 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   );
 
   const IS_WEB = Platform.OS === 'web';
-  const [sliderWidth, setSliderWidth] = useState(IS_WEB ? 0 : 320);
-  const sliderWidthRef = useRef(sliderWidth);
+  const [sliderWidth, setSliderWidth] = useState(1);
+  const sliderWidthRef = useRef(1);
   const sliderWindowXRef = useRef(0);
   const activeThumbRef = useRef(null);
   const sliderRef = useRef(null);
@@ -89,12 +90,13 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
   }, []);
 
   const percentFromNativeEvent = useCallback(nativeEvent => {
-    return getRangeSliderPercentFromEvent(
+    const raw = getRangeSliderPercentFromEvent(
       nativeEvent,
       sliderWidthRef.current,
       sliderWindowXRef.current,
       sliderRef,
     );
+    return touchPercentToRangeValuePercent(raw);
   }, []);
 
   const refreshMeasureThen = useCallback(
@@ -297,12 +299,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
         <View
           ref={sliderRef}
           style={styles.sliderContainer}
-          onLayout={e => {
-            const w = e.nativeEvent.layout.width;
-            if (w > 0) {
-              sliderWidthRef.current = w;
-              setSliderWidth(w);
-            }
+          onLayout={() => {
             syncSliderMeasure();
           }}
           {...panResponder.panHandlers}
@@ -315,11 +312,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
               end={{x: 1, y: 0}}
               style={[
                 styles.sliderTrackFill,
-                rangeSliderFillLtrVisualStyle(
-                  sliderWidth,
-                  minPercent,
-                  maxPercent,
-                ),
+                rangeSliderFillRtlVisualStyle(minPercent, maxPercent),
               ]}
             />
           </View>
@@ -330,7 +323,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              rangeSliderThumbLtrVisualStyle(sliderWidth, minPercent),
+              rangeSliderThumbRtlVisualStyle(minPercent),
               {pointerEvents: 'none'},
             ]}
           />
@@ -341,7 +334,7 @@ const PreferencesFilterScreen = ({initialFilter, onClose, onSave}) => {
             end={{x: 0.5, y: 1}}
             style={[
               styles.sliderThumb,
-              rangeSliderThumbLtrVisualStyle(sliderWidth, maxPercent),
+              rangeSliderThumbRtlVisualStyle(maxPercent),
               {pointerEvents: 'none'},
             ]}
           />
@@ -503,10 +496,8 @@ const styles = StyleSheet.create({
   ageRangeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    // justifyContent: 'center',
     gap: 10,
     marginBottom: 19,
-    ...forceLtrStyle,
   },
   ageRangeValue: {
     color: '#FFFFFF',
@@ -524,21 +515,17 @@ const styles = StyleSheet.create({
   },
   sliderContainer: {
     width: '100%',
-    height: 44,
+    height: 42,
     justifyContent: 'center',
     position: 'relative',
     marginBottom: 0,
-    ...forceLtrStyle,
   },
   sliderTrack: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '50%',
-    marginTop: -2,
+    width: '100%',
     height: 4,
     backgroundColor: '#FFFFFF',
     borderRadius: 1000,
+    overflow: 'visible',
   },
   sliderTrackFill: {
     position: 'absolute',
@@ -551,8 +538,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    top: '50%',
-    marginTop: -11,
+    top: 10,
     zIndex: 2,
   },
   checksWrap: {

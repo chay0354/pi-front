@@ -32,9 +32,15 @@ const SuccessScreen = ({
   localProfileImage = null,
 }) => {
   const insets = useSafeAreaInsets();
+  // Project marketers register with a logo like companies, so they share the layout.
+  const resolvedType = String(
+    subscription?.subscription_type || subscriptionType || '',
+  ).toLowerCase();
   const isCompany =
     subscriptionType === subscriptionTypes.company ||
-    String(subscription?.subscription_type || '').toLowerCase() === 'company';
+    subscriptionType === subscriptionTypes.projectMarketer ||
+    resolvedType === 'company' ||
+    resolvedType === subscriptionTypes.projectMarketer;
   // Only brokers have the 65-ad publish quota, so the quota line is broker-only.
   const isBroker =
     subscriptionType === subscriptionTypes.broker ||

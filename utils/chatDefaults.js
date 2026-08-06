@@ -32,6 +32,20 @@ export function getConversationWithWelcomeMessage(id = '1', name = 'pi') {
 export const CHAT_PEER_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** System sender for "עדכונים על פוסטים רלוונטים" professional post alerts. */
+export const PROFESSIONAL_UPDATES_SENDER_EMAIL =
+  'updates@pi-professional-alerts.internal';
+
+/** Direct chat with the professional post-updates bot (gold ring, in-bubble CTA). */
+export function isProfessionalUpdatesConversation(conv) {
+  if (!conv || conv.isGroup === true || conv.id === '1') return false;
+  const fromApi =
+    conv.otherUserEmail != null ? String(conv.otherUserEmail).trim().toLowerCase() : '';
+  if (fromApi === PROFESSIONAL_UPDATES_SENDER_EMAIL) return true;
+  const rawId = conv.id != null ? String(conv.id).trim().toLowerCase() : '';
+  return rawId === PROFESSIONAL_UPDATES_SENDER_EMAIL;
+}
+
 /** Ensure inbox / profile rows always carry peer email + conversation UUID for ChatScreen. */
 export function normalizeConversationForOpen(conv) {
   if (!conv) return conv;

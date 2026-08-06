@@ -131,14 +131,17 @@ import {
   brokerPiRatingFromListing,
   shouldShowListingPiRating,
   isFollowableListing,
+  isCompanyListing,
 } from '../utils/listingGridCardFigma';
 import {
   categoryImages,
-  companySheetAdListingCategoryIds,
+  canCreateOpenHousePost,
+  canShowListingAdInCreateSheet,
+  CREATE_SHEET_OPEN_HOUSE_ICON,
   getCreateSheetListingIcon,
   getListingSheetCopy,
   isCompanySubscriptionType,
-  regularUserAdListingCategoryIds,
+  OPEN_HOUSE_POST_DESCRIPTION,
   subscriptionTypes,
 } from '../utils/constant';
 
@@ -386,6 +389,23 @@ const isNewsSidebarListing = (listing, currentCategoryId) => {
     return String(listing.subscription_type || '').toLowerCase() === 'company';
   }
   return false;
+};
+
+/** דירות (10) + מגזר דתי (6): hide company ads unless חדשות or הדמיות sidebar is active. */
+const shouldHideCompanyAdsInApartmentsOrReligiousFeed = (
+  categoryNum,
+  {newsActive, renderingsActive, sidebarFilterId, activeSidebarFilter},
+) => {
+  if (categoryNum !== 10 && categoryNum !== 6) return false;
+  if (newsActive || renderingsActive) return false;
+  if (
+    sidebarFilterId != null &&
+    String(activeSidebarFilter?.subscription_type || '').toLowerCase() ===
+      'company'
+  ) {
+    return false;
+  }
+  return true;
 };
 
 const mergeListingRows = (target, rows) => {
@@ -761,6 +781,19 @@ function listingHasPlayableVideo(item) {
   if (!v) return false;
   if (typeof v === 'object' && (v.uri || v.url)) return true;
   return typeof v === 'string' && String(v).trim() !== '';
+}
+
+/** Top-bar "video" filter: listing ads that play as video — not posts, not image-only. */
+function isVideoAdListing(item) {
+  if (!item || isFeedPost(item)) return false;
+  if (resolveFeedVideoUri(item)) return true;
+  if (
+    item.type === 'video' &&
+    (item.videoProcessing || item.rawVideoUrl)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -2507,7 +2540,9 @@ const TikTokFeedScreen = ({
       return;
     }
     const isCompanyOrBroker =
-      sub === subscriptionTypes.company || sub === subscriptionTypes.broker;
+      sub === subscriptionTypes.company ||
+      sub === subscriptionTypes.projectMarketer ||
+      sub === subscriptionTypes.broker;
     if (isCompanyOrBroker && isBnbCategory) {
       onOpenOfficeListing?.(selectedCategory, opts);
       return;
@@ -2519,13 +2554,13 @@ const TikTokFeedScreen = ({
     }
   };
 
-  const closeSheetAndOpenPost = () => {
+  const closeSheetAndOpenPost = (opts = {}) => {
     setShowBottomSheet(false);
     if (isGuest) {
       onOpenUserRegistration?.();
       return;
     }
-    onOpenPostEditor?.(selectedCategory);
+    onOpenPostEditor?.({category: selectedCategory, openHouse: opts.openHouse === true});
   };
 
   // Per-user liked IDs (guests: empty so hearts never reflect another session)
@@ -2890,6 +2925,7 @@ const TikTokFeedScreen = ({
         let landFilter = null;
         let commercialFilter = null;
         let legacySidebarFilter = null;
+        let activeSidebarFilter = null;
         let newsSidebarFilterActive = false;
         let renderingsSidebarFilterActive = false;
 
@@ -2964,7 +3000,7 @@ const TikTokFeedScreen = ({
           newFromDeveloperSidebarFilter ??
           apartmentsLegacyFilter ??
           standardLegacySidebarFilter;
-        const activeSidebarFilter =
+        activeSidebarFilter =
           partnersFilter ??
           bnbFilter ??
           officeFilter ??
@@ -2989,14 +3025,15 @@ const TikTokFeedScreen = ({
           officeFilter?.condition ??
           commercialFilter?.condition ??
           landFilter?.condition;
-        // API has_video from sidebar filters that request it (incl. הדמיות).
+        // API has_video from sidebar filters that request it (incl. הדמיות), or top-bar video mode.
         const hasVideoFromSidebar =
           officeFilter?.has_video === true ||
           landFilter?.has_video === true ||
           commercialFilter?.has_video === true ||
           legacySidebarFilter?.has_video === true ||
           renderingsSidebarFilterActive;
-        const hasVideo = hasVideoFromSidebar;
+        const hasVideoFromTopBar = selectedTopBarFilter === 'video';
+        const hasVideo = hasVideoFromSidebar || hasVideoFromTopBar;
 
         const sharedListingFetchParams = {
           status: 'published',
@@ -3456,7 +3493,7 @@ const TikTokFeedScreen = ({
               };
             });
 
-          // Top bar: 'pics' default = no extra filter. 'video' = only items with a playable video (ad or post).
+          // Top bar: 'pics' default = no extra filter. 'video' = video ads only (not posts / not image-only).
           // 'liked' is applied at display time (baseList).
           const afterTopBar = transformedListings;
           // Backend filters by category; keep client guard so no mismatched rows slip in.
@@ -3480,7 +3517,7 @@ const TikTokFeedScreen = ({
           const finalListings = isProfilePostsFeed
             ? filteredListings
             : selectedTopBarFilter === 'video'
-              ? filteredListings.filter(l => listingHasPlayableVideo(l))
+              ? filteredListings.filter(isVideoAdListing)
               : filteredListings;
 
           // פוסטים / נותני שירות: enforce feed posts only (not regular ads); service = professional’s posts only.
@@ -3521,9 +3558,6 @@ const TikTokFeedScreen = ({
               (commercialFilter?.id === 'new' &&
                 commercialFilter?.ads_only === true));
 
-          const isCompany = l =>
-            String(l?.subscription_type || '').toLowerCase() === 'company';
-
           let displayListings = isProfilePostsFeed
             ? finalListings.filter(l => isFeedPost(l))
             : finalListings;
@@ -3545,16 +3579,16 @@ const TikTokFeedScreen = ({
           }
           if (legacySidebarFilter?.id === 'presale') {
             displayListings = displayListings.filter(
-              l => isCompany(l) && l.saleAtPresale === true,
+              l => isCompanyListing(l) && l.saleAtPresale === true,
             );
           } else if (legacySidebarFilter?.id === 'built') {
             displayListings = displayListings.filter(
-              l => isCompany(l) && companyConstructionStatusMatches(l, 'built'),
+              l => isCompanyListing(l) && companyConstructionStatusMatches(l, 'built'),
             );
           } else if (legacySidebarFilter?.id === 'under_construction') {
             displayListings = displayListings.filter(
               l =>
-                isCompany(l) &&
+                isCompanyListing(l) &&
                 companyConstructionStatusMatches(
                   l,
                   'beginning_of_construction',
@@ -3599,6 +3633,17 @@ const TikTokFeedScreen = ({
           }
           // שותפים: hide non-regular publishers (legacy broker/company ads).
           // BnB: regular + company listings (same card UX).
+          // דירות / מגזר דתי: no company ads in default feed — only via חדשות or הדמיות.
+          if (
+            shouldHideCompanyAdsInApartmentsOrReligiousFeed(selectedCatNum, {
+              newsActive: newsSidebarFilterActive,
+              renderingsActive: renderingsSidebarFilterActive,
+              sidebarFilterId: selectedSidebarFilter,
+              activeSidebarFilter: activeSidebarFilter,
+            })
+          ) {
+            displayListings = displayListings.filter(l => !isCompanyListing(l));
+          }
           if (selectedCatNum === 3 && !sidebarWantsProfessionalPosts) {
             displayListings = displayListings.filter(isRegularUserListing);
           } else if (selectedCatNum === 5 && !sidebarWantsProfessionalPosts) {
@@ -5254,7 +5299,7 @@ const TikTokFeedScreen = ({
   const activateFeedVideoAt = useCallback(index => {
     if (!isScreenActiveRef.current) {
       feedVideoRefs.current.forEach(player => {
-        player?.pause?.();
+        player?.stop?.();
       });
       return;
     }
@@ -5267,8 +5312,13 @@ const TikTokFeedScreen = ({
     });
   }, []);
 
-  useEffect(() => {
-    isScreenActiveRef.current = isScreenActive;
+  isScreenActiveRef.current = isScreenActive;
+
+  useLayoutEffect(() => {
+    if (isScreenActive) return;
+    feedVideoRefs.current.forEach(player => {
+      player?.stop?.();
+    });
   }, [isScreenActive]);
 
   useEffect(() => {
@@ -5276,10 +5326,8 @@ const TikTokFeedScreen = ({
       activateFeedVideoAt(currentIndexRef.current);
       return;
     }
-    // Profile covers the feed — pause+mute every mounted player (players stay
-    // mounted via prewarm so Android does not orphan ExoPlayer audio).
     feedVideoRefs.current.forEach(player => {
-      player?.pause?.();
+      player?.stop?.();
     });
   }, [isScreenActive, activateFeedVideoAt]);
 
@@ -5744,28 +5792,22 @@ const TikTokFeedScreen = ({
     selectedCategory != null && selectedCategory !== ''
       ? parseInt(String(selectedCategory).trim(), 10)
       : NaN;
-  /** Regular: allowed categories only. Company: companySheetAdListingCategoryIds. Guest on BnB: private/business rows. Professional: never show listing row. Brokers: unchanged. */
+  /** Listing row in feed compose sheet — same rules as Edit/Publish (no BnB/שותפים ads for brokers/marketers). */
   const showListingPublishInTikTokSheet = useMemo(() => {
-    const sub = (currentUser?.subscription_type || '').toLowerCase();
-    const n = tikTokSheetListingCategoryNum;
-    const ok = Number.isFinite(n);
     if (isGuest) {
-      return ok && n === 5;
+      const n = tikTokSheetListingCategoryNum;
+      return Number.isFinite(n) && n === 5;
     }
-    if (sub === subscriptionTypes.professional) {
-      return false;
-    }
-    if (sub === subscriptionTypes.user) {
-      return ok && regularUserAdListingCategoryIds.has(n);
-    }
-    if (sub === subscriptionTypes.company) {
-      return ok && companySheetAdListingCategoryIds.has(n);
-    }
-    return (
-      sub !== subscriptionTypes.user ||
-      (ok && regularUserAdListingCategoryIds.has(n))
+    return canShowListingAdInCreateSheet(
+      currentUser?.subscription_type,
+      tikTokSheetListingCategoryNum,
     );
   }, [currentUser?.subscription_type, tikTokSheetListingCategoryNum, isGuest]);
+
+  const showOpenHousePublishInTikTokSheet = useMemo(
+    () => canCreateOpenHousePost(currentUser),
+    [currentUser],
+  );
 
   const listingSheetCopy = useMemo(
     () =>
@@ -6030,8 +6072,7 @@ const TikTokFeedScreen = ({
     const isPostListing = isPostVideo(video);
     const isCompanyListing =
       !isPostListing &&
-      String(video.subscription_type || '').toLowerCase() ===
-        subscriptionTypes.company;
+      isCompanySubscriptionType(video.subscription_type);
     const isCompanyLandListing =
       isCompanyListing && Number(video?.category) === 7;
     const isBrokerListing =
@@ -6171,29 +6212,6 @@ const TikTokFeedScreen = ({
     };
   };
 
-  const {
-    isPostListing,
-    isCompanyListing,
-    isCompanyLandListing,
-    showBrokerStylePropertyOverlay,
-    isBnbListing,
-    isPartnersListing,
-    isBnbHotDeal,
-    brokerPurposeText,
-    brokerLocationText,
-    companyLandLocationText,
-    brokerPriceText,
-    partnersPurposeText,
-    partnersDisplayName,
-    bnbTypeTagText,
-    bnbTitleText,
-    companyPrimaryAddress,
-    companySecondaryAddress,
-    companyBuildingsCount,
-    companyFloorsCount,
-    companyApartmentsCount,
-  } = getVideoOverlayMeta(currentVideo);
-
   const activeCommentsVideo = activeCommentsPostId
     ? buildCommentsPostContext(
         activeCommentsPostId,
@@ -6247,6 +6265,8 @@ const TikTokFeedScreen = ({
       if (creatorTypes[0]) return creatorTypes[0];
       const subType = String(listing?.subscription_type || '').toLowerCase();
       if (subType === subscriptionTypes.company) return 'חברה';
+      if (subType === subscriptionTypes.projectMarketer)
+        return 'משווק פרויקטים';
       if (subType === subscriptionTypes.broker) return 'תיווך';
       if (subType === subscriptionTypes.professional) return 'נותן שירות';
       return 'משתמש';
@@ -7463,11 +7483,9 @@ const TikTokFeedScreen = ({
         // stays fixed at 3 real players max (A07-safe decoder budget).
         const isPrewarmNeighbor =
           index === currentIndex + 1 || index === currentIndex - 1;
-        // Feed stays mounted under profile. Keep current±1 players mounted
-        // (prewarm) while inactive so we can pause/mute instead of unmounting —
-        // Android ExoPlayer can keep playing audio if Video unmounts mid-stream.
         const feedVideoActive = isActiveVideoPage && isScreenActive;
-        const inPlayerWindow = isActiveVideoPage || isPrewarmNeighbor;
+        const inPlayerWindow =
+          isScreenActive && (isActiveVideoPage || isPrewarmNeighbor);
         const mustMountVideoPlayer = inPlayerWindow;
         const posterUri = resolveFeedVideoPosterUri(video);
         // Text overlays are passed INTO the player so post + text render as
@@ -8468,11 +8486,22 @@ const TikTokFeedScreen = ({
                 />
               ))}
             {showListingPublishInTikTokSheet ? <CreateAdSheetDivider /> : null}
+            {showOpenHousePublishInTikTokSheet ? (
+              <>
+                <CreateAdSheetRow
+                  title={OPEN_HOUSE_POST_DESCRIPTION}
+                  subtitle="פרסמו אירוע בית פתוח לקהילה"
+                  iconSource={CREATE_SHEET_OPEN_HOUSE_ICON}
+                  onPress={() => closeSheetAndOpenPost({openHouse: true})}
+                />
+                <CreateAdSheetDivider />
+              </>
+            ) : null}
             <CreateAdSheetRow
               title="פוסט"
               subtitle="שתף מידע או עדכון עם הקהילה"
               iconSource={CREATE_SHEET_POST_ICON}
-              onPress={closeSheetAndOpenPost}
+              onPress={() => closeSheetAndOpenPost()}
             />
           </CreateAdSheet>
         </Animated.View>

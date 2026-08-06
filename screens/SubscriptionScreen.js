@@ -31,6 +31,7 @@ const SUBSCRIPTION_PROFILE_IMAGE = {
   [subscriptionTypes.broker]: require('../assets/subscription-broker-profile.png'),
   [subscriptionTypes.professional]: require('../assets/subscription-professional-profile.png'),
   [subscriptionTypes.company]: require('../assets/subscription-company-profile.png'),
+  [subscriptionTypes.projectMarketer]: require('../assets/subscription-company-profile.png'),
 };
 
 const COMPANY_FEATURES = [
@@ -99,6 +100,13 @@ function subscriptionCopy(type, isAgreed, user) {
         subMid: ' ולקבל ',
         featuresTitle: 'מה כלול במנוי לחברות?',
       };
+    case subscriptionTypes.projectMarketer:
+      return {
+        headline: 'אתם משווקי פרויקטים?',
+        subLead: 'בואו לעשות מנוי',
+        subMid: ' ולקבל ',
+        featuresTitle: 'מה כלול במנוי למשווקי פרויקטים?',
+      };
     case subscriptionTypes.professional: {
       return {
         headline: 'בעלי מקצוע?',
@@ -122,6 +130,7 @@ function subscriptionCopy(type, isAgreed, user) {
 function featuresForType(type) {
   switch (type) {
     case subscriptionTypes.company:
+    case subscriptionTypes.projectMarketer:
       return COMPANY_FEATURES;
     case subscriptionTypes.professional:
       return PROFESSIONAL_FEATURES;

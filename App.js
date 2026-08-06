@@ -77,6 +77,11 @@ import {
   FeedbackSuggestionScreen,
   TermsOfUseScreen,
   AccessibilityStatementScreen,
+  ProjectMarketerPlanScreen,
+  JoinAgencyScreen,
+  AgencyJoinCodeScreen,
+  AgencyMembersScreen,
+  AgencyMemberListingsScreen,
 } from './screens';
 import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
 import PublishSuccessToast from './components/PublishSuccessToast';
@@ -91,6 +96,7 @@ import {
   OPEN_HOUSE_POST_KIND,
   isOpenHouseListing,
   isOpenHousePostDescription,
+  tikTokPostsSidebarFilterForCategory,
 } from './utils/constant';
 import {
   getChatUnreadCount,
@@ -124,15 +130,23 @@ import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const AppBootLoading = () => (
-  <View style={styles.bootRoot}>
-    <Image
-      source={require('./assets/SplashScreen.png')}
-      style={StyleSheet.absoluteFillObject}
-      resizeMode="cover"
-    />
-  </View>
-);
+const AppBootLoading = () => {
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      // Hand off from native splash straight to the JS boot screen.
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, []);
+  return (
+    <View style={styles.bootRoot}>
+      <Image
+        source={require('./assets/SplashScreen.png')}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode="cover"
+      />
+    </View>
+  );
+};
 
 const screenName = {
   home: 'home',
@@ -159,6 +173,18 @@ const screenName = {
   success: 'success',
   successCompany: 'successCompany',
   successProfessional: 'successProfessional',
+  /** משווק פרויקטים — plan picker, then the company-style subscription flow. */
+  projectMarketerPlan: 'projectMarketerPlan',
+  subscriptionProjectMarketer: 'subscriptionProjectMarketer',
+  subscriptionFormProjectMarketer: 'subscriptionFormProjectMarketer',
+  verificationProjectMarketer: 'verificationProjectMarketer',
+  verificationCodeProjectMarketer: 'verificationCodeProjectMarketer',
+  ratingIntroProjectMarketer: 'ratingIntroProjectMarketer',
+  successProjectMarketer: 'successProjectMarketer',
+  joinAgency: 'joinAgency',
+  agencyJoinCode: 'agencyJoinCode',
+  agencyMembers: 'agencyMembers',
+  agencyMemberListings: 'agencyMemberListings',
   userRegistration: 'userRegistration',
   postEditor: 'postEditor',
   cityFilter: 'cityFilter',
@@ -284,7 +310,8 @@ function App() {
 
   useLayoutEffect(() => {
     if (!fontsLoaded || !appBootstrapDone) return;
-    if (!showSplashIntro) {
+    // Android hides native splash in AppBootLoading; iOS waits for intro gate.
+    if (Platform.OS === 'android' || !showSplashIntro) {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [
@@ -408,6 +435,10 @@ function App() {
   }, [currentScreen, goBack]);
 
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
+  /** משווק פרויקטים plan chosen on the picker; forwarded to the registration form. */
+  const [marketerPlan, setMarketerPlan] = useState(null);
+  /** Team member a marketing manager is currently inspecting (ניהול משווקים). */
+  const [agencyMember, setAgencyMember] = useState(null);
   const [currentUser, setCurrentUserState] = useState(null); // Store current logged-in user data
   const setCurrentUser = useCallback(u => {
     if (u == null) {
@@ -571,6 +602,37 @@ function App() {
       return next;
     });
   }, []);
+
+  /** Open a feed post by id — sets category, פוסטים sidebar, and scroll focus. */
+  const openListingInTikTokFeed = useCallback(
+    (listing, {returnScreen = screenName.home} = {}) => {
+      if (!listing?.id) return;
+      const listingId = String(listing.id).trim();
+      const rawCat =
+        listing.category != null ? parseInt(String(listing.category), 10) : NaN;
+      const isFeedPost =
+        listing.feedPost === true ||
+        listing.feed_post === true ||
+        listing.feed_post === 'true' ||
+        listing.feed_post === 't';
+      if (Number.isFinite(rawCat) && rawCat > 0) {
+        setSelectedCategory(String(rawCat));
+        if (isFeedPost) {
+          handleSidebarFilterChange(
+            String(rawCat),
+            tikTokPostsSidebarFilterForCategory(rawCat),
+          );
+        }
+      }
+      setTikTokProfilePostsScope(null);
+      setTikTokFocusListingId(listingId);
+      setTikTokUserSearchOpenTrigger(0);
+      setTikTokReturnScreen(returnScreen);
+      setTikTokFeedRefreshKey(k => k + 1);
+      setCurrentScreen(screenName.tikTokFeed);
+    },
+    [handleSidebarFilterChange],
+  );
 
   const CHAT_LAST_OPENED_KEY = 'pi_chat_last_opened';
   // Per-user key (id or email) so every new user sees "1 unread" until they open Pi welcome once
@@ -1196,28 +1258,36 @@ function App() {
                     setBnbPublishHostType(opts?.bnbHostType ?? null);
                     setCurrentScreen(screenName.editPublishAd);
                   }}
-                  onOpenPostEditor={category => {
+                  onOpenPostEditor={arg => {
                     if (!currentUser) {
                       setReturnToScreenAfterAuth('tikTokFeed');
                       setCurrentScreen(screenName.userRegistration);
                       return;
                     }
+                    const categoryRaw =
+                      typeof arg === 'object' && arg != null
+                        ? arg.category
+                        : arg;
+                    const openHouse =
+                      typeof arg === 'object' && arg != null && arg.openHouse === true;
                     const raw =
-                      category != null && String(category).trim() !== ''
-                        ? parseInt(String(category).trim(), 10)
+                      categoryRaw != null && String(categoryRaw).trim() !== ''
+                        ? parseInt(String(categoryRaw).trim(), 10)
                         : NaN;
                     const listingCat =
                       Number.isFinite(raw) && raw > 0 ? raw : null;
                     if (listingCat != null) {
                       setSelectedCategory(String(listingCat));
                     }
-                  setPostEditorConfig({
-                    publishTarget: 'post',
-                    returnScreen: screenName.tikTokFeed,
-                    listingCategoryId: listingCat,
-                    editingListing: null,
-                    postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
-                  });
+                    setPostEditorConfig({
+                      publishTarget: 'post',
+                      returnScreen: screenName.tikTokFeed,
+                      listingCategoryId: listingCat,
+                      editingListing: null,
+                      postDescriptionLabel: openHouse
+                        ? OPEN_HOUSE_POST_DESCRIPTION
+                        : DEFAULT_POST_DESCRIPTION,
+                    });
                     setCurrentScreen(screenName.postEditor);
                   }}
                   onOpenCityFilter={() => {
@@ -1355,17 +1425,9 @@ function App() {
                   profilePostsScope={tikTokProfilePostsScope}
                   onOpenPostInFeed={listing => {
                     if (!listing?.id) return;
-                    const rawCat =
-                      listing.category != null
-                        ? parseInt(String(listing.category), 10)
-                        : NaN;
-                    if (Number.isFinite(rawCat) && rawCat > 0) {
-                      setSelectedCategory(String(rawCat));
-                    }
-                    setTikTokFocusListingId(String(listing.id).trim());
-                    setTikTokUserSearchOpenTrigger(0);
-                    setTikTokFeedRefreshKey(k => k + 1);
-                    setCurrentScreen(screenName.tikTokFeed);
+                    openListingInTikTokFeed(listing, {
+                      returnScreen: screenName.tikTokFeed,
+                    });
                   }}
                 />
               </View>
@@ -1758,9 +1820,6 @@ function App() {
                 }}
                 onOpenCompanyReport={openCompanyReportFromProfile}
                 onOpenAllReviews={openProfileReviewsFromProfile}
-                unreadChatCount={
-                  currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0
-                }
                 onOpenPostInFeed={listing => {
                   if (!listing?.id) return;
                   const subId = String(
@@ -2271,9 +2330,19 @@ function App() {
                     setCurrentScreen(screenName.subscriptionCompany);
                   } else if (type === subscriptionTypes.professional) {
                     setCurrentScreen(screenName.subscriptionProfessional);
+                  } else if (type === subscriptionTypes.projectMarketer) {
+                    setMarketerPlan(null);
+                    setCurrentScreen(screenName.projectMarketerPlan);
                   } else {
                     setCurrentScreen(screenName.subscription);
                   }
+                }}
+                onOpenAgencyJoinCode={() =>
+                  setCurrentScreen(screenName.agencyJoinCode)
+                }
+                onOpenAgencyMembers={() => {
+                  setAgencyMember(null);
+                  setCurrentScreen(screenName.agencyMembers);
                 }}
                 onLogout={() => setCurrentUser(null)}
                 onEditProfile={() => {
@@ -2649,11 +2718,20 @@ function App() {
                 conversation={selectedConversation}
                 currentUser={currentUser}
                 onMessageSent={() => setChatListRefreshKey(k => k + 1)}
-                onOpenPost={() => {
+                onOpenPost={listing => {
                   setSharedListingForChat(null);
-                  setSelectedConversation(null);
+                  openListingInTikTokFeed(
+                    {
+                      ...listing,
+                      feedPost:
+                        listing?.feedPost ??
+                        listing?.feed_post ??
+                        true,
+                    },
+                    {returnScreen: chatReturnScreen},
+                  );
                   setChatListRefreshKey(k => k + 1);
-                  setCurrentScreen(screenName.tikTokFeed);
+                  requestAnimationFrame(() => setSelectedConversation(null));
                 }}
                 onPiWelcomeOpened={async () => {
                   setPiWelcomeRead(true);
@@ -2667,6 +2745,21 @@ function App() {
                   }
                 }}
                 onOpenPeerProfile={openUserProfileFromChatPeer}
+                onContactListingOwner={owner => {
+                  const ownerEmail = (owner?.email || '')
+                    .trim()
+                    .toLowerCase();
+                  if (!ownerEmail) return;
+                  setSharedListingForChat(null);
+                  setSelectedConversation({
+                    id: ownerEmail,
+                    otherUserEmail: ownerEmail,
+                    name: owner?.name || 'משתמש',
+                    profileImageUrl: owner?.profileImageUrl || null,
+                    preview: '',
+                    time: '',
+                  });
+                }}
               />
             )}
             {currentScreen === screenName.login && (
@@ -2971,6 +3064,184 @@ function App() {
                 subscriptionType={subscriptionTypes.professional}
                 subscription={subscriptionData?.subscription}
                 localProfileImage={subscriptionData?.localProfileImage}
+              />
+            )}
+            {currentScreen === screenName.projectMarketerPlan && (
+              <ProjectMarketerPlanScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+                onSelectPlan={plan => {
+                  setMarketerPlan(plan);
+                  setCurrentScreen(screenName.subscriptionProjectMarketer);
+                }}
+                onJoinAgency={() => setCurrentScreen(screenName.joinAgency)}
+              />
+            )}
+            {currentScreen === screenName.subscriptionProjectMarketer && (
+              <SubscriptionScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.projectMarketerPlan)
+                }
+                onStart={() =>
+                  setCurrentScreen(screenName.subscriptionFormProjectMarketer)
+                }
+                subscriptionType={subscriptionTypes.projectMarketer}
+                currentUser={currentUser}
+              />
+            )}
+            {currentScreen === screenName.subscriptionFormProjectMarketer && (
+              <SubscriptionFormScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.subscriptionProjectMarketer)
+                }
+                onNext={draft => {
+                  setSubscriptionData(draft);
+                  setCurrentScreen(screenName.verificationProjectMarketer);
+                }}
+                subscriptionType={subscriptionTypes.projectMarketer}
+                marketerPlan={marketerPlan}
+              />
+            )}
+            {currentScreen === screenName.verificationProjectMarketer && (
+              <VerificationScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.subscriptionFormProjectMarketer)
+                }
+                onVerified={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                }}
+                onSkipVerifiedTest={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                }}
+                subscriptionType={subscriptionTypes.projectMarketer}
+                email={subscriptionData?.email}
+                subscriptionId={subscriptionData?.subscriptionId}
+                pendingSubmit={subscriptionData?.pendingSubmit}
+                localProfileImage={subscriptionData?.localProfileImage}
+              />
+            )}
+            {currentScreen === screenName.verificationCodeProjectMarketer && (
+              <VerificationCodeScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.verificationProjectMarketer)
+                }
+                onNext={subscription => {
+                  setSubscriptionData(prev => ({...prev, subscription}));
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                }}
+                subscriptionType={subscriptionTypes.projectMarketer}
+                email={subscriptionData?.email}
+                subscriptionId={subscriptionData?.subscriptionId}
+              />
+            )}
+            {currentScreen === screenName.ratingIntroProjectMarketer && (
+              <SubscriptionRatingIntroScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.verificationCodeProjectMarketer)
+                }
+                onContinue={() =>
+                  setCurrentScreen(screenName.successProjectMarketer)
+                }
+                subscriptionType={subscriptionTypes.projectMarketer}
+              />
+            )}
+            {currentScreen === screenName.successProjectMarketer && (
+              <SuccessScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.verificationCodeProjectMarketer)
+                }
+                onGoHome={() => {
+                  if (subscriptionData?.subscription) {
+                    setCurrentUser(subscriptionData.subscription);
+                  }
+                  setSubscriptionData(null);
+                  setMarketerPlan(null);
+                  setCurrentScreen(screenName.home);
+                }}
+                onStartPublishing={() => {
+                  if (subscriptionData?.subscription) {
+                    setCurrentUser(subscriptionData.subscription);
+                  }
+                  setSubscriptionData(null);
+                  setMarketerPlan(null);
+                  setCurrentScreen(screenName.home);
+                }}
+                subscriptionType={subscriptionTypes.projectMarketer}
+                subscription={subscriptionData?.subscription}
+                localProfileImage={subscriptionData?.localProfileImage}
+              />
+            )}
+            {currentScreen === screenName.joinAgency && (
+              <JoinAgencyScreen
+                onClose={() =>
+                  setCurrentScreen(screenName.projectMarketerPlan)
+                }
+                onJoined={subscription => {
+                  if (subscription) setCurrentUser(subscription);
+                  setCurrentScreen(screenName.home);
+                }}
+              />
+            )}
+            {currentScreen === screenName.agencyJoinCode && (
+              <AgencyJoinCodeScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+                currentUser={currentUser}
+              />
+            )}
+            {currentScreen === screenName.agencyMembers && (
+              <AgencyMembersScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+                currentUser={currentUser}
+                onOpenMember={member => {
+                  setAgencyMember(member);
+                  setCurrentScreen(screenName.agencyMemberListings);
+                }}
+              />
+            )}
+            {currentScreen === screenName.agencyMemberListings && (
+              <AgencyMemberListingsScreen
+                onClose={() => setCurrentScreen(screenName.agencyMembers)}
+                member={agencyMember}
+                onViewListing={listing =>
+                  openListingAdProfile(listing, {
+                    returnScreen: screenName.agencyMemberListings,
+                    profileExtras: {_forceListingAdProfile: true},
+                  })
+                }
+                onEditListing={listing => {
+                  setBnbPublishHostType(null);
+                  const listingCat =
+                    listing?.category != null
+                      ? parseInt(String(listing.category), 10)
+                      : NaN;
+                  if (Number.isFinite(listingCat)) {
+                    setSelectedCategory(String(listingCat));
+                  }
+                  setEditingListing(listing ?? null);
+                  setAdsFormReturnScreen(screenName.agencyMemberListings);
+                  setCurrentScreen(screenName.adsForm);
+                }}
+                onEditPost={listing => {
+                  const n =
+                    listing?.category != null
+                      ? parseInt(String(listing.category).trim(), 10)
+                      : NaN;
+                  const listingCat = Number.isFinite(n) && n > 0 ? n : null;
+                  if (listingCat != null) {
+                    setSelectedCategory(String(listingCat));
+                  }
+                  setPostEditorConfig({
+                    publishTarget: 'post',
+                    returnScreen: screenName.agencyMemberListings,
+                    listingCategoryId: listingCat,
+                    editingListing: listing ?? null,
+                    postDescriptionLabel: isOpenHouseListing(listing)
+                      ? OPEN_HOUSE_POST_DESCRIPTION
+                      : DEFAULT_POST_DESCRIPTION,
+                  });
+                  setCurrentScreen(screenName.postEditor);
+                }}
               />
             )}
             {showOnboarding ? (

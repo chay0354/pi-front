@@ -30,6 +30,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   getConversationWithWelcomeMessage,
   normalizeConversationForOpen,
+  isProfessionalUpdatesConversation,
 } from '../utils/chatDefaults';
 import {
   getChatConversations,
@@ -621,6 +622,7 @@ const ChatListScreen = ({
   const [newChatSearch, setNewChatSearch] = useState('');
   const [blockExclusiveOffers, setBlockExclusiveOffers] = useState(false);
   const [blockCollabOffers, setBlockCollabOffers] = useState(false);
+  const [blockRelevantPostUpdates, setBlockRelevantPostUpdates] = useState(false);
   const [brokerResults, setBrokerResults] = useState([]);
   const [brokerSearchLoading, setBrokerSearchLoading] = useState(false);
   const [brokerSearchError, setBrokerSearchError] = useState(null);
@@ -652,13 +654,22 @@ const ChatListScreen = ({
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
   const isBrokerUser = currentUserType === subscriptionTypes.broker;
   const isCompanyUser = currentUserType === subscriptionTypes.company;
+  const isProfessionalUser = currentUserType === subscriptionTypes.professional;
   const isRegularUser = isRegularSubscriptionType(currentUserType);
   const canShowListingAdNumber = isBrokerUser || isCompanyUser;
-  /** Brokers: any group. Companies: customer groups only. Regular users: regular group only. */
-  const canOpenGroups = isBrokerUser || isRegularUser || isCompanyUser;
+  /** Brokers: any group. Companies: customer groups only. Regular/professional: open group with all user kinds. */
+  const canOpenGroups =
+    isBrokerUser || isRegularUser || isCompanyUser || isProfessionalUser;
   const isRegularGroupCreator = isRegularUser && !isBrokerUser;
-  const hideMemberPickerSubtitle =
-    isRegularGroupCreator && groupFlow === 'customers';
+  /** Regular + professional users share the simplified "קבוצה" flow (all user types in picker). */
+  const usesSimpleGroupFlow = isRegularGroupCreator || isProfessionalUser;
+  const groupPickerAudience =
+    groupFlow === 'brokers'
+      ? 'broker_only'
+      : usesSimpleGroupFlow
+        ? 'all'
+        : 'regular';
+  const hideMemberPickerSubtitle = groupPickerAudience === 'regular';
 
   const persistOfferBlockPreference = useCallback(
     async (field, nextValue) => {
@@ -676,6 +687,8 @@ const ChatListScreen = ({
           setBlockExclusiveOffers(!nextValue);
         } else if (field === 'block_collab_offers') {
           setBlockCollabOffers(!nextValue);
+        } else if (field === 'block_relevant_post_updates') {
+          setBlockRelevantPostUpdates(!nextValue);
         }
         Alert.alert('', e?.message || 'עדכון ההגדרה נכשל');
       }
@@ -695,14 +708,24 @@ const ChatListScreen = ({
     persistOfferBlockPreference('block_collab_offers', next);
   }, [blockCollabOffers, persistOfferBlockPreference]);
 
+  const toggleBlockRelevantPostUpdates = useCallback(() => {
+    const next = !blockRelevantPostUpdates;
+    setBlockRelevantPostUpdates(next);
+    persistOfferBlockPreference('block_relevant_post_updates', next);
+  }, [blockRelevantPostUpdates, persistOfferBlockPreference]);
+
   useEffect(() => {
     if (!showNewChat) return;
     setBlockExclusiveOffers(currentUser?.block_exclusive_offers === true);
     setBlockCollabOffers(currentUser?.block_collab_offers === true);
+    setBlockRelevantPostUpdates(
+      currentUser?.block_relevant_post_updates === true,
+    );
   }, [
     showNewChat,
     currentUser?.block_exclusive_offers,
     currentUser?.block_collab_offers,
+    currentUser?.block_relevant_post_updates,
   ]);
 
   useEffect(() => {
@@ -736,7 +759,7 @@ const ChatListScreen = ({
     const q = groupSearch.trim();
     const seq = ++groupPickSeq.current;
     setGroupLoading(true);
-    const audience = groupFlow === 'brokers' ? 'broker_only' : 'regular';
+    const audience = groupPickerAudience;
     const run = getUsersForGroupPicker(q, myEmail, audience);
     run
       .then(res => {
@@ -760,7 +783,7 @@ const ChatListScreen = ({
       .finally(() => {
         if (groupPickSeq.current === seq) setGroupLoading(false);
       });
-  }, [groupSearch, groupFlow, showNewChat, currentUser?.email]);
+  }, [groupSearch, groupFlow, showNewChat, currentUser?.email, groupPickerAudience]);
 
   const toggleGroupMember = useCallback((email, row) => {
     const key = email != null ? String(email).trim().toLowerCase() : '';
@@ -994,7 +1017,7 @@ const ChatListScreen = ({
     const defaultTitle =
       groupFlow === 'brokers'
         ? 'קבוצת מתווכים'
-        : isRegularGroupCreator
+        : usesSimpleGroupFlow
           ? 'קבוצה'
           : 'קבוצת לקוחות';
     const title = rawTitle || defaultTitle;
@@ -1004,7 +1027,7 @@ const ChatListScreen = ({
         creatorEmail: myEmail,
         creatorSubscriptionId: currentUser?.id || null,
         memberEmails: selectedGroupEmails,
-        kind: groupFlow,
+        kind: usesSimpleGroupFlow ? 'open' : groupFlow,
         title,
         groupImageUrl: groupImageUrl || null,
       });
@@ -1039,7 +1062,7 @@ const ChatListScreen = ({
     groupWizardStep,
     groupNameDraft,
     groupImageUrl,
-    isRegularGroupCreator,
+    usesSimpleGroupFlow,
     currentUser?.id,
     onOpenChat,
     resetGroupFlowState,
@@ -1422,7 +1445,7 @@ const ChatListScreen = ({
               onPress={() => setShowNewChat(true)}
               accessibilityRole="button"
               accessibilityLabel={
-                isRegularGroupCreator ? 'קבוצה חדשה' : "צ'אט חדש"
+                usesSimpleGroupFlow ? 'קבוצה חדשה' : "צ'אט חדש"
               }>
               <View style={styles.plusCircle}>
                 <MaterialCommunityIcons name="plus" size={22} color="#fff" />
@@ -1511,7 +1534,7 @@ const ChatListScreen = ({
                           conv.subscription_type ||
                           null
                         }
-                        forceGoldRing={conv.id === '1'}
+                        forceGoldRing={conv.id === '1' || isProfessionalUpdatesConversation(conv)}
                       />
                       <Text style={styles.senderName} numberOfLines={1}>
                         {conv.name != null ? String(conv.name) : 'משתמש'}
@@ -1587,7 +1610,7 @@ const ChatListScreen = ({
                     ]}>
                     {groupFlow === 'brokers'
                       ? 'צור קבוצת מתווכים'
-                      : isRegularGroupCreator
+                      : usesSimpleGroupFlow
                         ? 'קבוצה'
                         : 'צור קבוצת לקוחות'}
                   </Text>
@@ -1617,7 +1640,7 @@ const ChatListScreen = ({
                     />
                   </TouchableOpacity>
                   <Text style={styles.ncTitle}>
-                    {isRegularGroupCreator ? 'קבוצה' : "צ'אט חדש"}
+                    {usesSimpleGroupFlow ? 'קבוצה' : "צ'אט חדש"}
                   </Text>
                   <View style={styles.ncHeaderSpacer} />
                 </>
@@ -2102,7 +2125,7 @@ const ChatListScreen = ({
                       <View style={styles.ncRowTextWrap}>
                         <Text style={styles.ncRowTitle}>קבוצה</Text>
                         <Text style={styles.ncRowSubtitle}>
-                          פתחו קבוצה עם משתמשים רגילים אחרים
+                          פתחו קבוצה עם כל סוגי המשתמשים
                         </Text>
                       </View>
                       <View style={styles.ncIconBubble}>
@@ -2129,6 +2152,67 @@ const ChatListScreen = ({
                       ) : null}
                     </View>
                     <Text style={styles.ncToggleLabel}>חסום הצעות לבלעדיות</Text>
+                  </Pressable>
+                </>
+              ) : isProfessionalUser ? (
+                <>
+                  <Text
+                    style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
+                    קבוצה
+                  </Text>
+                  <View style={styles.ncCard}>
+                    <Pressable
+                      style={({pressed}) => [
+                        styles.ncRow,
+                        pressed && styles.ncRowPressed,
+                      ]}
+                      onPress={() => {
+                        dispatchGroupPick({type: 'reset'});
+                        setGroupWizardStep(1);
+                        setGroupNameDraft('');
+                        setGroupImageUrl(null);
+                        setGroupSearch('');
+                        setGroupFlow('customers');
+                      }}
+                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
+                      <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={22}
+                        color="#FFFFFF"
+                        style={styles.ncChevron}
+                      />
+                      <View style={styles.ncRowTextWrap}>
+                        <Text style={styles.ncRowTitle}>קבוצה</Text>
+                        <Text style={styles.ncRowSubtitle}>
+                          פתחו קבוצה עם כל סוגי המשתמשים
+                        </Text>
+                      </View>
+                      <View style={styles.ncIconBubble}>
+                        <Image
+                          source={require('../assets/pi-chat/private-group.png')}
+                          style={styles.ncIconImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    </Pressable>
+                  </View>
+
+                  <Pressable
+                    style={styles.ncToggleRow}
+                    onPress={toggleBlockRelevantPostUpdates}
+                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                    <View style={styles.ncToggleOuter}>
+                      {blockRelevantPostUpdates ? (
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={15}
+                          color={NC_TOGGLE_AMBER}
+                        />
+                      ) : null}
+                    </View>
+                    <Text style={styles.ncToggleLabel}>
+                      חסום עדכון פוסטים רלוונטים
+                    </Text>
                   </Pressable>
                 </>
               ) : (

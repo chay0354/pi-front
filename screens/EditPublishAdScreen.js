@@ -30,6 +30,7 @@ import {
   getFeedPostCardCaption,
   getCreateSheetListingIcon,
   getPublishCategoriesStrip,
+  isCompanySubscriptionType,
   isOpenHouseListing,
   OPEN_HOUSE_POST_DESCRIPTION,
   resolveListingCategoryFromEditProfileUi,
@@ -302,24 +303,6 @@ const buildOldestFirstOrdinalMap = listings => {
   return map;
 };
 
-const isCompanyUser = user => {
-  const t = String(
-    user?.subscription_type || user?.subscriptionType || '',
-  )
-    .trim()
-    .toLowerCase();
-  return t === subscriptionTypes.company;
-};
-
-const isBrokerUser = user => {
-  const t = String(
-    user?.subscription_type || user?.subscriptionType || '',
-  )
-    .trim()
-    .toLowerCase();
-  return t === subscriptionTypes.broker;
-};
-
 const canOpenListingAnalysis = user =>
   canAccessListingAnalysis(user?.subscription_type);
 
@@ -332,7 +315,7 @@ const getListingTypeBadgeLabel = (listing, currentUser) => {
     listing?.category != null ? parseInt(String(listing.category), 10) : NaN;
   if (cat === 7) return 'קרקע';
   if (cat === 5) return 'BNB';
-  if (isCompanyUser(currentUser)) return 'פרויקט';
+  if (isCompanySubscriptionType(currentUser?.subscription_type)) return 'פרויקט';
   return 'נכס';
 };
 
@@ -714,11 +697,8 @@ const EditPublishAdScreen = ({
       ),
     [currentUser?.subscription_type, selectedListingCategoryId],
   );
-  // בית פתוח: company + broker only
-  const showOpenHouseCreateInSheet =
-    isCompanyUser(currentUser) ||
-    isBrokerUser(currentUser) ||
-    canCreateOpenHousePost(currentUser);
+  // בית פתוח: broker, company, project marketer (same as `canCreateOpenHousePost`).
+  const showOpenHouseCreateInSheet = canCreateOpenHousePost(currentUser);
   const filteredListings = useMemo(() => {
     if (publishCategoriesStrip.length === 0) {
       return mergedListings;
@@ -1401,7 +1381,7 @@ const EditPublishAdScreen = ({
               {showListingCreateInSheet &&
                 (isBnbCategory ? (
                   <>
-                    {!isCompanyUser(currentUser) ? (
+                    {!isCompanySubscriptionType(currentUser?.subscription_type) ? (
                       <>
                         <CreateAdSheetRow
                           title="פרסם כפרטי"
@@ -1434,7 +1414,7 @@ const EditPublishAdScreen = ({
                             ? 'קרקע'
                             : isBnbCategory
                               ? 'BNB'
-                              : isCompanyUser(currentUser)
+                              : isCompanySubscriptionType(currentUser?.subscription_type)
                                 ? 'פרויקט'
                                 : 'נכס'
                     }
@@ -1445,7 +1425,7 @@ const EditPublishAdScreen = ({
                           ? 'פרסם משרד למכירה או השכרה'
                           : isLandListingCategory
                             ? 'פרסם קרקע'
-                            : isCompanyUser(currentUser)
+                            : isCompanySubscriptionType(currentUser?.subscription_type)
                               ? 'פרסמו פרויקט'
                               : 'פרסמו נכס למכירה או להשכרה'
                     }

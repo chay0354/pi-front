@@ -15,7 +15,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
-import {subscriptionTypes} from '../utils/constant';
+import {isMarketingManager, subscriptionTypes} from '../utils/constant';
 import {
   getUserCompanyLogoUrl,
   getUserProfileImageUrl,
@@ -45,6 +45,7 @@ const MENU_ICONS = {
   company: require('../assets/subscription-company-icon.png'),
   broker: require('../assets/subscription-broker-icon.png'),
   professional: require('../assets/subscription-professional-icon.png'),
+  projectMarketer: require('../assets/subscription-company-icon.png'),
   secret: require('../assets/lock-icon.png'),
   feedback: require('../assets/suggestions-icon.png'),
   terms: require('../assets/more-icons/icons-1.png'),
@@ -78,6 +79,8 @@ const SettingsScreen = ({
   supportEmail = LEGAL_DEFAULTS.supportEmail,
   transactionCancellationUrl = LEGAL_DEFAULTS.transactionCancellationUrl,
   onOpenFollowHub,
+  onOpenAgencyJoinCode,
+  onOpenAgencyMembers,
 }) => {
   const insets = useSafeAreaInsets();
   const {currentUser, setCurrentUser} = useContext(ContextHook);
@@ -87,6 +90,10 @@ const SettingsScreen = ({
     currentUser?.subscription_type === subscriptionTypes.professional;
   const isLoggedCompany =
     currentUser?.subscription_type === subscriptionTypes.company;
+  const isLoggedProjectMarketer =
+    currentUser?.subscription_type === subscriptionTypes.projectMarketer;
+  /** Team plans (5 / 10 seats) may issue join codes and manage their marketers. */
+  const isMarketingManagerUser = isMarketingManager(currentUser);
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
   const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
   const viewerId = toSubscriptionId(
@@ -411,6 +418,28 @@ const SettingsScreen = ({
               </View>
             </TouchableOpacity>
           ) : null}
+          {isMarketingManagerUser ? (
+            <>
+              <TouchableOpacity
+                style={[styles.cardItem, styles.cardItemDivider]}
+                onPress={() => onOpenAgencyJoinCode && onOpenAgencyJoinCode()}>
+                {renderChevron()}
+                <View style={styles.cardItemTextWrap}>
+                  <Text style={styles.cardItemText}>צור קוד הצטרפות</Text>
+                  {renderMenuIcon('secret')}
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cardItem, styles.cardItemDivider]}
+                onPress={() => onOpenAgencyMembers && onOpenAgencyMembers()}>
+                {renderChevron()}
+                <View style={styles.cardItemTextWrap}>
+                  <Text style={styles.cardItemText}>ניהול משווקים</Text>
+                  {renderMenuIcon('projectMarketer')}
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : null}
           <TouchableOpacity
             style={styles.cardItem}
             onPress={() => onOpenFavorites && onOpenFavorites()}>
@@ -449,7 +478,7 @@ const SettingsScreen = ({
               </View>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.cardItem}
+              style={[styles.cardItem, styles.cardItemDivider]}
               onPress={() =>
                 handleSubscriptionPress(subscriptionTypes.professional)
               }>
@@ -457,6 +486,17 @@ const SettingsScreen = ({
               <View style={styles.cardItemTextWrap}>
                 <Text style={styles.cardItemText}>מנוי לבעלי מקצוע</Text>
                 {renderMenuIcon('professional')}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cardItem}
+              onPress={() =>
+                handleSubscriptionPress(subscriptionTypes.projectMarketer)
+              }>
+              {renderChevron()}
+              <View style={styles.cardItemTextWrap}>
+                <Text style={styles.cardItemText}>משווק פרויקטים</Text>
+                {renderMenuIcon('projectMarketer')}
               </View>
             </TouchableOpacity>
           </View>
@@ -469,7 +509,10 @@ const SettingsScreen = ({
           <Text style={styles.cardTitle}>כללי</Text>
           {currentUser &&
           currentUser.email &&
-          (isLoggedBroker || isLoggedProfessional || isLoggedCompany) ? (
+          (isLoggedBroker ||
+            isLoggedProfessional ||
+            isLoggedCompany ||
+            isLoggedProjectMarketer) ? (
             <TouchableOpacity
               style={[styles.cardItem, styles.cardItemDivider]}
               onPress={() =>

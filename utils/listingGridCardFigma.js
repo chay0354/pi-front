@@ -34,7 +34,8 @@ export const formatApartmentAreaForDisplay = v => {
 };
 
 /**
- * True only for **company** accounts (project ads: בניין / קומות / דירות).
+ * True for project ads (בניין / קומות / דירות): company and project-marketer
+ * accounts, which publish through the same company upload form.
  */
 export const isCompanyListing = listing => {
   if (!listing) return false;
@@ -45,9 +46,9 @@ export const isCompanyListing = listing => {
     listing.creator?.subscription_type,
   ];
   for (const v of candidates) {
-    if (typeof v === 'string' && v.toLowerCase().trim() === 'company') {
-      return true;
-    }
+    if (typeof v !== 'string') continue;
+    const t = v.toLowerCase().trim();
+    if (t === 'company' || t === 'project_marketer') return true;
   }
   return false;
 };
@@ -354,7 +355,12 @@ export const isRateableSubscriptionType = type => {
   const t = String(type || '')
     .toLowerCase()
     .trim();
-  return t === 'company' || t === 'broker' || t === 'professional';
+  return (
+    t === 'company' ||
+    t === 'broker' ||
+    t === 'professional' ||
+    t === 'project_marketer'
+  );
 };
 
 /** Any subscription type can be followed (including regular `user`). */
@@ -366,7 +372,8 @@ export const isFollowableSubscriptionType = type => {
     t === 'user' ||
     t === 'company' ||
     t === 'broker' ||
-    t === 'professional'
+    t === 'professional' ||
+    t === 'project_marketer'
   );
 };
 
@@ -388,7 +395,7 @@ export const isCommercialCategoryListing = listing =>
 export const shouldShowCommercialLogoBadge = listing => {
   if (!isCommercialCategoryListing(listing)) return false;
   const t = subscriptionTypeFromListing(listing);
-  return t === 'company' || t === 'broker';
+  return t === 'company' || t === 'broker' || t === 'project_marketer';
 };
 
 export const getCompanyLogoUrlFromListing = listing => {
@@ -402,8 +409,12 @@ export const getCompanyLogoUrlFromListing = listing => {
     listing.logo_url,
     listing.logoUrl,
     listing.business_logo_url,
-    t === 'company' ? listing.creator_profile_image_url : null,
-    t === 'company' ? listing.creatorProfileImageUrl : null,
+    t === 'company' || t === 'project_marketer'
+      ? listing.creator_profile_image_url
+      : null,
+    t === 'company' || t === 'project_marketer'
+      ? listing.creatorProfileImageUrl
+      : null,
   ];
   for (const c of candidates) {
     if (c != null && String(c).trim() !== '') return String(c).trim();

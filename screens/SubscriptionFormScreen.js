@@ -45,10 +45,20 @@ const SubscriptionFormScreen = ({
   onClose,
   onNext,
   subscriptionType = subscriptionTypes.broker,
+  marketerPlan = null,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
-  const isCompanyFlow = subscriptionType === subscriptionTypes.company;
+  /** משווק פרויקטים reuses the company form, with marketer wording. */
+  const isProjectMarketerFlow =
+    subscriptionType === subscriptionTypes.projectMarketer;
+  const isCompanyFlow =
+    subscriptionType === subscriptionTypes.company || isProjectMarketerFlow;
+  const orgNameLabel = isProjectMarketerFlow ? 'שם המשווק' : 'שם החברה';
+  const orgLogoLabel = isProjectMarketerFlow ? 'משווק' : 'חברה';
+  const orgWebsiteLabel = isProjectMarketerFlow
+    ? 'כתובת אתר המשווק'
+    : 'כתובת אתר החברה';
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState([]);
@@ -347,8 +357,8 @@ const SubscriptionFormScreen = ({
       // Validate required fields
       const missingFields = [];
 
-      if (subscriptionType === subscriptionTypes.company) {
-        if (!companyName) missingFields.push('שם החברה');
+      if (isCompanyFlow) {
+        if (!companyName) missingFields.push(orgNameLabel);
         if (!contactPersonName) missingFields.push('שם איש קשר');
         if (!companyEmail) missingFields.push('כתובת מייל');
         if (!officePhone) missingFields.push('מספר טלפון משרד');
@@ -388,10 +398,9 @@ const SubscriptionFormScreen = ({
         return;
       }
 
-      const registrationEmail =
-        subscriptionType === subscriptionTypes.company
-          ? companyEmail.trim()
-          : email.trim();
+      const registrationEmail = isCompanyFlow
+        ? companyEmail.trim()
+        : email.trim();
       const emailCheck = await checkEmailAvailable(registrationEmail);
       if (!emailCheck?.available) {
         setErrorMessage(
@@ -406,7 +415,7 @@ const SubscriptionFormScreen = ({
       // Prepare form data
       const formData = {
         subscriptionType,
-        ...(subscriptionType === subscriptionTypes.company
+        ...(isCompanyFlow
           ? {
               businessName: companyName,
               contactPersonName,
@@ -416,6 +425,9 @@ const SubscriptionFormScreen = ({
               email: companyEmail,
               companyWebsite,
               description: addDescription ? description : null,
+              ...(isProjectMarketerFlow && marketerPlan
+                ? {marketerPlan}
+                : null),
             }
           : subscriptionType === subscriptionTypes.broker
             ? {
@@ -471,8 +483,8 @@ const SubscriptionFormScreen = ({
         }
       };
 
-      if (subscriptionType === subscriptionTypes.company) {
-        // Company flow has no image/video tabs — only לוגו חברה.
+      if (isCompanyFlow) {
+        // Company flow has no image/video tabs — only the org logo.
         attachCompanyLogoAsAvatar();
       } else if (activeTab === 'video') {
         attachCompanyLogoAsAvatar();
@@ -486,10 +498,9 @@ const SubscriptionFormScreen = ({
         }
       }
 
-      const userEmail =
-        subscriptionType === subscriptionTypes.company ? companyEmail : email;
+      const userEmail = isCompanyFlow ? companyEmail : email;
       const localProfileImage =
-        subscriptionType === subscriptionTypes.company || activeTab === 'video'
+        isCompanyFlow || activeTab === 'video'
           ? companyLogo?.uri || null
           : profilePicture?.uri || null;
 
@@ -612,7 +623,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Tab Selector - Only for non-company */}
-        {subscriptionType !== subscriptionTypes.company && (
+        {!isCompanyFlow && (
           <View style={styles.mediaTypeSection}>
             <Text style={styles.mediaTypeSelectorTitle}>
               בחר את סוג התצוגה של הפרופיל שלך
@@ -668,7 +679,7 @@ const SubscriptionFormScreen = ({
         )}
 
         {/* Profile Picture and Additional Images Section - Only for non-company */}
-        {subscriptionType !== subscriptionTypes.company && (
+        {!isCompanyFlow && (
           <>
             <View style={styles.sectionContainer}>
               {activeTab === 'images' ? (
@@ -855,7 +866,8 @@ const SubscriptionFormScreen = ({
                       />
                     ) : (
                       <Text style={styles.companyLogoPlaceholderText}>
-                        לוגו{'\n'}חברה
+                        לוגו{'\n'}
+                        {orgLogoLabel}
                       </Text>
                     )}
                   </View>
@@ -879,16 +891,16 @@ const SubscriptionFormScreen = ({
             subscriptionType === subscriptionTypes.professional &&
               styles.professionalFormSection,
           ]}>
-          {subscriptionType === subscriptionTypes.company && (
+          {isCompanyFlow && (
             <Text style={[styles.sectionTitle, styles.companySectionTitle]}>
               פרטים כלליים
             </Text>
           )}
 
-          {subscriptionType === subscriptionTypes.company ? (
+          {isCompanyFlow ? (
             <>
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('שם החברה', true)}
+                {renderCompanyLabel(orgNameLabel, true)}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
                   placeholder="הזן שם מלא"
@@ -964,7 +976,7 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('כתובת אתר החברה')}
+                {renderCompanyLabel(orgWebsiteLabel)}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
                   placeholder="הזן כתובת אתר (אופציונלי)"
@@ -1281,7 +1293,9 @@ const SubscriptionFormScreen = ({
       onCancel={handleCircleCropCancel}
       onConfirm={handleCircleCropConfirm}
       title={
-        circleCropTarget === 'logo' ? 'חתוך את לוגו החברה' : 'חתוך תמונה'
+        circleCropTarget === 'logo'
+          ? `חתוך את לוגו ה${orgLogoLabel}`
+          : 'חתוך תמונה'
       }
     />
     </>

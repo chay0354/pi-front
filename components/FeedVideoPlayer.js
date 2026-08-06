@@ -65,6 +65,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   const videoRef = useRef(null);
   const webVideoRef = useRef(null);
   const isActiveRef = useRef(isActive);
+  /** Bumps when leaving active — invalidates in-flight playNow chains. */
+  const playGenerationRef = useRef(0);
+  const shouldPlayRef = useRef(false);
   const playLockRef = useRef(false);
   const lastPlayAttemptRef = useRef(0);
   const hasFrameRef = useRef(false);
@@ -86,6 +89,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   const isAudible = muted === undefined ? isActive : !muted;
 
   isActiveRef.current = isActive;
+  shouldPlayRef.current = shouldPlay;
 
   const emitPlaybackComplete = useCallback(() => {
     const now = Date.now();
@@ -183,28 +187,48 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   }, []);
 
   const playNow = useCallback(async () => {
-    if (!isActiveRef.current || userPausedRef.current) return;
+    if (!shouldPlayRef.current || !isActiveRef.current || userPausedRef.current) {
+      return;
+    }
     const now = Date.now();
     if (now - lastPlayAttemptRef.current < 400) return;
     if (playLockRef.current) return;
     lastPlayAttemptRef.current = now;
     playLockRef.current = true;
+    const generation = playGenerationRef.current;
     try {
       if (Platform.OS === 'web') {
         const el = webVideoRef.current;
-        if (!el) return;
+        if (!el || generation !== playGenerationRef.current) return;
         el.muted = muted === undefined ? false : !!muted;
         const play = el.play?.();
         if (play && typeof play.catch === 'function') play.catch(() => {});
         return;
       }
       const player = videoRef.current;
-      if (!player) return;
+      if (!player || generation !== playGenerationRef.current) return;
       try {
         const audible = muted === undefined ? true : !muted;
         await player.setIsMutedAsync(!audible);
+        if (generation !== playGenerationRef.current || !shouldPlayRef.current) {
+          await player.setIsMutedAsync(true);
+          await player.setVolumeAsync(0);
+          await player.pauseAsync?.();
+          return;
+        }
         await player.setVolumeAsync(audible ? 1.0 : 0);
+        if (generation !== playGenerationRef.current || !shouldPlayRef.current) {
+          await player.setIsMutedAsync(true);
+          await player.setVolumeAsync(0);
+          await player.pauseAsync?.();
+          return;
+        }
         await player.playAsync();
+        if (generation !== playGenerationRef.current || !shouldPlayRef.current) {
+          await player.setIsMutedAsync(true);
+          await player.setVolumeAsync(0);
+          await player.pauseAsync?.();
+        }
       } catch (_) {}
     } finally {
       playLockRef.current = false;
@@ -255,6 +279,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   // Mute/pause before paint when leaving the active page (profile covers feed).
   useLayoutEffect(() => {
     if (isActive) return;
+    playGenerationRef.current += 1;
     pauseNow();
   }, [isActive, pauseNow]);
 
@@ -338,7 +363,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
         }
       }
       markFrameReady();
-      if (isActiveRef.current && !userPausedRef.current) playNow();
+      if (shouldPlayRef.current) playNow();
     },
     [fitWidth, noteNaturalSize, markFrameReady, playNow],
   );
@@ -351,7 +376,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
           noteNaturalSize(ns.width, ns.height, ns.orientation);
         }
       }
-      if (isActiveRef.current && !userPausedRef.current) playNow();
+      if (shouldPlayRef.current) playNow();
     },
     [fitWidth, noteNaturalSize, playNow],
   );
@@ -454,15 +479,15 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
                 noteNaturalSize(el.videoWidth, el.videoHeight);
               }
             }
-            if (isActiveRef.current && !userPausedRef.current) playNow();
+            if (shouldPlayRef.current) playNow();
           }}
           onLoadedData={() => {
             markFrameReady();
-            if (isActiveRef.current && !userPausedRef.current) playNow();
+            if (shouldPlayRef.current) playNow();
           }}
           onCanPlay={() => {
             markFrameReady();
-            if (isActiveRef.current && !userPausedRef.current) playNow();
+            if (shouldPlayRef.current) playNow();
           }}
           onError={handleError}
         />
@@ -514,11 +539,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
             emitPlaybackComplete();
           }
           if (status.isPlaying || status.isBuffering) return;
-          if (
-            isActiveRef.current &&
-            !userPausedRef.current &&
-            !status.didJustFinish
-          ) {
+          if (shouldPlayRef.current && !status.didJustFinish) {
             playNow();
           }
         }}

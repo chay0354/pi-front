@@ -52,6 +52,7 @@ import {
   isReservedPostDescription,
   OPEN_HOUSE_POST_DESCRIPTION,
   OPEN_HOUSE_POST_KIND,
+  isB2BSubscriptionType,
 } from '../utils/constant';
 import {
   buildPostTextGeneralDetails,
@@ -68,6 +69,7 @@ import {
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
 } from '../components/ProfileAvatar';
+import PostTargetProfessionalsSheet from '../components/PostTargetProfessionalsSheet';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -1006,6 +1008,9 @@ const PostEditorScreen = ({
   const androidKeyboardLift = androidKeyboardComposer.bottomOffset;
   const androidKeyboardPull = androidKeyboardComposer.marginBottom;
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
+  const [showProfessionalTargetSheet, setShowProfessionalTargetSheet] =
+    useState(false);
+  const notifyProfessionalTypesRef = useRef([]);
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
   const [hashtagInput, setHashtagInput] = useState('');
@@ -1569,6 +1574,9 @@ const PostEditorScreen = ({
       let updatedListing = null;
       if (publishTarget === 'story') {
         if (!skipStoryPublish) {
+          if (!isB2BSubscriptionType(currentUser?.subscription_type)) {
+            throw new Error('Stories are only available for business accounts');
+          }
           await createStory({
             subscription_id: subId,
             media_url: url,
@@ -1628,6 +1636,7 @@ const PostEditorScreen = ({
           price: 0,
           hashtags,
           generalDetails: overlayGeneralDetails,
+          notify_professional_types: notifyProfessionalTypesRef.current,
         });
       } else {
         createdListing = await createListing({
@@ -1643,6 +1652,7 @@ const PostEditorScreen = ({
           price: 0,
           hashtags,
           generalDetails: overlayGeneralDetails,
+          notify_professional_types: notifyProfessionalTypesRef.current,
         });
       }
 
@@ -1675,7 +1685,35 @@ const PostEditorScreen = ({
       setIsCapturing(false);
       setPublishing(false);
       resetUploadProgress();
+      notifyProfessionalTypesRef.current = [];
     }
+  };
+
+  /**
+   * New (not edited) feed posts get one extra step: ask whether the post is
+   * relevant to specific professional types before actually publishing, so
+   * matching professionals can be notified in chat.
+   */
+  const handlePublishPress = () => {
+    if (publishing) return;
+    const isNewFeedPost = publishTarget !== 'story' && !isEditMode;
+    if (isNewFeedPost && canPublish) {
+      setShowProfessionalTargetSheet(true);
+      return;
+    }
+    handlePublish();
+  };
+
+  const handleProfessionalTargetSkip = () => {
+    notifyProfessionalTypesRef.current = [];
+    setShowProfessionalTargetSheet(false);
+    handlePublish();
+  };
+
+  const handleProfessionalTargetConfirm = types => {
+    notifyProfessionalTypesRef.current = Array.isArray(types) ? types : [];
+    setShowProfessionalTargetSheet(false);
+    handlePublish();
   };
 
   const selectedBackgroundGradient = useMemo(() => {
@@ -1698,6 +1736,16 @@ const PostEditorScreen = ({
   // image — after בוצע the image jumps down relative to the text.
   const lockPreviewLayout =
     Boolean(editingTextBlockId) || isKeyboardVisible;
+
+  /** Full keyboard-closed stage height — drag bounds must match save/finish coords. */
+  const effectiveStageHeight = Math.max(
+    stageLayout.height,
+    lockedStageHeight,
+    maxStageHeightRef.current,
+  );
+  const pinStageHeight =
+    (lockPreviewLayout && lockedStageHeight > 0) ||
+    (textBlocks.length > 0 && effectiveStageHeight > 0);
 
   const webToolbarInputMarginBottom = useMemo(() => {
     if (Platform.OS !== 'web' || !editingTextBlockId || isCapturing) {
@@ -1728,25 +1776,13 @@ const PostEditorScreen = ({
     if (Platform.OS === 'ios') {
       return toolbarH + Math.max(keyboardInset, 0) + 12;
     }
-    // Android: onLayout can lag behind expanded format panels; keep a floor so
-    // the field never sits under the color/font strip. Extra gap clears the
-    // suggestion bar that endCoordinates.height often under-reports.
-    const formatMin =
-      selectedFormat === 'color' ? 220 : selectedFormat === 'aa' ? 130 : 72;
-    const androidToolbarH = Math.max(toolbarH, formatMin);
-    return (
-      androidToolbarH +
-      Math.max(androidKeyboardLift, 0) +
-      (androidKeyboardPull || 0)
-    );
+    // Android input is anchored in editorRoot (see androidEditingInputBottom).
+    return 12;
   }, [
     editingTextBlockId,
     isCapturing,
     formatToolbarHeight,
     keyboardInset,
-    androidKeyboardLift,
-    androidKeyboardPull,
-    selectedFormat,
     webToolbarInputMarginBottom,
   ]);
 
@@ -1758,6 +1794,24 @@ const PostEditorScreen = ({
     Platform.OS === 'android' ? androidKeyboardLift : keyboardInset;
   const formatToolbarKeyboardMarginBottom =
     Platform.OS === 'android' ? androidKeyboardPull : 0;
+
+  /** Android: same coordinate space as keyboardControls — sits flush above format bar. */
+  const androidEditingInputBottom = useMemo(() => {
+    if (!editingTextBlockId || isCapturing || Platform.OS !== 'android') {
+      return 12;
+    }
+    const gap = 8;
+    const toolbarH = Math.max(formatToolbarHeight, 72);
+    const lift = Math.max(formatToolbarKeyboardBottom, 0);
+    const pull = formatToolbarKeyboardMarginBottom || 0;
+    return toolbarH + lift - pull + gap;
+  }, [
+    editingTextBlockId,
+    isCapturing,
+    formatToolbarHeight,
+    formatToolbarKeyboardBottom,
+    formatToolbarKeyboardMarginBottom,
+  ]);
 
   useEffect(() => {
     editingTextBlockIdRef.current = editingTextBlockId;
@@ -2329,7 +2383,7 @@ const PostEditorScreen = ({
           </TouchableOpacity>
         </View>
         <TouchableOpacity
-          onPress={handlePublish}
+          onPress={handlePublishPress}
           disabled={publishing}
           accessibilityRole="button"
           accessibilityLabel={
@@ -2539,11 +2593,11 @@ const PostEditorScreen = ({
                 ref={stageRef}
                 style={[
                   styles.stage,
-                  lockPreviewLayout && lockedStageHeight > 0
+                  pinStageHeight && effectiveStageHeight > 0
                     ? {
                         flexGrow: 0,
                         flexShrink: 0,
-                        height: lockedStageHeight,
+                        height: effectiveStageHeight,
                       }
                     : null,
                 ]}
@@ -2562,14 +2616,14 @@ const PostEditorScreen = ({
                 }}>
                 <View style={styles.stageLtr} pointerEvents="box-none">
                   {stageLayout.width > 0 &&
-                    stageLayout.height > 0 &&
+                    effectiveStageHeight > 0 &&
                     mediaImages.map((img, idx) => (
                       <DraggableImage
                         key={img.id}
                         id={img.id}
                         uri={img.uri}
                         stageWidth={stageLayout.width}
-                        stageHeight={stageLayout.height}
+                        stageHeight={effectiveStageHeight}
                         zIndex={img.stackOrder ?? idx + 1}
                         onBringToFront={bringMediaImageToFront}
                       />
@@ -2579,7 +2633,7 @@ const PostEditorScreen = ({
                       key={block.id}
                       block={block}
                       stageWidth={stageLayout.width}
-                      stageHeight={stageLayout.height}
+                      stageHeight={effectiveStageHeight}
                       selectedColor={selectedColor}
                       zIndex={block.stackOrder ?? idx + 1}
                       isBeingEdited={block.id === editingTextBlockId}
@@ -2604,6 +2658,50 @@ const PostEditorScreen = ({
                         );
                         const editingFontSize =
                           editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
+                        const editingTextField = (
+                          <EditingTextBox
+                            key={editingTextBlockId}
+                            ref={editingInputRef}
+                            nativeID="post-editor-text-input"
+                            initialText={editingBlock?.text ?? ''}
+                            onTextChange={syncEditingDraft}
+                            placeholder="הקלד משהו..."
+                            placeholderTextColor="rgba(255,255,255,0.55)"
+                            selectionColor={visual.textColor}
+                            style={[
+                              styles.editingTextInput,
+                              TEXT_STYLES[selectedTextStyleIndex]?.textStyle,
+                              {
+                                color: visual.textColor,
+                                backgroundColor: visual.backgroundColor,
+                                textAlign: physicalTextAlign(textAlignMode),
+                                writingDirection: 'rtl',
+                                fontSize: editingFontSize,
+                                lineHeight: Math.round(
+                                  editingFontSize * 1.15,
+                                ),
+                              },
+                            ]}
+                            multiline
+                            textAlignVertical="center"
+                            autoCorrect
+                            autoCapitalize="sentences"
+                            returnKeyType="done"
+                            blurOnSubmit
+                            submitBehavior="blurAndSubmit"
+                            onSubmitEditing={() => {
+                              syncEditingDraftFromInput();
+                              finishEditing();
+                            }}
+                            onEndEditing={() => {
+                              syncEditingDraftFromInput();
+                              // Do NOT auto-finish on blur: background video
+                              // (Android SurfaceView / audio focus) and format
+                              // toolbar taps can blur the field. Commit via
+                              // בוצע / keyboard Done (onSubmitEditing) only.
+                            }}
+                          />
+                        );
                         return (
                           <>
                             <FontSizeSlider
@@ -2612,66 +2710,23 @@ const PostEditorScreen = ({
                                 syncEditingToBlock({fontSize: nextSize})
                               }
                             />
-                            <View
-                              onLayout={e => {
-                                editingFieldLayoutRef.current =
-                                  e.nativeEvent.layout;
-                              }}
-                              style={[
-                                styles.editingInputRow,
-                                {
-                                  bottom: editingInputBottom,
-                                  // Physically place the input at the stage
-                                  // left/center/right to preview the final
-                                  // block position (row is forced LTR).
-                                  justifyContent:
-                                    alignToFlexSelf(textAlignMode),
-                                },
-                              ]}>
-                              <EditingTextBox
-                                key={editingTextBlockId}
-                                ref={editingInputRef}
-                                nativeID="post-editor-text-input"
-                                initialText={editingBlock?.text ?? ''}
-                                onTextChange={syncEditingDraft}
-                                placeholder="הקלד משהו..."
-                                placeholderTextColor="rgba(255,255,255,0.55)"
-                                selectionColor={visual.textColor}
+                            {Platform.OS !== 'android' ? (
+                              <View
+                                onLayout={e => {
+                                  editingFieldLayoutRef.current =
+                                    e.nativeEvent.layout;
+                                }}
                                 style={[
-                                  styles.editingTextInput,
-                                  TEXT_STYLES[selectedTextStyleIndex]
-                                    ?.textStyle,
+                                  styles.editingInputRow,
                                   {
-                                    color: visual.textColor,
-                                    backgroundColor: visual.backgroundColor,
-                                    textAlign: physicalTextAlign(textAlignMode),
-                                    writingDirection: 'rtl',
-                                    fontSize: editingFontSize,
-                                    lineHeight: Math.round(
-                                      editingFontSize * 1.15,
-                                    ),
+                                    bottom: editingInputBottom,
+                                    justifyContent:
+                                      alignToFlexSelf(textAlignMode),
                                   },
-                                ]}
-                                multiline
-                                textAlignVertical="center"
-                                autoCorrect
-                                autoCapitalize="sentences"
-                                returnKeyType="done"
-                                blurOnSubmit
-                                submitBehavior="blurAndSubmit"
-                                onSubmitEditing={() => {
-                                  syncEditingDraftFromInput();
-                                  finishEditing();
-                                }}
-                                onEndEditing={() => {
-                                  syncEditingDraftFromInput();
-                                  // Do NOT auto-finish on blur: background video
-                                  // (Android SurfaceView / audio focus) and format
-                                  // toolbar taps can blur the field. Commit via
-                                  // בוצע / keyboard Done (onSubmitEditing) only.
-                                }}
-                              />
-                            </View>
+                                ]}>
+                                {editingTextField}
+                              </View>
+                            ) : null}
                           </>
                         );
                       })()}
@@ -2680,6 +2735,67 @@ const PostEditorScreen = ({
                 </View>
               </View>
             </View>
+
+            {editingTextBlockId && !isCapturing && Platform.OS === 'android' && (
+              (() => {
+                const visual = getTextVisualStyle(
+                  editingBlock?.color ?? selectedColor,
+                  editingBlock?.bgMode ?? 0,
+                );
+                const editingFontSize =
+                  editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
+                return (
+                  <View
+                    onLayout={e => {
+                      editingFieldLayoutRef.current = e.nativeEvent.layout;
+                    }}
+                    style={[
+                      styles.editingInputFloating,
+                      {
+                        bottom: androidEditingInputBottom,
+                        justifyContent: alignToFlexSelf(textAlignMode),
+                      },
+                    ]}>
+                    <EditingTextBox
+                      key={editingTextBlockId}
+                      ref={editingInputRef}
+                      nativeID="post-editor-text-input"
+                      initialText={editingBlock?.text ?? ''}
+                      onTextChange={syncEditingDraft}
+                      placeholder="הקלד משהו..."
+                      placeholderTextColor="rgba(255,255,255,0.55)"
+                      selectionColor={visual.textColor}
+                      style={[
+                        styles.editingTextInput,
+                        TEXT_STYLES[selectedTextStyleIndex]?.textStyle,
+                        {
+                          color: visual.textColor,
+                          backgroundColor: visual.backgroundColor,
+                          textAlign: physicalTextAlign(textAlignMode),
+                          writingDirection: 'rtl',
+                          fontSize: editingFontSize,
+                          lineHeight: Math.round(editingFontSize * 1.15),
+                        },
+                      ]}
+                      multiline
+                      textAlignVertical="center"
+                      autoCorrect
+                      autoCapitalize="sentences"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      submitBehavior="blurAndSubmit"
+                      onSubmitEditing={() => {
+                        syncEditingDraftFromInput();
+                        finishEditing();
+                      }}
+                      onEndEditing={() => {
+                        syncEditingDraftFromInput();
+                      }}
+                    />
+                  </View>
+                );
+              })()
+            )}
 
             {showTextFormatToolbar && (
               <View
@@ -2714,8 +2830,8 @@ const PostEditorScreen = ({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={styles.textStylesScroll}
-                    contentContainerStyle={styles.textStylesRow}
+                    style={[styles.textStylesScroll, forceLtrStyle]}
+                    contentContainerStyle={[styles.textStylesRow, forceLtrStyle]}
                     keyboardShouldPersistTaps="always">
                     {TEXT_STYLES.map((styleItem, index) => (
                       <TouchableOpacity
@@ -3124,6 +3240,13 @@ const PostEditorScreen = ({
           </KeyboardAvoidingView>
         </Pressable>
       </Modal>
+
+      <PostTargetProfessionalsSheet
+        visible={showProfessionalTargetSheet}
+        submitting={publishing}
+        onSkip={handleProfessionalTargetSkip}
+        onConfirm={handleProfessionalTargetConfirm}
+      />
     </View>
   );
 };
@@ -3223,6 +3346,7 @@ const styles = StyleSheet.create({
   stageColumn: {
     flex: 1,
     minHeight: 0,
+    overflow: 'visible',
   },
   backgroundGradient: {
     ...StyleSheet.absoluteFillObject,
@@ -3411,6 +3535,19 @@ const styles = StyleSheet.create({
     zIndex: 1000001,
     elevation: Platform.OS === 'android' ? 30 : 0,
   },
+  /** Android: anchored in editorRoot above keyboardControls (not the locked stage). */
+  editingInputFloating: {
+    position: 'absolute',
+    left: 78,
+    right: 22,
+    paddingLeft: STAGE_TEXT_PAD_LEFT,
+    paddingRight: STAGE_TEXT_PAD_RIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000001,
+    elevation: Platform.OS === 'android' ? 31 : 0,
+  },
   polygonIndicator: {
     width: 28,
     height: POLYGON_TRACK_HEIGHT,
@@ -3497,7 +3634,7 @@ const styles = StyleSheet.create({
   },
   textStylesRow: {
     paddingHorizontal: 22,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },

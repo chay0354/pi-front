@@ -45,6 +45,7 @@ import {
   parseListingCategoryId,
   resolveSubscriptionType,
   subscriptionTypes,
+  isB2BSubscriptionType,
   uploadProjectWording,
   userCategoryForm,
 } from '../utils/constant';
@@ -541,7 +542,8 @@ const AdsForm = ({
     }
     if (
       t === subscriptionTypes.company ||
-      t === subscriptionTypes.professional
+      t === subscriptionTypes.professional ||
+      t === subscriptionTypes.projectMarketer
     ) {
       // companyCategoryForm had no key `1` — merge broker’s חדש מקבלן project form
       return {
@@ -2359,6 +2361,7 @@ const AdsForm = ({
         prevSalesUrl !== nextSalesUrl;
       // Publish a home story for תמונה מכירתית whenever it's new/pending or replaced.
       const shouldCreateSalesImageStory =
+        isB2BSubscriptionType(currentUser?.subscription_type) &&
         !!uploadedSalesImageUrl &&
         fieldKeys.includes('salesimage') &&
         (salesImageChangedOnEdit ||

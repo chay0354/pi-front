@@ -50,9 +50,14 @@ function getFieldsForType(type) {
     placeholder: 'ספר/י קצת על עצמך',
     multiline: true,
   };
-  if (t === subscriptionTypes.company) {
+  if (
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.projectMarketer
+  ) {
+    const isMarketer = t === subscriptionTypes.projectMarketer;
+    const orgNameLabel = isMarketer ? 'שם המשווק' : 'שם החברה';
     return [
-      {key: 'business_name', label: 'שם החברה', placeholder: 'שם החברה'},
+      {key: 'business_name', label: orgNameLabel, placeholder: orgNameLabel},
       {
         key: 'contact_person_name',
         label: 'איש קשר',
@@ -136,8 +141,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const {currentUser, setCurrentUser} = useContext(ContextHook);
 
   const type = currentUser?.subscription_type || subscriptionTypes.user;
-  const isCompany = String(type).toLowerCase() === subscriptionTypes.company;
   const subTypeLower = String(type).toLowerCase();
+  // Project marketers register with a logo like companies, so they share the layout.
+  const isCompany =
+    subTypeLower === subscriptionTypes.company ||
+    subTypeLower === subscriptionTypes.projectMarketer;
   const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
   /** Yellow ring → keep teal camera; blue/teal ring → system orange. */
   const cameraBadgeColor = hasGoldRing ? CAMERA_BADGE_TEAL : CAMERA_BADGE_ORANGE;
@@ -464,7 +472,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                   onPress={handlePickProfileVideo}
                   activeOpacity={0.7}
                   disabled={uploadingVideo || saving}>
-                  <Text style={styles.changePhotoText}>
+                  <Text style={styles.changeVideoLinkText}>
                     {profileVideoPreviewUri ? 'החלפת סרטון' : 'בחירת סרטון'}
                   </Text>
                 </TouchableOpacity>
@@ -614,6 +622,13 @@ const styles = StyleSheet.create({
     borderColor: BG,
   },
   changePhotoText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  changeVideoLinkText: {
     color: '#E8B34D',
     fontSize: 14,
     fontFamily: 'Rubik-Medium',

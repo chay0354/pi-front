@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect, useCallback} from 'react';
+import React, {useState, useRef, useEffect, useCallback, useLayoutEffect} from 'react';
 import {
   View,
   ScrollView,
@@ -58,8 +58,9 @@ import {
   firstImageUrl,
   firstVideoUrl,
   displayPiRatingFromReviews,
+  isRateableSubscriptionType,
 } from '../utils/listingGridCardFigma';
-import {resolveFeedVideoPosterUri} from '../utils/feedVideoPreload';
+import {resolveFeedVideoPosterUri, resolveFeedVideoUri} from '../utils/feedVideoPreload';
 import {muxThumbnailUri} from '../utils/videoPlayback';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {
@@ -76,6 +77,7 @@ import CompanyLandListingProfileContent from '../components/CompanyLandListingPr
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {buildProfileAdFeatureLabels} from '../utils/listingAmenities';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
+import {isCompanySubscriptionType} from '../utils/constant';
 import {
   flexEnd,
   flexStart,
@@ -136,6 +138,126 @@ const isVideoLikeMediaUrl = url => {
   if (/\/videos?\//i.test(s)) return true;
   return false;
 };
+
+/** Profile ad hero carousel — RTL on native (matches swipe + dots); LTR on web. */
+const heroCarouselDirectionStyle =
+  Platform.OS === 'web' ? forceLtrStyle : forceRtlStyle;
+
+/** Profile ad hero: resolve playable video from listing + feed payload shapes. */
+const resolveLastAdHeroVideoUri = ad => {
+  if (!ad) return null;
+  const fromListing = firstVideoUrl(ad);
+  if (fromListing) return fromListing;
+  const fromFeed = resolveFeedVideoUri(ad);
+  if (fromFeed) return fromFeed;
+  if (ad.video && typeof ad.video === 'object') {
+    const u = String(ad.video.uri || ad.video.url || '').trim();
+    if (u) return u;
+  }
+  if (typeof ad.video === 'string') {
+    const u = ad.video.trim();
+    if (u) return u;
+  }
+  const rows = [
+    ...(Array.isArray(ad.listing_images) ? ad.listing_images : []),
+    ...(Array.isArray(ad.images) ? ad.images : []),
+  ];
+  for (const img of rows) {
+    const u =
+      img && typeof img === 'object'
+        ? img.uri || img.image_url || img.url
+        : typeof img === 'string'
+          ? img
+          : null;
+    const s = String(u || '').trim();
+    if (s && isVideoLikeMediaUrl(s)) return s;
+  }
+  return null;
+};
+
+/** Hero carousel video — imperative play/pause; generation token avoids pause/play races. */
+const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
+  uri,
+  isActive,
+  posterUri,
+  width,
+}) {
+  const videoRef = useRef(null);
+  const generationRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const player = videoRef.current;
+    if (!player) return;
+
+    if (!isActive) {
+      generationRef.current += 1;
+      const gen = generationRef.current;
+      (async () => {
+        try {
+          await player.pauseAsync();
+          if (gen === generationRef.current) {
+            await player.setIsMutedAsync(true);
+          }
+        } catch (_) {}
+      })();
+      return;
+    }
+
+    const gen = generationRef.current;
+    let cancelled = false;
+    (async () => {
+      try {
+        await player.setIsMutedAsync(true);
+        if (cancelled || gen !== generationRef.current) return;
+        await player.playAsync();
+        if (gen !== generationRef.current) {
+          await player.pauseAsync();
+        }
+      } catch (_) {
+        if (!cancelled && gen === generationRef.current) {
+          try {
+            await player.playAsync();
+          } catch (_) {}
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, uri]);
+
+  const slideStyle = [styles.lastAdImage, {width}];
+
+  return (
+    <View style={slideStyle}>
+      <Video
+        ref={videoRef}
+        source={{uri}}
+        style={StyleSheet.absoluteFill}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay={false}
+        isLooping
+        isMuted
+        useNativeControls={false}
+      />
+      {posterUri && !isActive ? (
+        <Image
+          source={{uri: posterUri}}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+      ) : null}
+      <View style={styles.lastAdHeroVideoBadge} pointerEvents="none">
+        <MaterialCommunityIcons
+          name="play-circle"
+          size={28}
+          color="rgba(255,255,255,0.9)"
+        />
+      </View>
+    </View>
+  );
+});
 
 const isWeb = Platform.OS === 'web';
 const baseUrl =
@@ -286,8 +408,6 @@ const UserProfileScreen = ({
   onOpenFollowHub = null,
   onOpenCompanyReport = null,
   onOpenAllReviews = null,
-  /** Same as Settings Pi Chat row: server unread + 1 until Pi welcome message was opened once */
-  unreadChatCount = 0,
   /** Profile post grid (6 tiles): open TikTok feed scrolled to that listing. */
   onOpenPostInFeed = null,
   /** הנכסים שלי / פרוייקטים נבחרים carousel: open that listing's ad profile. */
@@ -365,7 +485,7 @@ const UserProfileScreen = ({
         const s = data.subscription;
         const type = (s.subscription_type || '').toLowerCase();
         let name = null;
-        if (type === 'company')
+        if (isCompanySubscriptionType(type))
           name = s.business_name || s.name || s.contact_person_name || null;
         else if (type === 'broker')
           name =
@@ -532,10 +652,7 @@ const UserProfileScreen = ({
       user?.creator_subscription_type ||
       ''
     ).toLowerCase();
-    const rateable =
-      subType === 'company' ||
-      subType === 'broker' ||
-      subType === 'professional';
+    const rateable = isRateableSubscriptionType(subType);
     if (subType && !rateable) {
       setReviews([]);
       setReviewsLoading(false);
@@ -581,7 +698,7 @@ const UserProfileScreen = ({
     if (!u) return null;
     const t = (u.subscription_type || u.subscriptionType || '').toLowerCase();
     let name = null;
-    if (t === 'company')
+    if (isCompanySubscriptionType(t))
       name = u.business_name || u.name || u.contact_person_name || null;
     else if (t === 'broker')
       name = u.broker_office_name || u.name || u.contact_person_name || null;
@@ -916,8 +1033,7 @@ const UserProfileScreen = ({
     const st = String(
       resolvedCreator?.subscription_type || user?.subscription_type || '',
     ).toLowerCase();
-    const canReport =
-      st === 'company' || st === 'professional' || st === 'broker';
+    const canReport = isRateableSubscriptionType(st);
     if (canReport && typeof onOpenCompanyReport === 'function') {
       onOpenCompanyReport();
       return;
@@ -1015,7 +1131,7 @@ const UserProfileScreen = ({
 
   /**
    * Profile ad hero gallery: video first (when present), then still images.
-   * LTR swipe — video on the left, swipe left for photos.
+   * Native RTL carousel — first slide on the right; dots follow the same order.
    */
   const lastAdImages = (() => {
     if (!lastAd) return [];
@@ -1057,7 +1173,7 @@ const UserProfileScreen = ({
     const mainStill = String(lastAd.main_image_url || '').trim();
     if (mainStill) pushStill(stills, mainStill);
 
-    const videoUri = firstVideoUrl(lastAd);
+    const videoUri = resolveLastAdHeroVideoUri(lastAd);
     if (videoUri) {
       const posterUri =
         muxThumbnailUri(videoUri, {time: 0, width: 720}) ||
@@ -1388,6 +1504,40 @@ const UserProfileScreen = ({
   const [lastAdImageIndex, setLastAdImageIndex] = useState(0);
   const lastAdCarouselRef = useRef(null);
   const lastAdCardWidth = SCREEN_WIDTH;
+  const lastAdViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55,
+  }).current;
+  const onLastAdViewableItemsChanged = useRef(({viewableItems}) => {
+    let bestIndex = null;
+    let bestPct = -1;
+    for (const entry of viewableItems || []) {
+      if (!entry?.isViewable || entry.index == null) continue;
+      const pct =
+        typeof entry.percentVisible === 'number'
+          ? entry.percentVisible
+          : entry.isViewable
+            ? 100
+            : 0;
+      if (pct > bestPct) {
+        bestPct = pct;
+        bestIndex = entry.index;
+      }
+    }
+    if (bestIndex != null) {
+      setLastAdImageIndex(bestIndex);
+    }
+  }).current;
+  const scrollLastAdCarouselToIndex = useCallback((index, animated = false) => {
+    lastAdCarouselRef.current?.scrollToIndex?.({index, animated});
+  }, []);
+  const handleLastAdScrollToIndexFailed = useCallback(info => {
+    requestAnimationFrame(() => {
+      lastAdCarouselRef.current?.scrollToIndex?.({
+        index: info.index,
+        animated: false,
+      });
+    });
+  }, []);
   const [smartInfoText, setSmartInfoText] = useState('');
   const [smartInfoLoading, setSmartInfoLoading] = useState(false);
   const adAddress = lastAd?.address || lastAd?.location || '';
@@ -1553,7 +1703,7 @@ const UserProfileScreen = ({
     lastAd?.subscription_type ||
     ''
   ).toLowerCase();
-  const isCompany = profileSubscriptionType === 'company';
+  const isCompany = isCompanySubscriptionType(profileSubscriptionType);
   const isBroker = profileSubscriptionType === 'broker';
   const isProfessional = profileSubscriptionType === 'professional';
   const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
@@ -2261,7 +2411,10 @@ const UserProfileScreen = ({
 
   useEffect(() => {
     setLastAdImageIndex(0);
-  }, [lastAd?.id]);
+    requestAnimationFrame(() => {
+      scrollLastAdCarouselToIndex(0, false);
+    });
+  }, [lastAd?.id, scrollLastAdCarouselToIndex]);
 
   // Auto-advance stills only — don't interrupt a playing hero video.
   useEffect(() => {
@@ -2269,15 +2422,16 @@ const UserProfileScreen = ({
     const t = setInterval(() => {
       setLastAdImageIndex(prev => {
         const next = (prev + 1) % lastAdImages.length;
-        lastAdCarouselRef.current?.scrollToOffset({
-          offset: next * lastAdCardWidth,
-          animated: true,
-        });
+        scrollLastAdCarouselToIndex(next, true);
         return next;
       });
     }, 4000);
     return () => clearInterval(t);
-  }, [lastAdImages.length, lastAdCardWidth, lastAdHasVideo]);
+  }, [
+    lastAdImages.length,
+    lastAdHasVideo,
+    scrollLastAdCarouselToIndex,
+  ]);
 
   const visibleReviews =
     reviews.length > MAX_VISIBLE_REVIEWS
@@ -2335,17 +2489,6 @@ const UserProfileScreen = ({
               resizeMode="contain"
             />
           </TouchableOpacity>
-          {unreadChatCount > 0 ? (
-            <View
-              style={styles.profilePiChatBadge}
-              pointerEvents="none"
-              accessibilityRole="text"
-              accessibilityLabel={`הודעות חדשות: ${unreadChatCount > 99 ? 'יותר מ־99' : unreadChatCount}`}>
-              <Text style={styles.profilePiChatBadgeText} numberOfLines={1}>
-                {unreadChatCount > 99 ? '99+' : String(unreadChatCount)}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <TouchableOpacity
@@ -2512,60 +2655,42 @@ const UserProfileScreen = ({
                   <FlatList
                     ref={lastAdCarouselRef}
                     data={lastAdImages}
+                    extraData={`${lastAdImageIndex}-${fullScreenImageModalVisible}`}
                     horizontal
                     pagingEnabled
-                    style={forceLtrStyle}
-                    contentContainerStyle={forceLtrStyle}
+                    inverted={false}
+                    style={heroCarouselDirectionStyle}
+                    contentContainerStyle={heroCarouselDirectionStyle}
                     showsHorizontalScrollIndicator={false}
-                    onMomentumScrollEnd={e => {
-                      const i = Math.round(
-                        e.nativeEvent.contentOffset.x / lastAdCardWidth,
-                      );
-                      setLastAdImageIndex(i);
-                    }}
+                    getItemLayout={(_, index) => ({
+                      length: lastAdCardWidth,
+                      offset: lastAdCardWidth * index,
+                      index,
+                    })}
+                    viewabilityConfig={lastAdViewabilityConfig}
+                    onViewableItemsChanged={onLastAdViewableItemsChanged}
+                    onScrollToIndexFailed={handleLastAdScrollToIndexFailed}
                     renderItem={({item, index}) => {
-                      const slideStyle = [
-                        styles.lastAdImage,
-                        {width: lastAdCardWidth},
-                      ];
                       if (item.isVideo) {
-                        const isCurrent = index === lastAdImageIndex;
                         return (
-                          <View style={slideStyle}>
-                            <Video
-                              source={{uri: item.uri}}
-                              style={StyleSheet.absoluteFill}
-                              resizeMode={ResizeMode.COVER}
-                              shouldPlay={
-                                isCurrent && !fullScreenImageModalVisible
-                              }
-                              isLooping
-                              isMuted
-                              useNativeControls={false}
-                            />
-                            {item.posterUri && !isCurrent ? (
-                              <Image
-                                source={{uri: item.posterUri}}
-                                style={StyleSheet.absoluteFill}
-                                resizeMode="cover"
-                              />
-                            ) : null}
-                            <View
-                              style={styles.lastAdHeroVideoBadge}
-                              pointerEvents="none">
-                              <MaterialCommunityIcons
-                                name="play-circle"
-                                size={28}
-                                color="rgba(255,255,255,0.9)"
-                              />
-                            </View>
-                          </View>
+                          <ProfileAdHeroVideo
+                            uri={item.uri}
+                            isActive={
+                              index === lastAdImageIndex &&
+                              !fullScreenImageModalVisible
+                            }
+                            posterUri={item.posterUri}
+                            width={lastAdCardWidth}
+                          />
                         );
                       }
                       return (
                         <Image
                           source={{uri: item.uri}}
-                          style={slideStyle}
+                          style={[
+                            styles.lastAdImage,
+                            {width: lastAdCardWidth},
+                          ]}
                           resizeMode="cover"
                         />
                       );
@@ -2575,8 +2700,8 @@ const UserProfileScreen = ({
                     }
                   />
                   {lastAdImages.length > 1 && (
-                    <View style={[styles.lastAdDots, forceLtrStyle]}>
-                      {lastAdImages.slice(0, 5).map((_, i) => (
+                    <View style={[styles.lastAdDots, heroCarouselDirectionStyle]}>
+                      {lastAdImages.map((_, i) => (
                         <View
                           key={i}
                           style={[
@@ -3735,10 +3860,12 @@ const UserProfileScreen = ({
             }
             horizontal
             pagingEnabled
-            style={forceLtrStyle}
-            contentContainerStyle={forceLtrStyle}
+            inverted={false}
+            style={heroCarouselDirectionStyle}
+            contentContainerStyle={heroCarouselDirectionStyle}
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
+            extraData={fullScreenImageIndex}
             initialScrollIndex={fullScreenImageIndex}
             getItemLayout={(data, index) => ({
               length: Dimensions.get('window').width,
@@ -3746,10 +3873,11 @@ const UserProfileScreen = ({
               index,
             })}
             onMomentumScrollEnd={e => {
-              const i = Math.round(
-                e.nativeEvent.contentOffset.x / Dimensions.get('window').width,
+              const pageWidth = Dimensions.get('window').width;
+              const i = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+              setFullScreenImageIndex(
+                Math.max(0, Math.min(i, lastAdImages.length - 1)),
               );
-              setFullScreenImageIndex(i);
             }}
             renderItem={({item, index}) => (
               <View
@@ -3792,7 +3920,8 @@ const UserProfileScreen = ({
           </View>
 
           {lastAdImages.length > 1 && (
-            <View style={[styles.fullScreenImageDots, forceLtrStyle]}>
+            <View
+              style={[styles.fullScreenImageDots, heroCarouselDirectionStyle]}>
               {lastAdImages.map((_, i) => (
                 <TouchableOpacity
                   key={i}
@@ -4364,35 +4493,6 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     overflow: 'visible',
   },
-  profilePiChatBadge: {
-    position: 'absolute',
-    top: -2,
-    left: 2,
-    minWidth: 24,
-    height: 24,
-    minHeight: 24,
-    borderRadius: 12,
-    backgroundColor: '#5EEAD4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 7,
-    zIndex: 10,
-    elevation: 6,
-    shadowColor: '#5EEAD4',
-    shadowOffset: {width: 0, height: 0},
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    borderWidth: 2,
-    borderColor: '#1E1D27',
-  },
-  profilePiChatBadgeText: {
-    color: '#1a1a2e',
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'Rubik-Medium',
-    includeFontPadding: false,
-    textAlign: 'center',
-  },
   profileCtaChatImageOnlyBtn: {
     width: '100%',
     height: 60,
@@ -4745,8 +4845,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 12,
   },
   lastAdHeroVideoBadge: {
     position: 'absolute',

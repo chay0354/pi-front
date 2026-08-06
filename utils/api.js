@@ -2453,11 +2453,17 @@ export const getUsersForGroupPicker = async (q = '', excludeEmail = null, audien
 };
 
 export const createChatGroup = async ({ creatorEmail, creatorSubscriptionId, memberEmails, title, kind, groupImageUrl = null }) => {
+  const kindNorm = String(kind || '').trim().toLowerCase();
   const payload = {
     creator_email: String(creatorEmail).trim().toLowerCase(),
     member_emails: (memberEmails || []).map((e) => String(e).trim().toLowerCase()).filter(Boolean),
     title: title != null ? String(title).trim() : '',
-    kind: kind === 'brokers' ? 'brokers' : 'customers',
+    kind:
+      kindNorm === 'brokers'
+        ? 'brokers'
+        : kindNorm === 'open'
+          ? 'open'
+          : 'customers',
   };
   const subId =
     creatorSubscriptionId != null ? String(creatorSubscriptionId).trim() : '';
@@ -2620,6 +2626,68 @@ export const getChatParticipantDisplay = async (userRef) => {
  * @param {string} otherUserEmail - other user email
  * @returns {Promise<{ success: boolean, messages: Array }>}
  */
+// --- משווקי פרויקטים — agency teams ------------------------------------------
+
+const agencyManagerParams = manager => {
+  const params = new URLSearchParams();
+  const id = manager?.subscription_id || manager?.id;
+  if (id != null && String(id).trim()) {
+    params.set('manager_subscription_id', String(id).trim());
+  }
+  const email = manager?.email;
+  if (email != null && String(email).trim()) {
+    params.set('manager_email', String(email).trim().toLowerCase());
+  }
+  return params;
+};
+
+/** Active agency join code for a marketing manager (null when none issued yet). */
+export const getAgencyJoinCode = async manager => {
+  const params = agencyManagerParams(manager);
+  const response = await apiFetch(
+    `${apiBase()}/api/agency/join-code?${params.toString()}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || 'טעינת הקוד נכשלה');
+  return data;
+};
+
+/** Issue a fresh join code, deactivating the previous one. */
+export const createAgencyJoinCode = async manager => {
+  const params = agencyManagerParams(manager);
+  const response = await apiFetch(`${apiBase()}/api/agency/join-code`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(Object.fromEntries(params)),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || 'יצירת הקוד נכשלה');
+  return data;
+};
+
+/** Marketers under a manager. */
+export const getAgencyMembers = async manager => {
+  const params = agencyManagerParams(manager);
+  const response = await apiFetch(
+    `${apiBase()}/api/agency/members?${params.toString()}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || 'טעינת המשווקים נכשלה');
+  return data;
+};
+
+/** Register a marketer into an existing agency using an invite code. */
+export const joinAgencyWithCode = async ({email, password, name, code}) => {
+  const response = await apiFetch(`${apiBase()}/api/agency/join`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email, password, name, code}),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || 'ההצטרפות נכשלה');
+  return data;
+};
+
 export const getListingPreview = async (listingId) => {
   if (!listingId) return null;
   const id = String(listingId).trim();

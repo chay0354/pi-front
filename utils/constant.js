@@ -30,14 +30,72 @@ export const subscriptionTypes = {
   company: 'company',
   professional: 'professional',
   broker: 'broker',
+  projectMarketer: 'project_marketer',
 };
+
+/** Broker, company, professional and project marketer — not regular (`user`) accounts. */
+export function isB2BSubscriptionType(type) {
+  const t = String(type || '').trim().toLowerCase();
+  return (
+    t === subscriptionTypes.broker ||
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.professional ||
+    t === subscriptionTypes.projectMarketer
+  );
+}
+
+/** משווק פרויקטים plans. Team plans may issue agency join codes. */
+export const MARKETER_PLANS = {
+  single: 'single',
+  team5: 'team5',
+  team10: 'team10',
+};
+
+export const MARKETER_PLAN_SEATS = {
+  [MARKETER_PLANS.single]: null,
+  [MARKETER_PLANS.team5]: 5,
+  [MARKETER_PLANS.team10]: 10,
+};
+
+export function isProjectMarketerType(type) {
+  return (
+    String(type || '').trim().toLowerCase() === subscriptionTypes.projectMarketer
+  );
+}
+
+/** Marketing manager: project marketer on a team plan (has seats to fill). */
+export function isMarketingManager(user) {
+  if (!user) return false;
+  if (!isProjectMarketerType(user.subscription_type ?? user.subscriptionType)) {
+    return false;
+  }
+  const seats = Number(user.marketer_seat_limit ?? user.marketerSeatLimit);
+  return Number.isFinite(seats) && seats > 0;
+}
 
 /** Default feed-post label stored in `ads.description` (Edit/Publish badge). */
 export const DEFAULT_POST_DESCRIPTION = 'פוסט';
-/** Open-house feed posts (company + broker only) — same upload flow as פוסט. */
+/** Open-house feed posts (company, broker, project marketer) — same upload flow as פוסט. */
 export const OPEN_HOUSE_POST_DESCRIPTION = 'בית פתוח';
 /** Persisted in `ads.general_details.post_kind` for open-house feed posts. */
 export const OPEN_HOUSE_POST_KIND = 'open_house';
+
+/** Sidebar chip id for feed posts only — must match TikTokFeedScreen filter tables. */
+export const TIKTOK_POSTS_SIDEBAR_FILTER_BY_CATEGORY = {
+  1: 'posts',
+  2: 'posts',
+  3: 'partners_posts',
+  5: 'bnb_posts',
+  7: 'land_posts',
+  8: 'posts',
+  10: 'posts',
+};
+
+export function tikTokPostsSidebarFilterForCategory(category) {
+  const n = parseInt(String(category ?? ''), 10);
+  if (!Number.isFinite(n)) return 'posts';
+  return TIKTOK_POSTS_SIDEBAR_FILTER_BY_CATEGORY[n] ?? 'posts';
+}
 
 export function parseListingGeneralDetails(raw) {
   if (raw == null) return null;
@@ -117,10 +175,22 @@ export function canCreateOpenHousePost(subscriptionTypeOrUser) {
       .toLowerCase()
       .trim();
   }
-  return sub === subscriptionTypes.company || sub === subscriptionTypes.broker;
+  return (
+    sub === subscriptionTypes.company ||
+    sub === subscriptionTypes.broker ||
+    sub === subscriptionTypes.projectMarketer
+  );
 }
 
-/** Create-sheet icon for the בית פתוח row (company / broker). */
+/** Ad listing categories for brokers and project marketers (excludes BnB + שותפים). */
+export function usesBrokerAdListingCategories(subscriptionType) {
+  const sub = resolveSubscriptionType(subscriptionType);
+  return (
+    sub === subscriptionTypes.broker || sub === subscriptionTypes.projectMarketer
+  );
+}
+
+/** Create-sheet icon for the בית פתוח row (company / broker / project marketer). */
 export const CREATE_SHEET_OPEN_HOUSE_ICON = require('../assets/upload-ad/broker/house.png');
 
 /** Valid DB `ads.category` ids (gaps 9/11 unused). */
@@ -146,7 +216,8 @@ export function isRegularSubscriptionType(subscriptionType) {
   if (
     t === subscriptionTypes.broker ||
     t === subscriptionTypes.company ||
-    t === subscriptionTypes.professional
+    t === subscriptionTypes.professional ||
+    t === subscriptionTypes.projectMarketer
   ) {
     return false;
   }
@@ -155,11 +226,13 @@ export function isRegularSubscriptionType(subscriptionType) {
   return true;
 }
 
-/** Company accounts use "פרויקט" in upload flows; all other types use "נכס". */
+/**
+ * Company accounts use "פרויקט" in upload flows; all other types use "נכס".
+ * Project marketers publish projects too, so they share the company wording.
+ */
 export function isCompanySubscriptionType(subscriptionType) {
-  return (
-    resolveSubscriptionType(subscriptionType) === subscriptionTypes.company
-  );
+  const t = resolveSubscriptionType(subscriptionType);
+  return t === subscriptionTypes.company || t === subscriptionTypes.projectMarketer;
 }
 
 export const PROJECT_OFFERS_SECTION_TITLE = 'הפרויקט מציע';
@@ -244,7 +317,8 @@ export const shouldShowProfileGoldRing = subscriptionType => {
   return (
     t === subscriptionTypes.company ||
     t === subscriptionTypes.professional ||
-    t === subscriptionTypes.broker
+    t === subscriptionTypes.broker ||
+    t === subscriptionTypes.projectMarketer
   );
 };
 
@@ -289,9 +363,9 @@ export const regularUserAdListingCategoryIds = new Set([
 ]);
 
 /**
- * DB `ads.category` values where a **broker** sees "פרסם מודעה" in the create sheet
- * (ערוך/פרסם מודעה). Same strip subset: חדש מקבלן, דירות, משרדים, מסחר, קרקעות, יוקרה, מגזר דתי, גלובל.
- * Excludes e.g. BnB (5), שותפים (3) — those show פוסט only for brokers.
+ * DB `ads.category` values where a **broker** or **project marketer** sees "פרסם מודעה"
+ * in the create sheet (ערוך/פרסם + TikTok compose).
+ * Excludes BnB (5) and שותפים (3) — those tabs are post / בית פתוח only.
  */
 export const brokerSheetAdListingCategoryIds = new Set([
   1, 2, 4, 6, 7, 8, 10, 12,
@@ -320,7 +394,10 @@ export function canShowListingAdInCreateSheet(
   if (sub === subscriptionTypes.professional) {
     return false;
   }
-  if (sub === subscriptionTypes.broker) {
+  if (
+    sub === subscriptionTypes.broker ||
+    sub === subscriptionTypes.projectMarketer
+  ) {
     return brokerSheetAdListingCategoryIds.has(n);
   }
   if (sub === subscriptionTypes.company) {
@@ -418,14 +495,14 @@ export function getCreateSheetListingIcon(
 ) {
   const id = parseInt(String(selectedCategory ?? '').trim(), 10);
   const sub = String(subscriptionType ?? '').toLowerCase();
-  const isBroker = sub === subscriptionTypes.broker;
+  const isBrokerLike = usesBrokerAdListingCategories(sub);
   const isRegularUser = sub === subscriptionTypes.user;
 
   if (id === 2) {
     return BROKER_OFFICE_LISTING_SHEET_ICON;
   }
 
-  if (isBroker) {
+  if (isBrokerLike) {
     if (BROKER_RESIDENTIAL_LISTING_SHEET_CATEGORY_IDS.has(id)) {
       return BROKER_RESIDENTIAL_LISTING_SHEET_ICON;
     }
@@ -673,6 +750,8 @@ export const getHeaderTitle = subscriptionType => {
       return 'מנוי לחברות';
     case subscriptionTypes.professional:
       return 'מנוי לבעלי מקצוע';
+    case subscriptionTypes.projectMarketer:
+      return 'מנוי למשווקי פרויקטים';
     case subscriptionTypes.broker:
     default:
       return 'מנוי למתווכים';

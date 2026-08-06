@@ -229,7 +229,7 @@ const ProfessionalCard = ({
           key={videoUri}
           source={{uri: videoUri}}
           style={styles.cardMediaImage}
-          resizeMode={ResizeMode.CONTAIN}
+          resizeMode={ResizeMode.COVER}
           shouldPlay
           isMuted={muted}
           isLooping
@@ -242,7 +242,7 @@ const ProfessionalCard = ({
         <Image
           source={{uri: posterUri || mediaUrl}}
           style={styles.cardMediaImage}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       );
     }
@@ -1260,7 +1260,6 @@ const styles = StyleSheet.create({
   cardMedia: {
     height: 212,
     position: 'relative',
-    // Letterbox fill when media is shorter/taller than the card (no crop).
     backgroundColor: '#1E1D27',
     overflow: 'hidden',
   },
@@ -1272,7 +1271,7 @@ const styles = StyleSheet.create({
   cardMediaWebVideo: {
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
+    objectFit: 'cover',
     display: 'block',
     backgroundColor: '#1E1D27',
   },

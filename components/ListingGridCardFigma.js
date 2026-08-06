@@ -15,8 +15,8 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors, BorderRadius} from '../constants/styles';
 import {
-  getBnbHostType,
   getListingFeedAvatarUrl,
+  getUserCompanyLogoUrl,
   shouldForceGoldRingForListing,
 } from '../utils/userProfileImage';
 import ProfileAvatar from './ProfileAvatar';
@@ -37,7 +37,6 @@ import {
   getCompanyLogoUrlFromListing,
   subscriptionTypeFromListing,
   isPartnersListing as checkIsPartnersListing,
-  isBnbListing as checkIsBnbListing,
   shouldHideListingCardStats,
 } from '../utils/listingGridCardFigma';
 import {flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
@@ -73,6 +72,8 @@ const ListingGridCardFigma = ({
     showPreSaleBadge,
     cardPriceLabel,
     profileUri,
+    profileFallbackUri,
+    profileDisplayName,
     showCommercialLogo,
     commercialLogoUrl,
     showPiRating,
@@ -97,12 +98,20 @@ const ListingGridCardFigma = ({
       ? String(listing?.project_name || '').trim() || formatPriceHe(listing)
       : formatPriceHe(listing);
     const pUri = getListingFeedAvatarUrl(listing);
-    const bnbHost = getBnbHostType(listing);
-    const bnbListing = checkIsBnbListing(listing, selectedCategory);
+    const logoFallback =
+      getUserCompanyLogoUrl(listing) ||
+      getCompanyLogoUrlFromListing(listing) ||
+      null;
+    const displayName = String(
+      listing?.creator_name ||
+        listing?.name ||
+        listing?.project_name ||
+        listing?.title ||
+        '',
+    ).trim();
     const partnersListing = checkIsPartnersListing(listing, selectedCategory);
     const hideStats = shouldHideListingCardStats(listing, selectedCategory);
-    const businessBnb = bnbListing && bnbHost === 'business';
-    const showAvatar = businessBnb || Boolean(pUri);
+    const showAvatar = true;
     const showCommercialLogo = shouldShowCommercialLogoBadge(listing);
     const commercialLogoUrl = showCommercialLogo
       ? getCompanyLogoUrlFromListing(listing)
@@ -126,6 +135,8 @@ const ListingGridCardFigma = ({
       showPreSaleBadge: preSale,
       cardPriceLabel: priceLabel,
       profileUri: pUri,
+      profileFallbackUri: logoFallback,
+      profileDisplayName: displayName || null,
       showCommercialLogo: showCommercialLogo && !!commercialLogoUrl,
       commercialLogoUrl,
       showPiRating: showPi,
@@ -234,6 +245,8 @@ const ListingGridCardFigma = ({
             pointerEvents="box-none">
             <ProfileAvatar
               uri={profileUri}
+              fallbackUri={profileFallbackUri}
+              name={profileDisplayName}
               size={38}
               subscriptionType={listing}
               forceGoldRing={forceGoldAvatarRing}

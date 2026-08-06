@@ -214,6 +214,37 @@ export function getRangeSliderPercentFromEvent(
   return 0;
 }
 
+/**
+ * Map raw touch percent (physical LTR along track) to value percent for dual-handle
+ * range sliders — same rule as PriceFilterScreen (RTL app / web `dir=rtl`).
+ */
+export function touchPercentToRangeValuePercent(touchPercent) {
+  const p = Math.max(0, Math.min(100, Number(touchPercent) || 0));
+  const isRtlVisual = Platform.OS === 'web' || I18nManager.isRTL;
+  return isRtlVisual ? 100 - p : p;
+}
+
+/** Dual-handle thumb position — matches PriceFilterScreen (web: `right`, native: mirrored `left`). */
+export function rangeSliderThumbRtlVisualStyle(
+  percent,
+  thumbSize = RANGE_SLIDER_THUMB_SIZE,
+) {
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  return Platform.OS === 'web'
+    ? {right: `${p}%`, marginRight: -thumbSize / 2}
+    : {left: `${p}%`, marginLeft: -thumbSize / 2};
+}
+
+/** Dual-handle fill between min/max — matches PriceFilterScreen. */
+export function rangeSliderFillRtlVisualStyle(minPercent, maxPercent) {
+  const min = Math.max(0, Math.min(100, Number(minPercent) || 0));
+  const max = Math.max(0, Math.min(100, Number(maxPercent) || 0));
+  const w = Math.max(0, max - min);
+  return Platform.OS === 'web'
+    ? {right: `${min}%`, width: `${w}%`}
+    : {left: `${min}%`, width: `${w}%`};
+}
+
 /** Single-thumb slider: filled segment from `percent` to the track end (e.g. distance slider). */
 export function rangeSliderTrailingFillStyle(_trackWidth, percent) {
   const p = Math.max(0, Math.min(100, Number(percent) || 0));

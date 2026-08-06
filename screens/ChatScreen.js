@@ -32,6 +32,7 @@ import {
   DEFAULT_WELCOME_MESSAGE,
   CHAT_PEER_UUID_RE,
   normalizeConversationForOpen,
+  isProfessionalUpdatesConversation,
 } from '../utils/chatDefaults';
 import {
   getChatMessages,
@@ -52,7 +53,9 @@ import {
   respondToExclusiveOffer,
 } from '../utils/api';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
-import {shouldShowProfileGoldRing} from '../utils/constant';
+import {shouldShowProfileGoldRing, isRegularSubscriptionType, subscriptionTypes} from '../utils/constant';
+import {parsePostTextOverlayPayload} from '../utils/postTextOverlay';
+import PostTextOverlays from '../components/PostTextOverlays';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
@@ -136,7 +139,7 @@ const CHAT_CATEGORY_LABELS = {
   2: 'משרדים',
   3: 'שותפים',
   4: 'גלובל',
-  5: 'BnB',
+  5: 'BNB',
   6: 'מגזר דתי',
   7: 'קרקעות',
   8: 'מסחרי',
@@ -347,6 +350,7 @@ const ChatScreen = ({
   onPiWelcomeOpened,
   onOpenPost,
   onOpenPeerProfile,
+  onContactListingOwner,
 }) => {
   const insets = useSafeAreaInsets();
   const conversation = useMemo(
@@ -356,6 +360,7 @@ const ChatScreen = ({
   const msg = DEFAULT_WELCOME_MESSAGE;
   const isWelcome = isWelcomeConversation(conversation);
   const isUser = isUserConversation(conversation);
+  const isProfessionalUpdatesThread = isProfessionalUpdatesConversation(conversation);
   const otherUserRef = isUser ? resolveOtherPartyRef(conversation) : null;
   const otherUserEmail = isUser ? resolveOtherPartyEmail(conversation) : null;
   const isGroupThread = conversation?.isGroup === true;
@@ -378,10 +383,11 @@ const ChatScreen = ({
     return null;
   }, [isGroupThread, conversation?.conversationId, conversation?.id]);
   const isDirectPeer =
-    isUser &&
-    !isWelcome &&
-    !isGroupThread &&
-    (!!otherUserEmail || !!directConversationId);
+    isProfessionalUpdatesThread ||
+    (isUser &&
+      !isWelcome &&
+      !isGroupThread &&
+      (!!otherUserEmail || !!directConversationId));
   const isBrokerUser = useMemo(() => {
     const t1 =
       currentUser?.subscription_type != null
@@ -687,6 +693,28 @@ const ChatScreen = ({
     [groupMembersList],
   );
   const groupAddAudience = useMemo(() => {
+    const storedKind =
+      groupDetail?.groupKind != null
+        ? String(groupDetail.groupKind).trim().toLowerCase()
+        : groupDetail?.group_kind != null
+          ? String(groupDetail.group_kind).trim().toLowerCase()
+          : null;
+    if (storedKind === 'open') return 'all';
+    if (storedKind === 'brokers') return 'broker_only';
+    if (storedKind === 'customers') return 'regular';
+
+    const actorType = String(
+      currentUser?.subscription_type || currentUser?.type || '',
+    )
+      .trim()
+      .toLowerCase();
+    if (
+      isRegularSubscriptionType(actorType) ||
+      actorType === subscriptionTypes.professional
+    ) {
+      return 'all';
+    }
+
     const isBrokerType = st =>
       String(st || '')
         .trim()
@@ -699,7 +727,7 @@ const ChatScreen = ({
     });
     const hasNonBroker = others.some(m => !isBrokerType(m?.subscriptionType));
     return hasNonBroker ? 'regular' : 'broker_only';
-  }, [groupMembersList, myEmail]);
+  }, [groupDetail, groupMembersList, myEmail, currentUser?.subscription_type, currentUser?.type]);
 
   useEffect(() => {
     if (!isGroupThread || groupMembersList.length === 0) return;
@@ -987,6 +1015,7 @@ const ChatScreen = ({
   }, [directConversationId]);
 
   useEffect(() => {
+    if (!conversation) return;
     if (!myEmail) {
       console.warn('[ChatScreen.initialLoad] aborting: no myEmail');
       return;
@@ -1313,6 +1342,7 @@ const ChatScreen = ({
               mediaUrl: row.media_url || null,
               listingId: row.listing_id != null ? String(row.listing_id) : null,
               listingShare: row.is_listing_share === true,
+              isProfessionalNotification: row.is_professional_notification === true,
               createdAt: row.created_at,
               isMe: senderEmail === myEmail,
             });
@@ -2411,6 +2441,15 @@ const ChatScreen = ({
           (!!msg.listingId &&
             legacyInferredShare &&
             !(hasImage && msg.listingShare === false)));
+      const listingIdForPreview = msg.listingId
+        ? String(msg.listingId).trim()
+        : '';
+      const cachedListingPreview = listingIdForPreview
+        ? listingPreviewCache[listingIdForPreview]
+        : null;
+      /** System "עדכונים על פוסטים רלוונטים" post notification — contact-poster CTA only here. */
+      const isProfessionalNotificationMsg =
+        msg.isProfessionalNotification === true && !m.isMe;
       const sid =
         m.senderId != null ? String(m.senderId).trim().toLowerCase() : '';
       const peerPic =
@@ -2447,6 +2486,14 @@ const ChatScreen = ({
                       resizeMode="cover"
                     />
                   )
+                ) : isProfessionalUpdatesThread ? (
+                  <ProfileAvatar
+                    uri={profileAvatarUrl || null}
+                    name={displayName}
+                    size={32}
+                    forceGoldRing
+                    placeholderImage={DEFAULT_PI_PROFILE_AVATAR}
+                  />
                 ) : (
                   <Image
                     source={senderAvatarSource}
@@ -2526,28 +2573,55 @@ const ChatScreen = ({
                       cached,
                       bodyTrim,
                     );
+                    const overlayPayload = cached?.generalDetails
+                      ? parsePostTextOverlayPayload({
+                          general_details: cached.generalDetails,
+                        })
+                      : null;
+                    const openSharedPostInFeed = () => {
+                      if (typeof onOpenPost !== 'function') return;
+                      onOpenPost({
+                        id: msg.listingId,
+                        mediaUrl: resolvedMediaUrl,
+                        body: m.body,
+                        category: cached?.category ?? null,
+                        general_details: cached?.generalDetails ?? null,
+                        feedPost: cached?.feedPost ?? true,
+                      });
+                    };
                     return (
                       <View style={styles.sharedPostCard}>
                         <TouchableOpacity
                           activeOpacity={0.9}
                           onPress={() => {
-                            if (resolvedMediaUrl) {
+                            if (
+                              isProfessionalNotificationMsg ||
+                              !resolvedMediaUrl
+                            ) {
+                              openSharedPostInFeed();
+                            } else {
                               openChatImageFullScreen(resolvedMediaUrl);
-                            } else if (typeof onOpenPost === 'function') {
-                              onOpenPost({
-                                id: msg.listingId,
-                                mediaUrl: resolvedMediaUrl,
-                                body: m.body,
-                              });
                             }
                           }}
                           style={styles.sharedPostImageWrap}>
                           {resolvedMediaUrl ? (
-                            <Image
-                              source={{uri: resolvedMediaUrl}}
-                              style={styles.sharedPostImage}
-                              resizeMode="cover"
-                            />
+                            <>
+                              <Image
+                                source={{uri: resolvedMediaUrl}}
+                                style={styles.sharedPostImage}
+                                resizeMode="cover"
+                              />
+                              {overlayPayload ? (
+                                <PostTextOverlays
+                                  overlays={overlayPayload.overlays}
+                                  previewWidth={overlayPayload.previewWidth}
+                                  previewHeight={overlayPayload.previewHeight}
+                                  coordsSpace={overlayPayload.coordsSpace}
+                                  feedWidth={236}
+                                  feedHeight={236 * (12 / 9)}
+                                />
+                              ) : null}
+                            </>
                           ) : previewLines ? (
                             <View style={styles.sharedPostImagePlaceholder}>
                               <Text
@@ -2581,15 +2655,7 @@ const ChatScreen = ({
                         </TouchableOpacity>
                         <TouchableOpacity
                           activeOpacity={0.85}
-                          onPress={() => {
-                            if (typeof onOpenPost === 'function') {
-                              onOpenPost({
-                                id: msg.listingId,
-                                mediaUrl: resolvedMediaUrl,
-                                body: m.body,
-                              });
-                            }
-                          }}
+                          onPress={openSharedPostInFeed}
                           style={styles.sharedPostFooter}>
                           <MaterialCommunityIcons
                             name="chevron-left"
@@ -2698,6 +2764,31 @@ const ChatScreen = ({
                 !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
                 !hasFile ? (
                   <Text style={styles.bubbleText}>{bodyTrim}</Text>
+                ) : null}
+                {isProfessionalNotificationMsg &&
+                cachedListingPreview?.creatorEmail ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={styles.contactPosterBtnInBubble}
+                    onPress={() =>
+                      typeof onContactListingOwner === 'function' &&
+                      onContactListingOwner({
+                        email: cachedListingPreview.creatorEmail,
+                        name: cachedListingPreview.creatorName,
+                        profileImageUrl:
+                          cachedListingPreview.creatorProfileImageUrl,
+                        listingId: listingIdForPreview,
+                      })
+                    }>
+                    <MaterialCommunityIcons
+                      name="message-text-outline"
+                      size={16}
+                      color="#1E1D27"
+                    />
+                    <Text style={styles.contactPosterBtnText}>
+                      צור קשר עם המפרסם
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
                 {!(hasAudio && !bodyTrim) ? (
                   <Text style={styles.bubbleTime}>
@@ -3267,6 +3358,7 @@ const ChatScreen = ({
                 subscriptionType={resolvedDisplay || conversation}
                 forceGoldRing={
                   isWelcomeConversation(conversation) ||
+                  isProfessionalUpdatesThread ||
                   shouldShowProfileGoldRing(resolvedDisplay || conversation)
                 }
                 placeholderImage={DEFAULT_PI_PROFILE_AVATAR}
@@ -5149,6 +5241,23 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 10,
     paddingHorizontal: 4,
+  },
+  contactPosterBtnInBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F4AD39',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginTop: 8,
+    alignSelf: 'stretch',
+  },
+  contactPosterBtnText: {
+    color: '#1E1D27',
+    fontSize: 13,
+    fontFamily: 'Rubik-Medium',
+    writingDirection: 'rtl',
   },
   welcomeBubble: {
     width: 248,
