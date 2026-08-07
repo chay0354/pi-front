@@ -211,6 +211,7 @@ const Home = ({
   onComplete,
   showIntroModal = false,
   onIntroModalShown,
+  onIntroMoveStart,
 }) => {
   const insets = useSafeAreaInsets();
   const {width: windowWidth} = useWindowDimensions();
@@ -758,6 +759,7 @@ const Home = ({
         insetsTop={insets.top}
         onShown={onIntroModalShown}
         onHidden={() => setLogoRevealed(true)}
+        onIntroMoveStart={onIntroMoveStart}
       />
       <HomeBackground>
       <View style={styles.backgroundClip}>

@@ -98,8 +98,9 @@ module.exports = {
       versionCode: 32,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
+      icon: './assets/app-icon/new-logo.png',
       adaptiveIcon: {
-        foregroundImage: './assets/app-icon/adaptive-foreground.png',
+        foregroundImage: './assets/app-icon/new-logo.png',
         backgroundColor: '#FFFFFF',
       },
       permissions: [

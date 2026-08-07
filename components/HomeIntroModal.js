@@ -7,6 +7,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import {getBootSplashLogoRect} from './BootSplashFrame';
 
 const HOLD_BEFORE_MS = 300; // stay at full initial size before moving
 const MOVE_MS = 1800; // slow move up + shrink, all together
@@ -48,6 +49,7 @@ export default function HomeIntroModal({
   insetsTop = 0,
   onShown,
   onHidden,
+  onIntroMoveStart,
 }) {
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
@@ -59,12 +61,7 @@ export default function HomeIntroModal({
 
   // Initial "big logo" — same asset as Home header, just larger / centered.
   const initialRect = useMemo(
-    () => ({
-      x: (screenWidth - 290) / 2,
-      y: (screenHeight - 353) / 2,
-      width: 290,
-      height: 280,
-    }),
+    () => getBootSplashLogoRect(screenWidth, screenHeight),
     [screenWidth, screenHeight],
   );
 
@@ -175,6 +172,7 @@ export default function HomeIntroModal({
     };
 
     const startMove = target => {
+      onIntroMoveStart?.();
       setResolvedTarget(target);
       Animated.timing(progress, {
         toValue: 1,
@@ -263,6 +261,7 @@ export default function HomeIntroModal({
             source={require('../assets/homeLogo.png')}
             style={styles.logoImage}
             resizeMode="contain"
+            fadeDuration={0}
           />
         </Animated.View>
       </Animated.View>

@@ -21,6 +21,7 @@ import {
   Alert,
 } from 'react-native';
 import {FormScrollProvider, useFormScroll} from '../utils/formKeyboardScroll';
+import {ContextHook} from '../hooks/ContextHook';
 import * as ImagePicker from 'expo-image-picker';
 import {
   AD_VIDEO_PICKER_OPTIONS,

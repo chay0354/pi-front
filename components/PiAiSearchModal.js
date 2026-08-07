@@ -367,10 +367,7 @@ const PiAiSearchModal = ({
       }
 
       const filteredPool = filterListingsByParsedQuery(listings, parsed);
-      if (
-        filteredPool.length === 0 &&
-        (parsed.city || parsed.purpose || parsed.searchPurpose)
-      ) {
+      if (filteredPool.length === 0) {
         setResults([]);
         setEmptyMessage(
           buildPiAiFilterEmptyMessage(parsed, listings.length) ||
@@ -379,7 +376,7 @@ const PiAiSearchModal = ({
         return;
       }
 
-      const searchPool = filteredPool.length > 0 ? filteredPool : listings;
+      const searchPool = filteredPool;
 
       // Gemini ranks the catalog against the query; the local keyword ranking
       // is only a fallback when the AI service is unavailable (offline/quota).

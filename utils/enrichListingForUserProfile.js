@@ -1,4 +1,4 @@
-import {getUserProfileImageUrl} from './userProfileImage';
+import {getListingFeedAvatarUrl, getUserProfileImageUrl} from './userProfileImage';
 import {normalizeLandOfferParcels} from './landListingFields';
 
 export function parseLandBlockParcelFromListing(listing) {
@@ -99,7 +99,8 @@ export function enrichListingForUserProfile(listing) {
       landParcels.length > 0
         ? landParcels
         : listing.company_offers_land_sizes ?? listing.companyOffersLandSizes ?? null,
-    profileImageUrl: getUserProfileImageUrl(listing),
+    profileImageUrl:
+      getListingFeedAvatarUrl(listing) || getUserProfileImageUrl(listing),
     price: priceDisplay || listing.price,
     purpose: purposeHebrew,
     location:

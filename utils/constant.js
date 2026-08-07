@@ -389,11 +389,11 @@ export const brokerSheetAdListingCategoryIds = new Set([
 /**
  * DB `ads.category` values where **company** (not professional) users see "פרסם מודעה"
  * (ערוך/פרסם מודעה sheet + TikTok feed compose row).
- * Matches product tabs: חדש מקבלן (1), BnB (5), גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7),
- * מסחר (8), משרדים (2). Professional accounts never get this listing row.
+ * Matches product tabs: חדש מקבלן (1), גלובל (4), מגזר דתי (6), יוקרה (12), קרקעות (7),
+ * מסחר (8), משרדים (2). BnB (5) is regular-user only — not companies.
  */
 export const companySheetAdListingCategoryIds = new Set([
-  1, 2, 4, 5, 6, 7, 8, 12,
+  1, 2, 4, 6, 7, 8, 12,
 ]);
 
 /** Whether the create sheet shows a listing/ad row (not post-only) for this user + DB category. */

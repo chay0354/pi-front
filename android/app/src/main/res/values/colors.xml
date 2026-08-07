@@ -1,8 +1,8 @@
 <resources>
-  <color name="splashscreen_background">#252525</color>
+  <color name="splashscreen_background">#1e1d27</color>
   <color name="iconBackground">#FFFFFF</color>
   <color name="colorPrimary">#023c69</color>
   <color name="colorPrimaryDark">#252525</color>
-  <!-- Match app chrome so release APKs don't get Android 15's white nav strip. -->
   <color name="navigationBar">#1E1D27</color>
+  <color name="navigationBarColor">#1e1d27</color>
 </resources>

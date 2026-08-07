@@ -5,6 +5,7 @@
 
 import {resolveAdVideoUri} from './videoPlayback';
 import {
+  BROKER_PRO_STARTING_STARS,
   computeBrokerProfessionalStarRating,
   isBrokerOrProfessionalSubscriptionType,
 } from './brokerProfessionalStarRating';
@@ -298,6 +299,10 @@ export const listingImageUrls = listing => {
 };
 
 export const brokerPiRatingFromListing = listing => {
+  const subType = subscriptionTypeFromListing(listing);
+  if (isBrokerOrProfessionalSubscriptionType(subType)) {
+    return BROKER_PRO_STARTING_STARS;
+  }
   const raw = listing?.pi_value;
   if (raw == null || raw === '') return 5;
   const n = Number(raw);
@@ -323,17 +328,13 @@ export const clampPiDisplay = n => {
  * @param {object|undefined} listing – `pi_value` + subscription type for fallbacks
  */
 export const displayPiRatingFromReviews = (reviews, listing) => {
-  const broker = brokerPiRatingFromListing(listing);
-  if (!reviews || reviews.length === 0) {
-    return broker;
-  }
-
   const subType = subscriptionTypeFromListing(listing);
   if (isBrokerOrProfessionalSubscriptionType(subType)) {
-    const tier = computeBrokerProfessionalStarRating(reviews);
-    if (tier != null) {
-      return tier;
-    }
+    return computeBrokerProfessionalStarRating(reviews || []);
+  }
+
+  const broker = brokerPiRatingFromListing(listing);
+  if (!reviews || reviews.length === 0) {
     return broker;
   }
 

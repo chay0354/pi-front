@@ -249,7 +249,8 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
+    marginTop: 2,
+    marginBottom: 24,
   },
   skipBtn: {
     flex: 1,

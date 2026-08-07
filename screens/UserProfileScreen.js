@@ -62,7 +62,11 @@ import {
 } from '../utils/listingGridCardFigma';
 import {resolveFeedVideoPosterUri, resolveFeedVideoUri} from '../utils/feedVideoPreload';
 import {muxThumbnailUri} from '../utils/videoPlayback';
-import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {
+  getListingFeedAvatarUrl,
+  getUserProfileImageUrl,
+  shouldForceGoldRingForListing,
+} from '../utils/userProfileImage';
 import {
   HERO_NAV_BACK_XML,
   HERO_NAV_HEART_LIKED_XML,
@@ -936,12 +940,15 @@ const UserProfileScreen = ({
     resolvedCreator?.companyLogoUrl ||
     profile?.company_logo_url;
   const logoImage = typeof logoImageRaw === 'string' ? logoImageRaw.trim() : '';
-  // Hero avatar: for listings opened from the feed, use the same URL order as TikTok
-  // (getUserProfileImageUrl: personal / creator before company logo). Otherwise company
-  // logo wins here and looks different from the feed/list card.
+  const listingAvatarSource = user;
+  const forceGoldRingForListing =
+    shouldForceGoldRingForListing(listingAvatarSource);
+  // Hero avatar: for listings opened from the feed, use feed avatar order (BnB business logo first).
   const displayLogoSource = (() => {
     if (isListingFromFeed) {
-      const unified = getUserProfileImageUrl(user);
+      const unified =
+        getListingFeedAvatarUrl(listingAvatarSource) ||
+        getUserProfileImageUrl(user);
       if (unified) return {uri: unified};
     }
     if (logoImage) return {uri: logoImage};
@@ -2591,6 +2598,7 @@ const UserProfileScreen = ({
                   name={displayName}
                   size={78}
                   subscriptionType={resolvedCreator || user}
+                  forceGoldRing={forceGoldRingForListing}
                   imageStyle={
                     Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
                   }
@@ -3568,10 +3576,17 @@ const UserProfileScreen = ({
             <View style={styles.contactDetailsContent}>
               <View style={styles.contactDetailsRight}>
                 <ProfileAvatar
-                  uri={contactLogo || undefined}
+                  uri={
+                    (isListingFromFeed
+                      ? getListingFeedAvatarUrl(listingAvatarSource)
+                      : null) ||
+                    contactLogo ||
+                    undefined
+                  }
                   name={displayName}
                   size={100}
                   subscriptionType={resolvedCreator || user}
+                  forceGoldRing={forceGoldRingForListing}
                   style={styles.contactDetailsProfileAvatar}
                   imageStyle={
                     Platform.OS === 'web' ? {objectFit: 'cover'} : undefined

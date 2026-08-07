@@ -2137,8 +2137,9 @@ const TikTokFeedScreen = ({
   currentUser = null,
   /** Guest taps follow + → App opens regular user registration (return to feed after). */
   onOpenUserRegistration = null,
-  /** Guest BnB "פרסם כעסק" → company registration flow. */
-  onOpenCompanyRegistration = null,
+  /** App requests the BnB publish bottom sheet (guest must pick before register). */
+  pendingBnbPublishSheet = false,
+  onPendingBnbPublishSheetConsumed = null,
   /** Bumped from App (e.g. Favorites search) to open the user search panel on mount, same as the magnify control. */
   userSearchOpenTrigger = 0,
   /** When user presses back to leave the user-search UI, App clears tikTokUserSearchOpenTrigger. */
@@ -2501,9 +2502,8 @@ const TikTokFeedScreen = ({
 
   /**
    * Center פרסם button: professionals + regular users get the create-ad
-   * drawer right on the feed (Figma מגירת צור מודעה). Companies on BnB get
-   * the same in-feed sheet. Other companies/brokers go to EditPublishAd;
-   * guests on BnB also get the in-feed sheet (registration per option).
+   * drawer right on the feed (Figma מגירת צור מודעה). Guests on BnB also get
+   * the in-feed sheet (registration per option). Companies/brokers go to EditPublishAd.
    */
   const handlePublishButtonPress = () => {
     const sub = (currentUser?.subscription_type || '').toLowerCase();
@@ -2513,10 +2513,9 @@ const TikTokFeedScreen = ({
         : NaN;
     const isBnbCategory = catNum === 5;
     if (
-      isGuest && isBnbCategory ||
+      (isGuest && isBnbCategory) ||
       sub === subscriptionTypes.professional ||
-      sub === subscriptionTypes.user ||
-      (sub === subscriptionTypes.company && isBnbCategory)
+      sub === subscriptionTypes.user
     ) {
       bottomSheetTranslateY.setValue(0);
       setShowBottomSheet(true);
@@ -2534,20 +2533,16 @@ const TikTokFeedScreen = ({
         : NaN;
     const isBnbCategory = catNum === 5;
     if (isGuest && isBnbCategory) {
-      if (opts?.bnbHostType === 'business') {
-        onOpenCompanyRegistration?.();
-      } else {
-        onOpenUserRegistration?.();
-      }
+      onOpenUserRegistration?.({
+        type: 'bnbAd',
+        bnbHostType:
+          opts?.bnbHostType === 'business' ? 'business' : 'private',
+      });
       return;
     }
     const isCompanyOrBroker =
       sub === subscriptionTypes.company ||
       isBrokerLikeSubscriptionType(sub);
-    if (isCompanyOrBroker && isBnbCategory) {
-      onOpenOfficeListing?.(selectedCategory, opts);
-      return;
-    }
     if (isCompanyOrBroker) {
       onOpenEditPublishAdWithCategory?.(selectedCategory, opts);
     } else {
@@ -2557,8 +2552,20 @@ const TikTokFeedScreen = ({
 
   const closeSheetAndOpenPost = (opts = {}) => {
     setShowBottomSheet(false);
+    const catNum =
+      selectedCategory != null && selectedCategory !== ''
+        ? parseInt(String(selectedCategory).trim(), 10)
+        : NaN;
+    const isBnbCategory = catNum === 5;
     if (isGuest) {
-      onOpenUserRegistration?.();
+      if (isBnbCategory) {
+        onOpenUserRegistration?.({
+          type: 'post',
+          openHouse: opts.openHouse === true,
+        });
+      } else {
+        onOpenUserRegistration?.();
+      }
       return;
     }
     onOpenPostEditor?.({category: selectedCategory, openHouse: opts.openHouse === true});
@@ -5606,6 +5613,17 @@ const TikTokFeedScreen = ({
       bottomSheetTranslateY.setValue(0);
     }
   }, [showBottomSheet, bottomSheetTranslateY]);
+
+  useEffect(() => {
+    if (!pendingBnbPublishSheet) return;
+    bottomSheetTranslateY.setValue(0);
+    setShowBottomSheet(true);
+    onPendingBnbPublishSheetConsumed?.();
+  }, [
+    pendingBnbPublishSheet,
+    bottomSheetTranslateY,
+    onPendingBnbPublishSheetConsumed,
+  ]);
 
   // Sidebar drag: hold and swipe up/down; bottom icons disappear off screen when dragged down
   // Max down equals the intro/profile-only stage.

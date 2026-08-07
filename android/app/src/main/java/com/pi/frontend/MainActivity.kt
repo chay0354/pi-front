@@ -25,6 +25,9 @@ class MainActivity : ReactActivity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       installSplashScreen()
     }
+    // Paint the window dark before switching off the splash theme so React
+    // never exposes a brief default/primary-colored frame.
+    window.setBackgroundDrawable(ColorDrawable(Color.parseColor("#1E1D27")))
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.

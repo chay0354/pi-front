@@ -3,7 +3,8 @@ export const BROKER_PRO_STAR_THRESHOLDS = [5, 15, 35, 75, 155];
 
 export const BROKER_PRO_LOW_RATING_WINDOW = 50;
 export const BROKER_PRO_LOW_RATING_DROP_AT = 10;
-export const BROKER_PRO_MIN_RATINGS_FOR_TIER = BROKER_PRO_STAR_THRESHOLDS[0];
+/** Display before enough reviews exist to earn tier 1 (5 ratings). */
+export const BROKER_PRO_STARTING_STARS = 1;
 
 export const isBrokerOrProfessionalSubscriptionType = type => {
   const t = String(type || '')
@@ -31,21 +32,18 @@ export const brokerProfessionalStarsFromCount = totalCount => {
 };
 
 /**
- * Broker / professional Pi display: tier progression by total reviews, minus one
- * star when 10+ low ratings (1–2) appear in the last 50 reviews.
- * @returns {number|null} 1–5 when tier applies; null when fewer than 5 reviews
+ * Broker / professional Pi display: starts at 1 star, tier progression by total
+ * reviews, minus one star when 10+ low ratings (1–2) appear in the last 50 reviews.
+ * @returns {number} 1–5
  */
 export const computeBrokerProfessionalStarRating = reviews => {
   if (!Array.isArray(reviews) || reviews.length === 0) {
-    return null;
-  }
-  if (reviews.length < BROKER_PRO_MIN_RATINGS_FOR_TIER) {
-    return null;
+    return BROKER_PRO_STARTING_STARS;
   }
 
   let stars = brokerProfessionalStarsFromCount(reviews.length);
   if (stars <= 0) {
-    return null;
+    return BROKER_PRO_STARTING_STARS;
   }
 
   const sorted = [...reviews].sort(

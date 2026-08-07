@@ -176,17 +176,33 @@ export function parsePiAiQuery(query) {
   else if (wantsSale && !wantsRent) purpose = 'sale';
 
   let searchPurpose = null;
-  if (
-    /(?:^|\s)(?:דיר(?:ה|ת)?\s*)?(?:ל)?(?:הכנס|היכנס)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכנס/.test(
+  // שותפים (category 3) — only when the user explicitly asks for roommate / join intent.
+  const wantsEnter =
+    q.includes('מחפש להיכנס') ||
+    q.includes('להיכנס לדירה') ||
+    q.includes('להכנס לדירה') ||
+    q.includes('רוצה להיכנס') ||
+    q.includes('רוצה להכנס') ||
+    /(?:^|\s)(?:מחפש|רוצה)(?:\s+\S+){0,4}\s*(?:דיר(?:ה|ת)\s*)?(?:ל)?(?:היכנס|הכנס\b)/.test(
       q,
-    )
-  ) {
+    ) ||
+    /(?:^|\s)(?:ל)?(?:היכנס|הכנס)\s+(?:ל)?(?:דיר(?:ה|ת)|לדיר)/.test(q);
+  const wantsBringIn =
+    q.includes('מחפש להכניס') ||
+    q.includes('מצא לי שותף') ||
+    q.includes('מצא שותף') ||
+    q.includes('חפש לי שותף') ||
+    q.includes('שותף דייר') ||
+    q.includes('שותפה דייר') ||
+    /(?:^|\s)(?:מצא|חפש)(?:\s+לי)?\s*(?:שותפ|דייר)/.test(q) ||
+    /(?:^|\s)(?:מחפש|רוצה)\s*(?:שותפ|דייר)/.test(q) ||
+    /(?:^|\s)(?:דיר(?:ה|ת)\s*)?(?:ל)?(?:הכניס\b)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכניס/.test(
+      q,
+    ) ||
+    /(?:^|\s)שותפ(?:ה|ים|ת)(?:\s+דייר)?(?:\s+לדיר(?:ה|ת))?/.test(q);
+  if (wantsEnter && !wantsBringIn) {
     searchPurpose = 'enter';
-  } else if (
-    /(?:^|\s)(?:דיר(?:ה|ת)?\s*)?(?:ל)?(?:הכניס)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכניס|שותפ/.test(
-      q,
-    )
-  ) {
+  } else if (wantsBringIn) {
     searchPurpose = 'bring_in';
   }
 
@@ -298,14 +314,22 @@ function listingMatchesSearchPurpose(listing, searchPurpose) {
  * @param {ReturnType<typeof parsePiAiQuery>} parsed
  * @returns {Record<string, unknown>[]}
  */
+function isPartnersListing(listing) {
+  return Number(listing?.category) === 3;
+}
+
 export function filterListingsByParsedQuery(listings, parsed) {
   if (!parsed) return listings || [];
   return (listings || []).filter(listing => {
-    if (parsed.city && !listingMatchesCity(listing, parsed.city)) {
-      return false;
-    }
     if (parsed.searchPurpose) {
       return listingMatchesSearchPurpose(listing, parsed.searchPurpose);
+    }
+    // Default Pi AI search: exclude שותפים unless the user explicitly asked.
+    if (isPartnersListing(listing)) {
+      return false;
+    }
+    if (parsed.city && !listingMatchesCity(listing, parsed.city)) {
+      return false;
     }
     if (parsed.purpose && !listingMatchesPurpose(listing, parsed.purpose)) {
       return false;

@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {Octicons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Colors, BorderRadius} from '../constants/styles';
 import {
@@ -64,6 +65,8 @@ const ListingGridCardFigma = ({
   displayPi,
   selectedCategory = null,
   style,
+  /** When set, shows the same top-right pen badge as EditPublishAd (ערוך/פרסם). */
+  onEdit = null,
 }) => {
   const {
     primaryUri,
@@ -267,6 +270,19 @@ const ListingGridCardFigma = ({
               }
             />
           </View>
+        ) : null}
+        {onEdit ? (
+          <TouchableOpacity
+            style={styles.gridCardEditBadge}
+            onPress={e => {
+              e?.stopPropagation?.();
+              onEdit(listing);
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="עריכה">
+            <Octicons name="pencil" size={25} color="#fff" />
+          </TouchableOpacity>
         ) : null}
         {dotCount > 0 ? (
           <View style={styles.gridCardDots} pointerEvents="none">
@@ -487,12 +503,36 @@ const styles = StyleSheet.create({
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 6,
   },
+  /**
+   * Publisher avatar — physical top-left under forceRTL + swapLeftAndRightInRTL.
+   *   Native: authored `right` → physical left.
+   *   Web: literal `left` (dir=rtl does not flip absolute edges).
+   */
   gridCardAvatarWrap: {
     position: 'absolute',
     top: 12,
-    right: 12,
     width: 38,
     height: 38,
+    zIndex: 2,
+    ...(Platform.OS === 'web' ? {left: 12} : {right: 12}),
+  },
+  /**
+   * Edit pen — same styling as EditPublishAd `editBadge`; physical top-right
+   * so it does not cover the avatar (opposite corner on native RTL).
+   *   Native: authored `left` → physical right (see ChatScreen bubbleTime).
+   *   Web: literal `right`.
+   */
+  gridCardEditBadge: {
+    position: 'absolute',
+    top: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2B2A39',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+    ...(Platform.OS === 'web' ? {right: 12} : {left: 12}),
   },
   gridCardDots: {
     position: 'absolute',
@@ -579,8 +619,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     zIndex: 1,
-    // Vertically center the number on the star (was sitting slightly low).
-    transform: [{translateY: -4}],
+    // Nudge down slightly so the number sits on the star's optical center.
+    transform: [{translateY: -1}],
     ...forceLtrStyle,
   },
   gridCardPiBadgeImage: {

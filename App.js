@@ -26,7 +26,7 @@ import {
 } from './utils/secureUserStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingFlow from './components/OnboardingOverlay';
-import SplashHomeIntroOverlay from './components/SplashHomeIntroOverlay';
+import BootSplashFrame from './components/BootSplashFrame';
 import {
   hasCompletedOnboarding,
   markOnboardingCompleted,
@@ -130,24 +130,6 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
-
-const AppBootLoading = () => {
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      // Hand off from native splash straight to the JS boot screen.
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, []);
-  return (
-    <View style={styles.bootRoot}>
-      <Image
-        source={require('./assets/SplashScreen.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
-    </View>
-  );
-};
 
 const screenName = {
   home: 'home',
@@ -308,24 +290,44 @@ function App() {
   /** After onboarding: must accept terms before using the app. */
   const [showTermsGate, setShowTermsGate] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
+  /** Keeps boot splash visible until HomeIntroModal has painted underneath. */
+  const [introOverlayReady, setIntroOverlayReady] = useState(false);
+  const nativeSplashHiddenRef = useRef(false);
 
-  useLayoutEffect(() => {
-    if (!fontsLoaded || !appBootstrapDone) return;
-    // Android hides native splash in AppBootLoading; iOS waits for intro gate.
-    if (Platform.OS === 'android' || !showSplashIntro) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [
-    fontsLoaded,
-    appBootstrapDone,
-    showSplashIntro,
-    showOnboarding,
-    showTermsGate,
-  ]);
-
-  const handleSplashOverlayFirstPaint = useCallback(() => {
+  const hideNativeSplashOnce = useCallback(() => {
+    if (nativeSplashHiddenRef.current) return;
+    nativeSplashHiddenRef.current = true;
     SplashScreen.hideAsync().catch(() => {});
   }, []);
+
+  const handleIntroMoveStart = useCallback(() => {
+    requestAnimationFrame(() => {
+      setIntroOverlayReady(true);
+      hideNativeSplashOnce();
+    });
+  }, [hideNativeSplashOnce]);
+
+  const wantsHomeIntro =
+    !hasShownHomeIntro && !showOnboarding && !showTermsGate;
+
+  const isBootstrapped = fontsLoaded && appBootstrapDone;
+  const showBootCover =
+    !isBootstrapped || (wantsHomeIntro && !introOverlayReady);
+
+  useEffect(() => {
+    if (!isBootstrapped) return;
+    if (!wantsHomeIntro) {
+      setIntroOverlayReady(true);
+      hideNativeSplashOnce();
+    }
+  }, [isBootstrapped, wantsHomeIntro, hideNativeSplashOnce]);
+
+  useLayoutEffect(() => {
+    if (!isBootstrapped) return;
+    if (!wantsHomeIntro) {
+      hideNativeSplashOnce();
+    }
+  }, [isBootstrapped, wantsHomeIntro, hideNativeSplashOnce]);
 
   // Real navigation history — fixes back/close getting stuck oscillating
   // between two screens (e.g. chat <-> userProfile) when each screen's
@@ -524,6 +526,10 @@ function App() {
   /** Snapshot of the Pi AI search (query/results/layout) so returning restores the list. */
   const [piAiSnapshot, setPiAiSnapshot] = useState(null);
   const [returnToScreenAfterAuth, setReturnToScreenAfterAuth] = useState(null);
+  /** Guest picked BnB sheet row — after registration open AdsForm or PostEditor. */
+  const [guestPublishAfterAuth, setGuestPublishAfterAuth] = useState(null);
+  /** One-shot: open BnB publish bottom sheet on TikTok (guest must pick before register). */
+  const [pendingBnbPublishSheet, setPendingBnbPublishSheet] = useState(false);
   // 'userProfile' | 'home' | 'settings' | 'tikTokFeed' | 'favorites' | null
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
   const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שכחתי סיסמה success screen
@@ -588,6 +594,80 @@ function App() {
       })
       .catch(() => {});
   }, []);
+
+  const isBnbListingCategory = useCallback(category => {
+    const n =
+      category != null && String(category).trim() !== ''
+        ? parseInt(String(category).trim(), 10)
+        : NaN;
+    return n === 5;
+  }, []);
+
+  const openGuestBnbPublishSheet = useCallback(() => {
+    setPendingBnbPublishSheet(true);
+    setReturnToScreenAfterAuth('tikTokFeed');
+    setSelectedCategory('5');
+    if (currentScreen !== screenName.tikTokFeed) {
+      setCurrentScreen(screenName.tikTokFeed);
+    }
+  }, [currentScreen]);
+
+  const openGuestUserRegistration = useCallback(
+    (intent = null, returnScreen = 'tikTokFeed') => {
+      setGuestPublishAfterAuth(intent);
+      setReturnToScreenAfterAuth(returnScreen);
+      setCurrentScreen(screenName.userRegistration);
+    },
+    [],
+  );
+
+  const completeGuestRegistration = useCallback(
+    user => {
+      setCurrentUser(user);
+      const intent = guestPublishAfterAuth;
+      setGuestPublishAfterAuth(null);
+      const back = returnToScreenAfterAuth;
+      setReturnToScreenAfterAuth(null);
+
+      if (intent?.type === 'bnbAd') {
+        setBnbPublishHostType(
+          intent.bnbHostType === 'business' ? 'business' : 'private',
+        );
+        setEditingListing(null);
+        setAdsFormReturnScreen(screenName.tikTokFeed);
+        setCurrentScreen(screenName.adsForm);
+        return;
+      }
+      if (intent?.type === 'post') {
+        const raw =
+          selectedCategory != null && String(selectedCategory).trim() !== ''
+            ? parseInt(String(selectedCategory).trim(), 10)
+            : NaN;
+        const listingCat = Number.isFinite(raw) && raw > 0 ? raw : 5;
+        setSelectedCategory(String(listingCat));
+        setPostEditorConfig({
+          publishTarget: 'post',
+          returnScreen: screenName.tikTokFeed,
+          listingCategoryId: listingCat,
+          editingListing: null,
+          postDescriptionLabel: intent.openHouse
+            ? OPEN_HOUSE_POST_DESCRIPTION
+            : DEFAULT_POST_DESCRIPTION,
+        });
+        setCurrentScreen(screenName.postEditor);
+        return;
+      }
+
+      goBack(authReturnFallbackScreen(back, screenName.tikTokFeed));
+    },
+    [
+      guestPublishAfterAuth,
+      returnToScreenAfterAuth,
+      selectedCategory,
+      setCurrentUser,
+      goBack,
+    ],
+  );
 
   const handleSidebarFilterChange = useCallback((category, filterId) => {
     const catKey =
@@ -1046,10 +1126,6 @@ function App() {
     setCurrentScreen(screenName.userProfile);
   }, []);
 
-  if (!fontsLoaded || !appBootstrapDone) {
-    return <AppBootLoading />;
-  }
-
   const presenceUserEmail =
     currentUser?.email != null && String(currentUser.email).trim() !== ''
       ? String(currentUser.email).trim().toLowerCase()
@@ -1065,6 +1141,8 @@ function App() {
       <PresenceProvider userEmail={presenceUserEmail}>
         <SafeAreaProvider>
           <View style={[styles.container, forceRtlStyle]}>
+            {isBootstrapped ? (
+              <>
             <OfflineBanner />
             {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
             {__DEV__ && typeof window !== 'undefined' && (
@@ -1089,6 +1167,9 @@ function App() {
               <View
                 style={[
                   styles.homeShell,
+                  showBootCover &&
+                    wantsHomeIntro &&
+                    styles.homeShellUnderBootCover,
                   currentScreen === screenName.tikTokFeed &&
                     styles.homeShellCached,
                 ]}
@@ -1105,6 +1186,7 @@ function App() {
                     !hasShownHomeIntro && !showOnboarding && !showTermsGate
                   }
                   onIntroModalShown={() => setHasShownHomeIntro(true)}
+                  onIntroMoveStart={handleIntroMoveStart}
                   carouselCategoryId={homeCarouselCategoryId}
                   onOpenSelectedProjects={() =>
                     setCurrentScreen(screenName.selectedProjects)
@@ -1243,17 +1325,23 @@ function App() {
                     setBnbPublishHostType(opts?.bnbHostType ?? null);
                     setEditingListing(null);
                     if (!currentUser) {
-                      setReturnToScreenAfterAuth('tikTokFeed');
-                      setCurrentScreen(screenName.userRegistration);
-                    } else {
-                      setAdsFormReturnScreen(screenName.tikTokFeed);
-                      setCurrentScreen(screenName.adsForm);
+                      if (isBnbListingCategory(category ?? selectedCategory)) {
+                        openGuestBnbPublishSheet();
+                        return;
+                      }
+                      openGuestUserRegistration(null, 'tikTokFeed');
+                      return;
                     }
+                    setAdsFormReturnScreen(screenName.tikTokFeed);
+                    setCurrentScreen(screenName.adsForm);
                   }}
                   onOpenEditPublishAdWithCategory={(category, opts) => {
                     if (!currentUser) {
-                      setReturnToScreenAfterAuth('tikTokFeed');
-                      setCurrentScreen(screenName.userRegistration);
+                      if (isBnbListingCategory(category ?? selectedCategory)) {
+                        openGuestBnbPublishSheet();
+                        return;
+                      }
+                      openGuestUserRegistration(null, 'tikTokFeed');
                       return;
                     }
                     if (category != null) setSelectedCategory(String(category));
@@ -1266,8 +1354,11 @@ function App() {
                   }}
                   onOpenPostEditor={arg => {
                     if (!currentUser) {
-                      setReturnToScreenAfterAuth('tikTokFeed');
-                      setCurrentScreen(screenName.userRegistration);
+                      if (isBnbListingCategory(selectedCategory)) {
+                        openGuestBnbPublishSheet();
+                        return;
+                      }
+                      openGuestUserRegistration(null, 'tikTokFeed');
                       return;
                     }
                     const categoryRaw =
@@ -1401,14 +1492,13 @@ function App() {
                     setChatReturnScreen(screenName.tikTokFeed);
                     setCurrentScreen(screenName.chat);
                   }}
-                  onOpenUserRegistration={() => {
-                    setReturnToScreenAfterAuth('tikTokFeed');
-                    setCurrentScreen(screenName.userRegistration);
-                  }}
-                  onOpenCompanyRegistration={() => {
-                    setReturnToScreenAfterAuth('tikTokFeed');
-                    setCurrentScreen(screenName.subscriptionCompany);
-                  }}
+                  onOpenUserRegistration={intent =>
+                    openGuestUserRegistration(intent, 'tikTokFeed')
+                  }
+                  pendingBnbPublishSheet={pendingBnbPublishSheet}
+                  onPendingBnbPublishSheetConsumed={() =>
+                    setPendingBnbPublishSheet(false)
+                  }
                   uploadedListings={uploadedListings}
                   selectedCategory={selectedCategory}
                   feedFilters={feedFilters}
@@ -2811,13 +2901,9 @@ function App() {
             {currentScreen === screenName.userRegistration && (
               <UserRegistrationScreen
                 selectedCategory={selectedCategory}
-                onSuccess={user => {
-                  setCurrentUser(user);
-                  const back = returnToScreenAfterAuth;
-                  setReturnToScreenAfterAuth(null);
-                  goBack(authReturnFallbackScreen(back, screenName.adsForm));
-                }}
+                onSuccess={completeGuestRegistration}
                 onCancel={() => {
+                  setGuestPublishAfterAuth(null);
                   const back = returnToScreenAfterAuth;
                   setReturnToScreenAfterAuth(null);
                   goBack(authReturnFallbackScreen(back, screenName.tikTokFeed));
@@ -3279,6 +3365,9 @@ function App() {
                 />
               </View>
             ) : null}
+              </>
+            ) : null}
+            {showBootCover ? <BootSplashFrame /> : null}
           </View>
         </SafeAreaProvider>
       </PresenceProvider>
@@ -3295,12 +3384,12 @@ export default function RootApp() {
 }
 
 const styles = StyleSheet.create({
-  bootRoot: {
-    flex: 1,
-    backgroundColor: '#1e1d27',
-  },
   homeShell: {
     flex: 1,
+  },
+  /** Hide Home (incl. background.png) until intro overlay has painted under the boot cover. */
+  homeShellUnderBootCover: {
+    opacity: 0,
   },
   /** Home stays mounted under TikTok so back is instant (no refetch). */
   homeShellCached: {
