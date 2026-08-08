@@ -182,12 +182,15 @@ const resolveLastAdHeroVideoUri = ad => {
   return null;
 };
 
-/** Hero carousel video — imperative play/pause; generation token avoids pause/play races. */
+/** Hero / fullscreen ad carousel video — sound on when active; imperative play/pause. */
 const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
   uri,
   isActive,
   posterUri,
   width,
+  resizeMode = ResizeMode.COVER,
+  fillHeight = false,
+  showPlayBadge = true,
 }) {
   const videoRef = useRef(null);
   const generationRef = useRef(0);
@@ -204,6 +207,7 @@ const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
           await player.pauseAsync();
           if (gen === generationRef.current) {
             await player.setIsMutedAsync(true);
+            await player.setVolumeAsync(0);
           }
         } catch (_) {}
       })();
@@ -214,7 +218,8 @@ const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
     let cancelled = false;
     (async () => {
       try {
-        await player.setIsMutedAsync(true);
+        await player.setIsMutedAsync(false);
+        await player.setVolumeAsync(1);
         if (cancelled || gen !== generationRef.current) return;
         await player.playAsync();
         if (gen !== generationRef.current) {
@@ -223,6 +228,7 @@ const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
       } catch (_) {
         if (!cancelled && gen === generationRef.current) {
           try {
+            await player.setVolumeAsync(1);
             await player.playAsync();
           } catch (_) {}
         }
@@ -234,34 +240,45 @@ const ProfileAdHeroVideo = React.memo(function ProfileAdHeroVideo({
     };
   }, [isActive, uri]);
 
-  const slideStyle = [styles.lastAdImage, {width}];
+  const slideStyle = fillHeight
+    ? {
+        width,
+        height: Dimensions.get('window').height,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000',
+      }
+    : [styles.lastAdImage, {width}];
 
   return (
     <View style={slideStyle}>
       <Video
         ref={videoRef}
         source={{uri}}
-        style={StyleSheet.absoluteFill}
-        resizeMode={ResizeMode.COVER}
+        style={fillHeight ? {width: '100%', height: '100%'} : StyleSheet.absoluteFill}
+        resizeMode={resizeMode}
         shouldPlay={false}
         isLooping
-        isMuted
+        isMuted={!isActive}
+        volume={isActive ? 1 : 0}
         useNativeControls={false}
       />
       {posterUri && !isActive ? (
         <Image
           source={{uri: posterUri}}
           style={StyleSheet.absoluteFill}
-          resizeMode="cover"
+          resizeMode={fillHeight ? 'contain' : 'cover'}
         />
       ) : null}
-      <View style={styles.lastAdHeroVideoBadge} pointerEvents="none">
-        <MaterialCommunityIcons
-          name="play-circle"
-          size={28}
-          color="rgba(255,255,255,0.9)"
-        />
-      </View>
+      {showPlayBadge ? (
+        <View style={styles.lastAdHeroVideoBadge} pointerEvents="none">
+          <MaterialCommunityIcons
+            name="play-circle"
+            size={28}
+            color="rgba(255,255,255,0.9)"
+          />
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -2291,14 +2308,16 @@ const UserProfileScreen = ({
     .map(tagLabel)
     .filter(t => t && t !== displayName);
   /**
-   * סוג under the name — only when opened from בעלי מקצוע בתחום הנדל״ן.
-   * Brokers always show "תיווך"; professionals show their types chips.
+   * סוג under the name — all professional/broker profiles (directory, TikTok, feed, chat, etc.).
+   * Brokers always show "תיווך"; professionals show their type chips.
    */
-  const directoryTypeLabels = openedFromProfessionalsDirectory
-    ? isBroker
-      ? ['תיווך']
-      : professionalTypesDisplay
-    : [];
+  const profileTypeLabelsUnderName = isBroker
+    ? ['תיווך']
+    : isProfessional
+      ? professionalTypesDisplay.length > 0
+        ? professionalTypesDisplay
+        : ['בעל מקצוע']
+      : [];
   // Professionals → התמחויות from specializations.
   // Brokers → אזור פעילות from activity_regions (not under התמחויות).
   // Company → התמחויות from specializations only (never activity regions).
@@ -2701,6 +2720,7 @@ const UserProfileScreen = ({
                             }
                             posterUri={item.posterUri}
                             width={lastAdCardWidth}
+                            showPlayBadge={false}
                           />
                         );
                       }
@@ -3335,14 +3355,8 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
-                {/* סוג under name — only from בעלי מקצוע בתחום הנדל״ן (brokers → תיווך). */}
-                {openedFromProfessionalsDirectory
-                  ? renderProfessionalTypeTags(directoryTypeLabels)
-                  : !showProfessionalFigmaProfile &&
-                      isProfessional &&
-                      !showTikTokProfessionalHeader
-                    ? renderProfessionalTypeTags(professionalTypesDisplay)
-                    : null}
+                {(isProfessional || isBroker) &&
+                  renderProfessionalTypeTags(profileTypeLabelsUnderName)}
                 {brokerAddress && !isOwnProfile ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
@@ -3916,14 +3930,14 @@ const UserProfileScreen = ({
                   backgroundColor: '#000',
                 }}>
                 {item.isVideo ? (
-                  <Video
-                    source={{uri: item.uri}}
-                    style={{width: '100%', height: '100%'}}
+                  <ProfileAdHeroVideo
+                    uri={item.uri}
+                    isActive={index === fullScreenImageIndex}
+                    posterUri={item.posterUri}
+                    width={Dimensions.get('window').width}
                     resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay={index === fullScreenImageIndex}
-                    isLooping
-                    isMuted={false}
-                    useNativeControls
+                    fillHeight
+                    showPlayBadge={false}
                   />
                 ) : (
                   <Image

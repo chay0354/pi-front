@@ -377,39 +377,6 @@ function App() {
     setCurrentScreen(nextScreen);
   }, []);
 
-  const finishPublishedListing = useCallback(
-    ({returnScreen, categoryId, listingPreview, isUpdate = false}) => {
-      const catNum =
-        categoryId != null ? parseInt(String(categoryId), 10) : NaN;
-      const resolvedCat = Number.isFinite(catNum) ? catNum : null;
-      if (resolvedCat != null) {
-        setSelectedCategory(String(resolvedCat));
-      }
-      if (returnScreen === screenName.editPublishAd) {
-        setEditPublishSourceCategory(
-          resolvedCat != null ? resolvedCat : editPublishSourceCategory,
-        );
-        setEditPublishRestoreStrip(true);
-      }
-      if (listingPreview) {
-        setUploadedListings(prev => [...prev, listingPreview]);
-      }
-      setEditingListing(null);
-      setBnbPublishHostType(null);
-      setPostEditorConfig(prev => ({...prev, editingListing: null}));
-      setEditPublishRefreshKey(k => k + 1);
-      setTimeout(() => setTikTokFeedRefreshKey(k => k + 1), 800);
-      replaceCurrentScreen(returnScreen);
-      setPublishSuccessMessage(
-        isUpdate
-          ? 'המודעה שלך עודכנה בהצלחה'
-          : 'המודעה שלכם פורסמה בהצלחה!',
-      );
-      setPublishSuccessVisible(true);
-    },
-    [editPublishSourceCategory, replaceCurrentScreen],
-  );
-
   /** Map auth return token → screen name (fallback when history is empty). */
   const authReturnFallbackScreen = useCallback((back, defaultScreen) => {
     if (back === 'home') return screenName.home;
@@ -688,6 +655,45 @@ function App() {
       return next;
     });
   }, []);
+
+  const finishPublishedListing = useCallback(
+    ({returnScreen, categoryId, listingPreview, isUpdate = false}) => {
+      const catNum =
+        categoryId != null ? parseInt(String(categoryId), 10) : NaN;
+      const resolvedCat = Number.isFinite(catNum) ? catNum : null;
+      if (resolvedCat != null) {
+        setSelectedCategory(String(resolvedCat));
+      }
+      if (listingPreview?.feed_post === true && resolvedCat != null) {
+        handleSidebarFilterChange(
+          String(resolvedCat),
+          tikTokPostsSidebarFilterForCategory(resolvedCat),
+        );
+      }
+      if (returnScreen === screenName.editPublishAd) {
+        setEditPublishSourceCategory(
+          resolvedCat != null ? resolvedCat : editPublishSourceCategory,
+        );
+        setEditPublishRestoreStrip(true);
+      }
+      if (listingPreview) {
+        setUploadedListings(prev => [...prev, listingPreview]);
+      }
+      setEditingListing(null);
+      setBnbPublishHostType(null);
+      setPostEditorConfig(prev => ({...prev, editingListing: null}));
+      setEditPublishRefreshKey(k => k + 1);
+      setTimeout(() => setTikTokFeedRefreshKey(k => k + 1), 800);
+      replaceCurrentScreen(returnScreen);
+      setPublishSuccessMessage(
+        isUpdate
+          ? 'המודעה שלך עודכנה בהצלחה'
+          : 'המודעה שלכם פורסמה בהצלחה!',
+      );
+      setPublishSuccessVisible(true);
+    },
+    [editPublishSourceCategory, handleSidebarFilterChange, replaceCurrentScreen],
+  );
 
   /** Open a feed post by id — sets category, פוסטים sidebar, and scroll focus. */
   const openListingInTikTokFeed = useCallback(
@@ -2342,7 +2348,13 @@ function App() {
                       general_details:
                         postEditorConfig.postDescriptionLabel ===
                         OPEN_HOUSE_POST_DESCRIPTION
-                          ? {post_kind: OPEN_HOUSE_POST_KIND}
+                          ? {
+                              post_kind: OPEN_HOUSE_POST_KIND,
+                              ...(payload?.generalDetails &&
+                              typeof payload.generalDetails === 'object'
+                                ? payload.generalDetails
+                                : {}),
+                            }
                           : payload?.generalDetails || null,
                     };
                   }

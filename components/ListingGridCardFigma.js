@@ -67,6 +67,10 @@ const ListingGridCardFigma = ({
   style,
   /** When set, shows the same top-right pen badge as EditPublishAd (ערוך/פרסם). */
   onEdit = null,
+  /** Hide multi-photo dots (Pi AI search). */
+  hidePhotoDots = false,
+  /** Place dots at top of image instead of bottom (TikTok list view). */
+  photoDotsAtTop = false,
 }) => {
   const {
     primaryUri,
@@ -284,8 +288,13 @@ const ListingGridCardFigma = ({
             <Octicons name="pencil" size={25} color="#fff" />
           </TouchableOpacity>
         ) : null}
-        {dotCount > 0 ? (
-          <View style={styles.gridCardDots} pointerEvents="none">
+        {!hidePhotoDots && dotCount > 0 ? (
+          <View
+            style={[
+              styles.gridCardDots,
+              photoDotsAtTop && styles.gridCardDotsTop,
+            ]}
+            pointerEvents="none">
             {Array.from({length: dotCount}, (_, i) => (
               <View
                 key={i}
@@ -543,6 +552,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 5,
+    zIndex: 2,
+  },
+  gridCardDotsTop: {
+    bottom: undefined,
+    top: 6,
   },
   gridCardDot: {borderRadius: 999},
   gridCardDotActive: {

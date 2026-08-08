@@ -356,6 +356,8 @@ const Home = ({
 
     const runVisit = () => {
       loadFeatureAdListing();
+      // Stories published while away (e.g. a new feed post) must appear in the strip.
+      loadStories({silent: true});
     };
     if (eagerLoad) {
       runVisit();
@@ -363,7 +365,7 @@ const Home = ({
     }
     const task = InteractionManager.runAfterInteractions(runVisit);
     return () => task.cancel();
-  }, [isScreenActive, eagerLoad, loadFeatureAdListing]);
+  }, [isScreenActive, eagerLoad, loadFeatureAdListing, loadStories]);
 
   useEffect(() => {
     if (eagerLoad) {

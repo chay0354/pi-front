@@ -156,7 +156,7 @@ const CITY_BY_LABEL = new Map(ISRAELI_CITIES.map(c => [c.label, c]));
 
 /**
  * @param {string} query
- * @returns {{ raw: string, city: string|null, purpose: 'rent'|'sale'|null, searchPurpose: 'enter'|'bring_in'|null }}
+ * @returns {{ raw: string, city: string|null, purpose: 'rent'|'sale'|null }}
  */
 export function parsePiAiQuery(query) {
   const raw = String(query || '').trim();
@@ -174,37 +174,6 @@ export function parsePiAiQuery(query) {
     q.includes('לקנות');
   if (wantsRent && !wantsSale) purpose = 'rent';
   else if (wantsSale && !wantsRent) purpose = 'sale';
-
-  let searchPurpose = null;
-  // שותפים (category 3) — only when the user explicitly asks for roommate / join intent.
-  const wantsEnter =
-    q.includes('מחפש להיכנס') ||
-    q.includes('להיכנס לדירה') ||
-    q.includes('להכנס לדירה') ||
-    q.includes('רוצה להיכנס') ||
-    q.includes('רוצה להכנס') ||
-    /(?:^|\s)(?:מחפש|רוצה)(?:\s+\S+){0,4}\s*(?:דיר(?:ה|ת)\s*)?(?:ל)?(?:היכנס|הכנס\b)/.test(
-      q,
-    ) ||
-    /(?:^|\s)(?:ל)?(?:היכנס|הכנס)\s+(?:ל)?(?:דיר(?:ה|ת)|לדיר)/.test(q);
-  const wantsBringIn =
-    q.includes('מחפש להכניס') ||
-    q.includes('מצא לי שותף') ||
-    q.includes('מצא שותף') ||
-    q.includes('חפש לי שותף') ||
-    q.includes('שותף דייר') ||
-    q.includes('שותפה דייר') ||
-    /(?:^|\s)(?:מצא|חפש)(?:\s+לי)?\s*(?:שותפ|דייר)/.test(q) ||
-    /(?:^|\s)(?:מחפש|רוצה)\s*(?:שותפ|דייר)/.test(q) ||
-    /(?:^|\s)(?:דיר(?:ה|ת)\s*)?(?:ל)?(?:הכניס\b)|מחפש(?:\s+דיר(?:ה|ת))?\s+להכניס/.test(
-      q,
-    ) ||
-    /(?:^|\s)שותפ(?:ה|ים|ת)(?:\s+דייר)?(?:\s+לדיר(?:ה|ת))?/.test(q);
-  if (wantsEnter && !wantsBringIn) {
-    searchPurpose = 'enter';
-  } else if (wantsBringIn) {
-    searchPurpose = 'bring_in';
-  }
 
   let city = null;
   for (const entry of CITY_ALIAS_ENTRIES) {
@@ -231,7 +200,7 @@ export function parsePiAiQuery(query) {
     }
   }
 
-  return {raw, city, purpose, searchPurpose};
+  return {raw, city, purpose};
 }
 
 /**
@@ -291,43 +260,15 @@ function listingMatchesPurpose(listing, purpose) {
 }
 
 /**
- * @param {Record<string, unknown>} listing
- * @param {'enter'|'bring_in'} searchPurpose
- * @returns {boolean}
- */
-function listingMatchesSearchPurpose(listing, searchPurpose) {
-  if (Number(listing.category) !== 3) return false;
-  const sp = String(
-    listing.search_purpose || listing.searchPurposeKey || '',
-  )
-    .trim()
-    .toLowerCase();
-  if (searchPurpose === 'enter') {
-    return sp === 'enter';
-  }
-  return sp === 'bring_in' || sp === 'partner';
-}
-
-/**
- * Hard filters extracted from the Hebrew query (city, rent/sale, שותפים patterns).
+ * Local pre-filter before Gemini (city / rent-sale only). Category intent = Gemini.
  * @param {Record<string, unknown>[]} listings
  * @param {ReturnType<typeof parsePiAiQuery>} parsed
  * @returns {Record<string, unknown>[]}
  */
-function isPartnersListing(listing) {
-  return Number(listing?.category) === 3;
-}
-
 export function filterListingsByParsedQuery(listings, parsed) {
   if (!parsed) return listings || [];
+  // Category / roommate intent is decided by Gemini — don't pre-filter שותפים here.
   return (listings || []).filter(listing => {
-    if (parsed.searchPurpose) {
-      return listingMatchesSearchPurpose(listing, parsed.searchPurpose);
-    }
-    // Default Pi AI search: exclude שותפים unless the user explicitly asked.
-    if (isPartnersListing(listing)) {
-      return false;
-    }
     if (parsed.city && !listingMatchesCity(listing, parsed.city)) {
       return false;
     }
@@ -346,8 +287,6 @@ export function filterListingsByParsedQuery(listings, parsed) {
 export function buildPiAiFilterEmptyMessage(parsed, totalBefore) {
   const parts = [];
   if (parsed?.city) parts.push(`ב${parsed.city}`);
-  if (parsed?.searchPurpose === 'enter') parts.push('מחפש להכנס');
-  if (parsed?.searchPurpose === 'bring_in') parts.push('מחפש להכניס / שותף');
   if (parsed?.purpose === 'rent') parts.push('להשכרה');
   if (parsed?.purpose === 'sale') parts.push('למכירה');
   if (!parts.length) return null;
@@ -364,16 +303,6 @@ export function buildPiAiSearchingMessage(query, parsed) {
   const q = String(query || '').trim();
   if (!q) return 'מחפש עבורך';
 
-  if (parsed?.searchPurpose === 'enter') {
-    return parsed.city
-      ? `מחפש דירה להכנס ב${parsed.city}`
-      : 'מחפש את ההכנס הנכון עבורך';
-  }
-  if (parsed?.searchPurpose === 'bring_in') {
-    return parsed.city
-      ? `מחפש שותף / להכניס ב${parsed.city}`
-      : 'מחפש את השותף המתאים עבורך';
-  }
   if (parsed?.city && parsed?.purpose === 'rent') {
     return `מחפש דירה להשכרה ב${parsed.city}`;
   }

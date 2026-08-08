@@ -85,6 +85,8 @@ export const DEFAULT_POST_DESCRIPTION = 'פוסט';
 export const OPEN_HOUSE_POST_DESCRIPTION = 'בית פתוח';
 /** Persisted in `ads.general_details.post_kind` for open-house feed posts. */
 export const OPEN_HOUSE_POST_KIND = 'open_house';
+export const OPEN_HOUSE_PLACE_KEY = 'open_house_place';
+export const OPEN_HOUSE_DATE_KEY = 'open_house_date';
 
 /** Sidebar chip id for feed posts only — must match TikTokFeedScreen filter tables. */
 export const TIKTOK_POSTS_SIDEBAR_FILTER_BY_CATEGORY = {
@@ -124,6 +126,44 @@ export function isOpenHouseListing(listing) {
   }
   const gd = parseListingGeneralDetails(listing.general_details);
   return gd?.post_kind === OPEN_HOUSE_POST_KIND;
+}
+
+/** @returns {{ place: string, date: string } | null} */
+export function getOpenHouseDetailsFromListing(listing) {
+  if (!isOpenHouseListing(listing)) return null;
+  const gd = parseListingGeneralDetails(listing?.general_details);
+  return {
+    place: String(gd?.[OPEN_HOUSE_PLACE_KEY] || '').trim(),
+    date: String(gd?.[OPEN_HOUSE_DATE_KEY] || '').trim(),
+  };
+}
+
+/** Feed overlay — `בית פתוח` + name + ` - ` + date (wraps naturally on two lines). */
+export function formatOpenHouseOverlayText(place, date) {
+  const name = String(place || '').trim();
+  const d = String(date || '').trim();
+  if (!name && !d) return '';
+  if (!name) return d ? `${OPEN_HOUSE_POST_DESCRIPTION} - ${d}` : '';
+  if (!d) return formatOpenHouseOverlayName(name);
+  return `${formatOpenHouseOverlayName(name)} - ${d}`;
+}
+
+function formatOpenHouseOverlayName(rawName) {
+  const n = String(rawName || '').trim();
+  if (!n) return OPEN_HOUSE_POST_DESCRIPTION;
+  if (n.includes('בית פתוח')) return n;
+  const joiner = /^(ש|ה)/.test(n) ? 'ב' : 'ב';
+  return `בית פתוח ${joiner}${n}`;
+}
+
+/** @deprecated use formatOpenHouseOverlayText */
+export function formatOpenHouseOverlayLine1(place) {
+  return formatOpenHouseOverlayName(place);
+}
+
+/** @deprecated use formatOpenHouseOverlayText */
+export function formatOpenHouseOverlayLine2(date) {
+  return String(date || '').trim();
 }
 
 /** Badge label on Edit/Publish cards: פוסט vs בית פתוח. */
@@ -195,6 +235,8 @@ export function usesBrokerAdListingCategories(subscriptionType) {
 
 /** Create-sheet icon for the בית פתוח row (company / broker / project marketer). */
 export const CREATE_SHEET_OPEN_HOUSE_ICON = require('../assets/upload-ad/broker/house.png');
+/** Feed overlay pill (בית פתוח + house icon) — baked PNG from Figma. */
+export const OPEN_HOUSE_FEED_TAG = require('../assets/open-house-tag.png');
 
 /** Valid DB `ads.category` ids (gaps 9/11 unused). */
 export const LISTING_CATEGORY_IDS = new Set([

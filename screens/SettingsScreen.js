@@ -15,7 +15,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
-import {isMarketingManager, subscriptionTypes} from '../utils/constant';
+import {getHeaderTitle, isMarketingManager, subscriptionTypes} from '../utils/constant';
 import {
   getUserCompanyLogoUrl,
   getUserProfileImageUrl,
@@ -495,7 +495,9 @@ const SettingsScreen = ({
               }>
               {renderChevron()}
               <View style={styles.cardItemTextWrap}>
-                <Text style={styles.cardItemText}>משווק פרויקטים</Text>
+                <Text style={styles.cardItemText}>
+                  {getHeaderTitle(subscriptionTypes.projectMarketer)}
+                </Text>
                 {renderMenuIcon('projectMarketer')}
               </View>
             </TouchableOpacity>

@@ -53,6 +53,9 @@ import {
   isReservedPostDescription,
   OPEN_HOUSE_POST_DESCRIPTION,
   OPEN_HOUSE_POST_KIND,
+  OPEN_HOUSE_PLACE_KEY,
+  OPEN_HOUSE_DATE_KEY,
+  getOpenHouseDetailsFromListing,
   isB2BSubscriptionType,
 } from '../utils/constant';
 import {
@@ -71,6 +74,7 @@ import {
   PROFILE_RING_LOCATIONS,
 } from '../components/ProfileAvatar';
 import PostTargetProfessionalsSheet from '../components/PostTargetProfessionalsSheet';
+import OpenHouseDetailsModal from '../components/OpenHouseDetailsModal';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
@@ -986,6 +990,10 @@ const PostEditorScreen = ({
   const uploadProgressLoopRef = useRef(null);
   const [topNavWidth, setTopNavWidth] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
+  // Feed post publishing a companion home story: expand the preview to the full
+  // screen first, so the story frame keeps the composed layout instead of being
+  // squashed from the feed aspect ratio.
+  const [capturingStoryFrame, setCapturingStoryFrame] = useState(false);
   const [textModeOverlayText, setTextModeOverlayText] = useState('');
   const [textContent, setTextContent] = useState('');
   const [mediaImages, setMediaImages] = useState([]);
@@ -1011,6 +1019,10 @@ const PostEditorScreen = ({
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
   const [showProfessionalTargetSheet, setShowProfessionalTargetSheet] =
     useState(false);
+  const [showOpenHouseDetailsModal, setShowOpenHouseDetailsModal] =
+    useState(false);
+  const [openHouseDraft, setOpenHouseDraft] = useState({place: '', date: ''});
+  const openHouseDetailsRef = useRef({place: '', date: ''});
   const notifyProfessionalTypesRef = useRef([]);
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
@@ -1057,6 +1069,9 @@ const PostEditorScreen = ({
   const editingListingId =
     initialListing?.id != null ? String(initialListing.id).trim() : '';
   const isEditMode = Boolean(editingListingId);
+  const isOpenHousePost =
+    defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION &&
+    publishTarget !== 'story';
   const originalVideoUrlRef = useRef(null);
   const originalMainImageUrlRef = useRef(null);
   const didHydrateListingRef = useRef(false);
@@ -1089,7 +1104,15 @@ const PostEditorScreen = ({
     setTextContent('');
     setTextModeOverlayText('');
     nextStackOrderRef.current = 1;
-  }, [editorSessionKey]);
+    if (isOpenHousePost && initialListing) {
+      const details = getOpenHouseDetailsFromListing(initialListing);
+      if (details) {
+        openHouseDetailsRef.current = details;
+      }
+    } else if (!isOpenHousePost) {
+      openHouseDetailsRef.current = {place: '', date: ''};
+    }
+  }, [editorSessionKey, isOpenHousePost, initialListing]);
 
   const isRemoteMediaUri = uri =>
     /^https?:\/\//i.test(String(uri || '').trim());
@@ -1360,9 +1383,8 @@ const PostEditorScreen = ({
         usedGradientBackground &&
         hasTextOverlays &&
         !hasStickerOverlays;
-      // Stickers always bake. Story photos with text also bake so home stories
-      // show the text (stories have no live overlay layer unless metadata is set).
-      // Feed posts keep live text layers for re-edit without baking.
+      // Stickers always bake. Direct story publish with text on photo also bakes.
+      // Feed posts keep live text layers; companion stories reuse them (no re-bake).
       const mustBakeComposite =
         hasStickerOverlays ||
         (publishTarget === 'story' && hasTextOverlays && !hasVideoBackground);
@@ -1410,14 +1432,11 @@ const PostEditorScreen = ({
               : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
           );
         }
-        const win = Dimensions.get('window');
         return captureRef(postPreviewRef.current, {
           format: 'jpg',
           quality: publishTarget === 'story' ? 0.88 : 0.75,
           result: 'tmpfile',
-          ...(publishTarget === 'story'
-            ? {width: win.width, height: win.height}
-            : null),
+          // Never force window width/height — mismatched aspect ratios stretch the JPEG.
         });
       };
 
@@ -1573,7 +1592,13 @@ const PostEditorScreen = ({
             : null,
         }),
         ...(defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION
-          ? {post_kind: OPEN_HOUSE_POST_KIND}
+          ? {
+              post_kind: OPEN_HOUSE_POST_KIND,
+              [OPEN_HOUSE_PLACE_KEY]:
+                openHouseDetailsRef.current?.place?.trim() || '',
+              [OPEN_HOUSE_DATE_KEY]:
+                openHouseDetailsRef.current?.date?.trim() || '',
+            }
           : {}),
       };
 
@@ -1663,6 +1688,68 @@ const PostEditorScreen = ({
         });
       }
 
+      // B2B accounts: new feed posts also become homepage story slides (stories table).
+      if (
+        publishTarget !== 'story' &&
+        !isEditMode &&
+        isB2BSubscriptionType(subType || currentUser?.subscription_type)
+      ) {
+        try {
+          let storyMediaUrl = url;
+          let storyGeneralDetails = undefined;
+
+          const storyUsesLiveText =
+            hasTextOverlays && !hasStickerOverlays && !textBakedIntoImage;
+
+          if (storyUsesLiveText) {
+            // Image / video / gradient feed posts — live text like TikTok feed.
+            storyGeneralDetails = overlayGeneralDetails;
+          } else if (hasStickerOverlays) {
+            // Stickers must be baked; letterbox the background (never crop).
+            setCapturingStoryFrame(true);
+            setIsCapturing(true);
+            await new Promise(resolve => requestAnimationFrame(() => resolve()));
+            await new Promise(resolve =>
+              setTimeout(resolve, Platform.OS === 'android' ? 350 : 180),
+            );
+            let storyCaptureUri;
+            if (Platform.OS === 'web') {
+              const el = resolvePostPreviewDomNode(
+                postPreviewRef,
+                'post-editor-preview-root',
+              );
+              if (!el) {
+                throw new Error('לא ניתן לצלם את התצוגה בדפדפן');
+              }
+              storyCaptureUri = await capturePostPreviewToDataUrl(el, {
+                minShortSidePx: 1440,
+                jpegQuality: 0.96,
+                maxScale: 4,
+              });
+            } else {
+              storyCaptureUri = await captureRef(postPreviewRef.current, {
+                format: 'jpg',
+                quality: 0.88,
+                result: 'tmpfile',
+              });
+            }
+            storyMediaUrl = await uploadImagePayload(storyCaptureUri, 'story');
+            setCapturingStoryFrame(false);
+          }
+
+          await createStory({
+            subscription_id: subId,
+            media_url: storyMediaUrl,
+            general_details: storyGeneralDetails,
+          });
+        } catch (storyErr) {
+          console.warn(
+            '[PostEditor] Companion story for feed post failed:',
+            storyErr?.message || storyErr,
+          );
+        }
+      }
+
       if (publishTarget !== 'story') {
         await finishUploadProgress();
       }
@@ -1689,6 +1776,7 @@ const PostEditorScreen = ({
         error?.message || (isEditMode ? 'העדכון נכשל' : 'הפרסום נכשל'),
       );
     } finally {
+      setCapturingStoryFrame(false);
       setIsCapturing(false);
       setPublishing(false);
       resetUploadProgress();
@@ -1696,19 +1784,48 @@ const PostEditorScreen = ({
     }
   };
 
-  /**
-   * New (not edited) feed posts get one extra step: ask whether the post is
-   * relevant to specific professional types before actually publishing, so
-   * matching professionals can be notified in chat.
-   */
-  const handlePublishPress = () => {
-    if (publishing) return;
+  const proceedAfterOpenHouseDetails = () => {
     const isNewFeedPost = publishTarget !== 'story' && !isEditMode;
-    if (isNewFeedPost && canPublish) {
+    if (isNewFeedPost && canPublish && !isOpenHousePost) {
       setShowProfessionalTargetSheet(true);
       return;
     }
     handlePublish();
+  };
+
+  const handlePublishPress = () => {
+    if (publishing) return;
+    if (!canPublish) {
+      Alert.alert(
+        'לא ניתן לפרסם',
+        'הוסף תמונה או סרטון מהמצלמה או מהגלריה, או טקסט (Aa), ואז לחץ שוב כדי להעלות ולפרסם.',
+      );
+      return;
+    }
+    if (isOpenHousePost) {
+      setOpenHouseDraft({...openHouseDetailsRef.current});
+      setShowOpenHouseDetailsModal(true);
+      return;
+    }
+    proceedAfterOpenHouseDetails();
+  };
+
+  const handleOpenHouseDetailsCancel = () => {
+    if (publishing) return;
+    setShowOpenHouseDetailsModal(false);
+  };
+
+  const handleOpenHouseDetailsConfirm = ({place, date}) => {
+    if (!String(place || '').trim() || !String(date || '').trim()) {
+      Alert.alert('חסר מידע', 'יש למלא מיקום ותאריך לבית הפתוח.');
+      return;
+    }
+    openHouseDetailsRef.current = {
+      place: String(place).trim(),
+      date: String(date).trim(),
+    };
+    setShowOpenHouseDetailsModal(false);
+    proceedAfterOpenHouseDetails();
   };
 
   const handleProfessionalTargetSkip = () => {
@@ -1743,6 +1860,9 @@ const PostEditorScreen = ({
   // image — after בוצע the image jumps down relative to the text.
   const lockPreviewLayout =
     Boolean(editingTextBlockId) || isKeyboardVisible;
+
+  const isStoryCapture =
+    isCapturing && (publishTarget === 'story' || capturingStoryFrame);
 
   /** Full keyboard-closed stage height — drag bounds must match save/finish coords. */
   const effectiveStageHeight = Math.max(
@@ -2458,7 +2578,7 @@ const PostEditorScreen = ({
         style={[
           styles.backgroundContainer,
           isCapturing &&
-            publishTarget === 'story' &&
+            (publishTarget === 'story' || capturingStoryFrame) &&
             styles.storyCaptureFill,
         ]}>
         <View
@@ -2467,10 +2587,14 @@ const PostEditorScreen = ({
           collapsable={false}
           style={[
             styles.backgroundMediaLayer,
-            lockPreviewLayout && lockedPreviewHeight > 0
+            !isStoryCapture &&
+            lockPreviewLayout &&
+            lockedPreviewHeight > 0
               ? styles.backgroundMediaLocked
               : null,
-            lockPreviewLayout && lockedPreviewHeight > 0
+            !isStoryCapture &&
+            lockPreviewLayout &&
+            lockedPreviewHeight > 0
               ? {height: lockedPreviewHeight}
               : null,
           ]}>
@@ -2479,7 +2603,6 @@ const PostEditorScreen = ({
               source={{uri: backgroundVideoAsset.uri}}
               style={styles.backgroundVideo}
               // Letterbox like the feed/ads (fit full frame; black bars if needed).
-              // COVER was cropping landscape / non-9:16 clips on both iOS and Android.
               resizeMode={ResizeMode.CONTAIN}
               // Pause while editing text so the video surface / audio focus
               // cannot steal touches or dismiss the keyboard mid-type.
@@ -3247,6 +3370,15 @@ const PostEditorScreen = ({
           </KeyboardAvoidingView>
         </Pressable>
       </Modal>
+
+      <OpenHouseDetailsModal
+        visible={showOpenHouseDetailsModal}
+        initialPlace={openHouseDraft.place}
+        initialDate={openHouseDraft.date}
+        submitting={publishing}
+        onCancel={handleOpenHouseDetailsCancel}
+        onConfirm={handleOpenHouseDetailsConfirm}
+      />
 
       <PostTargetProfessionalsSheet
         visible={showProfessionalTargetSheet}

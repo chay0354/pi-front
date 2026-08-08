@@ -29,6 +29,7 @@ import {resolveStorySlideUri} from '../utils/videoPlayback';
 import {
   parsePostTextOverlayPayload,
 } from '../utils/postTextOverlay';
+import {feedBottomBarHeight} from '../utils/feedLayout';
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
@@ -37,6 +38,8 @@ const SWIPE_COMMIT_FRACTION = 0.25;
 const SWIPE_COMMIT_VELOCITY = 0.35;
 const USER_SWITCH_MS = 280;
 const PAGER_RUBBER_BAND = 0.32;
+/** Same top bar as TikTokFeedScreen — overlay coords match the feed cell. */
+const FEED_TOP_BAR_HEIGHT = 52;
 
 /** App uses forceRTL — `row` / authored `left` flip. Stories stay Instagram LTR. */
 const NATIVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;
@@ -49,8 +52,23 @@ function storyPanDx(dx) {
   return dx;
 }
 
-function buildPanelScale(translateX, panelIndex, currentPanelIndex) {
-  const base = -currentPanelIndex * SCREEN_W;
+/**
+ * forceRTL anchors the pager row to the right edge, so panel 0 sits off-screen
+ * left. Offsets are measured from whichever edge the row is anchored to.
+ */
+function pagerOffsetForIndex(panelIndex, panelCount) {
+  return NATIVE_RTL
+    ? (panelCount - 1 - panelIndex) * SCREEN_W
+    : -panelIndex * SCREEN_W;
+}
+
+function pagerOffsetBounds(panelCount) {
+  const span = Math.max(0, panelCount - 1) * SCREEN_W;
+  return NATIVE_RTL ? {minX: 0, maxX: span} : {minX: -span, maxX: 0};
+}
+
+function buildPanelScale(translateX, panelIndex, currentPanelIndex, panelCount) {
+  const base = pagerOffsetForIndex(currentPanelIndex, panelCount);
   const dist = panelIndex - currentPanelIndex;
   if (dist === -1) {
     return translateX.interpolate({
@@ -96,21 +114,17 @@ function preloadRingImages(ring) {
 }
 
 /**
- * Story video: always edge-to-edge horizontally.
- * Top/bottom letterboxing is OK when the scaled video is shorter than the screen;
- * taller videos are cropped top/bottom (never leave side bars).
+ * Story media: scale to CONTAIN inside the viewport — preserves aspect ratio;
+ * letterboxes with black bars when the asset isn't 9:16.
  */
-function storyVideoLayout(naturalW, naturalH) {
+function storyMediaLayout(naturalW, naturalH) {
   const {width: screenW, height: screenH} = Dimensions.get('window');
-  const w = Number(naturalW) || 0;
-  const h = Number(naturalH) || 0;
-  if (w <= 0 || h <= 0) {
-    return {width: screenW, height: screenH};
-  }
-  const displayH = screenW * (h / w);
+  const w = Math.max(1, Number(naturalW) || screenW);
+  const h = Math.max(1, Number(naturalH) || screenH);
+  const scale = Math.min(screenW / w, screenH / h);
   return {
-    width: screenW,
-    height: displayH,
+    width: Math.round(w * scale),
+    height: Math.round(h * scale),
   };
 }
 
@@ -152,7 +166,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
     const h = Number(nh) || 0;
     if (w <= 0 || h <= 0) return;
     sizedRef.current = true;
-    const layout = storyVideoLayout(w, h);
+    const layout = storyMediaLayout(w, h);
     setVideoLayout(layout);
     onMediaLayoutRef.current?.(layout);
     // Reveal only after layout is committed — avoids the cover→sized jump.
@@ -168,7 +182,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
     if (w <= 0 || h <= 0) return;
     sizedRef.current = true;
     // Full width like story video — short editor captures were ~50% with contain.
-    const layout = storyVideoLayout(w, h);
+    const layout = storyMediaLayout(w, h);
     setImageLayout(layout);
     onMediaLayoutRef.current?.(layout);
     requestAnimationFrame(() => {
@@ -224,7 +238,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
             style={{
               width: sized ? videoLayout.width : '100%',
               height: sized ? videoLayout.height : '100%',
-              objectFit: sized ? 'fill' : 'cover',
+              objectFit: sized ? 'contain' : 'contain',
               backgroundColor: '#000',
               display: 'block',
               opacity: sized ? 1 : 0,
@@ -254,7 +268,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
             sized ? videoLayout : styles.mediaFullScreen,
             {opacity: sized ? 1 : 0},
           ]}
-          resizeMode={sized ? ResizeMode.STRETCH : ResizeMode.COVER}
+          resizeMode={ResizeMode.CONTAIN}
           shouldPlay={sized && !isPaused}
           isMuted={isMuted}
           useNativeControls={false}
@@ -292,7 +306,7 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
           imageSized ? imageLayout : styles.mediaFullScreen,
           styles.storyImageVisible,
         ]}
-        resizeMode={imageSized ? 'stretch' : 'cover'}
+        resizeMode="contain"
         onLoad={event => {
           const src = event?.nativeEvent?.source;
           if (src?.width && src?.height) {
@@ -315,6 +329,7 @@ function StoryRingSlidePanel({
   isActive,
   onReady,
   onMediaLayout,
+  overlayBand,
 }) {
   const slides = ring?.slides || [];
   const slide = slides[slideIndex] || slides[0] || null;
@@ -383,12 +398,11 @@ function StoryRingSlidePanel({
     }
     return parsePostTextOverlayPayload({general_details: gd});
   })();
-  const overlayFrameW = mediaFrame?.width || 0;
-  const overlayFrameH = mediaFrame?.height || 0;
+  // Same band + scale as TikTok feed (top/bottom chrome inset, feedPageHeight).
   const showLiveText =
     !!storyTextPayload?.overlays?.length &&
-    overlayFrameW > 0 &&
-    overlayFrameH > 0;
+    mediaFrame != null &&
+    overlayBand?.height > 0;
 
   if (!slide) {
     return (
@@ -408,21 +422,23 @@ function StoryRingSlidePanel({
         onMediaLayout={handleMediaLayout}
       />
       {showLiveText ? (
-        <View style={styles.textOverlayAlign} pointerEvents="none">
-          <View
-            style={{
-              width: overlayFrameW,
-              height: overlayFrameH,
-            }}>
-            <PostTextOverlays
-              overlays={storyTextPayload.overlays}
-              previewWidth={storyTextPayload.previewWidth}
-              previewHeight={storyTextPayload.previewHeight}
-              coordsSpace={storyTextPayload.coordsSpace}
-              feedWidth={overlayFrameW}
-              feedHeight={overlayFrameH}
-            />
-          </View>
+        <View
+          style={[
+            styles.textOverlayBand,
+            {
+              top: overlayBand.top,
+              bottom: overlayBand.bottom,
+            },
+          ]}
+          pointerEvents="none">
+          <PostTextOverlays
+            overlays={storyTextPayload.overlays}
+            previewWidth={storyTextPayload.previewWidth}
+            previewHeight={storyTextPayload.previewHeight}
+            coordsSpace={storyTextPayload.coordsSpace}
+            feedWidth={overlayBand.width}
+            feedHeight={overlayBand.height}
+          />
         </View>
       ) : null}
       {isActive && mediaLoading ? (
@@ -445,6 +461,12 @@ const StoryViewerModal = ({
   onOpenProfile,
 }) => {
   const insets = useSafeAreaInsets();
+  const overlayBand = useMemo(() => {
+    const top = FEED_TOP_BAR_HEIGHT + insets.top;
+    const bottom = feedBottomBarHeight(insets.bottom);
+    const height = Math.max(1, Dimensions.get('window').height - top - bottom);
+    return {top, bottom, width: SCREEN_W, height};
+  }, [insets.top, insets.bottom]);
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -485,7 +507,7 @@ const StoryViewerModal = ({
 
   const syncBaseOffset = useCallback(
     (animated = false) => {
-      const base = -currentPanelIndex * SCREEN_W;
+      const base = pagerOffsetForIndex(currentPanelIndex, pagerPanels.length);
       baseOffsetRef.current = base;
       dragStartOffsetRef.current = base;
       if (animated) {
@@ -499,7 +521,7 @@ const StoryViewerModal = ({
         translateX.setValue(base);
       }
     },
-    [currentPanelIndex, translateX],
+    [currentPanelIndex, pagerPanels.length, translateX],
   );
 
   useEffect(() => {
@@ -618,8 +640,7 @@ const StoryViewerModal = ({
           const dx = storyPanDx(gestureState.dx);
           let next = dragStartOffsetRef.current + dx;
           const base = baseOffsetRef.current;
-          const minX = -(pagerPanels.length - 1) * SCREEN_W;
-          const maxX = 0;
+          const {minX, maxX} = pagerOffsetBounds(pagerPanels.length);
           if (!hasPrevUser && next > base) {
             next = base + dx * PAGER_RUBBER_BAND;
           } else if (!hasNextUser && next < base) {
@@ -788,6 +809,7 @@ const StoryViewerModal = ({
                 translateX,
                 index,
                 currentPanelIndex,
+                pagerPanels.length,
               );
               return (
                 <Animated.View
@@ -805,6 +827,7 @@ const StoryViewerModal = ({
                     isMuted={isMuted}
                     isPaused={!isCurrent || isUserPanning || isUserSwitching}
                     isActive={isCurrent}
+                    overlayBand={overlayBand}
                   />
                 </Animated.View>
               );
@@ -934,11 +957,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  /** Center live text over the letterboxed media frame (same box as the image). */
-  textOverlayAlign: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /** Same inset band as TikTok feed — overlay coords land identically. */
+  textOverlayBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   mediaFullScreen: {
     width: '100%',

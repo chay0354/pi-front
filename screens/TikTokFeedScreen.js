@@ -117,7 +117,6 @@ import {
 } from '../utils/geocoding';
 import {resolveUserReferenceCoords} from '../utils/userLocation';
 import {
-  flexEnd,
   flexStart,
   forceLtrStyle,
   hebrewTextAlign,
@@ -141,6 +140,10 @@ import {
   CREATE_SHEET_OPEN_HOUSE_ICON,
   getCreateSheetListingIcon,
   getListingSheetCopy,
+  formatOpenHouseOverlayText,
+  getOpenHouseDetailsFromListing,
+  isOpenHouseListing,
+  OPEN_HOUSE_FEED_TAG,
   isCompanySubscriptionType,
   isBrokerLikeSubscriptionType,
   OPEN_HOUSE_POST_DESCRIPTION,
@@ -372,7 +375,7 @@ const isNewConditionListing = listing => {
 const isRegularUserListing = listing =>
   String(listing?.subscription_type || '').toLowerCase() === 'user';
 
-/** BnB feed: regular users + company publishers (same listing UX). */
+/** BnB listing feed (not פוסטים): regular users + company publishers (same listing UX). */
 const isBnbFeedPublisherListing = listing => {
   const sub = String(listing?.subscription_type || '').toLowerCase();
   return sub === 'user' || sub === 'company';
@@ -3651,13 +3654,27 @@ const TikTokFeedScreen = ({
             })
           ) {
             displayListings = displayListings.filter(
-              l => !isDeveloperCompanyListing(l),
+              l => isFeedPost(l) || !isDeveloperCompanyListing(l),
             );
           }
-          if (selectedCatNum === 3 && !sidebarWantsProfessionalPosts) {
-            displayListings = displayListings.filter(isRegularUserListing);
-          } else if (selectedCatNum === 5 && !sidebarWantsProfessionalPosts) {
-            displayListings = displayListings.filter(isBnbFeedPublisherListing);
+          // Publisher-type rules gate listing ads only — posts stay visible for
+          // every account type allowed to publish them in that category.
+          if (
+            selectedCatNum === 3 &&
+            !sidebarWantsProfessionalPosts &&
+            !sidebarWantsFeedPostsOnly
+          ) {
+            displayListings = displayListings.filter(
+              l => isFeedPost(l) || isRegularUserListing(l),
+            );
+          } else if (
+            selectedCatNum === 5 &&
+            !sidebarWantsProfessionalPosts &&
+            !sidebarWantsFeedPostsOnly
+          ) {
+            displayListings = displayListings.filter(
+              l => isFeedPost(l) || isBnbFeedPublisherListing(l),
+            );
           }
           }
 
@@ -6069,6 +6086,8 @@ const TikTokFeedScreen = ({
     if (!video) {
       return {
         isPostListing: false,
+        isOpenHousePost: false,
+        openHouseOverlayText: '',
         isCompanyListing: false,
         isCompanyLandListing: false,
         showBrokerStylePropertyOverlay: false,
@@ -6091,6 +6110,11 @@ const TikTokFeedScreen = ({
       };
     }
     const isPostListing = isPostVideo(video);
+    const isOpenHousePost =
+      isPostListing && isOpenHouseListing(video);
+    const openHouseDetails = isOpenHousePost
+      ? getOpenHouseDetailsFromListing(video)
+      : null;
     const isCompanyListing =
       !isPostListing &&
       isCompanySubscriptionType(video.subscription_type);
@@ -6210,6 +6234,13 @@ const TikTokFeedScreen = ({
     );
     return {
       isPostListing,
+      isOpenHousePost,
+      openHouseOverlayText: openHouseDetails
+        ? formatOpenHouseOverlayText(
+            openHouseDetails.place,
+            openHouseDetails.date,
+          )
+        : '',
       isCompanyListing,
       isCompanyLandListing,
       showBrokerStylePropertyOverlay,
@@ -7162,6 +7193,92 @@ const TikTokFeedScreen = ({
                   style={styles.companyStatIcon}
                 />
               </View>
+            </View>
+          </View>
+        ) : o.isOpenHousePost ? (
+          <View
+            style={[styles.postActionsInfo, postOverlayRtlDirection]}
+            pointerEvents="box-none">
+            <View style={styles.openHouseTagRow} pointerEvents="none">
+              <Image
+                source={OPEN_HOUSE_FEED_TAG}
+                style={styles.openHouseTagImage}
+                resizeMode="contain"
+                accessibilityLabel={OPEN_HOUSE_POST_DESCRIPTION}
+              />
+            </View>
+            {o.openHouseOverlayText ? (
+              <Text
+                style={styles.openHouseOverlayText}
+                numberOfLines={3}
+                ellipsizeMode="tail"
+                pointerEvents="none">
+                {o.openHouseOverlayText}
+              </Text>
+            ) : null}
+            {postHashtags.length > 0 ? (
+              <Text
+                style={styles.postHashtagsText}
+                numberOfLines={2}
+                pointerEvents="none">
+                {postHashtags.map(t => `#${t}`).join(' ')}
+              </Text>
+            ) : null}
+            <View
+              style={[styles.postActionsRow, postOverlayRtlDirection]}
+              pointerEvents="box-none">
+              <View style={styles.postActionItem}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postView}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(video?.view_count ?? 0)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => {
+                  if (!ensureSignedInOrRegister()) return;
+                  setSharePost(video);
+                }}
+                activeOpacity={0.85}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postShare}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(
+                    (video?.id != null && shareCountOverrides[video.id] != null
+                      ? shareCountOverrides[video.id]
+                      : video?.share_count) ?? 0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => openCommentsForPost(video)}
+                activeOpacity={0.85}>
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.postComment}
+                  style={styles.postActionIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(getDisplayedCommentCount(video))}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postActionItem}
+                onPress={() => togglePostLiked(video.id)}
+                activeOpacity={0.85}>
+                <PostFeedLikeIcon liked={isItemLiked(video)} size={32} />
+                <Text style={styles.postActionCountText}>
+                  {formatCount(video?.post_like_count ?? 0)}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         ) : o.isPostListing ? (
@@ -8294,6 +8411,7 @@ const TikTokFeedScreen = ({
                     liked={rowLiked}
                     onToggleLike={() => toggleLiked(listing)}
                     displayPi={displayPi}
+                    photoDotsAtTop
                   />
                 );
               })
@@ -10327,6 +10445,28 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     alignSelf: 'stretch',
     alignItems: flexStart,
+  },
+  openHouseTagRow: {
+    width: '100%',
+    alignItems: flexStart,
+    marginBottom: 12,
+  },
+  openHouseTagImage: {
+    width: 150,
+    height: 56,
+  },
+  openHouseOverlayText: {
+    color: '#F7F3E6',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
+    marginBottom: 10,
+    ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
   },
   postHashtagsText: {
     color: '#FFFFFF',

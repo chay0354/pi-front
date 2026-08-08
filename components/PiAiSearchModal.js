@@ -243,7 +243,6 @@ const PiAiSearchModal = ({
         const uid = currentUser?.id != null ? String(currentUser.id) : null;
         const res = await getListings({
           status: 'published',
-          ...(uid ? {user_id: uid} : {}),
         });
         if (cancelled) {
           return;
@@ -357,7 +356,6 @@ const PiAiSearchModal = ({
       if (listings.length === 0) {
         const result = await getListings({
           status: 'published',
-          ...(uid ? {user_id: uid} : {}),
         });
         listings = result?.listings || [];
         setAllListings(listings);
@@ -401,7 +399,8 @@ const PiAiSearchModal = ({
           aiSaidNoMatch = true;
         }
       }
-      if (rows == null && !aiSaidNoMatch) {
+      if (rows == null) {
+        // Gemini unavailable or returned no ids — keyword rank as backup.
         const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
         rows = rankedResult.ranked.map(r => r.listing);
       }
@@ -499,6 +498,7 @@ const PiAiSearchModal = ({
         liked={rowLiked}
         onToggleLike={handleToggleGridLike}
         displayPi={displayPi}
+        hidePhotoDots
       />
     );
   };
