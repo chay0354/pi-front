@@ -658,12 +658,13 @@ const ChatListScreen = ({
   const isProfessionalUser = currentUserType === subscriptionTypes.professional;
   const isRegularUser = isRegularSubscriptionType(currentUserType);
   const canShowListingAdNumber = isBrokerUser || isCompanyUser;
-  /** Brokers: any group. Companies: customer groups only. Regular/professional: open group with all user kinds. */
+  /** Brokers: customer + broker groups. Regular/professional/company: one open group with all user kinds. */
   const canOpenGroups =
     isBrokerUser || isRegularUser || isCompanyUser || isProfessionalUser;
   const isRegularGroupCreator = isRegularUser && !isBrokerUser;
-  /** Regular + professional users share the simplified "קבוצה" flow (all user types in picker). */
-  const usesSimpleGroupFlow = isRegularGroupCreator || isProfessionalUser;
+  /** Regular, professional, and company users share the simplified "קבוצה" flow (all user types). */
+  const usesSimpleGroupFlow =
+    isRegularGroupCreator || isProfessionalUser || isCompanyUser;
   const groupPickerAudience =
     groupFlow === 'brokers'
       ? 'broker_only'
@@ -1723,7 +1724,7 @@ const ChatListScreen = ({
                 <Text style={styles.ncChipsLabel}>
                   {groupFlow === 'brokers'
                     ? 'מתווכים שהתווספו'
-                    : isRegularGroupCreator
+                    : usesSimpleGroupFlow
                       ? 'חברים שהתווספו'
                       : 'אנשי קשר שהתווספו'}
                 </Text>
@@ -1792,7 +1793,7 @@ const ChatListScreen = ({
                 </View>
               </View>
             ) : null}
-            {!groupFlow && !isRegularGroupCreator ? (
+            {!groupFlow && !usesSimpleGroupFlow ? (
               <>
                 <View style={styles.ncSearchFullBleed}>
                   <View style={styles.ncSearchWrap}>
@@ -1861,7 +1862,7 @@ const ChatListScreen = ({
                 ) : groupCandidates.length === 0 ? (
                   <Text style={styles.ncBrokerEmpty}>
                     {groupFlow === 'customers'
-                      ? isRegularGroupCreator
+                      ? usesSimpleGroupFlow
                         ? 'לא נמצאו משתמשים. חפשו לפי שם או טלפון.'
                         : 'אין אנשי קשר עדיין. התחל/י שיחה פרטית — הוא יופיע כאן.'
                       : 'לא נמצאו מתווכים.'}
@@ -2096,7 +2097,7 @@ const ChatListScreen = ({
                 </>
               ) : null}
 
-              {isRegularGroupCreator ? (
+              {usesSimpleGroupFlow ? (
                 <>
                   <Text
                     style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
@@ -2139,82 +2140,63 @@ const ChatListScreen = ({
                     </Pressable>
                   </View>
 
-                  <Pressable
-                    style={styles.ncToggleRow}
-                    onPress={toggleBlockExclusiveOffers}
-                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                    <View style={styles.ncToggleOuter}>
-                      {blockExclusiveOffers ? (
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={15}
-                          color={NC_TOGGLE_AMBER}
-                        />
-                      ) : null}
-                    </View>
-                    <Text style={styles.ncToggleLabel}>חסום הצעות לבלעדיות</Text>
-                  </Pressable>
-                </>
-              ) : isProfessionalUser ? (
-                <>
-                  <Text
-                    style={[styles.ncSectionLabel, styles.ncSectionLabelSpaced]}>
-                    קבוצה
-                  </Text>
-                  <View style={styles.ncCard}>
+                  {isRegularGroupCreator ? (
                     <Pressable
-                      style={({pressed}) => [
-                        styles.ncRow,
-                        pressed && styles.ncRowPressed,
-                      ]}
-                      onPress={() => {
-                        dispatchGroupPick({type: 'reset'});
-                        setGroupWizardStep(1);
-                        setGroupNameDraft('');
-                        setGroupImageUrl(null);
-                        setGroupSearch('');
-                        setGroupFlow('customers');
-                      }}
-                      android_ripple={{color: 'rgba(255,255,255,0.08)'}}>
-                      <MaterialCommunityIcons
-                        name="chevron-left"
-                        size={22}
-                        color="#FFFFFF"
-                        style={styles.ncChevron}
-                      />
-                      <View style={styles.ncRowTextWrap}>
-                        <Text style={styles.ncRowTitle}>קבוצה</Text>
-                        <Text style={styles.ncRowSubtitle}>
-                          פתחו קבוצה עם כל סוגי המשתמשים
-                        </Text>
+                      style={styles.ncToggleRow}
+                      onPress={toggleBlockExclusiveOffers}
+                      android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                      <View style={styles.ncToggleOuter}>
+                        {blockExclusiveOffers ? (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={15}
+                            color={NC_TOGGLE_AMBER}
+                          />
+                        ) : null}
                       </View>
-                      <View style={styles.ncIconBubble}>
-                        <Image
-                          source={require('../assets/pi-chat/private-group.png')}
-                          style={styles.ncIconImage}
-                          resizeMode="contain"
-                        />
-                      </View>
+                      <Text style={styles.ncToggleLabel}>
+                        חסום הצעות לבלעדיות
+                      </Text>
                     </Pressable>
-                  </View>
+                  ) : null}
 
-                  <Pressable
-                    style={styles.ncToggleRow}
-                    onPress={toggleBlockRelevantPostUpdates}
-                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                    <View style={styles.ncToggleOuter}>
-                      {blockRelevantPostUpdates ? (
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={15}
-                          color={NC_TOGGLE_AMBER}
-                        />
-                      ) : null}
-                    </View>
-                    <Text style={styles.ncToggleLabel}>
-                      חסום עדכון פוסטים רלוונטים
-                    </Text>
-                  </Pressable>
+                  {isProfessionalUser ? (
+                    <Pressable
+                      style={styles.ncToggleRow}
+                      onPress={toggleBlockRelevantPostUpdates}
+                      android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                      <View style={styles.ncToggleOuter}>
+                        {blockRelevantPostUpdates ? (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={15}
+                            color={NC_TOGGLE_AMBER}
+                          />
+                        ) : null}
+                      </View>
+                      <Text style={styles.ncToggleLabel}>
+                        חסום עדכון פוסטים רלוונטים
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  {isCompanyUser ? (
+                    <Pressable
+                      style={styles.ncToggleRow}
+                      onPress={toggleBlockCollabOffers}
+                      android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                      <View style={styles.ncToggleOuter}>
+                        {blockCollabOffers ? (
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={15}
+                            color={NC_TOGGLE_AMBER}
+                          />
+                        ) : null}
+                      </View>
+                      <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
+                    </Pressable>
+                  ) : null}
                 </>
               ) : (
                 <>

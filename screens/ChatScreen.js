@@ -705,7 +705,8 @@ const ChatScreen = ({
       .toLowerCase();
     if (
       isRegularSubscriptionType(actorType) ||
-      actorType === subscriptionTypes.professional
+      actorType === subscriptionTypes.professional ||
+      actorType === subscriptionTypes.company
     ) {
       return 'all';
     }
