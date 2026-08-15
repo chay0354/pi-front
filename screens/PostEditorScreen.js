@@ -1702,16 +1702,23 @@ const PostEditorScreen = ({
       let needsCompanionStory = shouldPublishFeedPostCompanionStory;
       if (shouldPublishFeedPostCompanionStory && isEditMode) {
         const sync = updatedListing?.feedPostStorySync;
+        const mediaChangedLocally =
+          String(url || '').trim() !==
+          String(originalStoryMediaUrlRef.current || '').trim();
+        // Baked visuals can't be refreshed by patching general_details — the
+        // story image itself still shows the text as it was before the edit.
         const needsVisualStoryRebake =
-          hasStickerOverlays ||
-          (textBakedIntoImage &&
-            String(url || '').trim() !==
-              String(originalStoryMediaUrlRef.current || '').trim());
-        needsCompanionStory =
-          needsVisualStoryRebake ||
-          !sync ||
-          sync.mediaChanged === true ||
-          (!sync.storyMatched && Number(sync.storyUpdated || 0) === 0);
+          hasStickerOverlays || textBakedIntoImage || mediaChangedLocally;
+        const hadCompanionStory = sync
+          ? sync.storyMatched === true || Number(sync.storyRemoved || 0) > 0
+          : null;
+        if (hadCompanionStory === false) {
+          // Its 24h already elapsed — editing the post must not resurrect it.
+          needsCompanionStory = false;
+        } else {
+          needsCompanionStory =
+            needsVisualStoryRebake || sync?.mediaChanged === true;
+        }
       }
       if (needsCompanionStory) {
         try {
@@ -1773,9 +1780,16 @@ const PostEditorScreen = ({
             // Stickers must be baked; letterbox the background (never crop).
             setCapturingStoryFrame(true);
             setIsCapturing(true);
+            // The preview grows to the full phone frame here, so every text
+            // block re-measures and re-wraps. Snapshotting mid-relayout is what
+            // used to bake half a sentence into the story.
+            await new Promise(resolve => requestAnimationFrame(() => resolve()));
             await new Promise(resolve => requestAnimationFrame(() => resolve()));
             await new Promise(resolve =>
-              setTimeout(resolve, Platform.OS === 'android' ? 350 : 180),
+              InteractionManager.runAfterInteractions(() => resolve()),
+            );
+            await new Promise(resolve =>
+              setTimeout(resolve, Platform.OS === 'android' ? 550 : 260),
             );
             let storyCaptureUri;
             if (Platform.OS === 'web') {

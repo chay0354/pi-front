@@ -51,6 +51,9 @@ const PostTextOverlays = ({
         const hasBackground = visual.backgroundColor !== 'transparent';
         const align = block.align || 'center';
         const isNormalized = layout.normalized === true;
+        // Editor draws the chip at 10/4/8 around the authored font size; the
+        // same ratio must hold here or the text wraps at a different word.
+        const chipScale = layout.scale > 0 ? layout.scale : 1;
 
         return (
           <View
@@ -83,9 +86,9 @@ const PostTextOverlays = ({
                 },
                 hasBackground && {
                   backgroundColor: visual.backgroundColor,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 8,
+                  paddingHorizontal: Math.round(10 * chipScale),
+                  paddingVertical: Math.round(4 * chipScale),
+                  borderRadius: Math.round(8 * chipScale),
                   overflow: 'hidden',
                 },
               ]}>

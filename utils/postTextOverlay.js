@@ -200,6 +200,11 @@ export const serializePostTextOverlays = (
           ny: Number(ny.toFixed(5)),
           nw: Number(nw.toFixed(5)),
           nFont: Number(nFont.toFixed(5)),
+          // Width-relative font size. Renderers scale the glyph box and the
+          // font by the same factor, so text wraps on the exact same words no
+          // matter the frame aspect ratio (feed page vs full-screen story).
+          nFontW: Number((fontSize / previewBox.w).toFixed(5)),
+          nh: Number((measured.h / previewBox.h).toFixed(5)),
           coords: 'normalized',
         };
       }
@@ -627,24 +632,34 @@ export const scalePostTextOverlayBlock = (
       ny <= 1.5);
 
   if (hasNormalized && Number.isFinite(nx) && Number.isFinite(ny)) {
-    const fontSize = Math.max(
-      10,
-      Math.round(
-        Number.isFinite(nFont) && nFont > 0
+    const authoredFontSize = block.fontSize ?? DEFAULT_FONT_SIZE;
+    const nFontW = Number(block.nFontW);
+    // Font must scale with the SAME factor as the glyph box width, otherwise
+    // the text re-wraps (or overflows and gets clipped) whenever the target
+    // frame has a different aspect ratio than the editor preview.
+    const rawFontSize = Number.isFinite(nFontW) && nFontW > 0
+      ? nFontW * feedWidth
+      : Number.isFinite(nFont) && nFont > 0 && previewWidth > 0 && previewHeight > 0
+        ? nFont * previewHeight * (feedWidth / previewWidth)
+        : Number.isFinite(nFont) && nFont > 0
           ? nFont * feedHeight
-          : (block.fontSize ?? DEFAULT_FONT_SIZE) *
-              (previewHeight > 0 ? feedHeight / previewHeight : 1),
-      ),
-    );
+          : authoredFontSize *
+            (previewWidth > 0 ? feedWidth / previewWidth : 1);
+    const fontSize = Math.max(10, Math.round(rawFontSize));
+    const baseWidth =
+      Number.isFinite(nw) && nw > 0 ? nw * feedWidth : feedWidth * 0.88;
+    // Rounding + font rasterization differences can cost a fraction of a pixel
+    // and push the last word onto a new line. Widen symmetrically so the box
+    // still holds the same glyphs without shifting the text.
+    const widthSlack = 2;
     return {
-      translateX: Math.round(nx * feedWidth),
+      translateX: Math.round(nx * feedWidth - widthSlack / 2),
       translateY: Math.round(ny * feedHeight),
-      width: Math.round(
-        Number.isFinite(nw) && nw > 0 ? nw * feedWidth : feedWidth * 0.88,
-      ),
+      width: Math.ceil(baseWidth + widthSlack),
       padding: 0,
       fontSize,
       lineHeight: Math.round(fontSize * 1.15),
+      scale: fontSize / Math.max(1, authoredFontSize),
       normalized: true,
     };
   }
@@ -685,6 +700,7 @@ export const scalePostTextOverlayBlock = (
     padding: 0,
     fontSize,
     lineHeight: Math.round(fontSize * 1.15),
+    scale: fontSize / Math.max(1, block.fontSize ?? DEFAULT_FONT_SIZE),
     normalized: false,
   };
 };

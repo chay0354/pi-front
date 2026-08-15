@@ -415,6 +415,8 @@ const EditPublishAdScreen = ({
   const publishCategoriesStripRef = useRef([]);
   const categoryStripScrollXRef = useRef(null);
   const hasExplicitRestoreCategoryRef = useRef(restoreCategoryStrip);
+  /** Once the user taps a strip icon, never snap selection back to חדש מקבלן. */
+  const userPickedCategoryRef = useRef(false);
 
   const restoreCategoryStripPosition = useCallback(() => {
     const strip = publishCategoriesStripRef.current;
@@ -637,13 +639,11 @@ const EditPublishAdScreen = ({
   publishCategoriesStripRef.current = publishCategoriesStrip;
 
   useEffect(() => {
-    if (categoryStripScrollXRef.current != null) return;
+    if (userPickedCategoryRef.current) return;
     if (publishCategoriesStrip.length === 0) {
-      setSelectedCategoryId(
-        initialCategoryId != null
-          ? toEditProfileUiCategoryId(initialCategoryId)
-          : null,
-      );
+      if (initialCategoryId != null) {
+        setSelectedCategoryId(toEditProfileUiCategoryId(initialCategoryId));
+      }
       return;
     }
     const explicitUiId =
@@ -654,8 +654,15 @@ const EditPublishAdScreen = ({
       explicitUiId != null &&
       publishCategoriesStrip.some(cat => cat.id === explicitUiId)
         ? explicitUiId
-        : getRightmostStripCategoryId(publishCategoriesStrip);
-    setSelectedCategoryId(nextSelectedId);
+        : selectedCategoryIdRef.current &&
+            publishCategoriesStrip.some(
+              cat => cat.id === selectedCategoryIdRef.current,
+            )
+          ? selectedCategoryIdRef.current
+          : getRightmostStripCategoryId(publishCategoriesStrip);
+    if (nextSelectedId !== selectedCategoryIdRef.current) {
+      setSelectedCategoryId(nextSelectedId);
+    }
   }, [initialCategoryId, publishCategoriesStrip]);
 
   useEffect(() => {
@@ -1263,8 +1270,23 @@ const EditPublishAdScreen = ({
                       key={cat.id}
                       style={styles.categoryItem}
                       onPress={() => {
-                        categoryStripScrollXRef.current = null;
+                        userPickedCategoryRef.current = true;
                         setSelectedCategoryId(cat.id);
+                        const contentW = categoryContentWidthRef.current;
+                        const viewportW = categoryViewportWidthRef.current;
+                        const targetX = computeCategoryStripScrollX(
+                          cat.id,
+                          publishCategoriesStripRef.current,
+                          contentW,
+                          viewportW,
+                        );
+                        if (targetX != null) {
+                          categoryStripScrollXRef.current = targetX;
+                          categoryScrollRef.current?.scrollTo({
+                            x: targetX,
+                            animated: true,
+                          });
+                        }
                       }}
                       activeOpacity={0.8}>
                       <Image

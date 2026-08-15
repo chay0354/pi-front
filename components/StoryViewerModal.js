@@ -14,7 +14,7 @@ import {
   PanResponder,
   Easing,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -543,12 +543,19 @@ const StoryViewerModal = ({
   onOpenProfile,
 }) => {
   const insets = useSafeAreaInsets();
+  /** Same container height the TikTok feed measures with, so a post and its
+   *  companion story lay their text out over an identical band. */
+  const safeAreaFrame = useSafeAreaFrame();
   const overlayBand = useMemo(() => {
     const top = FEED_TOP_BAR_HEIGHT + insets.top;
     const bottom = feedBottomBarHeight(insets.bottom);
-    const height = Math.max(1, Dimensions.get('window').height - top - bottom);
+    const containerHeight =
+      safeAreaFrame.height > 0
+        ? safeAreaFrame.height
+        : Dimensions.get('window').height;
+    const height = Math.max(1, containerHeight - top - bottom);
     return {top, bottom, width: SCREEN_W, height};
-  }, [insets.top, insets.bottom]);
+  }, [insets.top, insets.bottom, safeAreaFrame.height]);
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
