@@ -362,6 +362,7 @@ const SubscriptionFormScreen = ({
         if (!contactPersonName) missingFields.push('שם איש קשר');
         if (!companyEmail) missingFields.push('כתובת מייל');
         if (!officePhone) missingFields.push('מספר טלפון משרד');
+        if (!businessAddress.trim()) missingFields.push('כתובת חברה');
       } else {
         // Broker/professional validation
         if (subscriptionType === subscriptionTypes.broker) {
@@ -424,6 +425,7 @@ const SubscriptionFormScreen = ({
               mobilePhone,
               email: companyEmail,
               companyWebsite,
+              businessAddress: businessAddress.trim(),
               description: addDescription ? description : null,
               ...(isProjectMarketerFlow && marketerPlan
                 ? {marketerPlan}
@@ -531,7 +533,8 @@ const SubscriptionFormScreen = ({
     companyName.trim() &&
     contactPersonName.trim() &&
     officePhone.trim() &&
-    companyEmail.trim();
+    companyEmail.trim() &&
+    businessAddress.trim();
   const brokerMediaOk =
     activeTab === 'video' ? !!video && !!companyLogo : !!profilePicture;
   const brokerCanProceed =
@@ -989,6 +992,18 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת חברה', true)}
+                <TextInput
+                  style={[styles.input, styles.companyInput]}
+                  placeholder="הזן כתובת חברה"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={businessAddress}
+                  onChangeText={setBusinessAddress}
+                  textAlign="right"
+                />
+              </View>
+
               <View style={styles.companyDescriptionOption}>
                 <TouchableOpacity
                   onPress={() => setAddDescription(!addDescription)}
@@ -1011,7 +1026,11 @@ const SubscriptionFormScreen = ({
                 <View style={styles.inputGroup}>
                   <TextInput
                     style={styles.textArea}
-                    placeholder="כתוב תיאור כללי על השירות שלך"
+                    placeholder={
+                      isProjectMarketerFlow
+                        ? 'כתוב תיאור כללי על השירות שלך'
+                        : 'כתוב תיאור כללי על החברה'
+                    }
                     placeholderTextColor={Colors.grey200}
                     value={description}
                     onChangeText={setDescription}

@@ -74,6 +74,8 @@ import {
   HERO_NAV_SHARE_XML,
 } from '../utils/heroNavFigmaIcons';
 import ProfileAvatar from '../components/ProfileAvatar';
+import {PiRatingBadge} from '../components/PiRatingBadge';
+import {getPiReviewStarSource} from '../utils/piRatingBadgeAssets';
 import {FollowPlusBadge} from '../components/FollowPlusBadge';
 import BnbListingProfileContent from '../components/BnbListingProfileContent';
 import PartnersListingProfileContent from '../components/PartnersListingProfileContent';
@@ -84,7 +86,9 @@ import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {
   isCompanySubscriptionType,
   isBrokerLikeSubscriptionType,
+  isProjectMarketerType,
 } from '../utils/constant';
+import {resolveProfileDisplayName} from '../utils/profileFields';
 import {
   flexEnd,
   flexStart,
@@ -116,9 +120,6 @@ const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padd
 
 /** Last-ad hero when no gallery images: fallback if remote logo/avatar URL fails to load (common on web). */
 const lastAdImageEndPlaceholder = require('../assets/improve/end.png');
-/** Pi badge: always bundle — web `{ uri: origin + '/pi-badge.png' }` often 404s or breaks on subpaths. */
-const piBadgeSource = require('../assets/pi-badge.png');
-const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
 const logoPiAi = require('../assets/paiailogo.png');
 const postGridViewIcon = require('../assets/tiktok/views.png');
 
@@ -146,9 +147,14 @@ const isVideoLikeMediaUrl = url => {
   return false;
 };
 
-/** Profile ad hero carousel — RTL on native (matches swipe + dots); LTR on web. */
-const heroCarouselDirectionStyle =
-  Platform.OS === 'web' ? forceLtrStyle : forceRtlStyle;
+/**
+ * Profile ad hero carousel — the list itself is held LTR with `direction`, not
+ * a scaleX mirror, so slides must NOT be flipped back: a lone scaleX(-1) has
+ * nothing to cancel and renders every photo and video mirrored.
+ */
+const heroCarouselListStyle = forceLtrStyle;
+/** Dots / counters stay LTR so they match swipe index on native RTL. */
+const heroCarouselDotsStyle = forceLtrStyle;
 
 /** Profile ad hero: resolve playable video from listing + feed payload shapes. */
 const resolveLastAdHeroVideoUri = ad => {
@@ -294,22 +300,9 @@ const contactEmailIconSource =
   isWeb && typeof window !== 'undefined'
     ? {uri: `${baseUrl}/conections-icons/image%20copy.png`}
     : require('../assets/email-icon.png');
-/** `index` 0…4 = rating 1…5 — reviews use `5old.png`; picker uses `5.png`. */
-const ratingStarSources =
-  isWeb && typeof window !== 'undefined'
-    ? [1, 2, 3, 4]
-        .map(i => ({uri: `${baseUrl}/starts/${i}.png`}))
-        .concat([{uri: `${baseUrl}/starts/5old.png`}])
-    : [
-        require('../assets/starts/1.png'),
-        require('../assets/starts/2.png'),
-        require('../assets/starts/3.png'),
-        require('../assets/starts/4.png'),
-        require('../assets/starts/5old.png'),
-      ];
-function getStarSource(index) {
-  const i = Math.min(4, Math.max(0, index));
-  return ratingStarSources[i];
+/** Review avatar overlay stars — 1–4 from new-stars; 5 keeps legacy art. */
+function getStarSource(rating) {
+  return getPiReviewStarSource(rating);
 }
 
 const buttonSources = isWeb
@@ -507,18 +500,8 @@ const UserProfileScreen = ({
       .then(data => {
         if (cancelled || !data?.subscription) return;
         const s = data.subscription;
-        const type = (s.subscription_type || '').toLowerCase();
-        let name = null;
-        if (isCompanySubscriptionType(type))
-          name = s.business_name || s.name || s.contact_person_name || null;
-        else if (isBrokerLikeSubscriptionType(type))
-          name =
-            s.broker_office_name ||
-            s.business_name ||
-            s.name ||
-            s.contact_person_name ||
-            null;
-        else name = s.name || s.business_name || s.contact_person_name || null;
+        const name =
+          resolveProfileDisplayName(s, {fallback: ''}) || null;
         let activityRegions = null;
         if (s.activity_regions != null) {
           if (Array.isArray(s.activity_regions))
@@ -608,6 +591,10 @@ const UserProfileScreen = ({
           business_address:
             s.business_address && String(s.business_address).trim()
               ? String(s.business_address).trim()
+              : null,
+          company_website:
+            s.company_website && String(s.company_website).trim()
+              ? String(s.company_website).trim()
               : null,
           company_logo_url:
             s.company_logo_url && String(s.company_logo_url).trim()
@@ -724,29 +711,13 @@ const UserProfileScreen = ({
   // Display name and image for current user by subscription type (broker, company, professional, user)
   const getReviewerDisplayName = u => {
     if (!u) return null;
-    const t = (u.subscription_type || u.subscriptionType || '').toLowerCase();
-    let name = null;
-    if (isCompanySubscriptionType(t))
-      name = u.business_name || u.name || u.contact_person_name || null;
-    else if (isBrokerLikeSubscriptionType(t))
-      name =
-        u.broker_office_name ||
-        u.business_name ||
-        u.name ||
-        u.contact_person_name ||
-        null;
-    else if (t === 'professional')
-      name = u.name || u.business_name || u.contact_person_name || null;
-    else
-      name =
-        u.name ||
-        u.contact_person_name ||
-        u.business_name ||
-        u.broker_office_name ||
-        u.creator_name ||
-        u.email ||
-        null;
-    return name && String(name).trim() ? String(name).trim() : null;
+    const name = resolveProfileDisplayName(u, {fallback: ''});
+    if (name) return name;
+    const fallback =
+      u.creator_name || u.email || null;
+    return fallback && String(fallback).trim()
+      ? String(fallback).trim()
+      : null;
   };
   const getReviewerImageUrl = u => getUserProfileImageUrl(u);
 
@@ -919,12 +890,28 @@ const UserProfileScreen = ({
       ? ''
       : rawEmailFromSource
     : rawEmailFromSource;
-  const displayName =
-    rawName && String(rawName).trim()
-      ? String(rawName).trim()
-      : isListingFromFeed
-        ? 'משתמש'
-        : profile.name;
+  const displayName = (() => {
+    if (isListingFromFeed) {
+      return rawName && String(rawName).trim()
+        ? String(rawName).trim()
+        : 'משתמש';
+    }
+    if (resolvedCreator?.name) return resolvedCreator.name;
+    const subType = (
+      user?.subscription_type ||
+      user?.creator_subscription_type ||
+      ''
+    ).toLowerCase();
+    if (subType) {
+      const typedName = resolveProfileDisplayName(
+        {...user, subscription_type: subType},
+        {fallback: ''},
+      );
+      if (typedName) return typedName;
+    }
+    if (rawName && String(rawName).trim()) return String(rawName).trim();
+    return profile.name;
+  })();
   const displayEmail =
     rawEmail && String(rawEmail).trim()
       ? String(rawEmail).trim()
@@ -982,21 +969,41 @@ const UserProfileScreen = ({
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
   const contactPhones = (() => {
-    if (resolvedCreator?.phones?.length > 0) {
-      return resolvedCreator.phones;
-    }
-    const fromListing = [
-      user?.phone,
-      user?.contact_details?.phone,
-      ...(Array.isArray(user?.contact_details?.phones)
-        ? user.contact_details.phones
-        : []),
-    ]
+    const raw =
+      resolvedCreator?.phones?.length > 0
+        ? resolvedCreator.phones
+        : [
+            user?.phone,
+            user?.mobile_phone,
+            user?.office_phone,
+            user?.contact_details?.phone,
+            ...(Array.isArray(user?.contact_details?.phones)
+              ? user.contact_details.phones
+              : []),
+          ];
+    // `phone` and `mobile_phone` hold the same number on accounts that were
+    // registered before the profile editor split them — list it once.
+    return raw
       .map(p => (p != null ? String(p).trim() : ''))
-      .filter(Boolean);
-    return fromListing;
+      .filter((p, i, arr) => p && arr.indexOf(p) === i);
   })();
   const contactEmail = displayEmail;
+  const contactWebsite = (() => {
+    const raw =
+      user?.company_website ||
+      user?.companyWebsite ||
+      resolvedCreator?.company_website ||
+      '';
+    return typeof raw === 'string' ? raw.trim() : '';
+  })();
+  const contactAddress = (() => {
+    const raw =
+      resolvedCreator?.business_address ||
+      user?.creator_business_address ||
+      user?.business_address ||
+      '';
+    return typeof raw === 'string' ? raw.trim() : '';
+  })();
   const primaryContactPhone =
     contactPhones.length > 0 ? String(contactPhones[0]).trim() : '';
 
@@ -1035,7 +1042,12 @@ const UserProfileScreen = ({
     (!viewedProfileEmail || !currentProfileEmail || profileEmailsMatch);
 
   const copyContactDetails = async () => {
-    const lines = [...contactPhones, contactEmail].filter(Boolean);
+    const lines = [
+      ...contactPhones,
+      contactEmail,
+      contactWebsite,
+      isCompany ? contactAddress : null,
+    ].filter(Boolean);
     const text = lines.join('\n');
     if (!text) return;
     try {
@@ -1586,6 +1598,59 @@ const UserProfileScreen = ({
     useState(false);
   const [fullScreenImageIndex, setFullScreenImageIndex] = useState(0);
   const fullScreenCarouselRef = useRef(null);
+  const fullScreenViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 55,
+  }).current;
+  const onFullScreenViewableItemsChanged = useRef(({viewableItems}) => {
+    let bestIndex = null;
+    let bestPct = -1;
+    for (const entry of viewableItems || []) {
+      if (!entry?.isViewable || entry.index == null) continue;
+      const pct =
+        typeof entry.percentVisible === 'number'
+          ? entry.percentVisible
+          : entry.isViewable
+            ? 100
+            : 0;
+      if (pct > bestPct) {
+        bestPct = pct;
+        bestIndex = entry.index;
+      }
+    }
+    if (bestIndex != null) {
+      setFullScreenImageIndex(bestIndex);
+    }
+  }).current;
+  const handleFullScreenScrollToIndexFailed = useCallback(info => {
+    const pageWidth = Dimensions.get('window').width;
+    requestAnimationFrame(() => {
+      fullScreenCarouselRef.current?.scrollToOffset?.({
+        offset: info.index * pageWidth,
+        animated: false,
+      });
+    });
+  }, []);
+  const closeFullScreenImageModal = useCallback(() => {
+    setLastAdImageIndex(fullScreenImageIndex);
+    scrollLastAdCarouselToIndex(fullScreenImageIndex, false);
+    setFullScreenImageModalVisible(false);
+  }, [fullScreenImageIndex, scrollLastAdCarouselToIndex]);
+
+  useEffect(() => {
+    if (!fullScreenImageModalVisible) return;
+    const pageWidth = Dimensions.get('window').width;
+    const idx = Math.max(
+      0,
+      Math.min(fullScreenImageIndex, Math.max(lastAdImages.length - 1, 0)),
+    );
+    const frame = requestAnimationFrame(() => {
+      fullScreenCarouselRef.current?.scrollToOffset?.({
+        offset: idx * pageWidth,
+        animated: false,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fullScreenImageModalVisible]);
 
   const [followStatus, setFollowStatus] = useState({
     isFollowing: false,
@@ -1982,6 +2047,12 @@ const UserProfileScreen = ({
    * Exception: opened as a specific listing (home פרויקט נבחר / company projects / feed ad). */
   const showOwnProfilePostGridAtTop =
     isOwnProfile && !isDedicatedListingAdProfile && !forceListingAdProfile;
+  /** Company opened from chat / following / etc. — subscription overview, not a project hero. */
+  const showCompanySubscriptionPostGridAtTop =
+    isCompany &&
+    !isListingFromFeed &&
+    !forceListingAdProfile &&
+    !isDedicatedListingAdProfile;
   /**
    * Figma 8:79136 — professional profile always uses the 6-post grid under
    * avatar/stats (own + other), never a listing hero between stats and posts.
@@ -1995,9 +2066,11 @@ const UserProfileScreen = ({
     ? true
     : isOwnProfile
       ? showOwnProfilePostGridAtTop
-      : showProfilePostGrid &&
-        !openedFromProfessionalsDirectory &&
-        !forceListingAdProfile;
+      : showCompanySubscriptionPostGridAtTop
+        ? true
+        : showProfilePostGrid &&
+          !openedFromProfessionalsDirectory &&
+          !forceListingAdProfile;
   /** Legacy directory path only — Figma pro layout keeps the grid at the top. */
   const showProfilePostGridAfterBio =
     !showProfessionalFigmaProfile &&
@@ -2478,17 +2551,7 @@ const UserProfileScreen = ({
 
   const renderPiRating = () => {
     if (!showProfileRatingFeatures || isRegularUserAdView) return null;
-    return (
-      <View style={styles.lastAdPiBadge}>
-        <Text style={styles.lastAdPiText}>{String(displayPiRating)}</Text>
-        {/* <Text style={styles.lastAdPiText}>{5}</Text> */}
-        <Image
-          source={displayPiRating > 4 ? piBadgeSourceRing : piBadgeSource}
-          style={styles.lastAdPiBadgeImage}
-          resizeMode="cover"
-        />
-      </View>
-    );
+    return <PiRatingBadge rating={displayPiRating} variant="profile" />;
   };
 
   /** Pinned top nav for any open-from–TikTok-feed / listing: inner hero + scroll back used to move away while scrolling. */
@@ -2698,8 +2761,8 @@ const UserProfileScreen = ({
                     horizontal
                     pagingEnabled
                     inverted={false}
-                    style={heroCarouselDirectionStyle}
-                    contentContainerStyle={heroCarouselDirectionStyle}
+                    style={heroCarouselListStyle}
+                    contentContainerStyle={heroCarouselListStyle}
                     showsHorizontalScrollIndicator={false}
                     getItemLayout={(_, index) => ({
                       length: lastAdCardWidth,
@@ -2712,27 +2775,31 @@ const UserProfileScreen = ({
                     renderItem={({item, index}) => {
                       if (item.isVideo) {
                         return (
-                          <ProfileAdHeroVideo
-                            uri={item.uri}
-                            isActive={
-                              index === lastAdImageIndex &&
-                              !fullScreenImageModalVisible
-                            }
-                            posterUri={item.posterUri}
-                            width={lastAdCardWidth}
-                            showPlayBadge={false}
-                          />
+                          <View style={{width: lastAdCardWidth}}>
+                            <ProfileAdHeroVideo
+                              uri={item.uri}
+                              isActive={
+                                index === lastAdImageIndex &&
+                                !fullScreenImageModalVisible
+                              }
+                              posterUri={item.posterUri}
+                              width={lastAdCardWidth}
+                              showPlayBadge={false}
+                            />
+                          </View>
                         );
                       }
                       return (
-                        <Image
-                          source={{uri: item.uri}}
-                          style={[
-                            styles.lastAdImage,
-                            {width: lastAdCardWidth},
-                          ]}
-                          resizeMode="cover"
-                        />
+                        <View style={{width: lastAdCardWidth}}>
+                          <Image
+                            source={{uri: item.uri}}
+                            style={[
+                              styles.lastAdImage,
+                              {width: lastAdCardWidth},
+                            ]}
+                            resizeMode="cover"
+                          />
+                        </View>
                       );
                     }}
                     keyExtractor={(item, i) =>
@@ -2740,7 +2807,7 @@ const UserProfileScreen = ({
                     }
                   />
                   {lastAdImages.length > 1 && (
-                    <View style={[styles.lastAdDots, heroCarouselDirectionStyle]}>
+                    <View style={[styles.lastAdDots, heroCarouselDotsStyle]}>
                       {lastAdImages.map((_, i) => (
                         <View
                           key={i}
@@ -3609,7 +3676,9 @@ const UserProfileScreen = ({
                 <Text style={styles.contactDetailsAgencyName}>
                   {displayName}
                 </Text>
-                {isCompany && (
+                {(isCompany ||
+                  isProjectMarketerType(profileSubscriptionType)) &&
+                contactWebsite ? (
                   <TouchableOpacity
                     style={[styles.contactDetailsRow]}
                     onPress={() => {}}>
@@ -3618,11 +3687,24 @@ const UserProfileScreen = ({
                       style={styles.contactDetailsIconImage}
                       resizeMode="contain"
                     />
-                    <Text style={styles.contactDetailsLink}>
-                      {contactEmail}
+                    <Text style={styles.contactDetailsLink} numberOfLines={1}>
+                      {contactWebsite}
                     </Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
+                {isCompany && contactAddress ? (
+                  <View style={styles.contactDetailsRow}>
+                    <SimpleLineIcons
+                      name="location-pin"
+                      size={18}
+                      color="rgba(255,255,255,0.9)"
+                      style={styles.contactDetailsIconImage}
+                    />
+                    <Text style={styles.contactDetailsLink} numberOfLines={2}>
+                      {contactAddress}
+                    </Text>
+                  </View>
+                ) : null}
                 {contactPhones.map((phone, i) => (
                   <TouchableOpacity
                     key={i}
@@ -3735,13 +3817,9 @@ const UserProfileScreen = ({
 
                       <Image
                         source={getStarSource(
-                          Math.min(5, Math.max(1, Number(r.rating) || 1)) - 1,
+                          Math.min(5, Math.max(1, Number(r.rating) || 1)),
                         )}
-                        style={[
-                          r.rating === 1
-                            ? styles.reviewCardStarBadgeImage1
-                            : styles.reviewCardStarBadgeImage,
-                        ]}
+                        style={styles.reviewCardStarBadgeImage}
                         resizeMode="contain"
                       />
                     </View>
@@ -3888,7 +3966,7 @@ const UserProfileScreen = ({
         <View style={styles.fullScreenImageModal}>
           <TouchableOpacity
             style={[styles.fullScreenImageCloseBtn, {top: insets.top + 10}]}
-            onPress={() => setFullScreenImageModalVisible(false)}
+            onPress={closeFullScreenImageModal}
             activeOpacity={0.8}>
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -3902,24 +3980,19 @@ const UserProfileScreen = ({
             horizontal
             pagingEnabled
             inverted={false}
-            style={heroCarouselDirectionStyle}
-            contentContainerStyle={heroCarouselDirectionStyle}
+            style={heroCarouselListStyle}
+            contentContainerStyle={heroCarouselListStyle}
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
             extraData={fullScreenImageIndex}
-            initialScrollIndex={fullScreenImageIndex}
             getItemLayout={(data, index) => ({
               length: Dimensions.get('window').width,
               offset: Dimensions.get('window').width * index,
               index,
             })}
-            onMomentumScrollEnd={e => {
-              const pageWidth = Dimensions.get('window').width;
-              const i = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
-              setFullScreenImageIndex(
-                Math.max(0, Math.min(i, lastAdImages.length - 1)),
-              );
-            }}
+            viewabilityConfig={fullScreenViewabilityConfig}
+            onViewableItemsChanged={onFullScreenViewableItemsChanged}
+            onScrollToIndexFailed={handleFullScreenScrollToIndexFailed}
             renderItem={({item, index}) => (
               <View
                 style={{
@@ -3961,8 +4034,7 @@ const UserProfileScreen = ({
           </View>
 
           {lastAdImages.length > 1 && (
-            <View
-              style={[styles.fullScreenImageDots, heroCarouselDirectionStyle]}>
+            <View style={[styles.fullScreenImageDots, heroCarouselDotsStyle]}>
               {lastAdImages.map((_, i) => (
                 <TouchableOpacity
                   key={i}

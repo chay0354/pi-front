@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Dimensions,
   TouchableOpacity,
+  Pressable,
   Platform,
   ActivityIndicator,
   PanResponder,
@@ -24,7 +25,6 @@ import {
   useWindowDimensions,
   InteractionManager,
   Keyboard,
-  Pressable,
 } from 'react-native';
 import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
@@ -76,6 +76,7 @@ import CreateAdSheet, {
   CreateAdSheetRow,
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
+import {PiRatingBadge} from '../components/PiRatingBadge';
 import {SvgXml} from '../utils/svgXml';
 import {getCachedSvgXml} from '../utils/svgIconCache';
 import {Colors} from '../constants/styles';
@@ -6018,7 +6019,6 @@ const TikTokFeedScreen = ({
     if (!tap || sidebarPanDidDragRef.current) return;
 
     if (tap.type === 'filter' && tap.id) {
-      setSelectedSidebarFilter(prev => (prev === tap.id ? null : tap.id));
       return;
     }
 
@@ -6835,18 +6835,21 @@ const TikTokFeedScreen = ({
         );
         if (sidebarDragMode) {
           return (
-            <View
+            <Pressable
               key={filter.id}
               style={[
                 styles.sidebarFilterBtn,
                 partnersTightStack && styles.sidebarFilterBtnPartnersTight,
               ]}
-              onTouchStart={() =>
-                markSidebarPendingTap({type: 'filter', id: filter.id})
-              }
+              onPress={() => {
+                if (sidebarPanDidDragRef.current) return;
+                setSelectedSidebarFilter(prev =>
+                  prev === filter.id ? null : filter.id,
+                );
+              }}
               onLayout={filterLayoutHandler}>
               {filterInner}
-            </View>
+            </Pressable>
           );
         }
         return (
@@ -8287,37 +8290,10 @@ const TikTokFeedScreen = ({
                                           isFive &&
                                             styles.userSearchMetaStarGroupFive,
                                         ]}>
-                                        {/* Figma 943:117842 — 16×16 slot,
-                                            ring star overflows ~4px/side (24px). */}
-                                        {isFive ? (
-                                          <View
-                                            style={
-                                              styles.userSearchFiveStarWrap
-                                            }
-                                            pointerEvents="none">
-                                            <Image
-                                              source={
-                                                TIKTOK_OVERLAY_ICONS.ratingFiveStars
-                                              }
-                                              style={
-                                                styles.userSearchFiveStarIcon
-                                              }
-                                              resizeMode="contain"
-                                            />
-                                          </View>
-                                        ) : (
-                                          <Image
-                                            source={
-                                              TIKTOK_OVERLAY_ICONS.ratingOneToFour
-                                            }
-                                            style={styles.userSearchStarIcon}
-                                            resizeMode="contain"
-                                          />
-                                        )}
-                                        <Text
-                                          style={styles.userSearchMetaCount}>
-                                          {String(n)}
-                                        </Text>
+                                        <PiRatingBadge
+                                          rating={n}
+                                          variant="compactSearch"
+                                        />
                                       </View>
                                     </>
                                   );

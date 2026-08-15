@@ -179,7 +179,10 @@ const CircleImageCropModal = ({
       }
       onConfirm?.({uri});
     } catch (err) {
-      console.warn('[CircleImageCropModal]', err?.message || err);
+      const message =
+        err?.message || 'לא ניתן לחתוך את התמונה. נסה/י שוב.';
+      console.warn('[CircleImageCropModal]', message);
+      onConfirm?.({error: message});
     } finally {
       setSaving(false);
     }

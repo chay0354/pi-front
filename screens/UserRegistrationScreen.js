@@ -29,6 +29,8 @@ const UserRegistrationScreen = ({
   onCancel,
   onOpenLogin: _onOpenLogin,
   selectedCategory: _selectedCategory,
+  /** Guest BnB "פרסם כעסק" — gold ring on registration only; account stays regular user. */
+  bnbBusinessRegistration = false,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
@@ -429,6 +431,7 @@ const UserRegistrationScreen = ({
                   name={fullName}
                   size={82}
                   subscriptionType={subscriptionTypes.user}
+                  forceGoldRing={bnbBusinessRegistration}
                   imageStyle={
                     Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
                   }

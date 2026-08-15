@@ -36,8 +36,7 @@ const TAB_FOLLOWING = 'following';
 const TAB_LIKES = 'likes';
 
 /** Same art as TikTokFeedScreen user-search rating row. */
-const RATING_STAR_ONE_TO_FOUR = require('../assets/tiktok/1-4hurt.png');
-const RATING_STAR_FIVE = require('../assets/tiktok/5stars.png');
+import {PiRatingBadge} from '../components/PiRatingBadge';
 
 /** Figma node 8:86865 — gold pill (עקוב / primary). */
 const GOLD_CTA = ['#FEE787', '#BD9947', '#9C6522'];
@@ -624,28 +623,15 @@ const FollowHubScreen = ({
                   <View style={styles.rowMetaRow}>
                     <Text style={styles.rowSub}>{row.subtitle}</Text>
                     {row?.viewer_rating_avg != null ? (
-                      <View style={styles.rowRatingWrap}>
-                        <Text style={styles.rowRatingValue}>
-                          {formatViewerAvg(row.viewer_rating_avg)}
-                        </Text>
-                        {Math.round(Number(row.viewer_rating_avg)) >= 5 ? (
-                          <View
-                            style={styles.rowRatingFiveStarWrap}
-                            pointerEvents="none">
-                            <Image
-                              source={RATING_STAR_FIVE}
-                              style={styles.rowRatingFiveStarImage}
-                              resizeMode="contain"
-                            />
-                          </View>
-                        ) : (
-                          <Image
-                            source={RATING_STAR_ONE_TO_FOUR}
-                            style={styles.rowRatingStarIcon}
-                            resizeMode="contain"
-                          />
-                        )}
-                      </View>
+                      <PiRatingBadge
+                        rating={Math.round(Number(row.viewer_rating_avg))}
+                        label={
+                          Math.round(Number(row.viewer_rating_avg)) >= 5
+                            ? formatViewerAvg(row.viewer_rating_avg)
+                            : undefined
+                        }
+                        variant="compactFollow"
+                      />
                     ) : null}
                   </View>
                 </View>

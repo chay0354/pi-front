@@ -15,7 +15,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import {ProfileAvatar} from '../components';
+import {ProfileAvatar, PROFILE_RING_COLORS, PROFILE_RING_LOCATIONS, PROFILE_USER_RING_COLORS, PROFILE_USER_RING_LOCATIONS} from '../components';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {ContextHook} from '../hooks/ContextHook';
 import {
@@ -26,117 +26,25 @@ import {
 import {
   getUserProfilePhotoUrl,
   getUserCompanyLogoUrl,
+  buildProfilePhotoSavePayload,
 } from '../utils/userProfileImage';
 import {updateSubscriptionProfile, uploadProfilePicture, uploadFile} from '../utils/api';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 import {ensureMediaLibraryPermission, AD_VIDEO_PICKER_OPTIONS} from '../utils/mediaLibraryPermission';
+import {
+  resolveProfileDisplayName,
+  getProfileEditFields,
+  hydrateProfileEditForm,
+  applyProfilePhoneSync,
+} from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
 
 const BG = '#27262F';
 const CARD_BG = '#2B2A39';
 const INPUT_BG = '#1E1D27';
 const DIVIDER = '#373548';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
-const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const TEXT_SECONDARY = 'rgba(255,255,255,0.55)';
 const PLACEHOLDER = 'rgba(255,255,255,0.35)';
-/** Camera badge on yellow/gold rings (broker / company / professional) — unchanged. */
-const CAMERA_BADGE_TEAL = '#5EEAD4';
-/** Camera badge on blue/teal rings (regular user) — system orange. */
-const CAMERA_BADGE_ORANGE = '#E8B34D';
-
-/** Field definitions per account type. Each: {key, label, placeholder, keyboardType?, multiline?} */
-function getFieldsForType(type) {
-  const t = String(type || '').toLowerCase();
-  const about = {
-    key: 'description',
-    label: 'אודות',
-    placeholder: 'ספר/י קצת על עצמך',
-    multiline: true,
-  };
-  if (
-    t === subscriptionTypes.broker ||
-    t === subscriptionTypes.projectMarketer
-  ) {
-    return [
-      {key: 'name', label: 'שם איש קשר', placeholder: 'שם מלא'},
-      {key: 'broker_office_name', label: 'שם המשרד', placeholder: 'שם המשרד'},
-      {
-        key: 'brokerage_license_number',
-        label: 'מספר רישיון תיווך',
-        placeholder: 'מספר רישיון',
-      },
-      {
-        key: 'mobile_phone',
-        label: 'טלפון נייד',
-        placeholder: 'מספר טלפון נייד',
-        keyboardType: 'phone-pad',
-      },
-      {
-        key: 'office_phone',
-        label: 'טלפון משרד',
-        placeholder: 'מספר טלפון משרד',
-        keyboardType: 'phone-pad',
-      },
-      about,
-    ];
-  }
-  if (t === subscriptionTypes.company) {
-    return [
-      {key: 'business_name', label: 'שם החברה', placeholder: 'שם החברה'},
-      {
-        key: 'contact_person_name',
-        label: 'איש קשר',
-        placeholder: 'שם איש הקשר',
-      },
-      {
-        key: 'mobile_phone',
-        label: 'טלפון נייד',
-        placeholder: 'מספר טלפון נייד',
-        keyboardType: 'phone-pad',
-      },
-      {
-        key: 'office_phone',
-        label: 'טלפון משרד',
-        placeholder: 'מספר טלפון משרד',
-        keyboardType: 'phone-pad',
-      },
-      {
-        key: 'company_website',
-        label: 'אתר אינטרנט',
-        placeholder: 'https://',
-        keyboardType: 'url',
-      },
-      {key: 'business_address', label: 'כתובת', placeholder: 'כתובת העסק'},
-      about,
-    ];
-  }
-  if (t === subscriptionTypes.professional) {
-    return [
-      {key: 'name', label: 'שם מלא', placeholder: 'שם מלא'},
-      {
-        key: 'mobile_phone',
-        label: 'טלפון נייד',
-        placeholder: 'מספר טלפון נייד',
-        keyboardType: 'phone-pad',
-      },
-      {key: 'business_address', label: 'כתובת', placeholder: 'כתובת'},
-      about,
-    ];
-  }
-  // Regular user (default)
-  return [
-    {key: 'name', label: 'שם מלא', placeholder: 'שם מלא'},
-    {
-      key: 'phone',
-      label: 'טלפון',
-      placeholder: 'מספר טלפון',
-      keyboardType: 'phone-pad',
-    },
-    {key: 'business_address', label: 'כתובת', placeholder: 'רחוב, עיר'},
-    about,
-  ];
-}
 
 const EditProfileScreen = ({onClose, onSaved}) => {
   const insets = useSafeAreaInsets();
@@ -147,33 +55,20 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const isCompany = subTypeLower === subscriptionTypes.company;
   const isBrokerLike = isBrokerLikeSubscriptionType(subTypeLower);
   const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
-  /** Yellow ring → keep teal camera; blue/teal ring → system orange. */
-  const cameraBadgeColor = hasGoldRing ? CAMERA_BADGE_TEAL : CAMERA_BADGE_ORANGE;
+  const cameraBadgeColors = hasGoldRing
+    ? PROFILE_RING_COLORS
+    : PROFILE_USER_RING_COLORS;
+  const cameraBadgeLocations = hasGoldRing
+    ? PROFILE_RING_LOCATIONS
+    : PROFILE_USER_RING_LOCATIONS;
   const canEditProfileVideo =
     isBrokerLike || subTypeLower === subscriptionTypes.professional;
-  const photoFieldKey = isCompany ? 'company_logo_url' : 'profile_picture_url';
 
-  const fields = useMemo(() => getFieldsForType(type), [type]);
+  const fields = useMemo(() => getProfileEditFields(type), [type]);
 
-  const [form, setForm] = useState(() => {
-    const initial = {};
-    fields.forEach(f => {
-      let val =
-        currentUser?.[f.key] != null ? String(currentUser[f.key]) : '';
-      if (
-        f.key === 'broker_office_name' &&
-        !val.trim() &&
-        currentUser?.business_name
-      ) {
-        val = String(currentUser.business_name);
-      }
-      if (f.key === 'name' && !val.trim() && currentUser?.contact_person_name) {
-        val = String(currentUser.contact_person_name);
-      }
-      initial[f.key] = val;
-    });
-    return initial;
-  });
+  const [form, setForm] = useState(() =>
+    hydrateProfileEditForm(currentUser, getProfileEditFields(type)),
+  );
   const [photoUrl, setPhotoUrl] = useState(() =>
     isCompany
       ? getUserCompanyLogoUrl(currentUser) || getUserProfilePhotoUrl(currentUser)
@@ -192,12 +87,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
 
-  const displayName =
-    currentUser?.name ||
-    currentUser?.contact_person_name ||
-    currentUser?.business_name ||
-    currentUser?.broker_office_name ||
-    'משתמש';
+  const displayName = resolveProfileDisplayName(currentUser);
 
   const setField = (key, value) =>
     setForm(prev => ({...prev, [key]: value}));
@@ -278,7 +168,12 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const handlePhotoCropConfirm = async result => {
     setCropVisible(false);
     setCropUri(null);
-    if (!result?.uri) return;
+    if (!result?.uri) {
+      if (result?.error) {
+        Alert.alert('שגיאה', result.error);
+      }
+      return;
+    }
     await uploadPicked({
       uri: result.uri,
       type: 'image/jpeg',
@@ -331,7 +226,8 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     fields.forEach(f => {
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
-    payload[photoFieldKey] = photoUrl || '';
+    Object.assign(payload, buildProfilePhotoSavePayload(type, photoUrl));
+    applyProfilePhoneSync(payload, type);
 
     let nextVideoUrl = profileVideoUrl;
     if (canEditProfileVideo && pendingProfileVideo) {
@@ -368,8 +264,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     try {
       const res = await updateSubscriptionProfile(subId, payload);
       const updated = res?.subscription || null;
+      const photoPatch = buildProfilePhotoSavePayload(type, photoUrl);
       setCurrentUser(prev =>
-        prev ? {...prev, ...(updated || payload)} : prev,
+        prev ? {...prev, ...(updated || payload), ...photoPatch} : prev,
       );
       if (typeof onSaved === 'function') onSaved(updated);
       Alert.alert('נשמר', 'הפרופיל עודכן בהצלחה.', [
@@ -422,19 +319,30 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                 subscriptionType={currentUser}
                 fallbackResizeMode="contain"
               />
-              <View
-                style={[
-                  styles.avatarEditBadge,
-                  {backgroundColor: cameraBadgeColor},
-                ]}>
+              <View style={styles.avatarEditBadgeWrap}>
                 {uploadingPhoto ? (
-                  <ActivityIndicator size="small" color="#1E1D27" />
+                  <View
+                    style={[
+                      styles.avatarEditBadge,
+                      {
+                        backgroundColor: cameraBadgeColors[1],
+                      },
+                    ]}>
+                    <ActivityIndicator size="small" color="#1E1D27" />
+                  </View>
                 ) : (
-                  <MaterialCommunityIcons
-                    name="camera"
-                    size={18}
-                    color="#1E1D27"
-                  />
+                  <LinearGradient
+                    colors={cameraBadgeColors}
+                    locations={cameraBadgeLocations}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={styles.avatarEditBadge}>
+                    <MaterialCommunityIcons
+                      name="camera"
+                      size={18}
+                      color="#1E1D27"
+                    />
+                  </LinearGradient>
                 )}
               </View>
             </TouchableOpacity>
@@ -515,7 +423,13 @@ const EditProfileScreen = ({onClose, onSaved}) => {
             <View key={f.key} style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>{f.label}</Text>
               <TextInput
-                style={[styles.input, f.multiline && styles.inputMultiline]}
+                style={[
+                  styles.input,
+                  f.multiline && styles.inputMultiline,
+                  (f.keyboardType === 'phone-pad' ||
+                    f.keyboardType === 'url') &&
+                    styles.inputLtrValue,
+                ]}
                 value={form[f.key]}
                 onChangeText={t => setField(f.key, t)}
                 placeholder={f.placeholder}
@@ -543,8 +457,8 @@ const EditProfileScreen = ({onClose, onSaved}) => {
             disabled={saving || uploadingPhoto || uploadingVideo}
             style={styles.saveBtnWrap}>
             <LinearGradient
-              colors={GOLD_GRADIENT}
-              locations={GOLD_GRADIENT_LOCATIONS}
+              colors={PROFILE_RING_COLORS}
+              locations={PROFILE_RING_LOCATIONS}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}
               style={[
@@ -618,10 +532,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: 10,
   },
-  avatarEditBadge: {
+  avatarEditBadgeWrap: {
     position: 'absolute',
     bottom: 0,
     right: 0,
+  },
+  avatarEditBadge: {
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -738,6 +654,11 @@ const styles = StyleSheet.create({
   inputMultiline: {
     minHeight: 96,
     textAlignVertical: 'top',
+  },
+  /** Phone numbers and URLs: an RTL run throws a leading "+" or "https://"
+   * to the far end of the value. Keep the glyph order LTR, still right-aligned. */
+  inputLtrValue: {
+    writingDirection: 'ltr',
   },
   inputReadonly: {
     backgroundColor: 'rgba(30,29,39,0.55)',

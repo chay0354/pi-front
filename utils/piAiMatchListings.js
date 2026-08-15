@@ -3,6 +3,32 @@
  * Scores published listings by overlap between user query and listing text fields.
  */
 
+import {isFeedPostListingRecord} from './listingShape';
+import {getChatListingCategoryLabel} from './chatListingCategory';
+
+/**
+ * Pi AI searches real-estate ads only — never TikTok feed posts.
+ * @param {Record<string, unknown>} listing
+ * @returns {boolean}
+ */
+export function isPiAiSearchExcludedListing(listing) {
+  if (isFeedPostListingRecord(listing)) return true;
+  const description = String(listing?.description || '')
+    .trim()
+    .toLowerCase();
+  return description === 'פוסט' || description === 'post';
+}
+
+/**
+ * @param {Record<string, unknown>[]} listings
+ * @returns {Record<string, unknown>[]}
+ */
+export function filterPiAiSearchListings(listings) {
+  return (Array.isArray(listings) ? listings : []).filter(
+    listing => listing && !isPiAiSearchExcludedListing(listing),
+  );
+}
+
 const STOP_HE = new Set([
   'של',
   'על',
@@ -71,8 +97,56 @@ export function buildListingSearchText(listing) {
 }
 
 /**
+ * @param {Record<string, unknown>} listing
+ * @returns {'rent'|'sale'|''}
+ */
+function listingPurposeKindForAi(listing) {
+  const raw = String(listing?.purpose || '')
+    .trim()
+    .toLowerCase();
+  if (raw === 'rent' || raw === 'להשכרה' || raw.includes('השכר')) {
+    return 'rent';
+  }
+  if (raw === 'sale' || raw === 'למכירה' || raw.includes('מכיר')) {
+    return 'sale';
+  }
+  return '';
+}
+
+function amenitiesTextForAi(listing) {
+  const a = listing?.amenities;
+  if (Array.isArray(a)) {
+    return a
+      .map(x => String(x || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof a === 'string') return a.trim();
+  return '';
+}
+
+function preferencesTextForAi(listing) {
+  const p = listing?.preferences;
+  if (Array.isArray(p)) {
+    return p
+      .map(x => String(x || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (p && typeof p === 'object') {
+    try {
+      return JSON.stringify(p);
+    } catch (_) {
+      return '';
+    }
+  }
+  if (typeof p === 'string') return p.trim();
+  return '';
+}
+
+/**
  * Compact whitelisted fields sent to the Pi AI (Gemini) search endpoint.
- * Keeps the payload/prompt small: only fields useful for matching, clipped.
+ * Keeps the payload useful for matching while clipped for prompt size.
  * @param {Record<string, unknown>} listing
  * @returns {Record<string, string>}
  */
@@ -83,23 +157,49 @@ export function buildListingAiSummary(listing) {
     const s = String(value).trim();
     if (s) out[key] = s.length > max ? s.slice(0, max) : s;
   };
-  set('purpose', listing.purpose, 30);
+
   set('category', listing.category, 10);
+  const catLabel = getChatListingCategoryLabel(listing.category);
+  if (catLabel) set('category_label', catLabel, 30);
+
+  set('purpose', listing.purpose, 30);
+  const purposeKind = listingPurposeKindForAi(listing);
+  if (purposeKind) set('purpose_kind', purposeKind, 10);
+
   set('property_type', listing.property_type, 40);
   set('apartment_type', listing.apartment_type, 40);
   set(
     'address',
     listing.address || listing.search_address || listing.land_address,
-    120,
+    160,
   );
+  set('land_address', listing.land_address, 120);
+  set('land_parcel', listing.land_parcel, 40);
+  set('land_block', listing.land_block, 40);
   set('project_name', listing.project_name, 80);
   set('price', listing.price, 20);
   set('budget', listing.budget, 20);
+  set('price_per_night', listing.price_per_night, 20);
   set('rooms', listing.rooms, 10);
   set('area', listing.area, 12);
   set('floor', listing.floor, 10);
   set('search_purpose', listing.search_purpose || listing.searchPurposeKey, 20);
-  set('description', listing.description, 240);
+  set('condition', listing.condition, 30);
+  set('construction_status', listing.construction_status, 30);
+  set('permit', listing.permit, 30);
+  set('hospitality_nature', listing.hospitality_nature, 40);
+  set('service_facility', listing.service_facility, 40);
+  set('preferred_gender', listing.preferred_gender, 20);
+  set('preferred_apartment_type', listing.preferred_apartment_type, 40);
+  if (listing.preferred_age_min != null && listing.preferred_age_min !== '') {
+    set('preferred_age_min', listing.preferred_age_min, 6);
+  }
+  if (listing.preferred_age_max != null && listing.preferred_age_max !== '') {
+    set('preferred_age_max', listing.preferred_age_max, 6);
+  }
+  set('preferences', preferencesTextForAi(listing), 120);
+  set('amenities', amenitiesTextForAi(listing), 120);
+  set('description', listing.description, 400);
   return out;
 }
 

@@ -74,6 +74,17 @@ const LoginScreen = ({onClose, onLoginSuccess, onForgotPassword}) => {
           error.message ||
             'לא הוגדרה סיסמה לחשבון. התחבר עם Google או הירשם מחדש.',
         );
+      } else if (error.code === 'SUBSCRIPTION_EXPIRED') {
+        setErrorMessage(
+          error.message ||
+            'תוקף המנוי הסתיים. לחידוש המנוי צרו קשר עם שירות הלקוחות.',
+        );
+      } else if (/שירות ההתחברות לא זמין|Cannot POST \/api\/auth\/login/i.test(
+        String(error.message || ''),
+      )) {
+        setErrorMessage(
+          'שירות ההתחברות לא זמין בשרת. נסה שוב בעוד דקה.',
+        );
       } else {
         setErrorMessage(error.message || 'נכשל בהתחברות. אנא נסה שוב.');
       }

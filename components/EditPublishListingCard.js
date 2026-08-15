@@ -188,16 +188,17 @@ const getExposureAsset = exposure => {
   return require('../assets/exposure-low.png');
 };
 
-const ListingStatsRow = ({listing, postRecord}) => {
+const ListingStatsRow = ({listing, postRecord, textStyle}) => {
   const {views, likes, comments} = getListingEngagementStats(
     listing,
     postRecord,
   );
+  const statTextStyle = textStyle ? [styles.statText, textStyle] : styles.statText;
   return (
     <View style={styles.statsRow}>
       <View style={styles.statItem}>
         <Image source={LISTING_STAT_ICONS.views} style={STAT_ICON_STYLE} resizeMode="contain" />
-        <Text style={styles.statText}>{views}</Text>
+        <Text style={statTextStyle}>{views}</Text>
       </View>
       <View style={styles.statItem}>
         <MaterialCommunityIcons
@@ -206,11 +207,11 @@ const ListingStatsRow = ({listing, postRecord}) => {
           color={STAT_ICON_COLOR}
           style={{opacity: STAT_ICON_OPACITY}}
         />
-        <Text style={styles.statText}>{likes}</Text>
+        <Text style={statTextStyle}>{likes}</Text>
       </View>
       <View style={styles.statItem}>
         <Image source={LISTING_STAT_ICONS.adComment} style={STAT_ICON_STYLE} resizeMode="contain" />
-        <Text style={styles.statText}>{comments}</Text>
+        <Text style={statTextStyle}>{comments}</Text>
       </View>
     </View>
   );
@@ -228,32 +229,168 @@ const EditPublishListingCard = ({
   onBoostPress,
   onFreezePress,
   onRemovePress,
+  variant = 'grid',
 }) => {
   const postRecord = isPostListingRecord(listing);
+  const compact = variant === 'list';
 
-  const renderListingMedia = () => {
+  const renderListingMedia = (imageStyle, wrapStyle) => {
     const videoUrl = getListingVideoUrl(listing);
     if (videoUrl) {
       return (
         <VideoPreviewThumb
           uri={videoUrl}
-          style={[styles.adImageWrap, {borderRadius: 0}]}
-          videoStyle={styles.adImage}
+          style={[wrapStyle || styles.adImageWrap, {borderRadius: 0}]}
+          videoStyle={imageStyle || styles.adImage}
         />
       );
     }
     const imageSource = getFirstImage(listing);
     if (imageSource) {
       return (
-        <Image source={imageSource} style={styles.adImage} resizeMode="cover" />
+        <Image
+          source={imageSource}
+          style={imageStyle || styles.adImage}
+          resizeMode="cover"
+        />
       );
     }
     return (
-      <View style={[styles.adImage, styles.adImagePlaceholder]}>
+      <View
+        style={[
+          imageStyle || styles.adImage,
+          styles.adImagePlaceholder,
+        ]}>
         <MaterialCommunityIcons name="image-off" size={48} color={TEXT_LIGHT} />
       </View>
     );
   };
+
+  const renderActionRow = (compactActions = false) => (
+    <View style={[styles.actionRow, compactActions && styles.actionRowList]}>
+      <TouchableOpacity
+        style={[styles.actionBtn, !canBoost && styles.actionBtnDisabled]}
+        onPress={e => {
+          e?.stopPropagation?.();
+          onBoostPress?.(listing);
+        }}
+        disabled={!canBoost}
+        activeOpacity={0.8}>
+        {!compactActions ? (
+          <Text style={styles.actionBtnText}>הקפצה</Text>
+        ) : null}
+        <Image
+          source={require('../assets/arrow_up.png')}
+          style={styles.actionBtnImage}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.actionBtn}
+        onPress={e => {
+          e?.stopPropagation?.();
+          onFreezePress?.(listing);
+        }}
+        activeOpacity={0.8}>
+        {!compactActions ? (
+          <Text
+            style={[
+              styles.actionBtnText,
+              isFrozen && styles.actionBtnFrozenText,
+            ]}>
+            {isFrozen ? 'הוקפאה' : 'הקפאה'}
+          </Text>
+        ) : isFrozen ? (
+          <Text
+            style={[
+              styles.actionBtnTextList,
+              styles.actionBtnFrozenText,
+            ]}>
+            הוקפאה
+          </Text>
+        ) : null}
+        <Image
+          source={require('../assets/freeze.png')}
+          style={[
+            styles.actionBtnImage,
+            isFrozen && styles.actionBtnFrozenIcon,
+          ]}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.actionBtn}
+        onPress={e => {
+          e?.stopPropagation?.();
+          onRemovePress?.(listing);
+        }}
+        activeOpacity={0.8}>
+        {!compactActions ? (
+          <Text style={styles.actionBtnText}>הסרה</Text>
+        ) : null}
+        <Image
+          source={require('../assets/close.png')}
+          style={styles.actionBtnImage}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (compact) {
+    return (
+      <TouchableOpacity
+        style={styles.adCardList}
+        activeOpacity={onPress ? 0.9 : 1}
+        onPress={onPress}
+        disabled={!onPress}>
+        <View style={styles.adCardListBody}>
+          <View style={styles.adCardListLeft}>
+            <Image
+              source={getExposureAsset(exposure)}
+              style={[
+                styles.exposureImage,
+                exposure === 'high' && styles.exposureImageHigh,
+              ]}
+              resizeMode="contain"
+            />
+            <View style={styles.adCardListTextCol}>
+              <Text style={styles.adCardListDescription} numberOfLines={2}>
+                {postRecord
+                  ? getFeedPostCardCaption(listing)
+                  : listing.description || '—'}
+              </Text>
+              <ListingStatsRow
+                listing={listing}
+                postRecord={postRecord}
+                textStyle={styles.statTextList}
+              />
+            </View>
+          </View>
+          {renderActionRow(true)}
+        </View>
+        <View style={styles.adCardListRight}>
+          {renderListingMedia(styles.adCardListImage, styles.adCardListImageWrap)}
+          <View style={styles.topRightTextWrap}>
+            <Text style={styles.topRightText}>
+              {getListingTypeBadgeLabel(listing, ownerUser)}
+            </Text>
+          </View>
+          {onEdit ? (
+            <TouchableOpacity
+              style={styles.editBadgeList}
+              onPress={e => {
+                e?.stopPropagation?.();
+                onEdit(listing);
+              }}
+              activeOpacity={0.8}>
+              <Octicons name="pencil" size={25} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity
@@ -307,60 +444,7 @@ const EditPublishListingCard = ({
           </View>
         </View>
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, !canBoost && styles.actionBtnDisabled]}
-            onPress={e => {
-              e?.stopPropagation?.();
-              onBoostPress?.(listing);
-            }}
-            disabled={!canBoost}
-            activeOpacity={0.8}>
-            <Text style={styles.actionBtnText}>הקפצה</Text>
-            <Image
-              source={require('../assets/arrow_up.png')}
-              style={styles.actionBtnImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={e => {
-              e?.stopPropagation?.();
-              onFreezePress?.(listing);
-            }}
-            activeOpacity={0.8}>
-            <Text
-              style={[
-                styles.actionBtnText,
-                isFrozen && styles.actionBtnFrozenText,
-              ]}>
-              {isFrozen ? 'הוקפאה' : 'הקפאה'}
-            </Text>
-            <Image
-              source={require('../assets/freeze.png')}
-              style={[
-                styles.actionBtnImage,
-                isFrozen && styles.actionBtnFrozenIcon,
-              ]}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={e => {
-              e?.stopPropagation?.();
-              onRemovePress?.(listing);
-            }}
-            activeOpacity={0.8}>
-            <Text style={styles.actionBtnText}>הסרה</Text>
-            <Image
-              source={require('../assets/close.png')}
-              style={styles.actionBtnImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-        </View>
+        {renderActionRow(false)}
       </View>
     </TouchableOpacity>
   );
@@ -478,6 +562,61 @@ const styles = StyleSheet.create({
   actionBtnFrozenIcon: {tintColor: FROZEN_ACTION_BLUE},
   actionBtnFrozenText: {color: FROZEN_ACTION_BLUE},
   actionBtnText: {color: '#fff', fontSize: 16, fontFamily: 'Rubik-Regular'},
+  actionBtnTextList: {color: TEXT_LIGHT, fontSize: 12},
+  actionRowList: {marginTop: 16},
+  adCardList: {
+    width: Dimensions.get('window').width * 0.88,
+    alignSelf: 'center',
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexDirection: 'row-reverse',
+    height: 192,
+    marginBottom: 22,
+  },
+  adCardListBody: {
+    flex: 1,
+    padding: 14,
+  },
+  adCardListLeft: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+  },
+  adCardListTextCol: {flex: 1},
+  adCardListDescription: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'left',
+    writingDirection: 'rtl',
+  },
+  adCardListRight: {
+    width: 108,
+    height: '100%',
+    position: 'relative',
+  },
+  adCardListImageWrap: {
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+  },
+  adCardListImage: {
+    width: '100%',
+    height: '100%',
+  },
+  editBadgeList: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2B2A39',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statTextList: {fontSize: 14},
 });
 
 export default EditPublishListingCard;

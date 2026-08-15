@@ -4,6 +4,7 @@ import React, {
   useLayoutEffect,
   useRef,
   useCallback,
+  useMemo,
 } from 'react';
 import {
   StyleSheet,
@@ -103,6 +104,7 @@ import {
   getChatUnreadCount,
   getListings,
   getCurrentUser,
+  getSubscription,
   toSubscriptionId,
   resolveSubscriptionId,
 } from './utils/api';
@@ -118,11 +120,6 @@ import {
   isFeedPostListingRecord,
 } from './utils/listingShape';
 import {enrichListingForUserProfile} from './utils/enrichListingForUserProfile';
-import {
-  pickTopViewedListingForProfile,
-  mergeHubRowIntoListingPayload,
-  isPostListingRecord,
-} from './utils/pickTopViewedListingForProfile';
 import {useFonts, loadAsync as loadFontsAsync} from 'expo-font';
 import {criticalFonts, deferredFonts} from './utils/fonts';
 import {schedulePreloadAppAssets} from './utils/preloadAppAssets';
@@ -533,6 +530,8 @@ function App() {
   const [feedFilters, setFeedFilters] = useState(INITIAL_FEED_FILTERS);
   /** Sidebar chip filters keyed by feed category id — survives profile/chat navigation. */
   const [sidebarFiltersByCategory, setSidebarFiltersByCategory] = useState({});
+  /** Session-only sidebar chip (e.g. deep-link to a post) — never written to AsyncStorage. */
+  const [ephemeralSidebarFilter, setEphemeralSidebarFilter] = useState(null);
   /** Filter modals return here on save/cancel (TikTok feed vs Favorites). */
   const [screenAfterFilter, setScreenAfterFilter] = useState(
     screenName.tikTokFeed,
@@ -561,6 +560,12 @@ function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (currentScreen !== screenName.tikTokFeed) {
+      setEphemeralSidebarFilter(null);
+    }
+  }, [currentScreen]);
 
   const isBnbListingCategory = useCallback(category => {
     const n =
@@ -636,11 +641,28 @@ function App() {
     ],
   );
 
-  const handleSidebarFilterChange = useCallback((category, filterId) => {
+  const handleSidebarFilterChange = useCallback((category, filterId, options = {}) => {
+    const persist = options.persist !== false;
     const catKey =
       category != null && String(category).trim() !== ''
         ? String(category).trim()
         : 'all';
+
+    if (!persist) {
+      if (filterId == null || String(filterId).trim() === '') {
+        setEphemeralSidebarFilter(null);
+      } else {
+        setEphemeralSidebarFilter({
+          categoryKey: catKey,
+          filterId: String(filterId).trim(),
+        });
+      }
+      return;
+    }
+
+    setEphemeralSidebarFilter(prev =>
+      prev?.categoryKey === catKey ? null : prev,
+    );
     setSidebarFiltersByCategory(prev => {
       const next = {...prev};
       if (filterId == null || String(filterId).trim() === '') {
@@ -656,6 +678,20 @@ function App() {
     });
   }, []);
 
+  const selectedSidebarFilterForFeed = useMemo(() => {
+    if (selectedCategory == null || String(selectedCategory).trim() === '') {
+      return null;
+    }
+    const catKey = String(selectedCategory).trim();
+    if (
+      ephemeralSidebarFilter?.categoryKey === catKey &&
+      ephemeralSidebarFilter.filterId
+    ) {
+      return ephemeralSidebarFilter.filterId;
+    }
+    return sidebarFiltersByCategory[catKey] ?? null;
+  }, [selectedCategory, ephemeralSidebarFilter, sidebarFiltersByCategory]);
+
   const finishPublishedListing = useCallback(
     ({returnScreen, categoryId, listingPreview, isUpdate = false}) => {
       const catNum =
@@ -668,6 +704,7 @@ function App() {
         handleSidebarFilterChange(
           String(resolvedCat),
           tikTokPostsSidebarFilterForCategory(resolvedCat),
+          {persist: false},
         );
       }
       if (returnScreen === screenName.editPublishAd) {
@@ -702,17 +739,14 @@ function App() {
       const listingId = String(listing.id).trim();
       const rawCat =
         listing.category != null ? parseInt(String(listing.category), 10) : NaN;
-      const isFeedPost =
-        listing.feedPost === true ||
-        listing.feed_post === true ||
-        listing.feed_post === 'true' ||
-        listing.feed_post === 't';
+      const isFeedPost = isFeedPostListingRecord(listing);
       if (Number.isFinite(rawCat) && rawCat > 0) {
         setSelectedCategory(String(rawCat));
         if (isFeedPost) {
           handleSidebarFilterChange(
             String(rawCat),
             tikTokPostsSidebarFilterForCategory(rawCat),
+            {persist: false},
           );
         }
       }
@@ -885,40 +919,66 @@ function App() {
     async (sid, meta = {}, returnScreen = screenName.home) => {
       const subscriptionId = String(sid || '').trim();
       if (!subscriptionId) return;
-      const row = {
-        id: subscriptionId,
-        name: meta.name || meta.display_name || '',
-        image_url: meta.image_url || meta.profile_image_url || null,
-      };
       setProfileReturnScreen(returnScreen);
+      setProfileListingFocusKey('');
+      setProfileOverviewSnapshot(null);
       try {
-        const res = await getListings({
-          status: 'published',
+        let subscription = null;
+        try {
+          const subRes = await getSubscription(subscriptionId);
+          subscription = subRes?.subscription || null;
+        } catch (_) {}
+
+        const imageUrl =
+          meta.image_url ||
+          meta.profile_image_url ||
+          subscription?.profile_picture_url ||
+          subscription?.company_logo_url ||
+          null;
+
+        setProfileUser({
+          ...(subscription || {}),
+          id: subscriptionId,
           subscription_id: subscriptionId,
+          owner_id: subscriptionId,
+          name:
+            subscription?.name ||
+            meta.name ||
+            meta.display_name ||
+            subscription?.business_name ||
+            null,
+          business_name:
+            subscription?.business_name ||
+            meta.business_name ||
+            meta.name ||
+            null,
+          contact_person_name:
+            subscription?.contact_person_name ||
+            meta.contact_person_name ||
+            null,
+          creator_name:
+            meta.name ||
+            meta.display_name ||
+            subscription?.business_name ||
+            subscription?.name ||
+            null,
+          creator_profile_image_url: imageUrl,
+          profile_picture_url: imageUrl,
+          profileImageUrl: imageUrl,
+          company_logo_url:
+            subscription?.company_logo_url || meta.company_logo_url || null,
+          subscription_type:
+            subscription?.subscription_type ||
+            meta.subscription_type ||
+            null,
+          email: subscription?.email || meta.email || null,
+          // Subscription overview — 6-post grid, not a featured project/ad hero.
+          _forceListingAdProfile: false,
+          _fromHomeFeatureProject: false,
+          _fromCompanyProjects: false,
+          _fromTikTokPost: false,
+          _fromProfessionalsDirectory: false,
         });
-        const list = Array.isArray(res?.listings) ? res.listings : [];
-        const top = pickTopViewedListingForProfile(list, {preferAds: true});
-        if (top) {
-          const merged = mergeHubRowIntoListingPayload(row, top);
-          const enriched = enrichListingForUserProfile(merged);
-          setProfileUser({
-            ...enriched,
-            _fromTikTokPost: true,
-            _forceListingAdProfile: !isPostListingRecord(enriched),
-          });
-        } else {
-          setProfileUser({
-            subscription_id: subscriptionId,
-            owner_id: subscriptionId,
-            creator_name: row.name,
-            name: row.name,
-            creator_email: null,
-            creator_profile_image_url: row.image_url || null,
-            profile_picture_url: row.image_url || null,
-            profileImageUrl: row.image_url || null,
-            _fromTikTokPost: true,
-          });
-        }
         setCurrentScreen(screenName.userProfile);
       } catch (e) {
         Alert.alert('', e?.message || 'שגיאה בטעינת הפרופיל');
@@ -1508,12 +1568,7 @@ function App() {
                   uploadedListings={uploadedListings}
                   selectedCategory={selectedCategory}
                   feedFilters={feedFilters}
-                  selectedSidebarFilter={
-                    selectedCategory != null
-                      ? (sidebarFiltersByCategory[String(selectedCategory)] ??
-                        null)
-                      : null
-                  }
+                  selectedSidebarFilter={selectedSidebarFilterForFeed}
                   onSidebarFilterChange={filterId =>
                     handleSidebarFilterChange(selectedCategory, filterId)
                   }
@@ -2834,16 +2889,9 @@ function App() {
                 onMessageSent={() => setChatListRefreshKey(k => k + 1)}
                 onOpenPost={listing => {
                   setSharedListingForChat(null);
-                  openListingInTikTokFeed(
-                    {
-                      ...listing,
-                      feedPost:
-                        listing?.feedPost ??
-                        listing?.feed_post ??
-                        true,
-                    },
-                    {returnScreen: chatReturnScreen},
-                  );
+                  openListingInTikTokFeed(listing, {
+                    returnScreen: chatReturnScreen,
+                  });
                   setChatListRefreshKey(k => k + 1);
                   requestAnimationFrame(() => setSelectedConversation(null));
                 }}
@@ -2913,6 +2961,10 @@ function App() {
             {currentScreen === screenName.userRegistration && (
               <UserRegistrationScreen
                 selectedCategory={selectedCategory}
+                bnbBusinessRegistration={
+                  guestPublishAfterAuth?.type === 'bnbAd' &&
+                  guestPublishAfterAuth?.bnbHostType === 'business'
+                }
                 onSuccess={completeGuestRegistration}
                 onCancel={() => {
                   setGuestPublishAfterAuth(null);

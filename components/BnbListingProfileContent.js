@@ -22,8 +22,7 @@ const DEEP = '#1E1D27';
 const GOLD_BADGE = '#FFC40A';
 const GOLD_PI = '#FFD275';
 const REPORT_BG = '#4D4966';
-const PI_BADGE = require('../assets/pi-badge.png');
-const PI_BADGE_RING = require('../assets/pi-badge-ring.png');
+import PiRatingBadge from './PiRatingBadge';
 
 const PROPERTY_TYPE_LABELS = {
   room: 'חדר',
@@ -269,20 +268,6 @@ function InfoChip({label, iconSource, active = true}) {
   );
 }
 
-function PiRatingBadge({rating}) {
-  const n = Math.min(5, Math.max(1, Math.round(Number(rating) || 5)));
-  return (
-    <View style={styles.piBadge}>
-      <Text style={styles.piBadgeText}>{String(n)}</Text>
-      <Image
-        source={n > 4 ? PI_BADGE_RING : PI_BADGE}
-        style={styles.piBadgeImage}
-        resizeMode="cover"
-      />
-    </View>
-  );
-}
-
 /**
  * BnB (category 5) listing detail — Figma 5:413374. Feed ads only (not posts).
  */
@@ -470,7 +455,7 @@ export default function BnbListingProfileContent({
                   <Text style={styles.tagWhiteText}>{unitLabel}</Text>
                 </View>
                 <View style={styles.piBadgeBelowTag}>
-                  <PiRatingBadge rating={displayPiRating} />
+                  <PiRatingBadge rating={displayPiRating} variant="listing" />
                 </View>
               </View>
             </View>

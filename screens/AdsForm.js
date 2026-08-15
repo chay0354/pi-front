@@ -1560,8 +1560,7 @@ const AdsForm = ({
       try {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [4, 3],
+          allowsEditing: false,
           quality: AD_IMAGE_PICKER_QUALITY,
         });
 
@@ -1689,8 +1688,7 @@ const AdsForm = ({
       try {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
+          allowsEditing: false,
           quality: AD_IMAGE_PICKER_QUALITY,
         });
 

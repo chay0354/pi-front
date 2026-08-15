@@ -1,6 +1,7 @@
 import {
   resolveSubscriptionType,
   shouldShowProfileGoldRing,
+  subscriptionTypes,
 } from './constant';
 
 /** @type {Map<string, string>} */
@@ -22,28 +23,60 @@ export function logProfilePic(tag, payload) {
   profilePicLogLastSig.set(tag, sig);
 }
 
+function trimUrl(value) {
+  return value != null && String(value).trim() ? String(value).trim() : '';
+}
+
 /**
- * Keep `profile_picture_url` (API/DB) and `profileImageUrl` (camelCase) in sync on user objects.
- * @param {object|null|undefined} user
- * @returns {object|null|undefined}
+ * Keep profile photo columns and camelCase aliases in sync on user objects.
+ *
+ * Company accounts edit `company_logo_url`, but most avatars resolve
+ * `profile_picture_url` first — without syncing both, a logo change looks
+ * like it never saved.
  */
 export function normalizeUserProfileAliases(user) {
   if (user == null || typeof user !== 'object') return user;
-  const snake =
-    user.profile_picture_url != null && String(user.profile_picture_url).trim()
-      ? String(user.profile_picture_url).trim()
-      : '';
-  const camel =
-    user.profileImageUrl != null && String(user.profileImageUrl).trim()
-      ? String(user.profileImageUrl).trim()
-      : '';
-  const pic = snake || camel;
+  const type = resolveSubscriptionType(user);
+  const isCompany = type === subscriptionTypes.company;
+
+  const profilePic = trimUrl(user.profile_picture_url) || trimUrl(user.profileImageUrl);
+  const companyLogo =
+    trimUrl(user.company_logo_url) || trimUrl(user.companyLogoUrl);
+
+  if (isCompany) {
+    const pic = companyLogo || profilePic;
+    if (!pic) return user;
+    return {
+      ...user,
+      profile_picture_url: pic,
+      profileImageUrl: pic,
+      company_logo_url: pic,
+      companyLogoUrl: pic,
+    };
+  }
+
+  const pic = profilePic || companyLogo;
   if (!pic) return user;
   return {
     ...user,
-    profile_picture_url: snake || camel,
-    profileImageUrl: camel || snake,
+    profile_picture_url: pic,
+    profileImageUrl: pic,
   };
+}
+
+/** PATCH payload keys for the profile photo shown in edit + profile screens. */
+export function buildProfilePhotoSavePayload(subscriptionType, photoUrl) {
+  const url = trimUrl(photoUrl);
+  const payload = {};
+  if (!url) return payload;
+  const type = resolveSubscriptionType(subscriptionType);
+  if (type === subscriptionTypes.company) {
+    payload.company_logo_url = url;
+    payload.profile_picture_url = url;
+  } else {
+    payload.profile_picture_url = url;
+  }
+  return payload;
 }
 
 function isProfileImagePlaceholder(value) {

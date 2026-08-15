@@ -6,7 +6,6 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
-  Pressable,
   Platform,
   ActivityIndicator,
   Dimensions,
@@ -29,17 +28,49 @@ import {resolveStorySlideUri} from '../utils/videoPlayback';
 import {
   parsePostTextOverlayPayload,
 } from '../utils/postTextOverlay';
-import {feedBottomBarHeight} from '../utils/feedLayout';
+import {
+  feedBottomBarHeight,
+  FEED_OVERLAY_ABOVE_BAR_GAP,
+} from '../utils/feedLayout';
+import {
+  formatOpenHouseOverlayText,
+  getOpenHouseDetailsFromListing,
+  isOpenHouseListing,
+  OPEN_HOUSE_FEED_TAG,
+  OPEN_HOUSE_POST_DESCRIPTION,
+} from '../utils/constant';
+import {flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 
 const STORY_DURATION_MS = 12000;
 const MEDIA_READY_TIMEOUT_MS = 2500;
 const SCREEN_W = Dimensions.get('window').width;
 const SWIPE_COMMIT_FRACTION = 0.25;
 const SWIPE_COMMIT_VELOCITY = 0.35;
+const STORY_TAP_MOVE_SLOP = 14;
 const USER_SWITCH_MS = 280;
 const PAGER_RUBBER_BAND = 0.32;
 /** Same top bar as TikTokFeedScreen — overlay coords match the feed cell. */
 const FEED_TOP_BAR_HEIGHT = 52;
+const FEED_OVERLAY_LEFT_PX = 20;
+const FEED_SIDEBAR_ZONE_PX = 88;
+const FEED_OVERLAY_TEXT_MAX_WIDTH = Math.min(
+  366,
+  SCREEN_W - FEED_OVERLAY_LEFT_PX - FEED_SIDEBAR_ZONE_PX,
+);
+
+/** Web StyleSheet omits `direction`; keep post overlay chips/buttons RTL-aligned. */
+const postOverlayRtlDirection =
+  Platform.OS === 'web' ? {direction: 'rtl'} : null;
+
+const webTextShadow = (color, offsetW, offsetH, radius) =>
+  Platform.select({
+    web: {textShadow: `${offsetW}px ${offsetH}px ${radius}px ${color}`},
+    default: {
+      textShadowColor: color,
+      textShadowOffset: {width: offsetW, height: offsetH},
+      textShadowRadius: radius,
+    },
+  });
 
 /** App uses forceRTL — `row` / authored `left` flip. Stories stay Instagram LTR. */
 const NATIVE_RTL = Platform.OS !== 'web' && I18nManager.isRTL;
@@ -93,13 +124,15 @@ function buildPanelScale(translateX, panelIndex, currentPanelIndex, panelCount) 
   }
   return 0.86;
 }
-/** Physical-left / physical-right hit targets under swapLeftAndRightInRTL. */
-const tapZonePrevStyle = NATIVE_RTL
-  ? {position: 'absolute', right: 0, top: 0, bottom: 0, width: '33%'}
-  : {position: 'absolute', left: 0, top: 0, bottom: 0, width: '33%'};
-const tapZoneNextStyle = NATIVE_RTL
-  ? {position: 'absolute', left: 0, top: 0, bottom: 0, width: '67%'}
-  : {position: 'absolute', right: 0, top: 0, bottom: 0, width: '67%'};
+/** Physical-left third = previous slide; rest = next (Instagram, window coords). */
+function isStoryTapInPrevZone(gestureState) {
+  const x =
+    typeof gestureState.pageX === 'number'
+      ? gestureState.pageX
+      : gestureState.x0;
+  return x < SCREEN_W * 0.33;
+}
+
 const progressFillAlign = NATIVE_RTL ? 'flex-end' : 'flex-start';
 
 function preloadRingImages(ring) {
@@ -398,11 +431,20 @@ function StoryRingSlidePanel({
     }
     return parsePostTextOverlayPayload({general_details: gd});
   })();
+  const openHouseOverlayText = (() => {
+    if (!isActive || !slide?.general_details) return '';
+    const listing = {general_details: slide.general_details};
+    if (!isOpenHouseListing(listing)) return null;
+    const details = getOpenHouseDetailsFromListing(listing);
+    if (!details) return '';
+    return formatOpenHouseOverlayText(details.place, details.date);
+  })();
   // Same band + scale as TikTok feed (top/bottom chrome inset, feedPageHeight).
   const showLiveText =
     !!storyTextPayload?.overlays?.length &&
     mediaFrame != null &&
     overlayBand?.height > 0;
+  const showOpenHouseOverlay = isActive && openHouseOverlayText != null;
 
   if (!slide) {
     return (
@@ -439,6 +481,35 @@ function StoryRingSlidePanel({
             feedWidth={overlayBand.width}
             feedHeight={overlayBand.height}
           />
+        </View>
+      ) : null}
+      {showOpenHouseOverlay ? (
+        <View
+          style={[
+            styles.openHouseOverlayWrap,
+            postOverlayRtlDirection,
+            {
+              bottom:
+                (overlayBand?.bottom ?? 0) + FEED_OVERLAY_ABOVE_BAR_GAP,
+            },
+          ]}
+          pointerEvents="none">
+          <View style={styles.openHouseTagRow}>
+            <Image
+              source={OPEN_HOUSE_FEED_TAG}
+              style={styles.openHouseTagImage}
+              resizeMode="contain"
+              accessibilityLabel={OPEN_HOUSE_POST_DESCRIPTION}
+            />
+          </View>
+          {openHouseOverlayText ? (
+            <Text
+              style={styles.openHouseOverlayText}
+              numberOfLines={3}
+              ellipsizeMode="tail">
+              {openHouseOverlayText}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       {isActive && mediaLoading ? (
@@ -615,101 +686,6 @@ const StoryViewerModal = ({
     [advanceToNextUser, advanceToPrevUser, syncBaseOffset, translateX],
   );
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          !isSwitchingRef.current &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
-          Math.abs(gestureState.dx) > 10,
-        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
-          !isSwitchingRef.current &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
-          Math.abs(gestureState.dx) > 10,
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => {
-          setIsUserPanning(true);
-          clearTimers();
-          translateX.stopAnimation(value => {
-            dragStartOffsetRef.current =
-              typeof value === 'number' ? value : baseOffsetRef.current;
-          });
-        },
-        onPanResponderMove: (_, gestureState) => {
-          const dx = storyPanDx(gestureState.dx);
-          let next = dragStartOffsetRef.current + dx;
-          const base = baseOffsetRef.current;
-          const {minX, maxX} = pagerOffsetBounds(pagerPanels.length);
-          if (!hasPrevUser && next > base) {
-            next = base + dx * PAGER_RUBBER_BAND;
-          } else if (!hasNextUser && next < base) {
-            next = base + dx * PAGER_RUBBER_BAND;
-          } else {
-            next = Math.max(minX, Math.min(maxX, next));
-          }
-          translateX.setValue(next);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          setIsUserPanning(false);
-          const dx = storyPanDx(gestureState.dx);
-          const vx = storyPanDx(gestureState.vx);
-          const threshold = SCREEN_W * SWIPE_COMMIT_FRACTION;
-          const flingNext = vx <= -SWIPE_COMMIT_VELOCITY;
-          const flingPrev = vx >= SWIPE_COMMIT_VELOCITY;
-          const releaseVelocity = vx * 1000;
-
-          if ((dx <= -threshold || flingNext) && hasNextUser) {
-            commitUserSwitch('next', releaseVelocity);
-            return;
-          }
-          if ((dx >= threshold || flingPrev) && hasPrevUser) {
-            commitUserSwitch('prev', releaseVelocity);
-            return;
-          }
-          if ((dx <= -threshold || flingNext) && !hasNextUser) {
-            Animated.timing(translateX, {
-              toValue: baseOffsetRef.current - SCREEN_W * PAGER_RUBBER_BAND,
-              duration: USER_SWITCH_MS,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }).start(({finished}) => {
-              if (finished) onClose?.();
-              else syncBaseOffset(false);
-            });
-            return;
-          }
-
-          Animated.spring(translateX, {
-            toValue: baseOffsetRef.current,
-            velocity: releaseVelocity,
-            useNativeDriver: true,
-            tension: 148,
-            friction: 22,
-          }).start();
-        },
-        onPanResponderTerminate: () => {
-          setIsUserPanning(false);
-          Animated.spring(translateX, {
-            toValue: baseOffsetRef.current,
-            useNativeDriver: true,
-            tension: 148,
-            friction: 22,
-          }).start();
-        },
-      }),
-    [
-      clearTimers,
-      commitUserSwitch,
-      hasNextUser,
-      hasPrevUser,
-      onClose,
-      pagerPanels.length,
-      syncBaseOffset,
-      translateX,
-    ],
-  );
-
   const goNext = useCallback(() => {
     const i = slideIndexRef.current;
     if (i + 1 >= total) {
@@ -735,6 +711,137 @@ const StoryViewerModal = ({
       advanceToPrevUser();
     }
   }, [advanceToPrevUser, hasPrevUser, commitUserSwitch]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !isSwitchingRef.current,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          !isSwitchingRef.current &&
+          (Math.abs(gestureState.dx) > STORY_TAP_MOVE_SLOP ||
+            Math.abs(gestureState.dy) > STORY_TAP_MOVE_SLOP),
+        onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+          !isSwitchingRef.current &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          Math.abs(gestureState.dx) > 10,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          clearTimers();
+          translateX.stopAnimation(value => {
+            dragStartOffsetRef.current =
+              typeof value === 'number' ? value : baseOffsetRef.current;
+          });
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const dx = storyPanDx(gestureState.dx);
+          if (
+            Math.abs(dx) > STORY_TAP_MOVE_SLOP ||
+            Math.abs(gestureState.dy) > STORY_TAP_MOVE_SLOP
+          ) {
+            setIsUserPanning(true);
+          }
+          let next = dragStartOffsetRef.current + dx;
+          const base = baseOffsetRef.current;
+          const {minX, maxX} = pagerOffsetBounds(pagerPanels.length);
+          if (!hasPrevUser && next > base) {
+            next = base + dx * PAGER_RUBBER_BAND;
+          } else if (!hasNextUser && next < base) {
+            next = base + dx * PAGER_RUBBER_BAND;
+          } else {
+            next = Math.max(minX, Math.min(maxX, next));
+          }
+          translateX.setValue(next);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          setIsUserPanning(false);
+          const dx = storyPanDx(gestureState.dx);
+          const dy = gestureState.dy;
+          const vx = storyPanDx(gestureState.vx);
+          const threshold = SCREEN_W * SWIPE_COMMIT_FRACTION;
+          const flingNext = vx <= -SWIPE_COMMIT_VELOCITY;
+          const flingPrev = vx >= SWIPE_COMMIT_VELOCITY;
+          const releaseVelocity = vx * 1000;
+          const isHorizontalSwipe =
+            Math.abs(dx) > Math.abs(dy) &&
+            (Math.abs(dx) > threshold || flingNext || flingPrev);
+
+          // Finger swipe → switch user at any slide (Instagram-style).
+          if (isHorizontalSwipe) {
+            if ((dx <= -threshold || flingNext) && hasNextUser) {
+              commitUserSwitch('next', releaseVelocity);
+              return;
+            }
+            if ((dx >= threshold || flingPrev) && hasPrevUser) {
+              commitUserSwitch('prev', releaseVelocity);
+              return;
+            }
+            if ((dx <= -threshold || flingNext) && !hasNextUser) {
+              Animated.timing(translateX, {
+                toValue: baseOffsetRef.current - SCREEN_W * PAGER_RUBBER_BAND,
+                duration: USER_SWITCH_MS,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+              }).start(({finished}) => {
+                if (finished) onClose?.();
+                else syncBaseOffset(false);
+              });
+              return;
+            }
+
+            Animated.spring(translateX, {
+              toValue: baseOffsetRef.current,
+              velocity: releaseVelocity,
+              useNativeDriver: true,
+              tension: 148,
+              friction: 22,
+            }).start();
+            return;
+          }
+
+          // Short press → previous / next slide within the current user.
+          if (
+            Math.abs(dx) < STORY_TAP_MOVE_SLOP &&
+            Math.abs(dy) < STORY_TAP_MOVE_SLOP
+          ) {
+            if (isStoryTapInPrevZone(gestureState)) {
+              goPrev();
+            } else {
+              goNext();
+            }
+            return;
+          }
+
+          Animated.spring(translateX, {
+            toValue: baseOffsetRef.current,
+            velocity: releaseVelocity,
+            useNativeDriver: true,
+            tension: 148,
+            friction: 22,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          setIsUserPanning(false);
+          Animated.spring(translateX, {
+            toValue: baseOffsetRef.current,
+            useNativeDriver: true,
+            tension: 148,
+            friction: 22,
+          }).start();
+        },
+      }),
+    [
+      clearTimers,
+      commitUserSwitch,
+      goNext,
+      goPrev,
+      hasNextUser,
+      hasPrevUser,
+      onClose,
+      pagerPanels.length,
+      syncBaseOffset,
+      translateX,
+    ],
+  );
 
   useEffect(() => {
     if (!visible || !ring || !total || isUserPanning || isUserSwitching) return;
@@ -790,9 +897,7 @@ const StoryViewerModal = ({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={onClose}>
       <View style={styles.root}>
-        <View
-          style={[styles.mediaLayer, storyPagerLtrStyle]}
-          {...panResponder.panHandlers}>
+        <View style={[styles.mediaLayer, storyPagerLtrStyle]}>
           <Animated.View
             style={[
               styles.pagerRow,
@@ -835,21 +940,12 @@ const StoryViewerModal = ({
           </Animated.View>
         </View>
 
-        {/* Physical LTR: left = previous slide, right = next slide. */}
+        {/* Full-screen gestures: swipe = switch user; tap = next/prev slide. */}
         <View
-          style={styles.tapZones}
-          pointerEvents={blockTapZones ? 'none' : 'box-none'}>
-          <Pressable
-            style={tapZonePrevStyle}
-            onPress={goPrev}
-            accessibilityLabel="הקודם"
-          />
-          <Pressable
-            style={tapZoneNextStyle}
-            onPress={goNext}
-            accessibilityLabel="הבא"
-          />
-        </View>
+          style={styles.gestureLayer}
+          pointerEvents={blockTapZones ? 'none' : 'auto'}
+          {...panResponder.panHandlers}
+        />
 
         <LinearGradient
           colors={['rgba(0,0,0,0.4)', 'rgba(0,0,0,0)']}
@@ -963,6 +1059,36 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
+  openHouseOverlayWrap: {
+    position: 'absolute',
+    left: FEED_OVERLAY_LEFT_PX,
+    width: FEED_OVERLAY_TEXT_MAX_WIDTH,
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
+    alignItems: flexStart,
+    zIndex: 4,
+  },
+  openHouseTagRow: {
+    width: '100%',
+    alignItems: flexStart,
+    marginBottom: 12,
+  },
+  openHouseTagImage: {
+    width: 150,
+    height: 56,
+  },
+  openHouseOverlayText: {
+    color: '#F7F3E6',
+    fontSize: 24,
+    lineHeight: 31,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
+    marginBottom: 10,
+    ...webTextShadow('rgba(0, 0, 0, 0.7)', 0, 1, 3),
+  },
   mediaFullScreen: {
     width: '100%',
     height: '100%',
@@ -983,7 +1109,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
-  tapZones: {
+  gestureLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 5,
   },

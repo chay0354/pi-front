@@ -11,6 +11,7 @@ import {
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import ProfileAvatar from '../components/ProfileAvatar';
+import {getPiReviewStarSource} from '../utils/piRatingBadgeAssets';
 import {flexStart} from '../utils/rtlLayout';
 
 /** Figma 10:31152 — full-screen ביקורות list (RTL). */
@@ -20,24 +21,8 @@ const CREAM = '#F7F3E6';
 const SECONDARY = '#D2D0DC';
 const GAP_CARDS = 31;
 
-const isWeb = Platform.OS === 'web';
-const baseUrl =
-  isWeb && typeof window !== 'undefined' ? window.location.origin : '';
-const ratingStarSources = isWeb
-  ? [1, 2, 3, 4].map(i => ({uri: `${baseUrl}/starts/${i}.png`})).concat([
-      {uri: `${baseUrl}/starts/5old.png`},
-    ])
-  : [
-      require('../assets/starts/1.png'),
-      require('../assets/starts/2.png'),
-      require('../assets/starts/3.png'),
-      require('../assets/starts/4.png'),
-      require('../assets/starts/5old.png'),
-    ];
-
-function getStarSource(index) {
-  const i = Math.min(4, Math.max(0, index));
-  return ratingStarSources[i];
+function getStarSource(rating) {
+  return getPiReviewStarSource(rating);
 }
 
 function formatReviewDate(dateStr) {
@@ -58,10 +43,8 @@ function formatReviewDate(dateStr) {
 
 const ReviewRow = ({r}) => {
   const rating = Math.min(5, Math.max(1, Number(r.rating) || 1));
-  const starIdx = rating - 1;
-  const starSource = getStarSource(starIdx);
-  const starStyle =
-    rating === 1 ? styles.starBadge1 : styles.starBadge;
+  const starSource = getStarSource(rating);
+  const starStyle = styles.starBadge;
 
   return (
     <View style={styles.card}>

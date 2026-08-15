@@ -1700,6 +1700,16 @@ const PostEditorScreen = ({
 
           const storyUsesLiveText =
             hasTextOverlays && !hasStickerOverlays && !textBakedIntoImage;
+          const openHouseStoryDetails =
+            defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION
+              ? {
+                  post_kind: OPEN_HOUSE_POST_KIND,
+                  [OPEN_HOUSE_PLACE_KEY]:
+                    openHouseDetailsRef.current?.place?.trim() || '',
+                  [OPEN_HOUSE_DATE_KEY]:
+                    openHouseDetailsRef.current?.date?.trim() || '',
+                }
+              : null;
 
           if (storyUsesLiveText) {
             // Image / video / gradient feed posts — live text like TikTok feed.
@@ -1735,6 +1745,12 @@ const PostEditorScreen = ({
             }
             storyMediaUrl = await uploadImagePayload(storyCaptureUri, 'story');
             setCapturingStoryFrame(false);
+            // Stickers bake user layers; בית פתוח tag/text render live in StoryViewer.
+            if (openHouseStoryDetails) {
+              storyGeneralDetails = openHouseStoryDetails;
+            }
+          } else if (openHouseStoryDetails) {
+            storyGeneralDetails = openHouseStoryDetails;
           }
 
           await createStory({
@@ -1861,8 +1877,13 @@ const PostEditorScreen = ({
   const lockPreviewLayout =
     Boolean(editingTextBlockId) || isKeyboardVisible;
 
-  const isStoryCapture =
-    isCapturing && (publishTarget === 'story' || capturingStoryFrame);
+  /**
+   * Only the companion-story bake blows the preview up to the whole phone.
+   * The תמונה מכירתית bake keeps the on-screen box: growing it re-centers the
+   * `contain` media while the text blocks stay where they are, which is what
+   * pushed the text up the image in the saved composite.
+   */
+  const isFullFrameCapture = isCapturing && capturingStoryFrame;
 
   /** Full keyboard-closed stage height — drag bounds must match save/finish coords. */
   const effectiveStageHeight = Math.max(
@@ -2577,9 +2598,7 @@ const PostEditorScreen = ({
         }}
         style={[
           styles.backgroundContainer,
-          isCapturing &&
-            (publishTarget === 'story' || capturingStoryFrame) &&
-            styles.storyCaptureFill,
+          isFullFrameCapture && styles.storyCaptureFill,
         ]}>
         <View
           ref={backgroundMediaRef}
@@ -2587,12 +2606,12 @@ const PostEditorScreen = ({
           collapsable={false}
           style={[
             styles.backgroundMediaLayer,
-            !isStoryCapture &&
+            !isFullFrameCapture &&
             lockPreviewLayout &&
             lockedPreviewHeight > 0
               ? styles.backgroundMediaLocked
               : null,
-            !isStoryCapture &&
+            !isFullFrameCapture &&
             lockPreviewLayout &&
             lockedPreviewHeight > 0
               ? {height: lockedPreviewHeight}
@@ -2640,7 +2659,12 @@ const PostEditorScreen = ({
           keyboardVerticalOffset={0}
         >
           <View style={styles.editorRoot}>
-            {!isCapturing && (
+            {isCapturing ? (
+              // The tools are hidden for the snapshot, but their band has to
+              // keep its space: unmounting it slides the stage — and with it
+              // every text block — up over a background image that stays put.
+              <View style={styles.headerContainer} pointerEvents="none" />
+            ) : (
               <View style={styles.headerContainer}>
                 <TouchableOpacity
                   onPress={() => {

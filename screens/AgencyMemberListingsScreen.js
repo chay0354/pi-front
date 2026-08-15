@@ -106,6 +106,7 @@ const AgencyMemberListingsScreen = ({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('all');
+  const [viewMode, setViewMode] = useState('grid');
   const [frozenListingIds, setFrozenListingIds] = useState([]);
   const [boostedOverrides, setBoostedOverrides] = useState({});
   const [boostQuota, setBoostQuota] = useState({
@@ -338,6 +339,30 @@ const AgencyMemberListingsScreen = ({
         ))}
       </View>
 
+      {!loading && visibleListings.length > 0 ? (
+        <View style={styles.actionBar}>
+          <TouchableOpacity
+            style={styles.viewToggle}
+            onPress={() =>
+              setViewMode(prev => (prev === 'grid' ? 'list' : 'grid'))
+            }
+            accessibilityRole="button"
+            accessibilityLabel={
+              viewMode === 'grid' ? 'הצג תצוגה קטנה' : 'הצג תצוגה גדולה'
+            }>
+            <Image
+              source={
+                viewMode === 'grid'
+                  ? require('../assets/swipereight.png')
+                  : require('../assets/swiperleft.png')
+              }
+              style={styles.viewToggleIcon}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={Colors.white100} />
@@ -379,6 +404,7 @@ const AgencyMemberListingsScreen = ({
                 exposure={exposure}
                 isFrozen={frozen}
                 canBoost={canBoostThisMonth}
+                variant={viewMode}
                 onPress={() => onViewListing?.(listing)}
                 onEdit={() =>
                   post ? onEditPost?.(listing) : onEditListing?.(listing)
@@ -652,6 +678,20 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   tabTextActive: {color: '#1E1D27', fontFamily: 'Rubik-Medium'},
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  viewToggle: {
+    width: 56,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleIcon: {width: '100%', height: '100%'},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   content: {paddingHorizontal: 16, paddingTop: 4},
   errorText: {

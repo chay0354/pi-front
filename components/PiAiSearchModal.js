@@ -35,6 +35,7 @@ import {
   filterListingsByParsedQuery,
   buildPiAiFilterEmptyMessage,
   buildPiAiSearchingMessage,
+  filterPiAiSearchListings,
 } from '../utils/piAiMatchListings';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import ListingGridCardFigma from './ListingGridCardFigma';
@@ -89,8 +90,7 @@ if (
 }
 
 /** Mirrored from UserProfileScreen: bundled assets (web URI paths 404 on subpaths). */
-const piBadgeSource = require('../assets/pi-badge.png');
-const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
+import {PiRatingBadge} from './PiRatingBadge';
 
 /** Shown next to the grid/list toggle: count of items in the current result set. */
 const formatResultsCountHe = n => {
@@ -247,7 +247,7 @@ const PiAiSearchModal = ({
         if (cancelled) {
           return;
         }
-        const listings = res?.listings || [];
+        const listings = filterPiAiSearchListings(res?.listings || []);
         setAllListings(listings);
         if (restoring) {
           // Keep the restored query/results; just refresh catalog + likes once.
@@ -357,7 +357,7 @@ const PiAiSearchModal = ({
         const result = await getListings({
           status: 'published',
         });
-        listings = result?.listings || [];
+        listings = filterPiAiSearchListings(result?.listings || []);
         setAllListings(listings);
         if (uid) {
           syncLikesFromListings(listings, uid);
@@ -399,8 +399,8 @@ const PiAiSearchModal = ({
           aiSaidNoMatch = true;
         }
       }
-      if (rows == null) {
-        // Gemini unavailable or returned no ids — keyword rank as backup.
+      if (rows == null && !aiSaidNoMatch) {
+        // Gemini unavailable — keyword rank as backup (not when AI said no match).
         const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
         rows = rankedResult.ranked.map(r => r.listing);
       }
@@ -523,7 +523,6 @@ const PiAiSearchModal = ({
       subKey !== '' && piDisplayBySubId[subKey] !== undefined
         ? piDisplayBySubId[subKey]
         : brokerPiRatingFromListing(listing);
-    const piBadgeImage = displayPi > 4 ? piBadgeSourceRing : piBadgeSource;
     const showCommercialLogo = shouldShowCommercialLogoBadge(listing);
     const commercialLogoUrl = showCommercialLogo
       ? getCompanyLogoUrlFromListing(listing)
@@ -736,17 +735,11 @@ const PiAiSearchModal = ({
           </View>
         ) : showPiRating ? (
           <View style={[styles.listResultActions, listRtlDirection]}>
-            <View
-              style={[styles.listResultPiRow, piBadgeLtrDirection]}
-              pointerEvents="box-none">
-              <Text style={styles.listResultPiText}>{String(displayPi)}</Text>
-              <Image
-                source={piBadgeImage}
-                style={styles.listResultPiBadge}
-                resizeMode="cover"
-                accessibilityLabel="דירוג Pi"
-              />
-            </View>
+            <PiRatingBadge
+              rating={displayPi}
+              variant="list"
+              style={piBadgeLtrDirection}
+            />
           </View>
         ) : null}
       </TouchableOpacity>

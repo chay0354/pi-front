@@ -28,8 +28,7 @@ const DEEP = '#1E1D27';
 const GOLD_PI = '#FFD275';
 const REPORT_BG = '#4D4966';
 
-const PI_BADGE = require('../assets/pi-badge.png');
-const PI_BADGE_RING = require('../assets/pi-badge-ring.png');
+import PiRatingBadge from './PiRatingBadge';
 
 function firstNonEmpty(...vals) {
   for (const v of vals) {
@@ -96,20 +95,6 @@ function AttrChip({label, iconSource}) {
           />
         ) : null}
       </View>
-    </View>
-  );
-}
-
-function PiRatingBadge({rating}) {
-  const n = Math.min(5, Math.max(1, Math.round(Number(rating) || 5)));
-  return (
-    <View style={styles.piBadge}>
-      <Text style={styles.piBadgeText}>{String(n)}</Text>
-      <Image
-        source={n > 4 ? PI_BADGE_RING : PI_BADGE}
-        style={styles.piBadgeImage}
-        resizeMode="cover"
-      />
     </View>
   );
 }
@@ -199,7 +184,7 @@ export default function CompanyLandListingProfileContent({
     <View style={styles.wrap}>
       <View style={[styles.sectionTop, {width: CONTENT_W}]}>
         <View style={styles.piPurposeRow}>
-          <PiRatingBadge rating={displayPiRating} />
+          <PiRatingBadge rating={displayPiRating} variant="listing" />
           <View style={styles.tagWhite}>
             <Text style={styles.tagWhiteText}>{purpose}</Text>
           </View>

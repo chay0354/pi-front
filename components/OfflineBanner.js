@@ -21,10 +21,20 @@ export default function OfflineBanner() {
         window.removeEventListener('offline', update);
       };
     }
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsOffline(state.isConnected === false || state.isInternetReachable === false);
-    });
-    return unsubscribe;
+    let unsubscribe;
+    try {
+      unsubscribe = NetInfo.addEventListener(state => {
+        setIsOffline(
+          state.isConnected === false || state.isInternetReachable === false,
+        );
+      });
+    } catch (e) {
+      console.warn('OfflineBanner: NetInfo unavailable', e?.message);
+      return undefined;
+    }
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   if (!isOffline) return null;

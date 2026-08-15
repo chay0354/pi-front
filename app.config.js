@@ -56,7 +56,7 @@ module.exports = {
     splash: {
       image: './assets/SplashScreen.png',
       resizeMode: 'cover',
-      backgroundColor: '#252525',
+      backgroundColor: '#1e1d27',
     },
     // Dark opaque nav bar; MainActivity pads the app above it so the screen's
     // bottom border sits exactly where the Android toolbar starts.
@@ -95,7 +95,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 32,
+      versionCode: 33,
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       icon: './assets/app-icon/new-logo.png',
@@ -164,6 +164,7 @@ module.exports = {
       ],
       withAndroidIndexDevEntry,
       withAndroidForceRtl,
+      './plugins/withAndroidBootSplash',
       // Survives EAS prebuild (.easignore drops local android/) — pads app above system nav.
       './plugins/withAndroidNavBarInset',
     ],

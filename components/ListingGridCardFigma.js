@@ -54,8 +54,7 @@ const CARD_BG = '#2B2A39';
 const IMG_PLACEHOLDER_BG = '#1e1d2b';
 const GOLD = '#FFC40A';
 
-const piBadgeSource = require('../assets/pi-badge.png');
-const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
+import {PiRatingBadge} from './PiRatingBadge';
 
 const ListingGridCardFigma = ({
   listing,
@@ -86,7 +85,6 @@ const ListingGridCardFigma = ({
     commercialLogoUrl,
     showPiRating,
     piDisplay,
-    piBadgeImage,
     dotCount,
     buildingsStat,
     floorsStat,
@@ -135,8 +133,6 @@ const ListingGridCardFigma = ({
       shouldShowListingPiRating(listing) &&
       !showCommercialLogo &&
       resolvedPi != null;
-    const badgeImg =
-      resolvedPi != null && resolvedPi > 4 ? piBadgeSourceRing : piBadgeSource;
     const dCount = g.length > 0 ? Math.min(5, g.length) : primary ? 1 : 0;
     const b = st.find(s => s.key === 'buildings');
     const f = st.find(s => s.key === 'floors');
@@ -159,7 +155,6 @@ const ListingGridCardFigma = ({
       commercialLogoUrl,
       showPiRating: showPi,
       piDisplay: resolvedPi,
-      piBadgeImage: badgeImg,
       dotCount: dCount,
       buildingsStat: b,
       floorsStat: f,
@@ -378,17 +373,11 @@ const ListingGridCardFigma = ({
               />
             </View>
           ) : showPiRating ? (
-            <View
+            <PiRatingBadge
+              rating={piDisplay}
+              variant="grid"
               style={[styles.gridCardPiBadge, piBadgeLtrDirection]}
-              pointerEvents="box-none">
-              <Image
-                source={piBadgeImage}
-                style={styles.gridCardPiBadgeImage}
-                resizeMode="contain"
-                accessibilityLabel="דירוג Pi"
-              />
-              <Text style={styles.gridCardPiText}>{String(piDisplay)}</Text>
-            </View>
+            />
           ) : null}
         </View>
 

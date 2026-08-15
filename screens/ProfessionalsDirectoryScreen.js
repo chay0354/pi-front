@@ -49,8 +49,7 @@ const imgSortTwoArrows = require('../assets/profile/2-arows.png');
 /** גבוה→נמוך (desc) / נמוך→גבוה (asc) */
 const imgSortArrowUp = require('../assets/profile/arow-up.png');
 const imgSortArrowDown = require('../assets/profile/arow-down.png');
-const piBadgeSource = require('../assets/pi-badge.png');
-const piBadgeSourceRing = require('../assets/pi-badge-ring.png');
+import {PiRatingBadge} from '../components/PiRatingBadge';
 const imgLocationPro = require('../assets/pros/location-pro.png');
 const imgProfileRing =
   'https://www.figma.com/api/mcp/asset/9daf687f-169f-43ec-baf8-8539b1ebca51';
@@ -116,31 +115,12 @@ const getRatingValue = value => {
   return num;
 };
 
-const ProfessionalPiRatingBadge = ({rating, variant = 'list'}) => {
-  const ratingValue = getRatingValue(rating);
-  const ratingText = formatRating(rating);
-  const badgeSource = ratingValue > 4 ? piBadgeSourceRing : piBadgeSource;
-  const isList = variant === 'list';
-
-  return (
-    <View
-      style={[
-        isList ? styles.listPiBadgeWrap : styles.cardPiBadgeWrap,
-        piBadgeLtrDirection,
-      ]}
-      pointerEvents="box-none">
-      <Text style={isList ? styles.listPiBadgeText : styles.cardPiBadgeText}>
-        {ratingText}
-      </Text>
-      <Image
-        source={badgeSource}
-        style={isList ? styles.listPiBadgeImage : styles.cardPiBadgeImage}
-        resizeMode="cover"
-        accessibilityLabel="דירוג Pi"
-      />
-    </View>
-  );
-};
+const ProfessionalPiRatingBadge = ({rating, variant = 'list'}) => (
+  <PiRatingBadge
+    rating={rating}
+    variant={variant === 'list' ? 'listLg' : 'cardLg'}
+  />
+);
 
 const isOwnProfessionalAccount = (professional, currentUser) => {
   if (!professional || !currentUser) return false;

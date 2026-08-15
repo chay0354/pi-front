@@ -16,10 +16,10 @@ import {ProfileAvatar} from '../components';
 import {Colors, BorderRadius, FontSizes} from '../constants/styles';
 import {ContextHook} from '../hooks/ContextHook';
 import {getHeaderTitle, isMarketingManager, subscriptionTypes} from '../utils/constant';
+import {resolveProfileDisplayName} from '../utils/profileFields';
 import {
   getUserCompanyLogoUrl,
   getUserProfileImageUrl,
-  getUserProfilePhotoUrl,
 } from '../utils/userProfileImage';
 import {getCurrentUser, getFollowHubRows, toSubscriptionId} from '../utils/api';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -45,7 +45,6 @@ const MENU_ICONS = {
   company: require('../assets/subscription-company-icon.png'),
   broker: require('../assets/subscription-broker-icon.png'),
   professional: require('../assets/subscription-professional-icon.png'),
-  projectMarketer: require('../assets/subscription-company-icon.png'),
   secret: require('../assets/lock-icon.png'),
   feedback: require('../assets/suggestions-icon.png'),
   terms: require('../assets/more-icons/icons-1.png'),
@@ -218,14 +217,10 @@ const SettingsScreen = ({
   };
 
   const settingsProfileDisplayName = currentUser
-    ? currentUser.name ||
-      currentUser.agent_name ||
-      currentUser.contact_person_name ||
-      currentUser.business_name ||
-      'משתמש'
+    ? resolveProfileDisplayName(currentUser)
     : '';
   const settingsProfilePhotoUrl = currentUser
-    ? getUserProfilePhotoUrl(currentUser)
+    ? getUserProfileImageUrl(currentUser)
     : null;
   const settingsCompanyLogoUrl = currentUser
     ? getUserCompanyLogoUrl(currentUser)
@@ -233,15 +228,35 @@ const SettingsScreen = ({
   const renderChevron = () => (
     <MaterialCommunityIcons name="chevron-left" size={20} color={'#A5A5A5'} />
   );
-  const renderMenuIcon = type => (
-    <View style={styles.menuIconBase}>
-      <Image
-        source={MENU_ICONS[type]}
-        style={styles.menuIconSingle}
-        resizeMode="contain"
-      />
-    </View>
-  );
+  const renderMenuIcon = type => {
+    if (type === 'projectMarketer') {
+      return (
+        <View style={styles.menuIconDualBase}>
+          <View style={styles.menuIconDualRow}>
+            <Image
+              source={MENU_ICONS.company}
+              style={styles.menuIconDual}
+              resizeMode="contain"
+            />
+            <Image
+              source={MENU_ICONS.broker}
+              style={styles.menuIconDual}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.menuIconBase}>
+        <Image
+          source={MENU_ICONS[type]}
+          style={styles.menuIconSingle}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  };
   const openBrokerUpdates = () => {
     Alert.alert('עדכון נכסים חדשים שעולים', 'התוכן יהיה זמין בקרוב.');
   };
@@ -818,6 +833,22 @@ const styles = StyleSheet.create({
   menuIconSingle: {
     width: 24,
     height: 24,
+  },
+  menuIconDualBase: {
+    width: 50,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  menuIconDualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  menuIconDual: {
+    width: 22,
+    height: 22,
   },
   profileCard: {
     backgroundColor: '#2b2a39',
