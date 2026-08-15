@@ -46,6 +46,7 @@ import {
 } from '../utils/tikTokLikedStorage';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Divider} from '../components';
+import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import LocationMap from '../components/LocationMap';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {isAdsListingRecord} from '../utils/listingShape';
@@ -59,6 +60,7 @@ import {
   firstVideoUrl,
   displayPiRatingFromReviews,
   isRateableSubscriptionType,
+  isPreSaleListing,
 } from '../utils/listingGridCardFigma';
 import {resolveFeedVideoPosterUri, resolveFeedVideoUri} from '../utils/feedVideoPreload';
 import {muxThumbnailUri} from '../utils/videoPlayback';
@@ -300,6 +302,21 @@ const contactEmailIconSource =
   isWeb && typeof window !== 'undefined'
     ? {uri: `${baseUrl}/conections-icons/image%20copy.png`}
     : require('../assets/email-icon.png');
+const contactLocationIconSource = require('../assets/chat/צילום_מסך_2026-08-15_194219-removebg-preview.png');
+
+const isPresentContactValue = value => {
+  const s = value != null ? String(value).trim() : '';
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  return (
+    lower !== 'https://' &&
+    lower !== 'http://' &&
+    lower !== '-' &&
+    lower !== '—' &&
+    lower !== 'n/a' &&
+    !lower.includes('placeholder')
+  );
+};
 /** Review avatar overlay stars — 1–4 from new-stars; 5 keeps legacy art. */
 function getStarSource(rating) {
   return getPiReviewStarSource(rating);
@@ -985,16 +1002,19 @@ const UserProfileScreen = ({
     // registered before the profile editor split them — list it once.
     return raw
       .map(p => (p != null ? String(p).trim() : ''))
-      .filter((p, i, arr) => p && arr.indexOf(p) === i);
+      .filter((p, i, arr) => isPresentContactValue(p) && arr.indexOf(p) === i);
   })();
-  const contactEmail = displayEmail;
+  const contactEmail = isPresentContactValue(displayEmail)
+    ? String(displayEmail).trim()
+    : '';
   const contactWebsite = (() => {
     const raw =
       user?.company_website ||
       user?.companyWebsite ||
       resolvedCreator?.company_website ||
       '';
-    return typeof raw === 'string' ? raw.trim() : '';
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    return isPresentContactValue(trimmed) ? trimmed : '';
   })();
   const contactAddress = (() => {
     const raw =
@@ -1002,7 +1022,8 @@ const UserProfileScreen = ({
       user?.creator_business_address ||
       user?.business_address ||
       '';
-    return typeof raw === 'string' ? raw.trim() : '';
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    return isPresentContactValue(trimmed) ? trimmed : '';
   })();
   const primaryContactPhone =
     contactPhones.length > 0 ? String(contactPhones[0]).trim() : '';
@@ -1415,24 +1436,10 @@ const UserProfileScreen = ({
             onPress={() => handlePostGridPress(item)}>
             <View
               style={[styles.lastAdGridItemInner, styles.lastAdGridVideoCell]}>
-              {/* Paused muted player: decodes the real first frame of the
-                  video, so the preview is never black even when there's no
-                  usable poster image. */}
-              <Video
-                source={{uri: item.uri}}
+              <FeedPostPreviewMedia
+                listing={item.listing}
                 style={StyleSheet.absoluteFill}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={false}
-                isMuted
-                positionMillis={0}
               />
-              {item.posterUri ? (
-                <Image
-                  source={{uri: item.posterUri}}
-                  style={styles.lastAdGridImage}
-                  resizeMode="cover"
-                />
-              ) : null}
               <View
                 style={[
                   styles.postGridVideoPlayOverlay,
@@ -1459,10 +1466,9 @@ const UserProfileScreen = ({
           activeOpacity={0.85}
           onPress={() => handlePostGridPress(item)}>
           <View style={styles.lastAdGridItemInner}>
-            <Image
-              source={{uri: item.uri}}
-              style={styles.lastAdGridImage}
-              resizeMode="cover"
+            <FeedPostPreviewMedia
+              listing={item.listing}
+              style={StyleSheet.absoluteFill}
             />
             {viewBadge}
           </View>
@@ -1807,6 +1813,11 @@ const UserProfileScreen = ({
   const isCompany = isCompanySubscriptionType(profileSubscriptionType);
   const isBroker = isBrokerLikeSubscriptionType(profileSubscriptionType);
   const isProfessional = profileSubscriptionType === 'professional';
+  const showContactWebsite =
+    (isCompany || isProjectMarketerType(profileSubscriptionType)) &&
+    !!contactWebsite;
+  const showContactAddress = isCompany && !!contactAddress;
+  const showContactEmail = !!contactEmail;
   const isRegularUserAccount = !isCompany && !isBroker && !isProfessional;
   const shouldShowFollowPlus =
     !!viewedSubscriptionId &&
@@ -2133,10 +2144,7 @@ const UserProfileScreen = ({
         user?._fromTikTokPost ||
         user?._fromHomeFeatureProject ||
         user?._forceListingAdProfile) &&
-        (!isOwnProfile ||
-          user?._fromHomeFeatureProject ||
-          user?._fromCompanyProjects ||
-          user?._forceListingAdProfile))),
+        (!isOwnProfile || forceListingAdProfile))),
   );
   /**
    * Figma 8:79136 — every professional profile (own + other) uses the standard
@@ -2914,19 +2922,19 @@ const UserProfileScreen = ({
                             numberOfLines={1}>
                             {displayName}
                           </Text>
-                        ) : isCompany ? (
+                        ) : isCompany && isPreSaleListing(lastAd || user) ? (
                           <Image
                             source={require('../assets/pre-sale.png')}
                             style={styles.preSaleBadgeImage}
                             resizeMode="contain"
                           />
-                        ) : (
+                        ) : !isCompany ? (
                           <View style={styles.lastAdPurposeTag}>
                             <Text style={styles.lastAdPurposeText}>
                               {lastAd.purpose || 'להשכרה'}
                             </Text>
                           </View>
-                        )}
+                        ) : null}
                       </View>
                       {!isProfessional && (
                         <Text style={styles.lastAdPrice}>
@@ -3615,19 +3623,19 @@ const UserProfileScreen = ({
                               />
                             </View>
                           )}
-                          {isCompany ? (
+                          {isCompany && isPreSaleListing(item) ? (
                             <Image
                               source={require('../assets/pre-sale.png')}
                               style={styles.myPropertiesCardBadgeImage}
                               resizeMode="contain"
                             />
-                          ) : (
+                          ) : !isCompany ? (
                             <View style={styles.myPropertiesCardBadge}>
                               <Text style={styles.myPropertiesCardBadgeText}>
                                 {purposeLabel}
                               </Text>
                             </View>
-                          )}
+                          ) : null}
                         </View>
                         <View style={styles.myPropertiesCardBottom}>
                           <Text style={styles.myPropertiesCardPrice}>
@@ -3676,11 +3684,9 @@ const UserProfileScreen = ({
                 <Text style={styles.contactDetailsAgencyName}>
                   {displayName}
                 </Text>
-                {(isCompany ||
-                  isProjectMarketerType(profileSubscriptionType)) &&
-                contactWebsite ? (
+                {showContactWebsite ? (
                   <TouchableOpacity
-                    style={[styles.contactDetailsRow]}
+                    style={styles.contactDetailsRow}
                     onPress={() => {}}>
                     <Image
                       source={require('../assets/web-icon.png')}
@@ -3692,13 +3698,12 @@ const UserProfileScreen = ({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
-                {isCompany && contactAddress ? (
+                {showContactAddress ? (
                   <View style={styles.contactDetailsRow}>
-                    <SimpleLineIcons
-                      name="location-pin"
-                      size={18}
-                      color="rgba(255,255,255,0.9)"
-                      style={styles.contactDetailsIconImage}
+                    <Image
+                      source={contactLocationIconSource}
+                      style={styles.contactDetailsLocationIcon}
+                      resizeMode="contain"
                     />
                     <Text style={styles.contactDetailsLink} numberOfLines={2}>
                       {contactAddress}
@@ -3720,9 +3725,9 @@ const UserProfileScreen = ({
                     </Text>
                   </TouchableOpacity>
                 ))}
-                {contactEmail ? (
+                {showContactEmail ? (
                   <TouchableOpacity
-                    style={[styles.contactDetailsRow, {marginBottom: 0}]}
+                    style={styles.contactDetailsRow}
                     onPress={() => {}}>
                     <Image
                       source={contactEmailIconSource}
@@ -3735,15 +3740,20 @@ const UserProfileScreen = ({
                   </TouchableOpacity>
                 ) : null}
               </View>
-              <TouchableOpacity
-                style={styles.contactDetailsCopyBtn}
-                onPress={copyContactDetails}>
-                <MaterialCommunityIcons
-                  name="content-copy"
-                  size={20}
-                  color="#fff"
-                />
-              </TouchableOpacity>
+              {showContactWebsite ||
+              showContactAddress ||
+              contactPhones.length > 0 ||
+              showContactEmail ? (
+                <TouchableOpacity
+                  style={styles.contactDetailsCopyBtn}
+                  onPress={copyContactDetails}>
+                  <MaterialCommunityIcons
+                    name="content-copy"
+                    size={20}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+              ) : null}
             </View>
             {renderProfileMessagingCta(styles.contactDetailsCtaSection)}
           </View>
@@ -4532,6 +4542,11 @@ const styles = StyleSheet.create({
   contactDetailsIconImage: {
     width: 24,
     height: 24,
+  },
+  contactDetailsLocationIcon: {
+    width: 28,
+    height: 28,
+    marginHorizontal: -2,
   },
   contactDetailsCopyBtn: {
     alignSelf: 'flex-end',

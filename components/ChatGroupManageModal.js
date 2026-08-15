@@ -281,19 +281,15 @@ const ChatGroupManageModal = ({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled">
             <View style={styles.hero}>
-              {avatarUri ? (
-                <Image
-                  source={{uri: avatarUri}}
-                  style={styles.heroAvatar}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Image
-                  source={GROUP_FALLBACK}
-                  style={styles.heroAvatar}
-                  resizeMode="contain"
-                />
-              )}
+              <ProfileAvatar
+                uri={avatarUri || null}
+                name="קבוצה"
+                size={112}
+                forceGoldRing
+                placeholderImage={GROUP_FALLBACK}
+                fallbackResizeMode="contain"
+                style={styles.heroAvatar}
+              />
 
               {editingTitle && showTitleEditor ? (
                 <View style={styles.titleEditBlock}>
@@ -494,11 +490,7 @@ const styles = StyleSheet.create({
   scrollContent: {paddingHorizontal: 20, paddingBottom: 32},
   hero: {alignItems: 'center', paddingTop: 12, paddingBottom: 20},
   heroAvatar: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
     marginBottom: 14,
-    backgroundColor: CARD,
   },
   titleRow: {
     flexDirection: 'row',

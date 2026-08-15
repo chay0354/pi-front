@@ -36,6 +36,7 @@ import {
   formatOpenHouseOverlayText,
   getOpenHouseDetailsFromListing,
   isOpenHouseListing,
+  isSalesImageCompanionListing,
   OPEN_HOUSE_FEED_TAG,
   OPEN_HOUSE_POST_DESCRIPTION,
 } from '../utils/constant';
@@ -431,11 +432,21 @@ function StoryRingSlidePanel({
     }
     return parsePostTextOverlayPayload({general_details: gd});
   })();
+  const isOpenHouseStorySlide = (() => {
+    if (!isActive || !slide) return false;
+    const listing = {
+      general_details: slide.general_details,
+      description: slide.description,
+    };
+    if (isSalesImageCompanionListing(listing)) return false;
+    if (!slide.general_details) return false;
+    return isOpenHouseListing(listing);
+  })();
   const openHouseOverlayText = (() => {
-    if (!isActive || !slide?.general_details) return '';
-    const listing = {general_details: slide.general_details};
-    if (!isOpenHouseListing(listing)) return null;
-    const details = getOpenHouseDetailsFromListing(listing);
+    if (!isOpenHouseStorySlide) return '';
+    const details = getOpenHouseDetailsFromListing({
+      general_details: slide.general_details,
+    });
     if (!details) return '';
     return formatOpenHouseOverlayText(details.place, details.date);
   })();
@@ -444,7 +455,7 @@ function StoryRingSlidePanel({
     !!storyTextPayload?.overlays?.length &&
     mediaFrame != null &&
     overlayBand?.height > 0;
-  const showOpenHouseOverlay = isActive && openHouseOverlayText != null;
+  const showOpenHouseOverlay = isOpenHouseStorySlide;
 
   if (!slide) {
     return (

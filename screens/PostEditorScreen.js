@@ -44,6 +44,8 @@ import {
   createListing,
   updateListing,
   createStory,
+  deleteActiveStoriesByMediaUrl,
+  deleteActiveStoriesByFeedListingId,
   resolveSubscriptionId,
 } from '../utils/api';
 import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
@@ -60,6 +62,7 @@ import {
 } from '../utils/constant';
 import {
   buildPostTextGeneralDetails,
+  FEED_POST_LISTING_ID_KEY,
   serializePostTextOverlays,
   parsePostTextOverlayPayload,
   parsePostEditorRestoreInfo,
@@ -1074,6 +1077,7 @@ const PostEditorScreen = ({
     publishTarget !== 'story';
   const originalVideoUrlRef = useRef(null);
   const originalMainImageUrlRef = useRef(null);
+  const originalStoryMediaUrlRef = useRef(null);
   const didHydrateListingRef = useRef(false);
   const didHydrateOverlaysRef = useRef(false);
 
@@ -1092,6 +1096,7 @@ const PostEditorScreen = ({
     didHydrateOverlaysRef.current = false;
     originalVideoUrlRef.current = null;
     originalMainImageUrlRef.current = null;
+    originalStoryMediaUrlRef.current = null;
     setTextBlocks([]);
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
@@ -1164,6 +1169,7 @@ const PostEditorScreen = ({
     const restoreInfo = parsePostEditorRestoreInfo(initialListing);
     originalVideoUrlRef.current = videoUrl;
     originalMainImageUrlRef.current = mainImageUrl;
+    originalStoryMediaUrlRef.current = videoUrl || mainImageUrl || null;
     setHashtags(parseListingHashtagsForEditor(initialListing));
     if (videoUrl) {
       setBackgroundVideoAsset({
@@ -1688,13 +1694,62 @@ const PostEditorScreen = ({
         });
       }
 
-      // B2B accounts: new feed posts also become homepage story slides (stories table).
-      if (
+      // B2B accounts: feed posts also become homepage story slides (stories table).
+      const shouldPublishFeedPostCompanionStory =
         publishTarget !== 'story' &&
-        !isEditMode &&
-        isB2BSubscriptionType(subType || currentUser?.subscription_type)
-      ) {
+        !skipStoryPublish &&
+        isB2BSubscriptionType(subType || currentUser?.subscription_type);
+      let needsCompanionStory = shouldPublishFeedPostCompanionStory;
+      if (shouldPublishFeedPostCompanionStory && isEditMode) {
+        const sync = updatedListing?.feedPostStorySync;
+        const needsVisualStoryRebake =
+          hasStickerOverlays ||
+          (textBakedIntoImage &&
+            String(url || '').trim() !==
+              String(originalStoryMediaUrlRef.current || '').trim());
+        needsCompanionStory =
+          needsVisualStoryRebake ||
+          !sync ||
+          sync.mediaChanged === true ||
+          (!sync.storyMatched && Number(sync.storyUpdated || 0) === 0);
+      }
+      if (needsCompanionStory) {
         try {
+          const resolvedListingId =
+            editingListingId ||
+            updatedListing?.id ||
+            updatedListing?.listing?.id ||
+            createdListing?.id ||
+            createdListing?.listing?.id ||
+            null;
+
+          if (isEditMode && resolvedListingId) {
+            try {
+              await deleteActiveStoriesByFeedListingId({
+                subscriptionId: subId,
+                listingId: resolvedListingId,
+                mediaUrl: originalStoryMediaUrlRef.current,
+              });
+            } catch (removeErr) {
+              console.warn(
+                '[PostEditor] Remove companion story by listing failed:',
+                removeErr?.message || removeErr,
+              );
+            }
+          } else if (isEditMode && originalStoryMediaUrlRef.current) {
+            try {
+              await deleteActiveStoriesByMediaUrl({
+                subscriptionId: subId,
+                mediaUrl: originalStoryMediaUrlRef.current,
+              });
+            } catch (removeErr) {
+              console.warn(
+                '[PostEditor] Remove old companion story failed:',
+                removeErr?.message || removeErr,
+              );
+            }
+          }
+
           let storyMediaUrl = url;
           let storyGeneralDetails = undefined;
 
@@ -1751,6 +1806,20 @@ const PostEditorScreen = ({
             }
           } else if (openHouseStoryDetails) {
             storyGeneralDetails = openHouseStoryDetails;
+          }
+
+          const resolvedListingIdForStory =
+            editingListingId ||
+            updatedListing?.id ||
+            updatedListing?.listing?.id ||
+            createdListing?.id ||
+            createdListing?.listing?.id ||
+            null;
+          if (resolvedListingIdForStory) {
+            storyGeneralDetails = {
+              ...(storyGeneralDetails || {}),
+              [FEED_POST_LISTING_ID_KEY]: resolvedListingIdForStory,
+            };
           }
 
           await createStory({

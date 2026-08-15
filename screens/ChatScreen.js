@@ -68,6 +68,7 @@ import {usePresence} from '../hooks/PresenceContext';
 import {
   flexEnd,
   flexStart,
+  forceLtrStyle,
   getRangeSliderPercentFromEvent,
   hebrewTextAlign,
 } from '../utils/rtlLayout';
@@ -687,6 +688,32 @@ const ChatScreen = ({
       ),
     [groupMembersList],
   );
+  /** Real unique members only — merge email + subscription-id rows for the same person. */
+  const visibleGroupMembers = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const member of groupMembersList || []) {
+      const email = String(member?.email || '')
+        .trim()
+        .toLowerCase();
+      const subId = String(
+        member?.subscriptionId || member?.subscription_id || '',
+      )
+        .trim()
+        .toLowerCase();
+      const alt = String(member?.user_id || member?.userRef || member?.id || '')
+        .trim()
+        .toLowerCase();
+      const key = subId || (email.includes('@') ? email : alt);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      if (email.includes('@')) seen.add(email);
+      if (subId) seen.add(subId);
+      if (alt) seen.add(alt);
+      out.push(member);
+    }
+    return out;
+  }, [groupMembersList]);
   const groupAddAudience = useMemo(() => {
     const storedKind =
       groupDetail?.groupKind != null
@@ -2458,6 +2485,18 @@ const ChatScreen = ({
           : null;
       const isExclusiveOffer =
         typeof msg.body === 'string' && isBrokerOfferBody(msg.body);
+      const bubbleTimeLabel = m.createdAt
+        ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const isPlainTextBubble =
+        !!bodyTrim &&
+        !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
+        !hasFile &&
+        !hasImage &&
+        !hasAudio;
       return (
         <React.Fragment key={m.id}>
           <View
@@ -2516,6 +2555,7 @@ const ChatScreen = ({
                   styles.bubble,
                   m.isMe ? styles.bubbleMe : styles.bubbleThem,
                   hasAudio && !bodyTrim && styles.bubbleVoiceOnly,
+                  isPlainTextBubble && styles.bubblePlainText,
                 ]}>
                 {showSharedPostCard ? (
                   (() => {
@@ -2756,7 +2796,20 @@ const ChatScreen = ({
                     ) || String(m.senderId)}
                   </Text>
                 ) : null}
-                {bodyTrim &&
+                {isPlainTextBubble ? (
+                  <View style={styles.bubbleTextFooter}>
+                    <Text style={[styles.bubbleText, styles.bubbleTextInFooter]}>
+                      {bodyTrim}
+                    </Text>
+                    {bubbleTimeLabel ? (
+                      <Text
+                        style={styles.bubbleTimeInline}
+                        numberOfLines={1}>
+                        {bubbleTimeLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : bodyTrim &&
                 !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
                 !hasFile ? (
                   <Text style={styles.bubbleText}>{bodyTrim}</Text>
@@ -2786,14 +2839,9 @@ const ChatScreen = ({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
-                {!(hasAudio && !bodyTrim) ? (
-                  <Text style={styles.bubbleTime}>
-                    {m.createdAt
-                      ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
+                {!(hasAudio && !bodyTrim) && !isPlainTextBubble ? (
+                  <Text style={styles.bubbleTime} numberOfLines={1}>
+                    {bubbleTimeLabel}
                   </Text>
                 ) : null}
               </Pressable>
@@ -3296,19 +3344,14 @@ const ChatScreen = ({
               />
             </TouchableOpacity>
             <View style={styles.groupHeaderCenter}>
-              {groupAvatarResolved ? (
-                <Image
-                  source={{uri: groupAvatarResolved}}
-                  style={styles.groupHeaderMiniAvatar}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Image
-                  source={require('../assets/pi-chat/groupe-icon-small.png')}
-                  style={styles.groupHeaderMiniAvatar}
-                  resizeMode="contain"
-                />
-              )}
+              <ProfileAvatar
+                uri={normalizeAvatarUrl(groupAvatarResolved) || null}
+                name={groupTitleResolved}
+                size={36}
+                forceGoldRing
+                placeholderImage={require('../assets/pi-chat/groupe-icon-small.png')}
+                fallbackResizeMode="contain"
+              />
               <Text style={styles.groupHeaderTitle} numberOfLines={1}>
                 {groupTitleResolved}
               </Text>
@@ -3465,29 +3508,24 @@ const ChatScreen = ({
             {isGroupThread && groupConversationId ? (
               <View style={styles.groupInfoCard}>
                 <View style={styles.groupInfoAvatarRing}>
-                  {groupAvatarResolved ? (
-                    <Image
-                      source={{uri: groupAvatarResolved}}
-                      style={styles.groupInfoAvatarImg}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Image
-                      source={require('../assets/pi-chat/igroupicon-big.png')}
-                      style={styles.groupInfoAvatarImg}
-                      resizeMode="contain"
-                    />
-                  )}
+                  <ProfileAvatar
+                    uri={normalizeAvatarUrl(groupAvatarResolved) || null}
+                    name={groupTitleResolved}
+                    size={60}
+                    forceGoldRing
+                    placeholderImage={require('../assets/pi-chat/igroupicon-big.png')}
+                    fallbackResizeMode="contain"
+                  />
                 </View>
                 <Text style={styles.groupInfoTitle}>{groupTitleResolved}</Text>
                 <Text style={styles.groupInfoMembersLabel}>חברי הקבוצה</Text>
-                {loading && groupMembersList.length === 0 ? (
+                {loading && visibleGroupMembers.length === 0 ? (
                   <View style={styles.groupMemberStackLoading}>
                     <ActivityIndicator size="small" color={GOLD} />
                   </View>
                 ) : (
                   <View style={styles.groupMemberStack}>
-                    {groupMembersList.slice(0, 12).map((member, i) =>
+                    {visibleGroupMembers.slice(0, 12).map((member, i) =>
                       (() => {
                         const refRaw =
                           member?.email != null && String(member.email).trim()
@@ -3499,15 +3537,26 @@ const ChatScreen = ({
                                 ? String(member.id).trim()
                                 : '';
                         const ref = refRaw.toLowerCase();
+                        const emailKey = String(member?.email || '')
+                          .trim()
+                          .toLowerCase();
                         const resolvedAvatar =
                           normalizeAvatarUrl(getUserProfileImageUrl(member)) ||
+                          normalizeAvatarUrl(member?.profileImageUrl) ||
+                          normalizeAvatarUrl(
+                            member?.participantProfileImageUrl,
+                          ) ||
                           normalizeAvatarUrl(
                             groupMemberAvatarOverrides[ref] || null,
+                          ) ||
+                          normalizeAvatarUrl(
+                            groupMemberAvatarOverrides[emailKey] || null,
                           ) ||
                           null;
                         return (
                           <View
                             key={
+                              member.subscriptionId ||
                               member.email ||
                               member.user_id ||
                               member.id ||
@@ -3521,12 +3570,11 @@ const ChatScreen = ({
                               uri={resolvedAvatar}
                               name={member?.name || member?.email}
                               size={38}
+                              placeholderImage={DEFAULT_PI_PROFILE_AVATAR}
                               subscriptionType={
                                 member?.subscriptionType ||
                                 member?.subscription_type ||
-                                (groupAddAudience === 'regular'
-                                  ? 'user'
-                                  : 'broker')
+                                'user'
                               }
                             />
                           </View>
@@ -4173,7 +4221,7 @@ const ChatScreen = ({
         title={groupTitleResolved}
         avatarUri={normalizeAvatarUrl(groupAvatarResolved) || null}
         description={savedGroupDescription}
-        members={groupMembersList}
+        members={visibleGroupMembers}
         myEmail={myEmail}
         isBrokerUser={isBrokerUser}
         busy={groupManageBusy}
@@ -4478,10 +4526,9 @@ const styles = StyleSheet.create({
   groupInfoAvatarRing: {
     width: 60,
     height: 60,
-    borderRadius: 30,
-    overflow: 'hidden',
-    backgroundColor: '#4D4966',
     marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   groupInfoAvatarImg: {width: '100%', height: '100%'},
   groupInfoTitle: {
@@ -5206,6 +5253,14 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     paddingHorizontal: 10,
   },
+  bubblePlainText: {
+    paddingBottom: 14,
+    minWidth: 72,
+  },
+  bubbleTextFooter: {
+    alignItems: 'stretch',
+    maxWidth: '100%',
+  },
   bubbleText: {
     color: CHAT_BG,
     fontSize: 15,
@@ -5213,6 +5268,19 @@ const styles = StyleSheet.create({
     textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     lineHeight: 22,
+  },
+  bubbleTextInFooter: {
+    width: '100%',
+  },
+  bubbleTimeInline: {
+    color: 'rgba(55,53,72,0.7)',
+    fontSize: 11,
+    lineHeight: 14,
+    flexShrink: 0,
+    alignSelf: flexStart,
+    marginTop: 4,
+    textAlign: 'left',
+    ...forceLtrStyle,
   },
   exclusiveStatusBanner: {
     alignSelf: 'stretch',
@@ -5461,7 +5529,10 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? {right: 12} : {left: 12}),
     color: 'rgba(55,53,72,0.7)',
     fontSize: 11,
-    textAlign: 'right',
+    lineHeight: 14,
+    textAlign: 'left',
+    flexShrink: 0,
+    ...forceLtrStyle,
   },
   inputRow: {
     flexDirection: 'row-reverse',

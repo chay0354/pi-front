@@ -2390,17 +2390,19 @@ const AdsForm = ({
               // non-baked cases (e.g. video + text).
               generalDetails: (() => {
                 const gd = salesImageEditorMeta?.generalDetails;
-                if (!gd || typeof gd !== 'object') return null;
-                const baked = gd.post_text_baked;
-                if (
+                const baked = gd?.post_text_baked;
+                const isBaked =
                   baked === true ||
                   baked === 'true' ||
                   baked === 't' ||
-                  baked === 1
-                ) {
-                  return null;
+                  baked === 1;
+                if (!gd || typeof gd !== 'object' || isBaked) {
+                  return {post_kind: SALES_IMAGE_POST_KIND};
                 }
-                return gd;
+                return {
+                  ...gd,
+                  post_kind: SALES_IMAGE_POST_KIND,
+                };
               })(),
             });
           } catch (mirrorErr) {

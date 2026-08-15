@@ -55,12 +55,13 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const isCompany = subTypeLower === subscriptionTypes.company;
   const isBrokerLike = isBrokerLikeSubscriptionType(subTypeLower);
   const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
+  /** Camera badge uses the opposite ring palette so it stands out on the avatar. */
   const cameraBadgeColors = hasGoldRing
-    ? PROFILE_RING_COLORS
-    : PROFILE_USER_RING_COLORS;
+    ? PROFILE_USER_RING_COLORS
+    : PROFILE_RING_COLORS;
   const cameraBadgeLocations = hasGoldRing
-    ? PROFILE_RING_LOCATIONS
-    : PROFILE_USER_RING_LOCATIONS;
+    ? PROFILE_USER_RING_LOCATIONS
+    : PROFILE_RING_LOCATIONS;
   const canEditProfileVideo =
     isBrokerLike || subTypeLower === subscriptionTypes.professional;
 

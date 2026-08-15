@@ -91,6 +91,7 @@ import {PresenceProvider} from './hooks/PresenceContext';
 import {
   subscriptionTypes,
   isBrokerLikeSubscriptionType,
+  isCompanySubscriptionType,
   DEFAULT_HOME_CAROUSEL_CATEGORY_ID,
   canAccessListingAnalysis,
   DEFAULT_POST_DESCRIPTION,
@@ -1508,10 +1509,20 @@ function App() {
                       String(
                         payload.propertyTypeRaw || payload.propertyType || '',
                       ).toLowerCase() === 'post';
+                    const isCompanyListing = isCompanySubscriptionType(
+                      payload.subscription_type ||
+                        payload.creator_subscription_type,
+                    );
+                    const tikTokListingProfileExtras = {
+                      _fromTikTokPost: true,
+                      ...(isCompanyListing
+                        ? {_forceListingAdProfile: true}
+                        : {}),
+                    };
                     if (isAdsListingRecord(payload) && !isFeedPost) {
                       openListingAdProfile(payload, {
                         returnScreen: screenName.tikTokFeed,
-                        profileExtras: {_fromTikTokPost: true},
+                        profileExtras: tikTokListingProfileExtras,
                       });
                       return;
                     }

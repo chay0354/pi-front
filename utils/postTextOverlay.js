@@ -284,6 +284,9 @@ export const parsePostTextOverlayPayload = listing => {
   };
 };
 
+/** Links a homepage story slide back to its feed-post listing (edit sync). */
+export const FEED_POST_LISTING_ID_KEY = 'feed_listing_id';
+
 /** general_details fragment to persist overlay layout for a post. */
 export const buildPostTextGeneralDetails = (
   postTextMeta,
@@ -389,6 +392,23 @@ export function shouldRenderPostTextOverlaysOnFeed(listing) {
   const gd = parseListingGeneralDetails(listing?.general_details);
   if (gd?.post_text_baked === true) return false;
   return true;
+}
+
+/** Media URL(s) for thumbnail/card previews (composite when baked, clean bg when live text). */
+export function resolveFeedPostDisplayMedia(listing) {
+  const showOverlays = shouldRenderPostTextOverlaysOnFeed(listing);
+  const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(listing);
+  if (videoUrl) {
+    return {videoUrl, imageUrl: null, showOverlays};
+  }
+  if (showOverlays && mainImageUrl) {
+    return {videoUrl: null, imageUrl: mainImageUrl, showOverlays: true};
+  }
+  const composite =
+    (listing?.main_image_url && String(listing.main_image_url).trim()) ||
+    mainImageUrl ||
+    null;
+  return {videoUrl: null, imageUrl: composite, showOverlays: false};
 }
 
 /** Extract main image / video URLs from a listing row for post editor hydration. */

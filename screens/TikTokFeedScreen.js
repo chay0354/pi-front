@@ -133,6 +133,7 @@ import {
   isFollowableListing,
   isCompanyListing,
   isDeveloperCompanyListing,
+  isPreSaleListing,
 } from '../utils/listingGridCardFigma';
 import {
   categoryImages,
@@ -7140,11 +7141,13 @@ const TikTokFeedScreen = ({
         ) : o.isCompanyListing ? (
           <View style={styles.companyOverlayInfo} pointerEvents="box-none">
             <View style={styles.companyTopRow} pointerEvents="box-none">
-              <Image
-                source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
-                style={styles.companyPreSaleBadge}
-                resizeMode="contain"
-              />
+              {isPreSaleListing(video) ? (
+                <Image
+                  source={TIKTOK_OVERLAY_ICONS.preSaleBadge}
+                  style={styles.companyPreSaleBadge}
+                  resizeMode="contain"
+                />
+              ) : null}
               <TouchableOpacity
                 style={[styles.actionIconButton, styles.companyHeartButton]}
                 onPress={() => toggleLiked(video)}>

@@ -435,7 +435,7 @@ export const getCompanyLogoUrlFromListing = listing => {
 };
 
 export const isPreSaleListing = listing => {
-  const v = listing?.sale_at_presale;
+  const v = listing?.sale_at_presale ?? listing?.saleAtPresale;
   if (v === true) return true;
   if (typeof v === 'string') {
     const s = v.toLowerCase().trim();

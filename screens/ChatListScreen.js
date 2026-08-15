@@ -279,6 +279,7 @@ function ChatListRowAvatar({
   userRef,
   subscriptionType,
   forceGoldRing = false,
+  placeholderImage = CHAT_LIST_AVATAR_PLACEHOLDER,
 }) {
   const trimmed = uri != null && String(uri).trim() ? String(uri).trim() : null;
   const initialSubType =
@@ -424,7 +425,7 @@ function ChatListRowAvatar({
       size={CHAT_LIST_AVATAR_PX}
       subscriptionType={resolvedSubscriptionType}
       forceGoldRing={forceGoldRing === true}
-      placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
+      placeholderImage={placeholderImage}
       onImageError={handleImageError}
     />
   );
@@ -1536,7 +1537,16 @@ const ChatListScreen = ({
                           conv.subscription_type ||
                           null
                         }
-                        forceGoldRing={conv.id === '1' || isProfessionalUpdatesConversation(conv)}
+                        forceGoldRing={
+                          conv.id === '1' ||
+                          conv.isGroup === true ||
+                          isProfessionalUpdatesConversation(conv)
+                        }
+                        placeholderImage={
+                          conv.isGroup === true
+                            ? require('../assets/pi-chat/groupe-icon-small.png')
+                            : CHAT_LIST_AVATAR_PLACEHOLDER
+                        }
                       />
                       <Text style={styles.senderName} numberOfLines={1}>
                         {conv.name != null ? String(conv.name) : 'משתמש'}

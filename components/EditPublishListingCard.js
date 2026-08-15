@@ -20,6 +20,7 @@ import {
   isOpenHouseListing,
 } from '../utils/constant';
 import {VideoPreviewThumb} from './FormsElement/VideoPreviewThumb';
+import FeedPostPreviewMedia from './FeedPostPreviewMedia';
 import {listingImageUrls} from '../utils/listingGridCardFigma';
 import {flexStart} from '../utils/rtlLayout';
 
@@ -235,6 +236,15 @@ const EditPublishListingCard = ({
   const compact = variant === 'list';
 
   const renderListingMedia = (imageStyle, wrapStyle) => {
+    if (postRecord) {
+      return (
+        <FeedPostPreviewMedia
+          listing={listing}
+          style={wrapStyle || styles.adImageWrap}
+          mediaStyle={imageStyle || styles.adImage}
+        />
+      );
+    }
     const videoUrl = getListingVideoUrl(listing);
     if (videoUrl) {
       return (

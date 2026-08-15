@@ -46,6 +46,7 @@ import CreateAdSheet, {
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
+import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import {getListings, getBoostQuota, boostListing, deleteListing, resolveSubscriptionId} from '../utils/api';
 import {listingImageUrls} from '../utils/listingGridCardFigma';
 import {resolveListingEditVideoSourceUrl} from '../utils/videoPlayback';
@@ -746,6 +747,15 @@ const EditPublishAdScreen = ({
   };
 
   const renderListingMedia = (listing, frameStyle, mediaStyle) => {
+    if (isPostListingRecord(listing)) {
+      return (
+        <FeedPostPreviewMedia
+          listing={listing}
+          style={frameStyle}
+          mediaStyle={mediaStyle}
+        />
+      );
+    }
     const videoUrl = getListingVideoUrl(listing);
     if (videoUrl) {
       return (
