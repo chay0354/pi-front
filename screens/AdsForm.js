@@ -47,6 +47,7 @@ import {
   resolveSubscriptionType,
   subscriptionTypes,
   isB2BSubscriptionType,
+  SALES_IMAGE_POST_KIND,
   uploadProjectWording,
   userCategoryForm,
 } from '../utils/constant';
@@ -2441,7 +2442,13 @@ const AdsForm = ({
                 propertyType: 'post',
                 price: 0,
                 // Keeps text overlays (video) / re-edit meta (baked photo).
-                generalDetails: salesEditorGd,
+                // post_kind hides this row from ערוך/פרסם — edit only on the ad.
+                generalDetails: {
+                  ...(salesEditorGd && typeof salesEditorGd === 'object'
+                    ? salesEditorGd
+                    : {}),
+                  post_kind: SALES_IMAGE_POST_KIND,
+                },
               });
             } catch (postErr) {
               console.warn(

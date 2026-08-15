@@ -27,7 +27,10 @@ import EditPublishListingCard, {
   computeListingExposureLevel,
   isPostListingRecord,
 } from '../components/EditPublishListingCard';
-import {canAccessListingAnalysis} from '../utils/constant';
+import {
+  canAccessListingAnalysis,
+  excludeSalesImageCompanionListings,
+} from '../utils/constant';
 import {agencyMemberDisplayName} from '../utils/agencyMemberDisplay';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 
@@ -190,15 +193,20 @@ const AgencyMemberListingsScreen = ({
     setRefreshing(false);
   }, [load]);
 
+  const managedListings = useMemo(
+    () => excludeSalesImageCompanionListings(listings),
+    [listings],
+  );
+
   const visibleListings = useMemo(() => {
-    if (tab === 'ads') return listings.filter(l => !isPostListingRecord(l));
-    if (tab === 'posts') return listings.filter(l => isPostListingRecord(l));
-    return listings;
-  }, [listings, tab]);
+    if (tab === 'ads') return managedListings.filter(l => !isPostListingRecord(l));
+    if (tab === 'posts') return managedListings.filter(l => isPostListingRecord(l));
+    return managedListings;
+  }, [managedListings, tab]);
 
   const listingOrdinalById = useMemo(
-    () => buildOldestFirstOrdinalMap(listings),
-    [listings],
+    () => buildOldestFirstOrdinalMap(managedListings),
+    [managedListings],
   );
 
   const isFrozen = useCallback(

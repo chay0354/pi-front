@@ -85,6 +85,8 @@ export const DEFAULT_POST_DESCRIPTION = 'פוסט';
 export const OPEN_HOUSE_POST_DESCRIPTION = 'בית פתוח';
 /** Persisted in `ads.general_details.post_kind` for open-house feed posts. */
 export const OPEN_HOUSE_POST_KIND = 'open_house';
+/** Companion feed row for תמונה מכירתית — not editable from ערוך/פרסם. */
+export const SALES_IMAGE_POST_KIND = 'sales_image';
 export const OPEN_HOUSE_PLACE_KEY = 'open_house_place';
 export const OPEN_HOUSE_DATE_KEY = 'open_house_date';
 
@@ -126,6 +128,74 @@ export function isOpenHouseListing(listing) {
   }
   const gd = parseListingGeneralDetails(listing.general_details);
   return gd?.post_kind === OPEN_HOUSE_POST_KIND;
+}
+
+export function isSalesImageCompanionListing(listing) {
+  if (!listing) return false;
+  const gd = parseListingGeneralDetails(listing.general_details);
+  return gd?.post_kind === SALES_IMAGE_POST_KIND;
+}
+
+const normalizeCompanionMediaUrl = url => {
+  if (url == null || url === '') return '';
+  return String(url).trim().split('?')[0].toLowerCase();
+};
+
+const listingLooksLikeFeedPost = item => {
+  if (!item) return false;
+  if (
+    item.feed_post === true ||
+    item.feed_post === 'true' ||
+    item.feed_post === 't' ||
+    item.isPostEntry === true
+  ) {
+    return true;
+  }
+  const type = String(
+    item.propertyType ||
+      item.property_type ||
+      item.propertyTypeRaw ||
+      item.apartmentTypeId ||
+      '',
+  ).toLowerCase();
+  if (
+    type === 'post' ||
+    type === 'posts' ||
+    type === 'feed_post' ||
+    type.includes('post')
+  ) {
+    return true;
+  }
+  const desc = String(item.description || item.desc || '').trim();
+  return desc === DEFAULT_POST_DESCRIPTION || desc.toLowerCase() === 'post';
+};
+
+/** Hide תמונה מכירתית companion posts from ערוך/פרסם (edit only from the ad). */
+export function excludeSalesImageCompanionListings(listings) {
+  const rows = Array.isArray(listings) ? listings.filter(Boolean) : [];
+  const salesUrls = new Set();
+  for (const row of rows) {
+    if (isSalesImageCompanionListing(row)) continue;
+    const raw = row.sales_image_url ?? row.salesImageUrl;
+    const url =
+      raw != null && String(raw).trim()
+        ? normalizeCompanionMediaUrl(raw)
+        : '';
+    if (url) salesUrls.add(url);
+  }
+  return rows.filter(row => {
+    if (isSalesImageCompanionListing(row)) return false;
+    if (!listingLooksLikeFeedPost(row)) return true;
+    const main = normalizeCompanionMediaUrl(
+      row.main_image_url ||
+        row.image_url ||
+        (typeof row.image === 'string' ? row.image : row.image?.uri),
+    );
+    const video = normalizeCompanionMediaUrl(row.video_url);
+    if (main && salesUrls.has(main)) return false;
+    if (video && salesUrls.has(video)) return false;
+    return true;
+  });
 }
 
 /** @returns {{ place: string, date: string } | null} */

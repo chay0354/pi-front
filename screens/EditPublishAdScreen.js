@@ -35,6 +35,7 @@ import {
   isCompanySubscriptionType,
   isOpenHouseListing,
   OPEN_HOUSE_POST_DESCRIPTION,
+  excludeSalesImageCompanionListings,
   resolveListingCategoryFromEditProfileUi,
   subscriptionTypes,
   toEditProfileUiCategoryId,
@@ -619,7 +620,7 @@ const EditPublishAdScreen = ({
       const id = l.id ?? l.ad_number;
       if (id != null && !byId.has(id)) byId.set(id, l);
     });
-    return Array.from(byId.values());
+    return excludeSalesImageCompanionListings(Array.from(byId.values()));
   })();
 
   const selectedListingCategoryId =
