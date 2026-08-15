@@ -29,6 +29,7 @@ const MIN_PASSWORD_LENGTH = 8;
 const JoinAgencyScreen = ({onClose, onJoined}) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -36,7 +37,11 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
   const [error, setError] = useState(null);
 
   const canSubmit =
-    email.trim() && password.length >= MIN_PASSWORD_LENGTH && code.trim();
+    name.trim() &&
+    phone.trim() &&
+    email.trim() &&
+    password.length >= MIN_PASSWORD_LENGTH &&
+    code.trim();
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -47,6 +52,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
         email: email.trim(),
         password,
         name: name.trim() || null,
+        phone: phone.trim(),
         code: code.trim().toUpperCase(),
       });
       onJoined?.(res?.subscription || null, res?.agency || null);
@@ -100,7 +106,9 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
             </View>
 
             <Text style={styles.lead}>
-              הזינו את פרטי החשבון והקוד שקיבלתם ממנהל הסוכנות
+              הזינו את פרטי החשבון והקוד שקיבלתם ממנהל הסוכנות. קוד הצטרפות
+              יוסיף משווק חדש, וקוד החלפה יחליף משווק קיים בלי לאבד מודעות,
+              פוסטים או שיחות.
             </Text>
 
             {error ? (
@@ -110,13 +118,30 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
             ) : null}
 
             <View style={styles.field}>
-              <Text style={styles.label}>שם מלא</Text>
+              <Text style={styles.label}>
+                שם מלא <Text style={styles.required}>*</Text>
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="הזן שם מלא"
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 value={name}
                 onChangeText={setName}
+                textAlign="right"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                מספר טלפון <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="הזן מספר טלפון"
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
                 textAlign="right"
               />
             </View>

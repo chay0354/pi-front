@@ -2676,12 +2676,30 @@ export const getAgencyMembers = async manager => {
   return data;
 };
 
+/** Issue a one-time, 24-hour code that transfers one agency member account. */
+export const createAgencyMemberReplacementCode = async (manager, memberId) => {
+  const params = agencyManagerParams(manager);
+  const response = await apiFetch(`${apiBase()}/api/agency/replacement-code`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ...Object.fromEntries(params),
+      target_subscription_id: String(memberId || '').trim(),
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || 'יצירת קוד ההחלפה נכשלה');
+  }
+  return data;
+};
+
 /** Register a marketer into an existing agency using an invite code. */
-export const joinAgencyWithCode = async ({email, password, name, code}) => {
+export const joinAgencyWithCode = async ({email, password, name, phone, code}) => {
   const response = await apiFetch(`${apiBase()}/api/agency/join`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email, password, name, code}),
+    body: JSON.stringify({email, password, name, phone, code}),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.error || 'ההצטרפות נכשלה');
