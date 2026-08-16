@@ -1,4 +1,4 @@
-import React, {useContext, useMemo, useState} from 'react';
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -22,6 +23,7 @@ import {
   subscriptionTypes,
   shouldShowProfileGoldRing,
   isBrokerLikeSubscriptionType,
+  getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
 import {
   getUserProfilePhotoUrl,
@@ -38,6 +40,7 @@ import {
   applyProfilePhoneSync,
 } from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const BG = '#27262F';
 const CARD_BG = '#2B2A39';
@@ -48,6 +51,11 @@ const PLACEHOLDER = 'rgba(255,255,255,0.35)';
 
 const EditProfileScreen = ({onClose, onSaved}) => {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
+  const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);
+  const focusedFieldKeyRef = useRef(null);
+  const inputRefs = useRef({});
   const {currentUser, setCurrentUser} = useContext(ContextHook);
 
   const type = currentUser?.subscription_type || subscriptionTypes.user;
@@ -92,6 +100,43 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const setField = (key, value) =>
     setForm(prev => ({...prev, [key]: value}));
+
+  const scrollFocusedIntoView = useCallback(
+    event => {
+      const target = event?.target;
+      const run = () => {
+        if (!scrollRef.current) return;
+        const keyboardHeight = Math.max(0, keyboardInset || 0);
+        const visibleBottom =
+          Dimensions.get('window').height -
+          keyboardHeight -
+          Math.max(insets.bottom, 12) -
+          28;
+        if (typeof target?.measureInWindow !== 'function') {
+          scrollRef.current.scrollToEnd?.({animated: true});
+          return;
+        }
+        target.measureInWindow((_x, fieldTop, _w, fieldHeight) => {
+          const fieldBottom = fieldTop + (fieldHeight || 0);
+          if (fieldBottom <= visibleBottom) return;
+          scrollRef.current.scrollTo({
+            y: scrollYRef.current + (fieldBottom - visibleBottom) + 24,
+            animated: true,
+          });
+        });
+      };
+      requestAnimationFrame(run);
+      setTimeout(run, Platform.OS === 'android' ? 280 : 100);
+      if (Platform.OS === 'android') setTimeout(run, 450);
+    },
+    [keyboardInset, insets.bottom],
+  );
+
+  useEffect(() => {
+    if (keyboardInset <= 0 || !focusedFieldKeyRef.current) return;
+    const target = inputRefs.current[focusedFieldKeyRef.current];
+    if (target) scrollFocusedIntoView({target});
+  }, [keyboardInset, scrollFocusedIntoView]);
 
   const buildPickedVideoFile = asset => ({
     uri: asset.uri,
@@ -225,6 +270,17 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     }
     const payload = {};
     fields.forEach(f => {
+      if (
+        f.type === 'chips' ||
+        f.key === 'activity_regions' ||
+        f.key === 'types' ||
+        f.key === 'specializations'
+      ) {
+        payload[f.key] = Array.isArray(form[f.key])
+          ? form[f.key].map(v => String(v).trim()).filter(Boolean)
+          : [];
+        return;
+      }
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
     Object.assign(payload, buildProfilePhotoSavePayload(type, photoUrl));
@@ -301,11 +357,25 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 12}>
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingBottom:
+                Math.max(48, insets.bottom + 24) + keyboardInset + 96,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+          onScroll={event => {
+            scrollYRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}>
           {/* Avatar with change button */}
           <View style={styles.avatarSection}>
@@ -423,22 +493,119 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           {fields.map(f => (
             <View key={f.key} style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>{f.label}</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  f.multiline && styles.inputMultiline,
-                  (f.keyboardType === 'phone-pad' ||
-                    f.keyboardType === 'url') &&
-                    styles.inputLtrValue,
-                ]}
-                value={form[f.key]}
-                onChangeText={t => setField(f.key, t)}
-                placeholder={f.placeholder}
-                placeholderTextColor={PLACEHOLDER}
-                keyboardType={f.keyboardType || 'default'}
-                multiline={!!f.multiline}
-                editable={!saving}
-              />
+              {f.type === 'chips' ? (
+                (() => {
+                  const chipOptions =
+                    f.optionsFrom === 'professionalTypes'
+                      ? getProfessionalSpecializationsForTypes(
+                          Array.isArray(form.types) ? form.types : [],
+                        )
+                      : f.options || [];
+                  if (chipOptions.length === 0) {
+                    return (
+                      <Text style={styles.chipEmptyHint}>
+                        {f.emptyHint || 'אין אפשרויות'}
+                      </Text>
+                    );
+                  }
+                  return (
+                    <View style={styles.chipsWrap}>
+                      {chipOptions.map(option => {
+                        const selected = Array.isArray(form[f.key])
+                          ? form[f.key].includes(option)
+                          : false;
+                        return (
+                          <TouchableOpacity
+                            key={option}
+                            activeOpacity={0.8}
+                            disabled={saving}
+                            onPress={() => {
+                              const current = Array.isArray(form[f.key])
+                                ? form[f.key]
+                                : [];
+                              const next =
+                                f.key === 'types'
+                                  ? selected
+                                    ? []
+                                    : [option]
+                                  : selected
+                                    ? current.filter(v => v !== option)
+                                    : [...current, option];
+                              if (f.key === 'types') {
+                                const valid = new Set(
+                                  getProfessionalSpecializationsForTypes(next),
+                                );
+                                const specs = (
+                                  Array.isArray(form.specializations)
+                                    ? form.specializations
+                                    : []
+                                ).filter(s => valid.has(s));
+                                setForm(prev => ({
+                                  ...prev,
+                                  types: next,
+                                  specializations: specs,
+                                }));
+                                return;
+                              }
+                              setField(f.key, next);
+                            }}
+                            style={[
+                              styles.chip,
+                              selected && styles.chipSelected,
+                            ]}>
+                            <Text
+                              style={[
+                                styles.chipText,
+                                selected && styles.chipTextSelected,
+                              ]}>
+                              {option}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })()
+              ) : (
+                <TextInput
+                  style={[
+                    styles.input,
+                    f.multiline && styles.inputMultiline,
+                    (f.keyboardType === 'phone-pad' ||
+                      f.keyboardType === 'url') &&
+                      styles.inputLtrValue,
+                  ]}
+                  ref={el => {
+                    inputRefs.current[f.key] = el;
+                  }}
+                  value={form[f.key]}
+                  onChangeText={t => setField(f.key, t)}
+                  onFocus={event => {
+                    focusedFieldKeyRef.current = f.key;
+                    scrollFocusedIntoView(event);
+                  }}
+                  onBlur={() => {
+                    if (focusedFieldKeyRef.current === f.key) {
+                      focusedFieldKeyRef.current = null;
+                    }
+                  }}
+                  onContentSizeChange={
+                    f.multiline
+                      ? () => {
+                          if (focusedFieldKeyRef.current !== f.key) return;
+                          scrollFocusedIntoView({
+                            target: inputRefs.current[f.key],
+                          });
+                        }
+                      : undefined
+                  }
+                  placeholder={f.placeholder}
+                  placeholderTextColor={PLACEHOLDER}
+                  keyboardType={f.keyboardType || 'default'}
+                  multiline={!!f.multiline}
+                  editable={!saving}
+                />
+              )}
             </View>
           ))}
 
@@ -627,6 +794,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     textAlign: 'center',
+  },
+  chipsWrap: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    backgroundColor: INPUT_BG,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipSelected: {
+    borderColor: '#E8B34D',
+    backgroundColor: 'rgba(232,179,77,0.18)',
+  },
+  chipText: {
+    color: TEXT_SECONDARY,
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
+    fontFamily: 'Rubik-Medium',
+  },
+  chipEmptyHint: {
+    color: PLACEHOLDER,
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   fieldBlock: {
     marginBottom: 16,

@@ -3525,7 +3525,7 @@ const ChatScreen = ({
                   </View>
                 ) : (
                   <View style={styles.groupMemberStack}>
-                    {visibleGroupMembers.slice(0, 12).map((member, i) =>
+                    {visibleGroupMembers.slice(0, 4).map((member, i) =>
                       (() => {
                         const refRaw =
                           member?.email != null && String(member.email).trim()

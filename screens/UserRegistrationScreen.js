@@ -55,18 +55,20 @@ const UserRegistrationScreen = ({
   const [socialError, setSocialError] = useState(null);
   const scrollRef = React.useRef(null);
   const scrollYRef = React.useRef(0);
+  const focusedTargetRef = React.useRef(null);
 
   const scrollFocusedIntoView = useCallback(
     event => {
       const target = event?.target;
+      if (target) focusedTargetRef.current = target;
       const run = () => {
         if (!scrollRef.current) return;
-        // iOS: window stays full height; subtract keyboard. Android resize
-        // already shrinks the window — do not subtract keyboard again.
-        const keyboardHeight =
-          Platform.OS === 'ios' ? keyboardInset || 320 : 0;
+        const keyboardHeight = Math.max(0, keyboardInset || 0);
         const visibleBottom =
-          Dimensions.get('window').height - keyboardHeight - 28;
+          Dimensions.get('window').height -
+          keyboardHeight -
+          Math.max(insets.bottom, 12) -
+          28;
 
         if (typeof target?.measureInWindow !== 'function') {
           scrollRef.current.scrollToEnd?.({animated: true});
@@ -88,8 +90,13 @@ const UserRegistrationScreen = ({
       setTimeout(run, Platform.OS === 'android' ? 280 : 100);
       if (Platform.OS === 'android') setTimeout(run, 450);
     },
-    [keyboardInset],
+    [keyboardInset, insets.bottom],
   );
+
+  useEffect(() => {
+    if (keyboardInset <= 0 || !focusedTargetRef.current) return;
+    scrollFocusedIntoView({target: focusedTargetRef.current});
+  }, [keyboardInset, scrollFocusedIntoView]);
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
   const MIN_PASSWORD_LENGTH = 8;
@@ -384,12 +391,8 @@ const UserRegistrationScreen = ({
 
   const busy = submitting || googleLoading || appleLoading;
 
-  // iOS: add keyboard height to scroll padding only (do not shrink the whole screen).
-  // Android: window already resizes via softwareKeyboardLayoutMode.
   const bottomPad =
-    Math.max(insets.bottom, 16) +
-    48 +
-    (Platform.OS === 'ios' && keyboardInset > 0 ? keyboardInset : 0);
+    Math.max(insets.bottom, 16) + 48 + Math.max(0, keyboardInset);
 
   return (
     <View style={styles.container}>
@@ -407,6 +410,7 @@ const UserRegistrationScreen = ({
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         onScroll={e => {
           scrollYRef.current = e.nativeEvent.contentOffset.y;
         }}

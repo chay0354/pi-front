@@ -5,6 +5,7 @@ import PostTextOverlays from './PostTextOverlays';
 import {
   parsePostTextOverlayPayload,
   resolveFeedPostDisplayMedia,
+  resolvePostStageCanvas,
 } from '../utils/postTextOverlay';
 import {
   formatOpenHouseOverlayText,
@@ -16,6 +17,9 @@ import {
 /**
  * Feed-post thumbnail/preview — background media plus live text layers and
  * open-house chrome (matches TikTok feed composition in small cards/grids).
+ *
+ * fit="post": scale the authored post canvas (no editor/feed header) to
+ * cover the cell — crop overflow, no letterbox bars.
  */
 export default function FeedPostPreviewMedia({
   listing,
@@ -23,6 +27,7 @@ export default function FeedPostPreviewMedia({
   mediaStyle,
   resizeMode = 'cover',
   showOpenHouseChrome = true,
+  fit = 'cover',
   children,
 }) {
   const [layout, setLayout] = useState({width: 0, height: 0});
@@ -34,13 +39,41 @@ export default function FeedPostPreviewMedia({
     () => resolveFeedPostDisplayMedia(listing),
     [listing],
   );
+  const stageCanvas = useMemo(
+    () => resolvePostStageCanvas(overlayPayload),
+    [overlayPayload],
+  );
+  const postFrame = useMemo(() => {
+    if (fit !== 'post' || !(layout.width > 0) || !(layout.height > 0)) {
+      return {
+        width: layout.width,
+        height: layout.height,
+        left: 0,
+        top: 0,
+      };
+    }
+    const aspect = stageCanvas.width / Math.max(1, stageCanvas.height);
+    let width = layout.width;
+    let height = width / aspect;
+    if (height < layout.height) {
+      height = layout.height;
+      width = height * aspect;
+    }
+    return {
+      width,
+      height,
+      left: (layout.width - width) / 2,
+      top: (layout.height - height) / 2,
+    };
+  }, [fit, layout, stageCanvas.height, stageCanvas.width]);
   const openHouseOverlayText = useMemo(() => {
     if (!showOpenHouseChrome || !isOpenHouseListing(listing)) return '';
     const details = getOpenHouseDetailsFromListing(listing);
     if (!details) return '';
     return formatOpenHouseOverlayText(details.place, details.date);
   }, [listing, showOpenHouseChrome]);
-  const tagScale = layout.height > 0 ? Math.min(1, layout.height / 230) : 1;
+  const tagScale = postFrame.height > 0 ? Math.min(1, postFrame.height / 230) : 1;
+  const useStageCanvas = fit === 'post';
 
   return (
     <View
@@ -55,61 +88,82 @@ export default function FeedPostPreviewMedia({
           );
         }
       }}>
-      {videoUrl ? (
-        <VideoPreviewThumb
-          uri={videoUrl}
-          style={[styles.mediaFill, {borderRadius: 0}]}
-          videoStyle={[styles.mediaFill, mediaStyle]}
-        />
-      ) : imageUrl ? (
-        <Image
-          source={{uri: imageUrl}}
-          style={[styles.mediaFill, mediaStyle]}
-          resizeMode={resizeMode}
-        />
-      ) : null}
-      {showOverlays && layout.width > 0 && layout.height > 0 ? (
-        <PostTextOverlays
-          overlays={overlayPayload.overlays}
-          previewWidth={overlayPayload.previewWidth}
-          previewHeight={overlayPayload.previewHeight}
-          coordsSpace={overlayPayload.coordsSpace}
-          feedWidth={layout.width}
-          feedHeight={layout.height}
-        />
-      ) : null}
-      {showOpenHouseChrome && isOpenHouseListing(listing) ? (
-        <View style={styles.openHouseRoot} pointerEvents="none">
-          <Image
-            source={OPEN_HOUSE_FEED_TAG}
-            style={[
-              styles.openHouseTag,
-              {
-                width: Math.round(92 * tagScale),
-                height: Math.round(28 * tagScale),
-              },
-            ]}
-            resizeMode="contain"
+      <View
+        style={
+          useStageCanvas && postFrame.width > 0
+            ? [
+                styles.postCanvas,
+                {
+                  width: postFrame.width,
+                  height: postFrame.height,
+                  left: postFrame.left,
+                  top: postFrame.top,
+                },
+              ]
+            : styles.mediaFill
+        }>
+        {videoUrl ? (
+          <VideoPreviewThumb
+            uri={videoUrl}
+            style={[styles.mediaFill, {borderRadius: 0}]}
+            videoStyle={[styles.mediaFill, mediaStyle]}
           />
-          {openHouseOverlayText ? (
-            <Text
+        ) : imageUrl ? (
+          <Image
+            source={{uri: imageUrl}}
+            style={[styles.mediaFill, mediaStyle]}
+            resizeMode={useStageCanvas ? 'cover' : resizeMode}
+          />
+        ) : null}
+        {showOverlays && postFrame.width > 0 && postFrame.height > 0 ? (
+          <PostTextOverlays
+            overlays={overlayPayload.overlays}
+            previewWidth={overlayPayload.previewWidth}
+            previewHeight={overlayPayload.previewHeight}
+            coordsSpace={overlayPayload.coordsSpace}
+            feedWidth={postFrame.width}
+            feedHeight={postFrame.height}
+            canvas={useStageCanvas ? 'stage' : 'preview'}
+          />
+        ) : null}
+        {showOpenHouseChrome && isOpenHouseListing(listing) ? (
+          <View style={styles.openHouseRoot} pointerEvents="none">
+            <Image
+              source={OPEN_HOUSE_FEED_TAG}
               style={[
-                styles.openHouseText,
-                {fontSize: Math.max(10, Math.round(14 * tagScale))},
+                styles.openHouseTag,
+                {
+                  width: Math.round(92 * tagScale),
+                  height: Math.round(28 * tagScale),
+                },
               ]}
-              numberOfLines={3}>
-              {openHouseOverlayText}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-      {children}
+              resizeMode="contain"
+            />
+            {openHouseOverlayText ? (
+              <Text
+                style={[
+                  styles.openHouseText,
+                  {fontSize: Math.max(10, Math.round(14 * tagScale))},
+                ]}
+                numberOfLines={3}>
+                {openHouseOverlayText}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+        {children}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   frame: {
+    overflow: 'hidden',
+    backgroundColor: '#1a1a22',
+  },
+  postCanvas: {
+    position: 'absolute',
     overflow: 'hidden',
     backgroundColor: '#1a1a22',
   },

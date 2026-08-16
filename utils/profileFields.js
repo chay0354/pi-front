@@ -2,6 +2,8 @@ import {
   subscriptionTypes,
   isCompanySubscriptionType,
   isProjectMarketerType,
+  BROKER_ACTIVITY_REGIONS,
+  PROFESSIONAL_FILTER_TYPES,
 } from './constant';
 
 /**
@@ -61,34 +63,38 @@ export function getProfileEditFields(subscriptionType) {
   if (t === subscriptionTypes.broker) {
     return [
       {
-        key: 'broker_office_name',
-        label: 'שם המשרד',
-        placeholder: 'שם המשרד',
+        key: 'activity_regions',
+        label: 'אזור פעילות',
+        type: 'chips',
+        options: BROKER_ACTIVITY_REGIONS,
       },
-      {key: 'name', label: 'שם הסוכן', placeholder: 'שם הסוכן'},
       {
         key: 'brokerage_license_number',
-        label: 'מספר רישיון תיווך',
-        placeholder: 'מספר רישיון',
+        label: 'מספר רשיון תיווך',
+        placeholder: 'הזן מספר רישיון',
       },
       {
-        key: 'mobile_phone',
-        label: 'טלפון נייד',
-        placeholder: 'מספר טלפון נייד',
+        key: 'broker_office_name',
+        label: 'שם משרד המתווך',
+        placeholder: 'הזן שם משרד',
+      },
+      {key: 'name', label: 'שם הסוכן', placeholder: 'הזן שם מלא'},
+      {
+        key: 'dealer_number',
+        label: 'מספר- ח.פ/עוסק/פטור',
+        placeholder: 'הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)',
+      },
+      {
+        key: 'phone',
+        label: 'מספר טלפון',
+        placeholder: 'הזן מספר טלפון',
         ...phonePad,
       },
       {
-        key: 'office_phone',
-        label: 'טלפון משרד',
-        placeholder: 'מספר טלפון משרד',
-        ...phonePad,
+        ...about,
+        label: 'תיאור',
+        placeholder: 'כתוב תיאור כללי על השירות שלך',
       },
-      {
-        key: 'business_address',
-        label: 'כתובת',
-        placeholder: 'כתובת המשרד',
-      },
-      about,
     ];
   }
 
@@ -168,25 +174,47 @@ export function getProfileEditFields(subscriptionType) {
 
   if (t === subscriptionTypes.professional) {
     return [
-      {key: 'name', label: 'שם העסק', placeholder: 'שם העסק'},
+      {
+        key: 'types',
+        label: 'סוג',
+        type: 'chips',
+        options: PROFESSIONAL_FILTER_TYPES,
+      },
+      {
+        key: 'specializations',
+        label: 'התמחות',
+        type: 'chips',
+        optionsFrom: 'professionalTypes',
+        emptyHint: 'בחר סוג כדי לראות התמחויות רלוונטיות',
+      },
+      {key: 'name', label: 'שם העסק', placeholder: 'הזן שם'},
+      {
+        key: 'business_address',
+        label: 'כתובת בית העסק',
+        placeholder: 'הזן כתובת',
+      },
+      {
+        key: 'dealer_number',
+        label: 'מספר- ח.פ/עוסק/פטור',
+        placeholder: 'הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)',
+      },
       {
         key: 'phone',
-        label: 'טלפון',
-        placeholder: 'מספר טלפון',
+        label: 'מספר טלפון 1',
+        placeholder: 'הזן מספר טלפון',
         ...phonePad,
       },
       {
         key: 'office_phone',
-        label: 'טלפון נוסף',
-        placeholder: 'מספר טלפון (אופציונלי)',
+        label: 'מספר טלפון 2',
+        placeholder: 'הזן מספר טלפון (אופציונאלי)',
         ...phonePad,
       },
       {
-        key: 'business_address',
-        label: 'כתובת',
-        placeholder: 'כתובת',
+        ...about,
+        label: 'תיאור',
+        placeholder: 'כתוב תיאור כללי על השירות שלך',
       },
-      about,
     ];
   }
 
@@ -211,6 +239,36 @@ export function hydrateProfileEditForm(user, fields) {
   const initial = {};
   const u = user && typeof user === 'object' ? user : {};
   fields.forEach(f => {
+    if (
+      f.type === 'chips' ||
+      f.key === 'activity_regions' ||
+      f.key === 'types' ||
+      f.key === 'specializations'
+    ) {
+      const raw = u[f.key];
+      if (Array.isArray(raw)) {
+        initial[f.key] = raw.map(v => String(v).trim()).filter(Boolean);
+      } else if (typeof raw === 'string' && raw.trim()) {
+        try {
+          const parsed = JSON.parse(raw);
+          initial[f.key] = Array.isArray(parsed)
+            ? parsed.map(v => String(v).trim()).filter(Boolean)
+            : raw
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
+        } catch {
+          initial[f.key] = raw
+            .split(',')
+            .map(v => v.trim())
+            .filter(Boolean);
+        }
+      } else {
+        initial[f.key] = [];
+      }
+      return;
+    }
+
     let val = u[f.key] != null ? String(u[f.key]) : '';
 
     if (f.key === 'broker_office_name' && !val.trim() && u.business_name) {
@@ -245,14 +303,20 @@ export function hydrateProfileEditForm(user, fields) {
  */
 export function applyProfilePhoneSync(payload, subscriptionType) {
   const t = String(subscriptionType || '').toLowerCase();
-  if (
-    t === subscriptionTypes.professional ||
-    t === subscriptionTypes.user
-  ) {
+  if (t === subscriptionTypes.user) {
+    return payload;
+  }
+  if (t === subscriptionTypes.professional) {
+    if ('name' in payload) {
+      payload.business_name = payload.name;
+    }
     return payload;
   }
   if ('mobile_phone' in payload) {
     payload.phone = payload.mobile_phone;
+  }
+  if (t === subscriptionTypes.broker && 'phone' in payload) {
+    payload.mobile_phone = payload.phone;
   }
   return payload;
 }

@@ -31,6 +31,7 @@ const PostTextOverlays = ({
   coordsSpace = 'preview',
   feedWidth,
   feedHeight,
+  canvas = 'preview',
 }) => {
   if (!Array.isArray(overlays) || overlays.length === 0) return null;
 
@@ -44,6 +45,7 @@ const PostTextOverlays = ({
           feedWidth,
           feedHeight,
           coordsSpace,
+          canvas,
         });
         const fontFamily =
           POST_TEXT_STYLE_FONTS[block.textStyleIndex ?? 0] ||

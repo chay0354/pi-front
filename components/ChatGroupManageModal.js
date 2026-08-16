@@ -88,27 +88,9 @@ const ChatGroupManageModal = ({
       ? String(myMember.groupRole).trim().toLowerCase()
       : 'member';
 
-  const isRegularGroup = useMemo(() => {
-    const isRegularType = st => {
-      const t = st != null ? String(st).trim().toLowerCase() : '';
-      if (!t) return true;
-      return (
-        t === 'user' ||
-        t === 'private' ||
-        t === 'regular' ||
-        t === 'customer'
-      );
-    };
-    return sortedMembers.some(m => isRegularType(m?.subscriptionType));
-  }, [sortedMembers]);
+  const canManageOthers = myRole === 'owner' || myRole === 'manager';
 
-  const canManageOthers =
-    (isBrokerUser || isRegularGroup) &&
-    (myRole === 'owner' || myRole === 'manager');
-
-  const canAddMembers =
-    (myRole === 'owner' || myRole === 'manager') &&
-    (isBrokerUser || isRegularGroup);
+  const canAddMembers = myRole === 'owner' || myRole === 'manager';
 
   const openMemberActions = m => {
     const email = String(m?.email || '')

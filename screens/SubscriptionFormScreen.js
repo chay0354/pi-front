@@ -29,6 +29,7 @@ import {Colors, Spacing, BorderRadius, FontSizes} from '../constants/styles';
 import {
   getHeaderTitle,
   subscriptionTypes,
+  BROKER_ACTIVITY_REGIONS,
   PROFESSIONAL_FILTER_TYPES,
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
@@ -127,25 +128,11 @@ const SubscriptionFormScreen = ({
   );
 
   // Activity regions for broker subscription
-  const activityRegions = [
-    'ירושלים והסביבה',
-    'מרכז - גוש דן',
-    'מרכז - השפלה',
-    'מרכז - השרון',
-    'צפון - הגליל המערבי והעליון',
-    'צפון - רמת הגולן',
-    'דרום - באר שבע והנגב',
-    'צפון - חיפה והעמקים',
-    'דרום - אשדוד ואשקלון',
-    'דרום - אילת והערבה',
-    'יהודה ושומרון',
-  ];
+  const activityRegions = BROKER_ACTIVITY_REGIONS;
 
   const toggleType = type => {
     setSelectedTypes(prev => {
-      const next = prev.includes(type)
-        ? prev.filter(t => t !== type)
-        : [...prev, type];
+      const next = prev.includes(type) ? [] : [type];
       const validSpecs = new Set(getProfessionalSpecializationsForTypes(next));
       setSelectedSpecializations(prevSpecs =>
         prevSpecs.filter(spec => validSpecs.has(spec)),

@@ -89,6 +89,7 @@ import {
   isCompanySubscriptionType,
   isBrokerLikeSubscriptionType,
   isProjectMarketerType,
+  subscriptionTypes,
 } from '../utils/constant';
 import {resolveProfileDisplayName} from '../utils/profileFields';
 import {
@@ -317,7 +318,7 @@ const isPresentContactValue = value => {
     !lower.includes('placeholder')
   );
 };
-/** Review avatar overlay stars — 1–4 from new-stars; 5 keeps legacy art. */
+/** Review avatar overlay stars — original starts/1–5 art. */
 function getStarSource(rating) {
   return getPiReviewStarSource(rating);
 }
@@ -598,9 +599,14 @@ const UserProfileScreen = ({
         //   'set description:',
         //   description,
         // );
-        const phones = [s.phone, s.mobile_phone, s.office_phone].filter(
-          p => p != null && String(p).trim(),
-        );
+        const isBrokerAccount =
+          String(s.subscription_type || '').toLowerCase() ===
+          subscriptionTypes.broker;
+        const phones = (
+          isBrokerAccount
+            ? [s.phone, s.mobile_phone]
+            : [s.phone, s.mobile_phone, s.office_phone]
+        ).filter(p => p != null && String(p).trim());
         setResolvedCreator({
           id: creatorId,
           name: name || null,
@@ -986,23 +992,37 @@ const UserProfileScreen = ({
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
   const contactPhones = (() => {
+    const subType = String(
+      resolvedCreator?.subscription_type ||
+        user?.subscription_type ||
+        user?.creator_subscription_type ||
+        '',
+    ).toLowerCase();
+    const brokerRegisterPhonesOnly = subType === subscriptionTypes.broker;
     const raw =
       resolvedCreator?.phones?.length > 0
         ? resolvedCreator.phones
-        : [
-            user?.phone,
-            user?.mobile_phone,
-            user?.office_phone,
-            user?.contact_details?.phone,
-            ...(Array.isArray(user?.contact_details?.phones)
-              ? user.contact_details.phones
-              : []),
-          ];
+        : brokerRegisterPhonesOnly
+          ? [
+              user?.phone,
+              user?.mobile_phone,
+              user?.contact_details?.phone,
+            ]
+          : [
+              user?.phone,
+              user?.mobile_phone,
+              user?.office_phone,
+              user?.contact_details?.phone,
+              ...(Array.isArray(user?.contact_details?.phones)
+                ? user.contact_details.phones
+                : []),
+            ];
     // `phone` and `mobile_phone` hold the same number on accounts that were
     // registered before the profile editor split them — list it once.
-    return raw
+    const unique = raw
       .map(p => (p != null ? String(p).trim() : ''))
       .filter((p, i, arr) => isPresentContactValue(p) && arr.indexOf(p) === i);
+    return brokerRegisterPhonesOnly ? unique.slice(0, 1) : unique;
   })();
   const contactEmail = isPresentContactValue(displayEmail)
     ? String(displayEmail).trim()
@@ -1439,6 +1459,7 @@ const UserProfileScreen = ({
               <FeedPostPreviewMedia
                 listing={item.listing}
                 style={StyleSheet.absoluteFill}
+                fit="post"
               />
               <View
                 style={[
@@ -1469,6 +1490,7 @@ const UserProfileScreen = ({
             <FeedPostPreviewMedia
               listing={item.listing}
               style={StyleSheet.absoluteFill}
+              fit="post"
             />
             {viewBadge}
           </View>
@@ -1812,6 +1834,7 @@ const UserProfileScreen = ({
   ).toLowerCase();
   const isCompany = isCompanySubscriptionType(profileSubscriptionType);
   const isBroker = isBrokerLikeSubscriptionType(profileSubscriptionType);
+  const isBrokerAccount = profileSubscriptionType === subscriptionTypes.broker;
   const isProfessional = profileSubscriptionType === 'professional';
   const showContactWebsite =
     (isCompany || isProjectMarketerType(profileSubscriptionType)) &&
@@ -2143,7 +2166,8 @@ const UserProfileScreen = ({
       ((fromCompanyProjects ||
         user?._fromTikTokPost ||
         user?._fromHomeFeatureProject ||
-        user?._forceListingAdProfile) &&
+        user?._forceListingAdProfile ||
+        forceListingAdProfile) &&
         (!isOwnProfile || forceListingAdProfile))),
   );
   /**
@@ -3430,9 +3454,9 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
-                {(isProfessional || isBroker) &&
+                {(isProfessional || (isBroker && !isBrokerAccount)) &&
                   renderProfessionalTypeTags(profileTypeLabelsUnderName)}
-                {brokerAddress && !isOwnProfile ? (
+                {brokerAddress && !isOwnProfile && !isBrokerAccount ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
                       name="location-pin"

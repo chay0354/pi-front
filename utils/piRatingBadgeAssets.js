@@ -3,6 +3,15 @@ export const PI_RATING_BADGE_RING = require('../assets/pi-badge-ring.png');
 export const PI_RATING_FIVE_STARS_COMPACT = require('../assets/tiktok/5stars.png');
 export const PI_RATING_REVIEW_STAR_FIVE = require('../assets/starts/5old.png');
 
+/** Original review overlay stars (number inside the star), not the new Pi composites. */
+export const PI_RATING_REVIEW_STARS = [
+  require('../assets/starts/1.png'),
+  require('../assets/starts/2.png'),
+  require('../assets/starts/3.png'),
+  require('../assets/starts/4.png'),
+  require('../assets/starts/5old.png'),
+];
+
 export const PI_RATING_COMPOSITE_STARS = [
   require('../assets/new-stars/1-star.png'),
   require('../assets/new-stars/2-star.png'),
@@ -27,9 +36,8 @@ export function getPiRatingCompositeSource(rating) {
   return PI_RATING_COMPOSITE_STARS[n - 1];
 }
 
-/** Review avatar overlay: new 1–4 composites; rating 5 keeps legacy ring star. */
+/** Star under the reviewer avatar — original 1–5 art from `assets/starts`. */
 export function getPiReviewStarSource(rating) {
   const n = normalizePiRating(rating);
-  if (n >= 5) return PI_RATING_REVIEW_STAR_FIVE;
-  return PI_RATING_COMPOSITE_STARS[n - 1];
+  return PI_RATING_REVIEW_STARS[n - 1] || PI_RATING_REVIEW_STAR_FIVE;
 }

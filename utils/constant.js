@@ -33,6 +33,21 @@ export const subscriptionTypes = {
   projectMarketer: 'project_marketer',
 };
 
+/** Broker register + edit profile — same chips, same order. */
+export const BROKER_ACTIVITY_REGIONS = [
+  'ירושלים והסביבה',
+  'מרכז - גוש דן',
+  'מרכז - השפלה',
+  'מרכז - השרון',
+  'צפון - הגליל המערבי והעליון',
+  'צפון - רמת הגולן',
+  'דרום - באר שבע והנגב',
+  'צפון - חיפה והעמקים',
+  'דרום - אשדוד ואשקלון',
+  'דרום - אילת והערבה',
+  'יהודה ושומרון',
+];
+
 /** Broker, company, professional and project marketer — not regular (`user`) accounts. */
 export function isB2BSubscriptionType(type) {
   const t = String(type || '').trim().toLowerCase();

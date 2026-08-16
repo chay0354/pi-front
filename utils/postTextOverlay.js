@@ -609,14 +609,134 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
   });
 }
 
+/** Authored post canvas (the media+text stage — no editor/feed header). */
+export function resolvePostStageCanvas(payload) {
+  const overlays = Array.isArray(payload?.overlays) ? payload.overlays : [];
+  const staged = overlays.find(
+    o => Number(o?.stage_w) > 0 && Number(o?.stage_h) > 0,
+  );
+  if (staged) {
+    return {
+      width: Number(staged.stage_w),
+      height: Number(staged.stage_h),
+      source: 'stage',
+    };
+  }
+  const pw = Number(payload?.previewWidth) || 0;
+  const ph = Number(payload?.previewHeight) || 0;
+  if (pw > 0 && ph > 0) {
+    return {
+      width: Math.max(1, pw - POST_STAGE_MARGIN_H * 2),
+      height: Math.max(1, ph - POST_STAGE_HEADER_BAND - POST_STAGE_MARGIN_TOP),
+      source: 'preview-stripped',
+    };
+  }
+  return {width: 9, height: 16, source: 'default'};
+}
+
 /**
  * Scale a saved overlay block onto the feed page.
  * Prefer normalized nx/ny/nw/nFont (WYSIWYG measureInWindow at publish).
  */
 export const scalePostTextOverlayBlock = (
   block,
-  {previewWidth, previewHeight, feedWidth, feedHeight, coordsSpace = 'preview'},
+  {
+    previewWidth,
+    previewHeight,
+    feedWidth,
+    feedHeight,
+    coordsSpace = 'preview',
+    canvas = 'preview',
+  },
 ) => {
+  if (canvas === 'stage') {
+    const stageW =
+      Number(block.stage_w) > 0
+        ? Number(block.stage_w)
+        : previewWidth > 0
+          ? Math.max(1, previewWidth - POST_STAGE_MARGIN_H * 2)
+          : 0;
+    const stageH =
+      Number(block.stage_h) > 0
+        ? Number(block.stage_h)
+        : previewHeight > 0
+          ? Math.max(
+              1,
+              previewHeight - POST_STAGE_HEADER_BAND - POST_STAGE_MARGIN_TOP,
+            )
+          : 0;
+    const stageX = Number(block.stage_x);
+    const stageY = Number(block.stage_y);
+    const authoredFontSize = block.fontSize ?? DEFAULT_FONT_SIZE;
+    if (
+      stageW > 0 &&
+      stageH > 0 &&
+      Number.isFinite(stageX) &&
+      Number.isFinite(stageY)
+    ) {
+      const scale = feedWidth / stageW;
+      const fontSize = Math.max(10, Math.round(authoredFontSize * scale));
+      return {
+        translateX: Math.round(stageX * scale),
+        translateY: Math.round(stageY * (feedHeight / stageH)),
+        width: Math.ceil(
+          (Number(block.maxWidth) > 0 ? Number(block.maxWidth) : stageW * 0.88) *
+            scale +
+            2,
+        ),
+        padding: 0,
+        fontSize,
+        lineHeight: Math.round(fontSize * 1.15),
+        scale: fontSize / Math.max(1, authoredFontSize),
+        normalized: false,
+      };
+    }
+    // Normalized coords were measured on the full editor preview (header +
+    // stage). Map them onto the stage-only canvas so thumbnails don't keep
+    // an empty header strip.
+    const nxStage = Number(block.nx);
+    const nyStage = Number(block.ny);
+    if (
+      stageW > 0 &&
+      stageH > 0 &&
+      previewWidth > 0 &&
+      previewHeight > 0 &&
+      Number.isFinite(nxStage) &&
+      Number.isFinite(nyStage)
+    ) {
+      const relX = (nxStage * previewWidth - POST_STAGE_MARGIN_H) / stageW;
+      const relY =
+        (nyStage * previewHeight -
+          POST_STAGE_HEADER_BAND -
+          POST_STAGE_MARGIN_TOP) /
+        stageH;
+      const nFontW = Number(block.nFontW);
+      const scale = feedWidth / stageW;
+      const fontSize = Math.max(
+        10,
+        Math.round(
+          Number.isFinite(nFontW) && nFontW > 0
+            ? nFontW * previewWidth * scale
+            : authoredFontSize * scale,
+        ),
+      );
+      const nw = Number(block.nw);
+      return {
+        translateX: Math.round(relX * feedWidth),
+        translateY: Math.round(relY * feedHeight),
+        width: Math.ceil(
+          (Number.isFinite(nw) && nw > 0 ? nw * previewWidth : stageW * 0.88) *
+            scale +
+            2,
+        ),
+        padding: 0,
+        fontSize,
+        lineHeight: Math.round(fontSize * 1.15),
+        scale: fontSize / Math.max(1, authoredFontSize),
+        normalized: true,
+      };
+    }
+  }
   const nx = Number(block.nx);
   const ny = Number(block.ny);
   const nw = Number(block.nw);

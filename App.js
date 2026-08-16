@@ -2015,6 +2015,19 @@ function App() {
                   openListingAdProfile(listing, {
                     returnScreen: screenName.userProfile,
                     saveOverviewSnapshot: true,
+                    profileExtras: {
+                      _forceListingAdProfile: true,
+                      _fromCompanyProjects: Boolean(
+                        String(
+                          profileUser?.subscription_type ||
+                            listing?.subscription_type ||
+                            listing?.creator_subscription_type ||
+                            '',
+                        )
+                          .toLowerCase()
+                          .trim() === 'company',
+                      ),
+                    },
                   })
                 }
               />
@@ -3051,11 +3064,11 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.subscriptionForm)}
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntro);
+                  setCurrentScreen(screenName.success);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntro);
+                  setCurrentScreen(screenName.success);
                 }}
                 subscriptionType={subscriptionTypes.broker}
                 email={subscriptionData?.email}
@@ -3091,11 +3104,11 @@ function App() {
                 }
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProfessional);
+                  setCurrentScreen(screenName.successProfessional);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProfessional);
+                  setCurrentScreen(screenName.successProfessional);
                 }}
                 subscriptionType={subscriptionTypes.professional}
                 email={subscriptionData?.email}
@@ -3109,7 +3122,7 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.verification)}
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntro);
+                  setCurrentScreen(screenName.success);
                 }}
                 subscriptionType={subscriptionTypes.broker}
                 email={subscriptionData?.email}
@@ -3135,7 +3148,7 @@ function App() {
                 }
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProfessional);
+                  setCurrentScreen(screenName.successProfessional);
                 }}
                 subscriptionType={subscriptionTypes.professional}
                 email={subscriptionData?.email}
@@ -3281,11 +3294,11 @@ function App() {
                 }
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                  setCurrentScreen(screenName.successProjectMarketer);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                  setCurrentScreen(screenName.successProjectMarketer);
                 }}
                 subscriptionType={subscriptionTypes.projectMarketer}
                 email={subscriptionData?.email}
@@ -3301,7 +3314,7 @@ function App() {
                 }
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
+                  setCurrentScreen(screenName.successProjectMarketer);
                 }}
                 subscriptionType={subscriptionTypes.projectMarketer}
                 email={subscriptionData?.email}
