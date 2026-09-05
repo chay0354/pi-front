@@ -7,22 +7,14 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import React, {useMemo, useState, useCallback} from 'react';
-import {Video, ResizeMode} from 'expo-av';
+import React from 'react';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
-import PostTextOverlays from '../PostTextOverlays';
-import {parsePostTextOverlayPayload} from '../../utils/postTextOverlay';
+import FeedPostPreviewMedia from '../FeedPostPreviewMedia';
 
 /** Same portrait frame as PostEditor / stories — avoids cutting the composition. */
 const PREVIEW_ASPECT = 9 / 16;
-
-const isVideoUri = uri => {
-  const s = String(uri || '').trim();
-  if (!s) return false;
-  return /\.(mp4|m3u8|webm|mov|m4v)(\?|$)/i.test(s) || /\/videos?\//i.test(s);
-};
 
 export const SalesImage = ({
   salesImage,
@@ -46,30 +38,6 @@ export const SalesImage = ({
       : handleSalesImageUpload;
 
   const mediaUri = salesImage?.uri ? String(salesImage.uri).trim() : '';
-  const isVideo = isVideoUri(mediaUri);
-
-  const overlayPayload = useMemo(() => {
-    const gd = salesImageEditorMeta?.generalDetails;
-    if (!gd || typeof gd !== 'object') return null;
-    if (gd.post_text_baked === true) return null;
-    return parsePostTextOverlayPayload({general_details: gd});
-  }, [salesImageEditorMeta]);
-
-  const [previewSize, setPreviewSize] = useState({w: 0, h: 0});
-  const onPreviewLayout = useCallback(
-    event => {
-      const {width, height} = event?.nativeEvent?.layout || {};
-      if (
-        width > 0 &&
-        height > 0 &&
-        (Math.abs(width - previewSize.w) > 1 ||
-          Math.abs(height - previewSize.h) > 1)
-      ) {
-        setPreviewSize({w: width, h: height});
-      }
-    },
-    [previewSize.h, previewSize.w],
-  );
 
   return (
     <FormContainer>
@@ -83,42 +51,20 @@ export const SalesImage = ({
           salesImage ? styles.fixedImageContainerFilled : null,
         ]}
         onPress={openSalesImageEditor}
-        onLayout={onPreviewLayout}
         activeOpacity={0.9}>
         {salesImage ? (
-          <View style={styles.previewMediaWrap}>
-            {isVideo ? (
-              <Video
-                source={{uri: mediaUri}}
-                style={styles.fixedImage}
-                // Same as PostEditor / feed posts: letterbox, never crop.
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay
-                isLooping
-                isMuted
-                useNativeControls={false}
-              />
-            ) : (
-              <Image
-                source={{uri: mediaUri}}
-                style={styles.fixedImage}
-                // Same as PostEditor / feed posts: letterbox, never crop.
-                resizeMode="contain"
-              />
-            )}
-            {overlayPayload?.overlays?.length &&
-            previewSize.w > 0 &&
-            previewSize.h > 0 ? (
-              <PostTextOverlays
-                overlays={overlayPayload.overlays}
-                previewWidth={overlayPayload.previewWidth}
-                previewHeight={overlayPayload.previewHeight}
-                coordsSpace={overlayPayload.coordsSpace}
-                feedWidth={previewSize.w}
-                feedHeight={previewSize.h}
-              />
-            ) : null}
-          </View>
+          <FeedPostPreviewMedia
+            listing={{
+              feed_post: true,
+              _preferSalesImage: true,
+              sales_image_url: mediaUri,
+              main_image_url: mediaUri,
+              general_details: salesImageEditorMeta?.generalDetails ?? null,
+            }}
+            style={styles.previewMediaWrap}
+            showOpenHouseChrome={false}
+            showVideoPlayIcon={false}
+          />
         ) : (
           <>
             <Image

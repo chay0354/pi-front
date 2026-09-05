@@ -4,7 +4,7 @@ import {getRangeSliderPercentFromEvent, rangeSliderFillRtlVisualStyle, rangeSlid
 
 import {LinearGradient} from 'expo-linear-gradient';
 /** Match PreferencesFilterScreen (Figma drawer — גיל מועדף). */
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const TRACK_GRADIENT = ['#FFE073', '#FFBA30'];
 const TRACK_GRADIENT_LOCATIONS = [0.1113, 0.8662];

@@ -10,6 +10,7 @@ import {
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
+import {BNB_SERVICE_ICONS, BNB_FLOOR_CHIP_ICON} from '../utils/bnbServiceIcons';
 import {flexStart, flexEnd} from '../utils/rtlLayout';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -43,6 +44,7 @@ const HOSPITALITY_LABELS = {
   special: 'מיוחדים',
   rural: 'כפרי',
   desert: 'מדבר',
+  urban: 'עירוני',
 };
 
 /** Figma profile chips — PNG icons from new-profile-pages/bnb */
@@ -54,6 +56,7 @@ const HOSPITALITY_ICONS = {
   special: require('../assets/new-profile-pages/bnb/spetials.png'),
   rural: require('../assets/new-profile-pages/bnb/vilage.png'),
   desert: require('../assets/new-profile-pages/bnb/desert.png'),
+  urban: require('../assets/new-profile-pages/bnb/urban.png'),
 };
 
 /** Figma 5:413419 — right column in RTL row-reverse */
@@ -63,7 +66,7 @@ const HOSPITALITY_COL_RIGHT = [
   'with_pool',
   'nature',
 ];
-const HOSPITALITY_COL_LEFT = ['special', 'rural', 'desert'];
+const HOSPITALITY_COL_LEFT = ['special', 'rural', 'desert', 'urban'];
 
 const SERVICE_LABELS = {
   pool: 'בריכה',
@@ -88,29 +91,7 @@ const SERVICE_LABELS = {
 
 const SERVICE_ORDER = Object.keys(SERVICE_LABELS);
 
-/** PNG icons — filenames matched to form keys / Hebrew labels */
-const SERVICE_ICONS = {
-  pool: require('../assets/new-profile-pages/bnb/services/pool.png'),
-  merger: require('../assets/new-profile-pages/bnb/services/AC.png'),
-  fridge: require('../assets/new-profile-pages/bnb/services/frige.png'),
-  eater: require('../assets/new-profile-pages/bnb/services/food.png'),
-  kitchen: require('../assets/new-profile-pages/bnb/services/kitchen.png'),
-  locker: require('../assets/new-profile-pages/bnb/services/locker.png'),
-  tv: require('../assets/new-profile-pages/bnb/services/TV.png'),
-  safe: require('../assets/new-profile-pages/bnb/services/safe.png'),
-  smoke_detector: require('../assets/new-profile-pages/bnb/services/smoke-detector.png'),
-  wifi_internet: require('../assets/new-profile-pages/bnb/services/wi-fi.png'),
-  private_services: require('../assets/new-profile-pages/bnb/services/toilet.png'),
-  shared_services: require('../assets/new-profile-pages/bnb/services/public-toilet.png'),
-  private_shower: require('../assets/new-profile-pages/bnb/services/private-shower.png'),
-  shared_shower: require('../assets/new-profile-pages/bnb/services/public-shower.png'),
-  accessible_place: require('../assets/new-profile-pages/bnb/services/acceable.png'),
-  suitable_for_animals: require('../assets/new-profile-pages/bnb/services/pet-alowed.png'),
-  suitable_for_smokers: require('../assets/new-profile-pages/bnb/services/smoking-alowed.png'),
-  parking: require('../assets/new-profile-pages/bnb/services/parking.png'),
-};
-
-const FLOOR_CHIP_ICON = require('../assets/new-profile-pages/bnb/services/flor.png');
+const FLOOR_CHIP_ICON = BNB_FLOOR_CHIP_ICON;
 
 /** Listing `floor` column (BnB general details) → קומה N chip */
 function buildFloorServiceTile(listing) {
@@ -167,7 +148,7 @@ function buildParkingServiceTile(listing) {
   return {
     id: 'parking',
     label: formatParkingLabel(count, isPaidParking),
-    iconSource: SERVICE_ICONS.parking,
+    iconSource: BNB_SERVICE_ICONS.parking,
   };
 }
 
@@ -183,12 +164,12 @@ function formatShortDate(d) {
   try {
     const s = String(d).trim();
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-      const dt = new Date(s);
-      if (!Number.isNaN(dt.getTime())) {
-        return `${dt.getDate()}.${dt.getMonth() + 1}`;
-      }
+      const [y, mo, day] = s.slice(0, 10).split('-').map(Number);
+      if (y && mo && day) return `${day}/${mo}`;
     }
-    return s;
+    const m = s.match(/^(\d{1,2})[./-](\d{1,2})/);
+    if (m) return `${Number(m[1])}/${Number(m[2])}`;
+    return s.replace(/\./g, '/');
   } catch {
     return String(d);
   }
@@ -350,14 +331,7 @@ export default function BnbListingProfileContent({
     null;
   const ci = formatShortDate(checkIn);
   const co = formatShortDate(checkOut);
-  const datesLine =
-    ci && co
-      ? `תאריך מוצע: ${ci}-${co}`
-      : ci
-        ? `תאריך כניסה: ${ci}`
-        : co
-          ? `תאריך יציאה: ${co}`
-          : null;
+  const hasDates = Boolean(ci || co);
 
   const cancelRaw = String(
     listing?.cancellation_policy || listing?.cancellationPolicy || '',
@@ -400,7 +374,7 @@ export default function BnbListingProfileContent({
     const facilities = [...ordered, ...extra].map(k => ({
       id: k,
       label: SERVICE_LABELS[k] || k,
-      iconSource: SERVICE_ICONS[k] || null,
+      iconSource: BNB_SERVICE_ICONS[k] || null,
     }));
     const floor = buildFloorServiceTile(listing);
     const parking = buildParkingServiceTile(listing);
@@ -415,7 +389,7 @@ export default function BnbListingProfileContent({
     };
   }, [listing]);
 
-  const showStayCard = roomsLine || datesLine || showFreeCancel;
+  const showStayCard = roomsLine || hasDates || showFreeCancel;
   const showCompanyPiRating =
     displayPiRating != null && !Number.isNaN(Number(displayPiRating));
 
@@ -518,20 +492,28 @@ export default function BnbListingProfileContent({
                 <Text style={styles.highlightText}>{roomsLine}</Text>
               </View>
             ) : null}
-            {roomsLine && datesLine ? (
+            {roomsLine && hasDates ? (
               <View style={styles.highlightDivider} />
             ) : null}
-            {datesLine ? (
-              <View style={styles.highlightRow}>
+            {hasDates ? (
+              <View style={[styles.highlightRow, styles.highlightDateRow]}>
                 <Image
                   source={require('../assets/new-profile-pages/bnb/top-part/date.png')}
                   style={styles.highlightIcon}
                   resizeMode="contain"
                 />
-                <Text style={styles.highlightText}>{datesLine}</Text>
+                <View style={styles.highlightDateCol}>
+                  <Text style={styles.highlightDateLine}>תאריך מוצע</Text>
+                  {ci ? (
+                    <Text style={styles.highlightDateLine}>כניסה {ci}</Text>
+                  ) : null}
+                  {co ? (
+                    <Text style={styles.highlightDateLine}>יציאה {co}</Text>
+                  ) : null}
+                </View>
               </View>
             ) : null}
-            {(roomsLine || datesLine) && showFreeCancel ? (
+            {(roomsLine || hasDates) && showFreeCancel ? (
               <View style={styles.highlightDivider} />
             ) : null}
             {showFreeCancel ? (
@@ -831,6 +813,20 @@ const styles = StyleSheet.create({
   highlightIcon: {
     width: 28,
     height: 28,
+  },
+  highlightDateRow: {
+    alignItems: 'flex-start',
+  },
+  highlightDateCol: {
+    flex: 1,
+    gap: 2,
+  },
+  highlightDateLine: {
+    fontFamily: 'Rubik-Regular',
+    fontSize: 18,
+    lineHeight: 26,
+    color: '#FFFFFF',
+    textAlign: 'left',
   },
   highlightDivider: {
     height: 1,

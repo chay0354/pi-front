@@ -94,6 +94,21 @@ export function isMarketingManager(user) {
   return Number.isFinite(seats) && seats > 0;
 }
 
+/** Public profile chip under the name: team lead vs regular marketer. */
+export function getProjectMarketerRoleLabel(user) {
+  return isMarketingManager(user) ? 'מנהל שיווק' : 'משווק';
+}
+
+/** Team marketer seated under a marketing manager — not the manager themselves. */
+export function isTeamMarketerUnderManager(user) {
+  if (!user || typeof user !== 'object') return false;
+  if (!isProjectMarketerType(user.subscription_type ?? user.subscriptionType)) {
+    return false;
+  }
+  if (isMarketingManager(user)) return false;
+  return Boolean(user.parent_subscription_id || user.parentSubscriptionId);
+}
+
 /** Default feed-post label stored in `ads.description` (Edit/Publish badge). */
 export const DEFAULT_POST_DESCRIPTION = 'פוסט';
 /** Open-house feed posts (company, broker, project marketer) — same upload flow as פוסט. */
@@ -599,14 +614,13 @@ export function getPublishCategoriesStrip(_subscriptionType) {
   return orderPublishCategoriesStrip(categoriesEditProfile);
 }
 
-/** ניתוח מודעות: only categories where this user may publish ads (not post-only tabs). */
+/** ניתוח מודעות: publishable listing categories + Pi Partners (שותפים). */
 export function getAnalysisCategoriesStrip(subscriptionType) {
-  const filtered = categoriesEditProfile.filter(cat =>
-    canShowListingAdInCreateSheet(
-      subscriptionType,
-      resolveListingCategoryFromEditProfileUi(cat.id),
-    ),
-  );
+  const filtered = categoriesEditProfile.filter(cat => {
+    const listingId = resolveListingCategoryFromEditProfileUi(cat.id);
+    if (listingId === 3) return true;
+    return canShowListingAdInCreateSheet(subscriptionType, listingId);
+  });
   return orderPublishCategoriesStrip(filtered);
 }
 
@@ -1397,6 +1411,9 @@ export const userCategoryForm = {
         ],
       },
       {
+        key: 'propertycondition',
+      },
+      {
         key: 'purpose',
       },
       {
@@ -2116,6 +2133,9 @@ export const brokerCategoryForm = {
           {title: 'ממ״ד'},
           {title: 'כניסה מיידית'},
         ],
+      },
+      {
+        key: 'propertycondition',
       },
       {
         key: 'purpose',

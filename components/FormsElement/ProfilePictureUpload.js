@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Title} from './Title';
 import {Text} from 'react-native';
 import {Colors} from '../../constants/styles';
@@ -19,40 +20,57 @@ export const ProfilePictureUpload = ({
   mainImageInputRef,
   title = 'תמונת נושא או הדמייה',
   required = true,
+  circularPreview = false,
+  onEditExistingImage,
 }) => {
+  const hasImage = Boolean(mainImage?.uri);
+  const showEdit = hasImage && typeof onEditExistingImage === 'function';
+
   return (
     <>
       <Title text={title} required={required} />
-      <TouchableOpacity
-        style={styles.fixedImageContainer}
-        onPress={handleMainImageUpload}>
-        {mainImage ? (
-          <Image
-            source={{uri: mainImage.uri}}
-            style={styles.fixedImage}
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <Image
-              source={require('../../assets/user-icon.png')}
-              style={styles.useImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.userImageText}>תמונת פרופיל</Text>
-            <View style={styles.uploadButtonContainer}>
-              <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
-            </View>
-          </View>
-        )}
+      <View style={styles.fixedImageContainer}>
         <TouchableOpacity
-          style={styles.uploadButtonOverlay}
+          style={circularPreview ? styles.circleHit : styles.rectHit}
           onPress={handleMainImageUpload}
+          activeOpacity={0.85}
           disabled={uploadProgress.mainImage}>
-          {uploadProgress.mainImage && (
-            <ActivityIndicator size="small" color="#fff" />
+          {hasImage ? (
+            <Image
+              source={{uri: mainImage.uri}}
+              style={circularPreview ? styles.circleImage : styles.fixedImage}
+              resizeMode={circularPreview ? 'cover' : 'contain'}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <Image
+                source={require('../../assets/user-icon.png')}
+                style={styles.useImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.userImageText}>תמונת פרופיל</Text>
+              <View style={styles.uploadButtonContainer}>
+                <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
+              </View>
+            </View>
           )}
+          {uploadProgress.mainImage ? (
+            <View style={styles.uploadButtonOverlay}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          ) : null}
         </TouchableOpacity>
+        {showEdit ? (
+          <TouchableOpacity
+            style={styles.editChip}
+            onPress={onEditExistingImage}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="עריכת תמונה">
+            <MaterialCommunityIcons name="crop" size={16} color="#FFFFFF" />
+            <Text style={styles.editChipText}>עריכה</Text>
+          </TouchableOpacity>
+        ) : null}
         {Platform.OS === 'web' && (
           <input
             ref={mainImageInputRef}
@@ -62,10 +80,12 @@ export const ProfilePictureUpload = ({
             onChange={handleMainImageChange}
           />
         )}
-      </TouchableOpacity>
+      </View>
     </>
   );
 };
+
+const CIRCLE = 168;
 
 const styles = StyleSheet.create({
   fixedImageContainer: {
@@ -81,6 +101,19 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 12,
     overflow: 'hidden',
+    gap: 12,
+  },
+  rectHit: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  circleHit: {
+    width: CIRCLE,
+    height: CIRCLE,
+    borderRadius: CIRCLE / 2,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#F7C63A',
   },
   useImage: {
     width: 55,
@@ -116,15 +149,28 @@ const styles = StyleSheet.create({
     height: 198,
     maxHeight: 198,
   },
+  circleImage: {
+    width: '100%',
+    height: '100%',
+  },
   uploadButtonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(30, 29, 39, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+  },
+  editChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#4D4966',
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+  },
+  editChipText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
 });

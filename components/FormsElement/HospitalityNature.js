@@ -16,6 +16,7 @@ export const HospitalityNature = ({
     {name: 'special', title: 'מיוחדים'},
     {name: 'rural', title: 'כפרי'},
     {name: 'desert', title: 'מדבר'},
+    {name: 'urban', title: 'עירוני'},
   ];
   return (
     <FormContainer>

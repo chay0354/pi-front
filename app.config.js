@@ -95,7 +95,16 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 33,
+      versionCode: 44,
+      intentFilters: [
+        {
+          action: 'VIEW',
+          category: ['BROWSABLE', 'DEFAULT'],
+          data: [
+            {scheme: 'pifrontend', host: 'post', pathPrefix: '/'},
+          ],
+        },
+      ],
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
       icon: './assets/app-icon/new-logo.png',

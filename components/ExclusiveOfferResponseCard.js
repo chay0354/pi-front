@@ -17,7 +17,7 @@ const SECONDARY = '#d2d0dc';
 const DEEP = '#1e1d27';
 const WHITE_PILL = '#ffffff';
 
-const GOLD_GRADIENT = ['#fee787', '#bd9947', '#9c6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_LOCATIONS = [0.045, 0.508, 0.883];
 
 const formatPrice = n => {

@@ -19,7 +19,7 @@ import {PROFESSIONAL_FILTER_TYPES} from '../utils/constant';
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
 const SHEET_HEIGHT = Math.min(560, Math.round(SCREEN_HEIGHT * 0.72));
 
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 /**

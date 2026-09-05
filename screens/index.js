@@ -42,6 +42,7 @@ export {default as FavoritesScreen} from './FavoritesScreen';
 export {default as FeedbackSuggestionScreen} from './FeedbackSuggestionScreen';
 export {default as TermsOfUseScreen} from './TermsOfUseScreen';
 export {default as AccessibilityStatementScreen} from './AccessibilityStatementScreen';
+export {default as AccessibilityMenuScreen} from './AccessibilityMenuScreen';
 export {default as ProjectMarketerPlanScreen} from './ProjectMarketerPlanScreen';
 export {default as JoinAgencyScreen} from './JoinAgencyScreen';
 export {default as AgencyJoinCodeScreen} from './AgencyJoinCodeScreen';

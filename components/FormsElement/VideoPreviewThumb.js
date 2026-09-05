@@ -2,28 +2,42 @@ import React, {useRef} from 'react';
 import {Image, Platform, StyleSheet, View} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
 
-export function VideoPreviewThumb({uri, style, videoStyle}) {
+export function VideoPreviewThumb({
+  uri,
+  style,
+  videoStyle,
+  showPlayIcon = true,
+  resizeMode = 'cover',
+}) {
   const videoRef = useRef(null);
   if (!uri) return null;
+
+  const playOverlay = showPlayIcon ? (
+    <View style={styles.playOverlay} pointerEvents="none">
+      <Image
+        source={require('../../assets/play-button.png')}
+        style={styles.playIcon}
+        resizeMode="contain"
+      />
+    </View>
+  ) : null;
 
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.frame, style]}>
         <video
           src={uri}
-          style={{...styles.webVideo, ...(videoStyle || {})}}
+          style={{
+            ...styles.webVideo,
+            objectFit: resizeMode === 'contain' ? 'contain' : 'cover',
+            ...(videoStyle || {}),
+          }}
           controls={false}
           muted
           playsInline
           preload="metadata"
         />
-        <View style={styles.playOverlay} pointerEvents="none">
-          <Image
-            source={require('../../assets/play-button.png')}
-            style={styles.playIcon}
-            resizeMode="contain"
-          />
-        </View>
+        {playOverlay}
       </View>
     );
   }
@@ -35,7 +49,9 @@ export function VideoPreviewThumb({uri, style, videoStyle}) {
         key={uri}
         source={{uri}}
         style={[styles.video, videoStyle]}
-        resizeMode={ResizeMode.COVER}
+        resizeMode={
+          resizeMode === 'contain' ? ResizeMode.CONTAIN : ResizeMode.COVER
+        }
         useNativeControls={false}
         shouldPlay={false}
         isMuted
@@ -44,13 +60,7 @@ export function VideoPreviewThumb({uri, style, videoStyle}) {
           videoRef.current?.setPositionAsync(0).catch(() => {});
         }}
       />
-      <View style={styles.playOverlay} pointerEvents="none">
-        <Image
-          source={require('../../assets/play-button.png')}
-          style={styles.playIcon}
-          resizeMode="contain"
-        />
-      </View>
+      {playOverlay}
     </View>
   );
 }

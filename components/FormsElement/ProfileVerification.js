@@ -1,16 +1,16 @@
 import React from 'react';
-import {StyleSheet, Text, View, I18nManager} from 'react-native';
+import {Text} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {ProfilePictureUpload} from './ProfilePictureUpload';
 import {VideoUpload} from './VideoUpload';
-import {Divider} from './Divider';
-import {Spacing} from '../../constants/styles';
+
 export const ProfileVerification = ({
   mainImage,
   uploadProgress,
   handleMainImageUpload,
   handleMainImageChange,
   mainImageInputRef,
+  onEditExistingImage,
   hasVideo,
   setHasVideo,
   videoFile,
@@ -20,7 +20,6 @@ export const ProfileVerification = ({
 }) => {
   return (
     <FormContainer>
-      {/* Profile Picture Section */}
       <ProfilePictureUpload
         title="תמונת פרופיל"
         mainImage={mainImage}
@@ -28,9 +27,10 @@ export const ProfileVerification = ({
         handleMainImageUpload={handleMainImageUpload}
         handleMainImageChange={handleMainImageChange}
         mainImageInputRef={mainImageInputRef}
+        circularPreview
+        onEditExistingImage={onEditExistingImage}
       />
 
-      {/* Video Upload Section */}
       <VideoUpload
         hasVideo={hasVideo}
         setHasVideo={setHasVideo}
@@ -55,9 +55,3 @@ export const ProfileVerification = ({
     </FormContainer>
   );
 };
-
-const styles = StyleSheet.create({
-  divider: {
-    marginVertical: 10,
-  },
-});

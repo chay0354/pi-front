@@ -69,6 +69,8 @@ import {
   extractPostListingMediaUrls,
   parseListingHashtagsForEditor,
   hydratePostEditorBlocksFromOverlays,
+  POST_BACKGROUND_GRADIENTS,
+  shouldUseLiveColorPostBackground,
 } from '../utils/postTextOverlay';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
 import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
@@ -81,7 +83,7 @@ import OpenHouseDetailsModal from '../components/OpenHouseDetailsModal';
 
 const TAB_TEXT = 'טקסט';
 const TAB_CAMERA = 'מצלמה';
-const FORMAT_SELECTED_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const FORMAT_SELECTED_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const MIN_FONT_SIZE = 10;
 const MAX_FONT_SIZE = 50;
 const DEFAULT_FONT_SIZE = 20;
@@ -263,13 +265,7 @@ const getColorPageIndexForColor = color => {
   return pageIndex >= 0 ? pageIndex : 0;
 };
 
-const BACKGROUND_GRADIENTS = [
-  ['#2B2A39', '#5149C4'],
-  ['#3B2600', '#8A5A0C'],
-  ['#3B1014', '#6B1E27'],
-  ['#043144', '#0F6F94'],
-  ['#2C1A4A', '#533288'],
-];
+const BACKGROUND_GRADIENTS = POST_BACKGROUND_GRADIENTS;
 
 const createTextBlockId = () =>
   `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -1075,6 +1071,8 @@ const PostEditorScreen = ({
   const isOpenHousePost =
     defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION &&
     publishTarget !== 'story';
+  /** תמונה מכירתית uses the story editor — no hashtags on that flow. */
+  const isSalesImageEditor = publishTarget === 'story';
   const originalVideoUrlRef = useRef(null);
   const originalMainImageUrlRef = useRef(null);
   const originalStoryMediaUrlRef = useRef(null);
@@ -1170,7 +1168,11 @@ const PostEditorScreen = ({
     originalVideoUrlRef.current = videoUrl;
     originalMainImageUrlRef.current = mainImageUrl;
     originalStoryMediaUrlRef.current = videoUrl || mainImageUrl || null;
-    setHashtags(parseListingHashtagsForEditor(initialListing));
+    setHashtags(
+      isSalesImageEditor
+        ? []
+        : parseListingHashtagsForEditor(initialListing),
+    );
     if (videoUrl) {
       setBackgroundVideoAsset({
         uri: videoUrl,
@@ -1183,19 +1185,21 @@ const PostEditorScreen = ({
       setActiveTab(TAB_CAMERA);
       return;
     }
-    // Feed image with text burned in and no clean source stored (e.g. a
-    // text-on-gradient post): never use the baked composite as background —
-    // the hydrated text blocks would appear on top of their own baked copy
-    // (every text shown twice). Restore the gradient background instead.
-    if (restoreInfo.textBaked && !restoreInfo.sourceImageUrl) {
+    // Color-background text post (no photo/video). A stale gradient index of 0
+    // must never hide a real uploaded image.
+    const isColorTextPost = shouldUseLiveColorPostBackground(initialListing);
+    if (
+      isColorTextPost ||
+      (restoreInfo.textBaked && !restoreInfo.sourceImageUrl && !mainImageUrl)
+    ) {
       originalMainImageUrlRef.current = null;
       setBackgroundImageUri(null);
       setBackgroundVideoAsset(null);
       if (restoreInfo.bgGradientIndex != null) {
         setSelectedBackgroundGradientIndex(restoreInfo.bgGradientIndex);
       }
-      activeTabRef.current = TAB_CAMERA;
-      setActiveTab(TAB_CAMERA);
+      activeTabRef.current = TAB_TEXT;
+      setActiveTab(TAB_TEXT);
       return;
     }
     if (mainImageUrl) {
@@ -1247,8 +1251,11 @@ const PostEditorScreen = ({
     if (!blocks.length) return;
     nextStackOrderRef.current = blocks.length + 1;
     setTextBlocks(blocks);
-    activeTabRef.current = TAB_CAMERA;
-    setActiveTab(TAB_CAMERA);
+    const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
+    const hasMediaBackground = Boolean(videoUrl) || Boolean(mainImageUrl);
+    const nextTab = hasMediaBackground ? TAB_CAMERA : TAB_TEXT;
+    activeTabRef.current = nextTab;
+    setActiveTab(nextTab);
   }, [initialListing, stageLayout.width, stageLayout.height, editorSessionKey]);
 
   useEffect(
@@ -2325,7 +2332,7 @@ const PostEditorScreen = ({
       .trim();
     if (!raw) return;
     setHashtags(prev => {
-      const cleaned = raw.replace(/\s+/g, '').slice(0, 50);
+      const cleaned = raw.replace(/\s+/g, ' ').slice(0, 50);
       if (!cleaned || prev.includes(cleaned)) return prev;
       if (prev.length >= 30) return prev;
       return [...prev, cleaned];
@@ -2776,20 +2783,22 @@ const PostEditorScreen = ({
                     onPress={addTextBlock}>
                     <Text style={styles.AaStyleBtnText}>Aa</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.hashtagBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="האשטאגים"
-                    onPress={() => setShowHashtagModal(true)}>
-                    <Text style={styles.hashtagBtnSymbol}>#</Text>
-                    {hashtags.length > 0 && (
-                      <View style={styles.hashtagBadge}>
-                        <Text style={styles.hashtagBadgeText}>
-                          {hashtags.length}
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
+                  {!isSalesImageEditor ? (
+                    <TouchableOpacity
+                      style={styles.hashtagBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="האשטאגים"
+                      onPress={() => setShowHashtagModal(true)}>
+                      <Text style={styles.hashtagBtnSymbol}>#</Text>
+                      {hashtags.length > 0 && (
+                        <View style={styles.hashtagBadge}>
+                          <Text style={styles.hashtagBadgeText}>
+                            {hashtags.length}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
                   {editingTextBlockId && (
                     <TouchableOpacity
                       style={styles.doneBtn}
@@ -3397,7 +3406,7 @@ const PostEditorScreen = ({
       </Modal>
 
       <Modal
-        visible={showHashtagModal}
+        visible={showHashtagModal && !isSalesImageEditor}
         transparent
         animationType="fade"
         statusBarTranslucent={Platform.OS === 'android'}

@@ -2,6 +2,7 @@ import {StyleSheet, View} from 'react-native';
 import {FormContainer} from './FormContainer';
 import {Title} from './Title';
 import {RadioWithText} from './RadioWithText';
+import {BNB_SERVICE_ICONS} from '../../utils/bnbServiceIcons';
 
 export const ServiceAndFacility = ({
   facilities = {},
@@ -30,6 +31,7 @@ export const ServiceAndFacility = ({
               index={index}
               isSelected={isSelected}
               useFigmaStyleIcon
+              leftIcon={BNB_SERVICE_ICONS[item.name]}
               styleDevider={{marginTop: 20}}
             />
           );

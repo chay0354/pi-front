@@ -78,6 +78,8 @@ export default function ChatVoiceMessageBubble({
   playStartProgress = 0,
   onTogglePlay,
   onDurationKnown,
+  showReadTicks = false,
+  isRead = false,
 }) {
   const bars = useMemo(
     () => buildVoiceWaveform(messageId, VOICE_WAVE_BAR_COUNT),
@@ -262,9 +264,19 @@ export default function ChatVoiceMessageBubble({
             />
           </View>
           <View style={[styles.metaRow, forceLtrStyle]}>
-            <Text style={[styles.metaText, {color: theme.meta}]}>
-              {formatSentTime(createdAt)}
-            </Text>
+            <View style={styles.metaTimeRow}>
+              {showReadTicks ? (
+                <MaterialCommunityIcons
+                  name="check-all"
+                  size={14}
+                  color={isRead ? '#34B7F1' : theme.meta}
+                  accessibilityLabel={isRead ? 'נקראה' : 'נשלחה'}
+                />
+              ) : null}
+              <Text style={[styles.metaText, {color: theme.meta}]}>
+                {formatSentTime(createdAt)}
+              </Text>
+            </View>
             <Text style={[styles.metaText, {color: theme.meta}]}>
               {durationSec > 0 ? formatVoiceClock(durationSec) : '0:00'}
             </Text>
@@ -414,6 +426,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  metaTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   metaText: {
     fontSize: 11,

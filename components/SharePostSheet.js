@@ -14,6 +14,7 @@ import {
   Platform,
   Dimensions,
   I18nManager,
+  Alert,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -27,11 +28,18 @@ import {
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {resolveAdVideoUri} from '../utils/videoPlayback';
 import {flexStart} from '../utils/rtlLayout';
+import FeedPostPreviewMedia from './FeedPostPreviewMedia';
+import {usePostFrameAspect} from '../utils/postFrame';
+import {
+  EXTERNAL_SHARE_PLATFORMS,
+  listingIdForShare,
+  shareListingToPlatform,
+} from '../utils/externalShare';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
-const SHEET_HEIGHT = Math.min(640, Math.round(SCREEN_HEIGHT * 0.82));
+const SHEET_HEIGHT = Math.min(700, Math.round(SCREEN_HEIGHT * 0.88));
 
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 const pickUrl = v => {
@@ -92,21 +100,6 @@ const postCaption = post => {
   return String(c || '').trim();
 };
 
-/** Must match server CHAT_LISTING_ID_UUID_RE — chat stores ads.id for post cards. */
-const AD_LISTING_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const listingUuidForShare = post => {
-  if (!post || typeof post !== 'object') return null;
-  const candidates = [post.id, post.ad_id, post.listing_id, post.uuid];
-  for (const c of candidates) {
-    if (c == null) continue;
-    const s = String(c).trim();
-    if (AD_LISTING_UUID_RE.test(s)) return s.toLowerCase();
-  }
-  return null;
-};
-
 const SharePostSheet = ({
   visible,
   post,
@@ -115,6 +108,8 @@ const SharePostSheet = ({
   onShareToConversation,
   onShareCounted,
 }) => {
+  /** Preview chip is shaped like a feed page (single source: utils/postFrame). */
+  const postAspect = usePostFrameAspect();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sendingToId, setSendingToId] = useState(null);
@@ -209,7 +204,7 @@ const SharePostSheet = ({
     if (!conv || sendingToId) return;
     const imageUrl = firstImage(post);
     const caption = postCaption(post);
-    const postId = listingUuidForShare(post);
+    const postId = listingIdForShare(post);
     const senderDisplay = {
       name:
         currentUser?.name ||
@@ -267,6 +262,23 @@ const SharePostSheet = ({
       setSendingToId(null);
     }
   };
+
+  const handleExternalShare = useCallback(
+    async platformId => {
+      try {
+        await shareListingToPlatform({
+          platformId,
+          listingId: listingIdForShare(post),
+          caption: postCaption(post),
+          onShareCounted,
+        });
+      } catch (err) {
+        console.warn('[SharePostSheet] external share failed', err?.message || err);
+        Alert.alert('שיתוף', 'השיתוף נכשל. נסו שוב או העתיקו את הקישור.');
+      }
+    },
+    [onShareCounted, post],
+  );
 
   const q = (query || '').trim().toLowerCase();
   const filtered = q
@@ -358,16 +370,43 @@ const SharePostSheet = ({
           </View>
 
           <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>שליחה בצ׳אט</Text>
+            <Text style={styles.headerTitle}>שיתוף פוסט</Text>
+          </View>
+
+          <View style={styles.platformRow}>
+            {EXTERNAL_SHARE_PLATFORMS.map(item => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.platformBtn}
+                onPress={() => handleExternalShare(item.id)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`שתף ב${item.label}`}>
+                <View
+                  style={[
+                    styles.platformIcon,
+                    {backgroundColor: item.color},
+                  ]}>
+                  <MaterialCommunityIcons
+                    name={item.icon}
+                    size={22}
+                    color={item.id === 'copy' ? '#1E1D27' : '#fff'}
+                  />
+                </View>
+                <Text style={styles.platformLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <View style={styles.previewCard}>
-            <View style={styles.previewImageWrap}>
-              {preview ? (
-                <Image
-                  source={{uri: preview}}
+            <View style={[styles.previewImageWrap, {aspectRatio: postAspect}]}>
+              {post ? (
+                <FeedPostPreviewMedia
+                  listing={post}
+                  posterUri={preview}
                   style={styles.previewImage}
-                  resizeMode="cover"
+                  showOpenHouseChrome={false}
+                  showVideoPlayIcon={false}
                 />
               ) : (
                 <View
@@ -387,6 +426,7 @@ const SharePostSheet = ({
             </View>
           </View>
 
+          <Text style={styles.chatSectionTitle}>שליחה בצ׳אט</Text>
           <View style={styles.searchRow}>
             <MaterialCommunityIcons
               name="magnify"
@@ -466,6 +506,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     textAlign: 'center',
   },
+  platformRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  platformBtn: {
+    alignItems: 'center',
+    width: 58,
+    gap: 6,
+  },
+  platformIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  platformLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  chatSectionTitle: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontFamily: 'Rubik-Medium',
+    textAlign: 'left',
+    writingDirection: 'rtl',
+    marginBottom: 8,
+  },
   previewCard: {
     flexDirection: 'row',
     backgroundColor: '#2B2A39',
@@ -476,8 +549,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   previewImageWrap: {
-    width: 56,
-    height: 56,
+    height: 64,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#373548',

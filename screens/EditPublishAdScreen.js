@@ -759,7 +759,8 @@ const EditPublishAdScreen = ({
         <FeedPostPreviewMedia
           listing={listing}
           style={frameStyle}
-          mediaStyle={mediaStyle}
+          showOpenHouseChrome={false}
+          cropOverflow
         />
       );
     }
@@ -1086,8 +1087,12 @@ const EditPublishAdScreen = ({
 
     return (
       <View style={styles.adCard}>
-        <View style={styles.adImageWrap}>
-          {renderListingMedia(listing, styles.adImageWrap, styles.adImage)}
+        <View
+          style={[
+            styles.adImageWrap,
+            postRecord && styles.adImageWrapPost,
+          ]}>
+          {renderListingMedia(listing, styles.adImageFill, styles.adImage)}
           {!postRecord || onEditPost ? (
             <TouchableOpacity
               style={styles.editBadge}
@@ -1877,6 +1882,10 @@ const styles = StyleSheet.create({
     height: 230,
     overflow: 'hidden',
   },
+  adImageWrapPost: {
+    backgroundColor: '#1a1a22',
+  },
+  adImageFill: StyleSheet.absoluteFillObject,
   adImage: {width: '100%', height: '100%'},
   adImagePlaceholder: {
     width: '100%',

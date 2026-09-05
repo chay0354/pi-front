@@ -57,12 +57,6 @@ const LAND_ATTR_CHIPS = [
     label: ({plan}) => (plan === 'happy' ? 'תב״ע מאושרת' : 'עם תב״ע'),
   },
   {
-    id: 'mortgage',
-    iconSource: LAND_ATTR_ICONS.ownershipAdmin,
-    when: ({mortgage}) => mortgage === 'yes',
-    label: () => 'קרקע במושע',
-  },
-  {
     id: 'permit',
     iconSource: LAND_ATTR_ICONS.permit,
     when: ({permit}) => permit === 'there_is',

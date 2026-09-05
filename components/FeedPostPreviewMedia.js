@@ -1,12 +1,22 @@
 import React, {useMemo, useState} from 'react';
 import {View, Image, Text, StyleSheet} from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
 import {VideoPreviewThumb} from './FormsElement/VideoPreviewThumb';
 import PostTextOverlays from './PostTextOverlays';
+import PostFrameFitWidthImage from './PostFrameMedia';
 import {
   parsePostTextOverlayPayload,
+  parsePostEditorRestoreInfo,
   resolveFeedPostDisplayMedia,
-  resolvePostStageCanvas,
+  resolvePostBackgroundGradient,
+  shouldUseLiveColorPostBackground,
 } from '../utils/postTextOverlay';
+import {
+  resolvePostFrameCoverWidth,
+  resolvePostFrameInCell,
+  useFeedPostPageSize,
+} from '../utils/postFrame';
+import {muxThumbnailUri} from '../utils/videoPlayback';
 import {
   formatOpenHouseOverlayText,
   getOpenHouseDetailsFromListing,
@@ -15,57 +25,63 @@ import {
 } from '../utils/constant';
 
 /**
- * Feed-post thumbnail/preview — background media plus live text layers and
- * open-house chrome (matches TikTok feed composition in small cards/grids).
+ * The one renderer for a feed post outside the feed itself (profile grid,
+ * ערוך/פרסם, hashtag explore, chat, share sheet, sales image).
  *
- * fit="post": scale the authored post canvas (no editor/feed header) to
- * cover the cell — crop overflow, no letterbox bars.
+ * Geometry comes from `utils/postFrame`, which mirrors the live TikTok feed
+ * page, so media and text land in exactly the same spot on every surface.
  */
 export default function FeedPostPreviewMedia({
   listing,
+  posterUri = null,
   style,
-  mediaStyle,
-  resizeMode = 'cover',
   showOpenHouseChrome = true,
-  fit = 'cover',
+  showVideoPlayIcon = true,
+  /** Scale to cell width and clip top/bottom instead of letterboxing. */
+  cropOverflow = false,
   children,
 }) {
+  const feedPageSize = useFeedPostPageSize();
   const [layout, setLayout] = useState({width: 0, height: 0});
   const overlayPayload = useMemo(
     () => parsePostTextOverlayPayload(listing),
     [listing],
   );
-  const {videoUrl, imageUrl, showOverlays} = useMemo(
+  const restoreInfo = useMemo(
+    () => parsePostEditorRestoreInfo(listing),
+    [listing],
+  );
+  const {videoUrl, imageUrl} = useMemo(
     () => resolveFeedPostDisplayMedia(listing),
     [listing],
   );
-  const stageCanvas = useMemo(
-    () => resolvePostStageCanvas(overlayPayload),
-    [overlayPayload],
+  const isColorTextPost = shouldUseLiveColorPostBackground(listing);
+  const gradientColors = useMemo(
+    () => (isColorTextPost ? resolvePostBackgroundGradient(listing) : null),
+    [isColorTextPost, listing],
   );
+  const videoPosterUri = useMemo(() => {
+    const explicit = posterUri != null ? String(posterUri).trim() : '';
+    if (explicit && /^https?:\/\//i.test(explicit)) return explicit;
+    const mux = muxThumbnailUri(videoUrl, {time: 0, width: 480});
+    return mux || '';
+  }, [posterUri, videoUrl]);
+  const showOverlays =
+    Boolean(overlayPayload?.overlays?.length) && restoreInfo.textBaked !== true;
   const postFrame = useMemo(() => {
-    if (fit !== 'post' || !(layout.width > 0) || !(layout.height > 0)) {
-      return {
-        width: layout.width,
-        height: layout.height,
-        left: 0,
-        top: 0,
-      };
+    if (!(layout.width > 0) || !(layout.height > 0)) {
+      return {width: layout.width, height: layout.height, left: 0, top: 0};
     }
-    const aspect = stageCanvas.width / Math.max(1, stageCanvas.height);
-    let width = layout.width;
-    let height = width / aspect;
-    if (height < layout.height) {
-      height = layout.height;
-      width = height * aspect;
-    }
-    return {
-      width,
-      height,
-      left: (layout.width - width) / 2,
-      top: (layout.height - height) / 2,
-    };
-  }, [fit, layout, stageCanvas.height, stageCanvas.width]);
+    const resolve = cropOverflow
+      ? resolvePostFrameCoverWidth
+      : resolvePostFrameInCell;
+    return resolve(
+      layout.width,
+      layout.height,
+      overlayPayload,
+      feedPageSize,
+    );
+  }, [cropOverflow, feedPageSize, layout, overlayPayload]);
   const openHouseOverlayText = useMemo(() => {
     if (!showOpenHouseChrome || !isOpenHouseListing(listing)) return '';
     const details = getOpenHouseDetailsFromListing(listing);
@@ -73,7 +89,11 @@ export default function FeedPostPreviewMedia({
     return formatOpenHouseOverlayText(details.place, details.date);
   }, [listing, showOpenHouseChrome]);
   const tagScale = postFrame.height > 0 ? Math.min(1, postFrame.height / 230) : 1;
-  const useStageCanvas = fit === 'post';
+  const stillUri =
+    videoPosterUri ||
+    (!isColorTextPost && imageUrl && /^https?:\/\//i.test(String(imageUrl))
+      ? String(imageUrl)
+      : '');
 
   return (
     <View
@@ -90,7 +110,7 @@ export default function FeedPostPreviewMedia({
       }}>
       <View
         style={
-          useStageCanvas && postFrame.width > 0
+          postFrame.width > 0
             ? [
                 styles.postCanvas,
                 {
@@ -102,17 +122,32 @@ export default function FeedPostPreviewMedia({
               ]
             : styles.mediaFill
         }>
-        {videoUrl ? (
+        {isColorTextPost && gradientColors ? (
+          <LinearGradient
+            colors={gradientColors}
+            start={{x: 0, y: 0.5}}
+            end={{x: 1, y: 0.5}}
+            style={styles.mediaFill}
+          />
+        ) : stillUri ? (
+          <PostFrameFitWidthImage
+            uri={stillUri}
+            frameWidth={postFrame.width}
+            frameHeight={postFrame.height}
+          />
+        ) : videoUrl ? (
           <VideoPreviewThumb
             uri={videoUrl}
             style={[styles.mediaFill, {borderRadius: 0}]}
-            videoStyle={[styles.mediaFill, mediaStyle]}
+            videoStyle={styles.mediaFill}
+            showPlayIcon={showVideoPlayIcon}
+            resizeMode="contain"
           />
         ) : imageUrl ? (
-          <Image
-            source={{uri: imageUrl}}
-            style={[styles.mediaFill, mediaStyle]}
-            resizeMode={useStageCanvas ? 'cover' : resizeMode}
+          <PostFrameFitWidthImage
+            uri={imageUrl}
+            frameWidth={postFrame.width}
+            frameHeight={postFrame.height}
           />
         ) : null}
         {showOverlays && postFrame.width > 0 && postFrame.height > 0 ? (
@@ -123,7 +158,7 @@ export default function FeedPostPreviewMedia({
             coordsSpace={overlayPayload.coordsSpace}
             feedWidth={postFrame.width}
             feedHeight={postFrame.height}
-            canvas={useStageCanvas ? 'stage' : 'preview'}
+            canvas="preview"
           />
         ) : null}
         {showOpenHouseChrome && isOpenHouseListing(listing) ? (

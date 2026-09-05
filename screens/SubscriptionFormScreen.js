@@ -32,6 +32,7 @@ import {
   BROKER_ACTIVITY_REGIONS,
   PROFESSIONAL_FILTER_TYPES,
   getProfessionalSpecializationsForTypes,
+  MARKETER_PLANS,
 } from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
 import {checkEmailAvailable} from '../utils/api';
@@ -53,6 +54,9 @@ const SubscriptionFormScreen = ({
   /** משווק פרויקטים reuses the company form, with marketer wording. */
   const isProjectMarketerFlow =
     subscriptionType === subscriptionTypes.projectMarketer;
+  /** Solo marketer — profile photo only, no company-logo upload. */
+  const isRegularMarketerSignup =
+    isProjectMarketerFlow && marketerPlan === MARKETER_PLANS.single;
   const isCompanyFlow =
     subscriptionType === subscriptionTypes.company || isProjectMarketerFlow;
   const orgNameLabel = isProjectMarketerFlow ? 'שם המשווק' : 'שם החברה';
@@ -350,6 +354,9 @@ const SubscriptionFormScreen = ({
         if (!companyEmail) missingFields.push('כתובת מייל');
         if (!officePhone) missingFields.push('מספר טלפון משרד');
         if (!businessAddress.trim()) missingFields.push('כתובת חברה');
+        if (isRegularMarketerSignup && !profilePicture) {
+          missingFields.push('תמונת פרופיל');
+        }
       } else {
         // Broker/professional validation
         if (subscriptionType === subscriptionTypes.broker) {
@@ -472,7 +479,13 @@ const SubscriptionFormScreen = ({
         }
       };
 
-      if (isCompanyFlow) {
+      if (isRegularMarketerSignup) {
+        if (profilePicIsUrl) {
+          formData.profile_picture_url = profilePicture.uri;
+        } else if (profilePicture) {
+          files.profilePicture = profilePicture;
+        }
+      } else if (isCompanyFlow) {
         // Company flow has no image/video tabs — only the org logo.
         attachCompanyLogoAsAvatar();
       } else if (activeTab === 'video') {
@@ -521,7 +534,8 @@ const SubscriptionFormScreen = ({
     contactPersonName.trim() &&
     officePhone.trim() &&
     companyEmail.trim() &&
-    businessAddress.trim();
+    businessAddress.trim() &&
+    (!isRegularMarketerSignup || !!profilePicture);
   const brokerMediaOk =
     activeTab === 'video' ? !!video && !!companyLogo : !!profilePicture;
   const brokerCanProceed =
@@ -628,7 +642,7 @@ const SubscriptionFormScreen = ({
               onPress={() => setActiveTab('images')}>
               {activeTab === 'images' ? (
                 <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0.5, y: 0}}
                   end={{x: 0.5, y: 1}}
@@ -649,7 +663,7 @@ const SubscriptionFormScreen = ({
               onPress={() => setActiveTab('video')}>
               {activeTab === 'video' ? (
                 <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0.5, y: 0}}
                   end={{x: 0.5, y: 1}}
@@ -840,7 +854,21 @@ const SubscriptionFormScreen = ({
           </>
         )}
 
-        {isCompanyFlow && (
+        {isRegularMarketerSignup ? (
+          <View style={styles.sectionContainer}>
+            <ProfilePictureUpload
+              mainImage={profilePicture}
+              uploadProgress={{mainImage: false}}
+              handleMainImageUpload={handleProfilePictureUpload}
+              handleMainImageChange={handleProfilePictureChange}
+              mainImageInputRef={profilePictureInputRef}
+              title="תמונת פרופיל"
+              required
+            />
+          </View>
+        ) : null}
+
+        {isCompanyFlow && !isRegularMarketerSignup && (
           <>
             <View style={styles.companyLogoWrap}>
               <TouchableOpacity

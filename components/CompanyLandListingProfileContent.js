@@ -10,7 +10,7 @@ import {
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../utils/rtlLayout';
+import {flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {
   buildCompanyLandAttrChips,
@@ -100,12 +100,12 @@ function AttrChip({label, iconSource}) {
 }
 
 /**
- * קרקעות (category 7) listing detail — Figma 1:171175. Feed ads only (company, broker).
+ * קרקעות (category 7) listing detail — Figma land chips (גוש / חלקה / תב״ע / היתר).
  */
 export default function CompanyLandListingProfileContent({
   listing,
   displayName,
-  displayPiRating = 5,
+  displayPiRating = null,
   publisherAvatarUri,
   mapAddress,
   adAddress,
@@ -166,25 +166,36 @@ export default function CompanyLandListingProfileContent({
     [listing],
   );
 
-  const attrGridColumns = useMemo(() => {
-    const right = [];
-    const left = [];
-    attrChips.forEach((chip, i) => {
-      if (i % 2 === 0) left.push(chip);
-      else right.push(chip);
+  const landDetailTiles = useMemo(() => {
+    const tiles = [];
+    if (block) {
+      tiles.push({id: 'block', kind: 'gush', label: 'גוש', value: block});
+    }
+    if (parcel) {
+      tiles.push({id: 'parcel', kind: 'gush', label: 'חלקה', value: parcel});
+    }
+    attrChips.forEach(chip => {
+      tiles.push({
+        id: chip.id,
+        kind: 'attr',
+        label: chip.label,
+        iconSource: chip.iconSource,
+      });
     });
-    return {right, left};
-  }, [attrChips]);
+    return tiles;
+  }, [block, parcel, attrChips]);
 
-  const showGushHelkaRow = Boolean(block || parcel);
-  const showAttrGrid =
-    attrGridColumns.right.length > 0 || attrGridColumns.left.length > 0;
+  const showLandDetailsGrid = landDetailTiles.length > 0;
+  const showPiRating =
+    displayPiRating != null && !Number.isNaN(Number(displayPiRating));
 
   return (
     <View style={styles.wrap}>
       <View style={[styles.sectionTop, {width: CONTENT_W}]}>
         <View style={styles.piPurposeRow}>
-          <PiRatingBadge rating={displayPiRating} variant="listing" />
+          {showPiRating ? (
+            <PiRatingBadge rating={displayPiRating} variant="listing" />
+          ) : null}
           <View style={styles.tagWhite}>
             <Text style={styles.tagWhiteText}>{purpose}</Text>
           </View>
@@ -254,38 +265,19 @@ export default function CompanyLandListingProfileContent({
         </View>
       ) : null}
 
-      {showGushHelkaRow ? (
+      {showLandDetailsGrid ? (
         <>
           <View style={[styles.line, {width: CONTENT_W}]} />
-          <View style={[styles.gushHelkaRow, {width: CONTENT_W}]}>
-            {block ? <GushHelkaCard label="גוש" value={block} /> : null}
-            {parcel ? <GushHelkaCard label="חלקה" value={parcel} /> : null}
-          </View>
-        </>
-      ) : null}
-
-      {showAttrGrid ? (
-        <>
-          <View style={[styles.line, {width: CONTENT_W}]} />
-          <View style={[styles.twoColGrid, {width: CONTENT_W}]}>
-            <View style={styles.col}>
-              {attrGridColumns.right.map(c => (
-                <AttrChip
-                  key={c.id}
-                  label={c.label}
-                  iconSource={c.iconSource}
-                />
-              ))}
-            </View>
-            <View style={styles.col}>
-              {attrGridColumns.left.map(c => (
-                <AttrChip
-                  key={c.id}
-                  label={c.label}
-                  iconSource={c.iconSource}
-                />
-              ))}
-            </View>
+          <View style={[styles.landDetailsGrid, {width: CONTENT_W}]}>
+            {landDetailTiles.map(tile => (
+              <View key={tile.id} style={styles.landDetailsCell}>
+                {tile.kind === 'gush' ? (
+                  <GushHelkaCard label={tile.label} value={tile.value} />
+                ) : (
+                  <AttrChip label={tile.label} iconSource={tile.iconSource} />
+                )}
+              </View>
+            ))}
           </View>
         </>
       ) : null}
@@ -408,14 +400,15 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     fontSize: 11,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     alignSelf: 'stretch',
     marginBottom: 7,
     width: '100%',
   },
   postedByRow: {
-    flexDirection: 'row-reverse',
+    // forceRTL: `row` + flex-start puts the logo on the physical right.
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 8,
@@ -436,7 +429,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
   },
   bodyText: {
@@ -511,24 +504,17 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
   },
-  twoColGrid: {
-    flexDirection: 'row',
+  landDetailsGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
     gap: 12,
     alignSelf: flexStart,
   },
-  col: {
-    flex: 1,
-    gap: 12,
-    alignItems: 'stretch',
-  },
-  gushHelkaRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignSelf: flexStart,
-    width: '100%',
+  landDetailsCell: {
+    width: (CONTENT_W - 12) / 2,
   },
   gushHelkaCard: {
-    flex: 1,
+    width: '100%',
     height: 56,
     minHeight: 56,
     backgroundColor: CARD_BG,
@@ -558,6 +544,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   attrChip: {
+    width: '100%',
     backgroundColor: CARD_BG,
     borderRadius: 12,
     minHeight: 56,

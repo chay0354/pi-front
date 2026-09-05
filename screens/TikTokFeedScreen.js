@@ -51,6 +51,7 @@ import {
   FeedVideoPosterPlaceholder,
 } from '../components/FeedVideoPlayer';
 import PostTextOverlays from '../components/PostTextOverlays';
+import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import {
   prefetchFeedWindowMedia,
   resolveFeedVideoPosterUri,
@@ -58,10 +59,15 @@ import {
   feedScrollFocusIndex,
 } from '../utils/feedVideoPreload';
 import {fitWidthMediaLayout} from '../utils/fitWidthMedia';
-import {resolveAdVideoUri, isVideoProcessing} from '../utils/videoPlayback';
+import {setFeedPostPageSize} from '../utils/postFrame';
+import {useAccessibility} from '../hooks/AccessibilityContext';
+import {resolveAdVideoUri, isVideoProcessing, muxThumbnailUri} from '../utils/videoPlayback';
 import {
   parsePostTextOverlayPayload,
   shouldRenderPostTextOverlaysOnFeed,
+  resolvePostBackgroundGradient,
+  shouldUseLiveColorPostBackground,
+  POST_BACKGROUND_GRADIENTS,
 } from '../utils/postTextOverlay';
 import FeedBottomBar from '../components/FeedBottomBar';
 import ListingGridCardFigma from '../components/ListingGridCardFigma';
@@ -76,7 +82,10 @@ import CreateAdSheet, {
   CreateAdSheetRow,
   CREATE_SHEET_POST_ICON,
 } from '../components/CreateAdSheet';
-import {PiRatingBadge} from '../components/PiRatingBadge';
+import {
+  PI_RATING_BADGE_RING,
+  getPiRatingCompositeSource,
+} from '../utils/piRatingBadgeAssets';
 import {SvgXml} from '../utils/svgXml';
 import {getCachedSvgXml} from '../utils/svgIconCache';
 import {Colors} from '../constants/styles';
@@ -127,6 +136,8 @@ import {
   formatCompanyApartmentsLabel,
   formatCompanyBuildingsLabel,
   formatCompanyFloorsLabel,
+  listingHasCompanyProjectStats,
+  readCompanyProjectStats,
   displayPiRatingFromReviews,
   brokerPiRatingFromListing,
   shouldShowListingPiRating,
@@ -432,7 +443,7 @@ const mergeListingRows = (target, rows) => {
 const isNewsSidebarFilterDef = filter =>
   filter?.id === 'new' && filter?.ads_only === true;
 
-/** הדמיות sidebar: company video ads only (no posts / no image-only), every category. */
+/** הדמיות sidebar: company ads the creator chose to display as video (not main image / collage). */
 const isRenderingsSidebarFilterDef = filter =>
   filter?.id === 'renderings' &&
   String(filter?.subscription_type || '').toLowerCase() === 'company' &&
@@ -443,10 +454,12 @@ const isRenderingsSidebarListing = listing => {
   if (String(listing?.subscription_type || '').toLowerCase() !== 'company') {
     return false;
   }
-  // Prefer transformed feed shape; fall back to raw listing video fields.
-  return (
-    listingHasPlayableVideo(listing) || Boolean(resolveAdVideoUri(listing))
-  );
+  const hasVideo =
+    listingHasPlayableVideo(listing) || Boolean(resolveAdVideoUri(listing));
+  if (!hasVideo) return false;
+  // Transformed feed: type is 'video' only when feed_display_priority is video.
+  if (listing.type === 'images') return false;
+  return normalizeListingFeedDisplayPriority(listing) === 'video';
 };
 
 /** Company ads: `construction_status` from DB may be English keys or Hebrew labels from the form. */
@@ -1379,6 +1392,12 @@ const BNB_SIDEBAR_FILTERS = [
     svg: bnbSidebarSvgs.desert,
   },
   {
+    id: 'bnb_urban',
+    label: 'עירוני',
+    hospitality_nature: 'urban',
+    svg: bnbSidebarSvgs.urban,
+  },
+  {
     id: 'bnb_posts',
     label: 'פוסטים',
     feed_post: true,
@@ -1746,6 +1765,7 @@ const ImageSwiper = ({
 }) => {
   const {width: winWidth} = useWindowDimensions();
   const pageWidth = Math.min(Math.max(1, winWidth), FEED_PAGE_MAX_WIDTH);
+  const {prefs: a11yPrefs} = useAccessibility();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [fadeIdxA, setFadeIdxA] = useState(0);
   const [fadeIdxB, setFadeIdxB] = useState(0);
@@ -1762,6 +1782,7 @@ const ImageSwiper = ({
   const autoSlideshow =
     isActivePage &&
     !pauseAutoAdvance &&
+    !a11yPrefs.reduceMotion &&
     displayOption === 'slideshow' &&
     images.length > 1 &&
     !isFeedPostVideo(video);
@@ -1927,7 +1948,8 @@ const ImageSwiper = ({
 
   const renderSlideshowSlide = (image, slideKey, single = false) => {
     const uri = resolveImageUri(image);
-    const useFallback = !uri || erroredKeys.has(slideKey);
+    const isPlaceholder = /^text-post-placeholder$/i.test(uri);
+    const useFallback = !uri || isPlaceholder || erroredKeys.has(slideKey);
     const imageSource = useFallback ? fallbackCategoryImage : {uri};
     if (!isPostSlide) {
       return (
@@ -2340,6 +2362,10 @@ const TikTokFeedScreen = ({
   const feedChromeBottom = FEED_OVERLAY_ABOVE_BAR_GAP;
   /** Sidebar intro clip — same band as chrome (page minus bottom bar reserve). */
   const sidebarClipHeight = Math.max(1, feedPageHeight - feedChromeBottom);
+  // The feed page is the reference frame every post preview letterboxes into.
+  useEffect(() => {
+    setFeedPostPageSize(screenWidth, feedPageHeight);
+  }, [feedPageHeight, screenWidth]);
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
@@ -3294,6 +3320,8 @@ const TikTokFeedScreen = ({
                       : imagesArray,
                 isTextOnlyPost: !!isTextOnly,
                 displayOption: normalizeListingDisplayOption(listing),
+                feed_display_priority:
+                  normalizeListingFeedDisplayPriority(listing),
                 location:
                   String(
                     listing.location ||
@@ -3437,28 +3465,21 @@ const TikTokFeedScreen = ({
                   listing.general_details &&
                   typeof listing.general_details === 'object' &&
                   listing.general_details.shared_spaces_company === true,
-                companyBuildingCount:
-                  listing.general_details &&
-                  typeof listing.general_details === 'object' &&
-                  Number.isFinite(
-                    Number(listing.general_details.building_count),
-                  )
-                    ? Number(listing.general_details.building_count)
-                    : null,
-                companyFloorCount:
-                  listing.general_details &&
-                  typeof listing.general_details === 'object' &&
-                  Number.isFinite(Number(listing.general_details.floor_count))
-                    ? Number(listing.general_details.floor_count)
-                    : null,
-                companyApartmentCount:
-                  listing.general_details &&
-                  typeof listing.general_details === 'object' &&
-                  Number.isFinite(
-                    Number(listing.general_details.apartment_count),
-                  )
-                    ? Number(listing.general_details.apartment_count)
-                    : null,
+                ...(() => {
+                  const stats = readCompanyProjectStats(listing);
+                  if (!listingHasCompanyProjectStats(listing)) {
+                    return {
+                      companyBuildingCount: null,
+                      companyFloorCount: null,
+                      companyApartmentCount: null,
+                    };
+                  }
+                  return {
+                    companyBuildingCount: stats.buildings,
+                    companyFloorCount: stats.floors,
+                    companyApartmentCount: stats.apartments,
+                  };
+                })(),
                 project_offers:
                   listing.project_offers &&
                   typeof listing.project_offers === 'object'
@@ -3611,7 +3632,7 @@ const TikTokFeedScreen = ({
             !isProfilePostsFeed &&
             renderingsSidebarFilterActive
           ) {
-            // הדמיות: company ads with a playable video only (no image-only / posts).
+            // הדמיות: company ads with a video AND display mode "וידיאו" (not main image).
             displayListings = displayListings.filter(isRenderingsSidebarListing);
           }
           if (landFilter?.land_in_mortgage) {
@@ -6091,6 +6112,7 @@ const TikTokFeedScreen = ({
         openHouseOverlayText: '',
         isCompanyListing: false,
         isCompanyLandListing: false,
+        isCompanyCommercialListing: false,
         showBrokerStylePropertyOverlay: false,
         isBnbListing: false,
         isPartnersListing: false,
@@ -6121,6 +6143,8 @@ const TikTokFeedScreen = ({
       isCompanySubscriptionType(video.subscription_type);
     const isCompanyLandListing =
       isCompanyListing && Number(video?.category) === 7;
+    const isCompanyCommercialListing =
+      isCompanyListing && Number(video?.category) === 8;
     const isBrokerListing =
       !isPostListing &&
       isBrokerLikeSubscriptionType(video.subscription_type);
@@ -6190,6 +6214,7 @@ const TikTokFeedScreen = ({
         landscapes: 'נופים',
         nature: 'טבע',
         desert: 'מדבר',
+        urban: 'עירוני',
         on_the_beach: 'על הים',
         with_pool: 'עם בריכה',
         apartment: 'דירה',
@@ -6244,6 +6269,7 @@ const TikTokFeedScreen = ({
         : '',
       isCompanyListing,
       isCompanyLandListing,
+      isCompanyCommercialListing,
       showBrokerStylePropertyOverlay,
       isBnbListing,
       isPartnersListing,
@@ -7171,6 +7197,7 @@ const TikTokFeedScreen = ({
                 {o.companySecondaryAddress ? `,\n${o.companySecondaryAddress}` : ''}
               </Text>
             </View>
+            {o.isCompanyCommercialListing ? null : (
             <View style={styles.companyStatsRow} pointerEvents="box-none">
               <View style={styles.companyStatItem}>
                 <Text style={styles.companyStatText}>
@@ -7200,6 +7227,7 @@ const TikTokFeedScreen = ({
                 />
               </View>
             </View>
+            )}
           </View>
         ) : o.isOpenHousePost ? (
           <View
@@ -7588,8 +7616,18 @@ const TikTokFeedScreen = ({
       video?.type === 'video' &&
       Boolean(resolveFeedVideoUri(video));
 
+    const pageGradient = shouldUseLiveColorPostBackground(video)
+      ? resolvePostBackgroundGradient(video)
+      : null;
+
     return (
-    <View style={[styles.videoItem, styles.feedPage, feedPageDimensions]}>
+    <View
+      style={[
+        styles.videoItem,
+        styles.feedPage,
+        feedPageDimensions,
+        pageGradient ? {backgroundColor: pageGradient[0]} : null,
+      ]}>
       {media}
       {shouldRenderFeedChrome(index) ? (
         <View style={styles.feedPageChrome} pointerEvents="box-none">
@@ -7666,16 +7704,74 @@ const TikTokFeedScreen = ({
           </>
         );
       }
+      const gradientColors = shouldUseLiveColorPostBackground(video)
+        ? resolvePostBackgroundGradient(video)
+        : null;
+      const liveColorTextPost = Boolean(gradientColors);
+      if (liveColorTextPost) {
+        return (
+          <>
+            <LinearGradient
+              colors={gradientColors}
+              start={{x: 0, y: 0.5}}
+              end={{x: 1, y: 0.5}}
+              style={styles.feedFullScreenGradient}
+            />
+            {renderPostTextOverlays(video)}
+          </>
+        );
+      }
+      if (video.isTextOnlyPost && shouldRenderPostTextOverlaysOnFeed(video)) {
+        return (
+          <>
+            <LinearGradient
+              colors={gradientColors || POST_BACKGROUND_GRADIENTS[0]}
+              start={{x: 0, y: 0.5}}
+              end={{x: 1, y: 0.5}}
+              style={styles.feedFullScreenGradient}
+            />
+            {renderPostTextOverlays(video)}
+          </>
+        );
+      }
       if (video.isTextOnlyPost && video.description) {
         return (
           <LinearGradient
-            colors={['#2a1a4a', '#1a0d2e', '#0d0620']}
+            colors={gradientColors || ['#2a1a4a', '#1a0d2e', '#0d0620']}
+            start={{x: 0, y: 0.5}}
+            end={{x: 1, y: 0.5}}
             style={styles.textPostCardGradient}>
             <Text style={styles.textPostCardDescription} numberOfLines={10}>
               {video.description}
             </Text>
           </LinearGradient>
         );
+      }
+      if (shouldUseLiveColorPostBackground(video) && video.images && video.images.length > 0) {
+        const firstUri = (() => {
+          const img = video.images[0];
+          if (typeof img === 'string') return img.trim();
+          return String(img?.uri || img?.url || '').trim();
+        })();
+        if (firstUri && !/^text-post-placeholder$/i.test(firstUri)) {
+          return (
+            <>
+              <LinearGradient
+                colors={gradientColors}
+                start={{x: 0, y: 0.5}}
+                end={{x: 1, y: 0.5}}
+                style={styles.feedFullScreenGradient}
+              />
+              <Image
+                source={{uri: firstUri}}
+                {...FEED_IMAGE_PROPS}
+                style={styles.feedFullScreenGradient}
+                resizeMode="cover"
+              />
+              {renderPostTextOverlays(video)}
+            </>
+          );
+        }
       }
       if (video.images && video.images.length > 0) {
         const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
@@ -7769,16 +7865,6 @@ const TikTokFeedScreen = ({
     if (idx >= 0) scrollToIndex(idx, false);
   };
 
-  /** Thumbnail URL for an explore-grid cell. */
-  const hashtagCellImage = listing =>
-    listing?.main_image_url ||
-    listing?.sales_image_url ||
-    listing?.profile_image_url ||
-    (Array.isArray(listing?.additional_image_urls)
-      ? listing.additional_image_urls[0]
-      : null) ||
-    null;
-
   /** Caption text for an explore card (post text, else its hashtags). */
   const hashtagCellCaption = listing => {
     const desc = String(listing?.description || '').trim();
@@ -7822,8 +7908,11 @@ const TikTokFeedScreen = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.exploreGrid}>
           {hashtagPosts.map(listing => {
-            const img = hashtagCellImage(listing);
-            const isVideo = String(listing?.video_url || '').trim().length > 0;
+            const videoUri = String(listing?.video_url || '').trim();
+            const isVideo = videoUri.length > 0;
+            const posterUri = isVideo
+              ? muxThumbnailUri(videoUri, {time: 0, width: 480})
+              : null;
             const caption = hashtagCellCaption(listing);
             const likes = hashtagCellLikes(listing);
             const authorName = String(listing?.creator_name || '').trim();
@@ -7835,39 +7924,31 @@ const TikTokFeedScreen = ({
             return (
               <View key={String(listing.id)} style={styles.exploreCell}>
                 <TouchableOpacity
-                  activeOpacity={0.9}
+                  activeOpacity={0.85}
                   onPress={() => openHashtagPost(listing)}>
                   <View style={styles.exploreThumbWrap}>
-                    {img ? (
-                      <Image
-                        source={{uri: img}}
-                        style={styles.exploreThumb}
-                        resizeMode="cover"
-                      />
-                    ) : (
+                    <FeedPostPreviewMedia
+                      listing={listing}
+                      posterUri={posterUri}
+                      style={StyleSheet.absoluteFill}
+                      showVideoPlayIcon={false}
+                    />
+                    {isVideo ? (
                       <View
                         style={[
-                          styles.exploreThumb,
-                          styles.exploreCellPlaceholder,
-                        ]}>
+                          styles.exploreCellVideoPlayOverlay,
+                          posterUri
+                            ? styles.exploreCellVideoPlayOverlayDim
+                            : null,
+                        ]}
+                        pointerEvents="none">
                         <MaterialCommunityIcons
-                          name={
-                            isVideo ? 'play-circle-outline' : 'image-outline'
-                          }
-                          size={34}
-                          color="#6C6A7A"
+                          name="play-circle"
+                          size={36}
+                          color="rgba(255,255,255,0.85)"
                         />
                       </View>
-                    )}
-                    {isVideo && (
-                      <View style={styles.exploreCellVideoBadge}>
-                        <MaterialCommunityIcons
-                          name="play"
-                          size={14}
-                          color="#FFFFFF"
-                        />
-                      </View>
-                    )}
+                    ) : null}
                   </View>
 
                   {caption ? (
@@ -8235,7 +8316,14 @@ const TikTokFeedScreen = ({
                               }
                               name={item.name}
                               size={60}
-                              subscriptionType={item}
+                              subscriptionType={
+                                item.listing ||
+                                item.recentSubscriptionType ||
+                                null
+                              }
+                              forceGoldRing={shouldForceGoldRingForListing(
+                                item.listing,
+                              )}
                             />
                             <View style={styles.userSearchTextWrap}>
                               <Text
@@ -8293,10 +8381,40 @@ const TikTokFeedScreen = ({
                                           isFive &&
                                             styles.userSearchMetaStarGroupFive,
                                         ]}>
-                                        <PiRatingBadge
-                                          rating={n}
-                                          variant="compactSearch"
-                                        />
+                                        {isFive ? (
+                                          <>
+                                            <View
+                                              style={
+                                                styles.userSearchFiveStarWrap
+                                              }
+                                              pointerEvents="none">
+                                              <Image
+                                                source={PI_RATING_BADGE_RING}
+                                                style={
+                                                  styles.userSearchFiveStarIcon
+                                                }
+                                                resizeMode="cover"
+                                              />
+                                            </View>
+                                            <Text
+                                              style={[
+                                                styles.userSearchMetaCount,
+                                                styles.userSearchMetaCountFive,
+                                              ]}>
+                                              {String(n)}
+                                            </Text>
+                                          </>
+                                        ) : (
+                                          <Image
+                                            source={getPiRatingCompositeSource(
+                                              n,
+                                            )}
+                                            style={
+                                              styles.userSearchCompositeStar
+                                            }
+                                            resizeMode="contain"
+                                          />
+                                        )}
                                       </View>
                                     </>
                                   );
@@ -9133,8 +9251,7 @@ const styles = StyleSheet.create({
   },
   exploreThumbWrap: {
     width: '100%',
-    aspectRatio: 1,
-    borderRadius: 14,
+    aspectRatio: 0.78,
     overflow: 'hidden',
     backgroundColor: '#1E1D27',
   },
@@ -9146,6 +9263,14 @@ const styles = StyleSheet.create({
   exploreCellPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  exploreCellVideoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exploreCellVideoPlayOverlayDim: {
+    backgroundColor: 'rgba(0,0,0,0.22)',
   },
   exploreCellVideoBadge: {
     position: 'absolute',
@@ -9292,6 +9417,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     minWidth: 11,
   },
+  userSearchMetaCountFive: {
+    color: '#FFD275',
+    fontFamily: 'Rubik-Medium',
+  },
   userSearchDismissBtn: {
     width: 24,
     height: 24,
@@ -9303,26 +9432,30 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
   },
-  /** Figma-styled star icon next to a user's rating number in the recent-search list. */
-  userSearchStarIcon: {
-    width: 16,
-    height: 16,
+  /** Same 1–4 composite art as profile pages (`assets/new-stars`). */
+  userSearchCompositeStar: {
+    width: 42,
+    height: 34,
   },
-  /** Figma 943:117842 — 16×16 layout slot; ring star overflows ~4px per side. */
+  userSearchStarIcon: {
+    width: 26,
+    height: 26,
+  },
+  /** Same ring-star asset as profile pages, scaled into the search meta row. */
   userSearchFiveStarWrap: {
-    width: 16,
-    height: 16,
+    width: 26,
+    height: 26,
     position: 'relative',
     overflow: 'visible',
     flexShrink: 0,
   },
   userSearchFiveStarIcon: {
     position: 'absolute',
-    top: -4,
-    left: -4,
-    width: 24,
-    height: 24,
-    ...(Platform.OS === 'web' ? {objectFit: 'contain'} : {}),
+    top: -17,
+    left: -17,
+    width: 60,
+    height: 60,
+    ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   userSearchRatingGlowWrap: {
     width: 18,
@@ -9774,9 +9907,19 @@ const styles = StyleSheet.create({
     maxWidth: FEED_OVERLAY_TEXT_MAX_WIDTH,
     zIndex: 20,
   },
+  feedFullScreenGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
   textPostCardGradient: {
     flex: 1,
     width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,

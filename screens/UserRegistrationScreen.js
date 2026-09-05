@@ -591,7 +591,7 @@ const UserRegistrationScreen = ({
               style={styles.registerButtonWrap}
               activeOpacity={0.9}>
               <LinearGradient
-                colors={['#FEE787', '#BD9947', '#9C6522']}
+                colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                 locations={[0.045575, 0.50763, 0.88314]}
                 start={{x: 0.5, y: 0}}
                 end={{x: 0.5, y: 1}}

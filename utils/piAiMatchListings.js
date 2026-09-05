@@ -52,10 +52,125 @@ const STOP_HE = new Set([
   'מתי',
 ]);
 
+function getProjectOffers(listing) {
+  let po = listing?.project_offers ?? listing?.projectOffers;
+  if (typeof po === 'string') {
+    try {
+      po = JSON.parse(po);
+    } catch (_) {
+      return null;
+    }
+  }
+  return po && typeof po === 'object' ? po : null;
+}
+
+function offerLineActive(po, name) {
+  if (!po || typeof po !== 'object') return false;
+  const area = Number(po[`${name}_area`]);
+  const price = Number(po[`${name}_price`]);
+  return (Number.isFinite(area) && area > 0) || (Number.isFinite(price) && price > 0);
+}
+
 /**
- * @param {Record<string, unknown>} listing
- * @returns {string}
+ * Company / חדש מקבלן ads store 3/4/5-room types in `project_offers`,
+ * while `listing.rooms` is often a dummy 1.
+ * @returns {{ labels: string[], roomNums: number[] }}
  */
+export function projectOfferRoomTypes(listing) {
+  const po = getProjectOffers(listing);
+  const labels = [];
+  const roomNums = [];
+  const addNum = n => {
+    const x = Number(n);
+    if (Number.isFinite(x) && x > 0 && !roomNums.includes(x)) roomNums.push(x);
+  };
+  if (po) {
+    for (const n of [3, 4, 5]) {
+      if (offerLineActive(po, `rooms_${n}`)) {
+        labels.push(`${n} חדרים`);
+        addNum(n);
+      }
+    }
+    if (offerLineActive(po, 'garden')) {
+      labels.push('דירת גן');
+      addNum(po.garden_rooms);
+    }
+    if (offerLineActive(po, 'penthouse')) {
+      labels.push('פנטהאוז');
+      addNum(po.penthouse_rooms);
+    }
+    if (offerLineActive(po, 'private')) {
+      labels.push('בית פרטי');
+      addNum(po.private_rooms);
+    }
+  }
+  const roomsRaw = listing?.rooms != null ? String(listing.rooms).trim() : '';
+  if (roomsRaw.includes(',')) {
+    for (const bit of roomsRaw.split(',')) addNum(bit.trim());
+  } else {
+    const listingRooms = Number(listing?.rooms);
+    if (Number.isFinite(listingRooms) && listingRooms > 0) {
+      const dummyOne = listingRooms === 1 && roomNums.length > 0;
+      if (!dummyOne) addNum(listingRooms);
+    }
+  }
+  return {labels, roomNums};
+}
+
+function listingPublisherName(listing) {
+  const parts = [
+    listing?.creator_name,
+    listing?.creator_business_name,
+    listing?.business_name,
+    listing?.broker_office_name,
+    listing?.publisher,
+    listing?.company_name,
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const v of parts) {
+    const s = v != null ? String(v).trim() : '';
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
+}
+
+function listingSubscriberNumber(listing) {
+  const v =
+    listing?.creator_subscriber_number ??
+    listing?.subscriber_number ??
+    listing?.created_by_subscriber_number;
+  const s = v != null ? String(v).trim() : '';
+  return s;
+}
+
+export function listingOffersRoomCount(listing, want) {
+  const n = Number(want);
+  if (!Number.isFinite(n) || n <= 0) return true;
+  const {roomNums, labels} = projectOfferRoomTypes(listing);
+  if (roomNums.some(x => Number(x) === n)) return true;
+  const compact = `${listing?.rooms || ''} ${listing?.rooms_offered || ''} ${labels.join(' ')}`;
+  const nums = String(compact).match(/\d+(?:\.\d+)?/g) || [];
+  if (nums.some(x => Number(x) === n)) return true;
+  const blob = [
+    listing?.description,
+    listing?.project_name,
+    listing?.rooms_offered,
+    typeof listing?.general_details === 'string'
+      ? listing.general_details
+      : listing?.general_details
+        ? JSON.stringify(listing.general_details)
+        : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return new RegExp(`(?:^|\\D)${n}(?:\\.0+)?\\s*-?\\s*חדר`).test(blob);
+}
+
 export function buildListingSearchText(listing) {
   const parts = [];
   const push = v => {
@@ -78,12 +193,43 @@ export function buildListingSearchText(listing) {
   push(listing.display_option);
   if (listing.price != null && listing.price !== '') push(String(listing.price));
   if (listing.budget != null && listing.budget !== '') push(String(listing.budget));
-  if (listing.rooms != null && listing.rooms !== '') {
+  const offered = projectOfferRoomTypes(listing);
+  if (offered.roomNums.length) {
+    for (const n of offered.roomNums) {
+      push(String(n));
+      push(`${n} חדרים`);
+    }
+  } else if (listing.rooms != null && listing.rooms !== '') {
     push(String(listing.rooms));
     push(`${listing.rooms} חדרים`);
   }
+  for (const label of offered.labels) push(label);
   if (listing.area != null && listing.area !== '') push(String(listing.area));
   if (listing.floor != null && listing.floor !== '') push(String(listing.floor));
+
+  for (const name of listingPublisherName(listing)) {
+    push(name);
+    push(`חברה ${name}`);
+    push(`חברת ${name}`);
+  }
+  const subNum = listingSubscriberNumber(listing);
+  if (subNum) push(subNum);
+
+  const catNum = Number(listing.category);
+  if (catNum === 1) {
+    push('חדש מקבלן');
+    push('דירה חדשה');
+    push('חדשה');
+    push('קבלן');
+  }
+  push(listing.construction_status);
+  if (
+    listing.sale_at_presale === true ||
+    listing.sale_at_presale === 'true' ||
+    listing.sale_at_presale === 't'
+  ) {
+    push('פריסייל');
+  }
 
   try {
     if (listing.additional_fields && typeof listing.additional_fields === 'object') {
@@ -177,15 +323,38 @@ export function buildListingAiSummary(listing) {
   set('land_parcel', listing.land_parcel, 40);
   set('land_block', listing.land_block, 40);
   set('project_name', listing.project_name, 80);
+  const publishers = listingPublisherName(listing);
+  if (publishers.length) {
+    set('publisher', publishers.join(', '), 80);
+    set('company_name', publishers[0], 80);
+  }
+  set(
+    'subscriber_number',
+    listingSubscriberNumber(listing) || listing.subscriber_number,
+    20,
+  );
   set('price', listing.price, 20);
   set('budget', listing.budget, 20);
   set('price_per_night', listing.price_per_night, 20);
-  set('rooms', listing.rooms, 10);
+  const offered = projectOfferRoomTypes(listing);
+  if (offered.labels.length) {
+    set('rooms_offered', offered.labels.join(', '), 80);
+  } else {
+    set('rooms_offered', listing.rooms_offered, 80);
+  }
+  if (offered.roomNums.length) {
+    set('rooms', offered.roomNums.join(','), 20);
+  } else {
+    set('rooms', listing.rooms, 20);
+  }
   set('area', listing.area, 12);
   set('floor', listing.floor, 10);
   set('search_purpose', listing.search_purpose || listing.searchPurposeKey, 20);
   set('condition', listing.condition, 30);
   set('construction_status', listing.construction_status, 30);
+  if (Number(listing.category) === 1) {
+    set('new_from_contractor', 'חדש מקבלן דירה חדשה', 40);
+  }
   set('permit', listing.permit, 30);
   set('hospitality_nature', listing.hospitality_nature, 40);
   set('service_facility', listing.service_facility, 40);
@@ -199,7 +368,14 @@ export function buildListingAiSummary(listing) {
   }
   set('preferences', preferencesTextForAi(listing), 120);
   set('amenities', amenitiesTextForAi(listing), 120);
-  set('description', listing.description, 400);
+  const descExtra = [];
+  for (const name of publishers) descExtra.push(`חברת ${name}`);
+  const subForDesc = listingSubscriberNumber(listing);
+  if (subForDesc) descExtra.push(subForDesc);
+  if (offered.labels.length) descExtra.push(offered.labels.join(', '));
+  const descBase = listing.description != null ? String(listing.description).trim() : '';
+  const descCombined = [descBase, ...descExtra].filter(Boolean).join(' · ');
+  set('description', descCombined, 400);
   return out;
 }
 
@@ -315,6 +491,8 @@ function listingLocationBlob(listing) {
       listing.land_address,
       listing.project_name,
       listing.description,
+      listing.creator_name,
+      listing.business_name,
     ]
       .filter(Boolean)
       .join(' '),
@@ -359,20 +537,97 @@ function listingMatchesPurpose(listing, purpose) {
   return listingPurposeKind(listing) === purpose;
 }
 
+const HOME_CATS = new Set(['1', '6', '10', '12']);
+
 /**
- * Local pre-filter before Gemini (city / rent-sale only). Category intent = Gemini.
+ * Hard type/purpose constraints inferred from the Hebrew query.
+ * @param {string} query
+ * @returns {{ cats: string[]|null, purpose: 'rent'|'sale'|null }}
+ */
+const HE_ROOM_WORDS = {
+  שלושה: 3,
+  שלוש: 3,
+  שלושת: 3,
+  ארבעה: 4,
+  ארבע: 4,
+  חמישה: 5,
+  חמש: 5,
+  שישה: 6,
+  שש: 6,
+  שני: 2,
+  שתיים: 2,
+  שתי: 2,
+};
+
+function inferRoomsFromQuery(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const withNoun = q.match(/(\d+(?:\.\d+)?)\s*-?\s*חדר/);
+  if (withNoun) {
+    const n = Number(withNoun[1]);
+    if (Number.isFinite(n) && n > 0 && n < 20) return n;
+  }
+  for (const [word, n] of Object.entries(HE_ROOM_WORDS)) {
+    if (new RegExp(`${word}\\s*חדר`).test(q) || q.includes(`${word} חדרים`)) {
+      return n;
+    }
+  }
+  return null;
+}
+
+export function inferPiAiQueryConstraints(query) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  let cats = null;
+  if (/שותפ/.test(q)) cats = ['3'];
+  else if (/(?:צימר|\bbnb\b|לינה)/i.test(q)) cats = ['5'];
+  else if (/משרד/.test(q)) cats = ['2'];
+  else if (/(?:מגרש|קרקע|גוש|חלקה)/.test(q)) cats = ['7'];
+  else if (/מסחר/.test(q)) cats = ['8'];
+  else if (/(?:דיר|בית|יוקר|פנטהאוז)/.test(q)) cats = [...HOME_CATS];
+
+  let purpose = null;
+  const rent = /להשכרה|לשכור|שכירות|השכרה/.test(q);
+  const sale = /למכירה|לקנות|קנייה|קניה/.test(q);
+  if (rent && !sale) purpose = 'rent';
+  else if (sale && !rent) purpose = 'sale';
+
+  return {cats, purpose, rooms: inferRoomsFromQuery(q)};
+}
+
+function listingFitsPiAiConstraints(listing, constraints) {
+  if (!listing || !constraints) return true;
+  if (constraints.cats && constraints.cats.length) {
+    const c = String(listing.category != null ? listing.category : '');
+    if (!constraints.cats.includes(c)) return false;
+  }
+  if (constraints.purpose) {
+    if (listingPurposeKind(listing) !== constraints.purpose) return false;
+  }
+  if (constraints.rooms != null) {
+    if (!listingOffersRoomCount(listing, constraints.rooms)) return false;
+  }
+  return true;
+}
+
+/**
+ * Local pre-filter before Gemini (city / rent-sale / asset type).
  * @param {Record<string, unknown>[]} listings
  * @param {ReturnType<typeof parsePiAiQuery>} parsed
+ * @param {string} [query]
  * @returns {Record<string, unknown>[]}
  */
-export function filterListingsByParsedQuery(listings, parsed) {
-  if (!parsed) return listings || [];
-  // Category / roommate intent is decided by Gemini — don't pre-filter שותפים here.
+export function filterListingsByParsedQuery(listings, parsed, query) {
+  if (!parsed && !query) return listings || [];
+  const constraints = inferPiAiQueryConstraints(query || parsed?.raw || '');
   return (listings || []).filter(listing => {
-    if (parsed.city && !listingMatchesCity(listing, parsed.city)) {
+    if (parsed?.city && !listingMatchesCity(listing, parsed.city)) {
       return false;
     }
-    if (parsed.purpose && !listingMatchesPurpose(listing, parsed.purpose)) {
+    if (parsed?.purpose && !listingMatchesPurpose(listing, parsed.purpose)) {
+      return false;
+    }
+    if (!listingFitsPiAiConstraints(listing, constraints)) {
       return false;
     }
     return true;
@@ -430,10 +685,22 @@ export function buildPiAiSearchingMessage(query, parsed) {
 export function tokenizeQuery(q) {
   const s = String(q || '').trim();
   if (!s) return [];
-  return s
+  const tokens = s
     .split(/\s+/)
     .map(w => w.replace(/^[,;:!?'"()[\]״׳]+|[,;:!?'"()[\]״׳]+$/g, ''))
     .filter(w => w.length >= 2 && !STOP_HE.has(w));
+  const extra = [];
+  for (const t of tokens) {
+    const n = HE_ROOM_WORDS[t];
+    if (n) {
+      extra.push(String(n), `${n} חדרים`);
+    }
+  }
+  const roomsN = inferRoomsFromQuery(s);
+  if (roomsN != null) {
+    extra.push(String(roomsN), `${roomsN} חדרים`);
+  }
+  return [...tokens, ...extra];
 }
 
 /**

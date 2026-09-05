@@ -22,7 +22,6 @@ import {ContextHook} from '../hooks/ContextHook';
 import {
   subscriptionTypes,
   shouldShowProfileGoldRing,
-  isBrokerLikeSubscriptionType,
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
 import {
@@ -38,6 +37,8 @@ import {
   getProfileEditFields,
   hydrateProfileEditForm,
   applyProfilePhoneSync,
+  canEditSeparateCompanyLogo,
+  getProfileBusinessNameFieldKey,
 } from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
@@ -61,7 +62,6 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const subTypeLower = String(type).toLowerCase();
   const isCompany = subTypeLower === subscriptionTypes.company;
-  const isBrokerLike = isBrokerLikeSubscriptionType(subTypeLower);
   const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
   /** Camera badge uses the opposite ring palette so it stands out on the avatar. */
   const cameraBadgeColors = hasGoldRing
@@ -71,12 +71,21 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     ? PROFILE_USER_RING_LOCATIONS
     : PROFILE_RING_LOCATIONS;
   const canEditProfileVideo =
-    isBrokerLike || subTypeLower === subscriptionTypes.professional;
+    subTypeLower === subscriptionTypes.broker ||
+    subTypeLower === subscriptionTypes.professional;
+  const canEditCompanyLogo = canEditSeparateCompanyLogo(
+    subTypeLower,
+    currentUser,
+  );
+  const businessNameFieldKey = getProfileBusinessNameFieldKey(type, currentUser);
 
-  const fields = useMemo(() => getProfileEditFields(type), [type]);
+  const fields = useMemo(
+    () => getProfileEditFields(type, currentUser),
+    [type, currentUser],
+  );
 
   const [form, setForm] = useState(() =>
-    hydrateProfileEditForm(currentUser, getProfileEditFields(type)),
+    hydrateProfileEditForm(currentUser, getProfileEditFields(type, currentUser)),
   );
   const [photoUrl, setPhotoUrl] = useState(() =>
     isCompany
@@ -93,8 +102,14 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const [pendingProfileVideo, setPendingProfileVideo] = useState(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(() =>
+    getUserCompanyLogoUrl(currentUser),
+  );
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [cropUri, setCropUri] = useState(null);
   const [cropVisible, setCropVisible] = useState(false);
+  const [cropTarget, setCropTarget] = useState('profile');
+  const cropTargetRef = useRef('profile');
 
   const displayName = resolveProfileDisplayName(currentUser);
 
@@ -149,7 +164,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     pendingProfileVideo?.uri || profileVideoUrl || null;
 
   const handlePickProfileVideo = async () => {
-    if (uploadingVideo || saving || uploadingPhoto) return;
+    if (uploadingVideo || saving || uploadingPhoto || uploadingLogo) return;
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -205,13 +220,33 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     }
   };
 
-  const openPhotoCropper = uri => {
+  const uploadLogoPicked = async picked => {
+    if (!picked) return;
+    setUploadingLogo(true);
+    try {
+      const uploaded = await uploadFile(picked, 'company-logos');
+      if (uploaded?.url) {
+        setLogoUrl(uploaded.url);
+      } else {
+        throw new Error('לא התקבלה כתובת לוגו');
+      }
+    } catch (err) {
+      Alert.alert('שגיאה', err?.message || 'העלאת הלוגו נכשלה, נסה/י שוב.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const openPhotoCropper = (uri, target = 'profile') => {
     if (!uri) return;
+    cropTargetRef.current = target;
+    setCropTarget(target);
     setCropUri(uri);
     setCropVisible(true);
   };
 
   const handlePhotoCropConfirm = async result => {
+    const target = cropTargetRef.current;
     setCropVisible(false);
     setCropUri(null);
     if (!result?.uri) {
@@ -220,11 +255,16 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       }
       return;
     }
-    await uploadPicked({
+    const picked = {
       uri: result.uri,
       type: 'image/jpeg',
-      name: `profile-${Date.now()}.jpg`,
-    });
+      name: `${target === 'logo' ? 'logo' : 'profile'}-${Date.now()}.jpg`,
+    };
+    if (target === 'logo') {
+      await uploadLogoPicked(picked);
+      return;
+    }
+    await uploadPicked(picked);
   };
 
   const handlePhotoCropCancel = () => {
@@ -232,15 +272,15 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     setCropUri(null);
   };
 
-  const handlePickPhoto = async () => {
-    if (uploadingPhoto || saving) return;
+  const handlePickImage = async (target = 'profile') => {
+    if (uploadingPhoto || uploadingLogo || saving) return;
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
       input.onchange = e => {
         const file = e.target.files?.[0];
-        if (file) openPhotoCropper(URL.createObjectURL(file));
+        if (file) openPhotoCropper(URL.createObjectURL(file), target);
       };
       input.click();
       return;
@@ -254,15 +294,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         quality: 1,
       });
       if (!result.canceled && result.assets?.[0]) {
-        openPhotoCropper(result.assets[0].uri);
+        openPhotoCropper(result.assets[0].uri, target);
       }
     } catch (err) {
-      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${err.message}`);
+      Alert.alert(
+        'שגיאה',
+        target === 'logo'
+          ? `לא ניתן לבחור לוגו: ${err.message}`
+          : `לא ניתן לבחור תמונה: ${err.message}`,
+      );
     }
   };
 
+  const handlePickPhoto = () => handlePickImage('profile');
+  const handlePickLogo = () => handlePickImage('logo');
+
   const handleSave = async () => {
-    if (saving || uploadingPhoto || uploadingVideo) return;
+    if (saving || uploadingPhoto || uploadingVideo || uploadingLogo) return;
     const subId = currentUser?.id || currentUser?.subscription_id;
     if (!subId) {
       Alert.alert('שגיאה', 'לא ניתן לזהות את המשתמש.');
@@ -284,6 +332,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
     Object.assign(payload, buildProfilePhotoSavePayload(type, photoUrl));
+    if (canEditCompanyLogo && logoUrl) {
+      payload.company_logo_url = logoUrl;
+    }
     applyProfilePhoneSync(payload, type);
 
     let nextVideoUrl = profileVideoUrl;
@@ -322,8 +373,14 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       const res = await updateSubscriptionProfile(subId, payload);
       const updated = res?.subscription || null;
       const photoPatch = buildProfilePhotoSavePayload(type, photoUrl);
+      const logoPatch =
+        canEditCompanyLogo && logoUrl
+          ? {company_logo_url: logoUrl, companyLogoUrl: logoUrl}
+          : {};
       setCurrentUser(prev =>
-        prev ? {...prev, ...(updated || payload), ...photoPatch} : prev,
+        prev
+          ? {...prev, ...(updated || payload), ...photoPatch, ...logoPatch}
+          : prev,
       );
       if (typeof onSaved === 'function') onSaved(updated);
       Alert.alert('נשמר', 'הפרופיל עודכן בהצלחה.', [
@@ -491,7 +548,8 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
           {/* Editable fields */}
           {fields.map(f => (
-            <View key={f.key} style={styles.fieldBlock}>
+            <View key={f.key}>
+            <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>{f.label}</Text>
               {f.type === 'chips' ? (
                 (() => {
@@ -607,6 +665,62 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                 />
               )}
             </View>
+            {canEditCompanyLogo && f.key === businessNameFieldKey ? (
+              <View style={styles.fieldBlock}>
+                <Text style={styles.fieldLabel}>לוגו חברה</Text>
+                <View style={styles.logoRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handlePickLogo}
+                    disabled={uploadingLogo || saving}
+                    style={styles.logoAvatarWrap}>
+                    <ProfileAvatar
+                      uri={logoUrl}
+                      name={
+                        (businessNameFieldKey && form[businessNameFieldKey]) ||
+                        displayName
+                      }
+                      size={72}
+                      subscriptionType={currentUser}
+                      fallbackResizeMode="contain"
+                    />
+                    <View style={styles.logoEditBadgeWrap}>
+                      {uploadingLogo ? (
+                        <View
+                          style={[
+                            styles.avatarEditBadge,
+                            {backgroundColor: cameraBadgeColors[1]},
+                          ]}>
+                          <ActivityIndicator size="small" color="#1E1D27" />
+                        </View>
+                      ) : (
+                        <LinearGradient
+                          colors={cameraBadgeColors}
+                          locations={cameraBadgeLocations}
+                          start={{x: 0, y: 0}}
+                          end={{x: 1, y: 1}}
+                          style={styles.avatarEditBadge}>
+                          <MaterialCommunityIcons
+                            name="camera"
+                            size={16}
+                            color="#1E1D27"
+                          />
+                        </LinearGradient>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handlePickLogo}
+                    activeOpacity={0.7}
+                    disabled={uploadingLogo || saving}>
+                    <Text style={styles.changePhotoText}>
+                      {logoUrl ? 'שינוי לוגו חברה' : 'העלאת לוגו חברה'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+            </View>
           ))}
 
           {/* Read-only subscriber number */}
@@ -622,7 +736,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleSave}
-            disabled={saving || uploadingPhoto || uploadingVideo}
+            disabled={
+              saving || uploadingPhoto || uploadingVideo || uploadingLogo
+            }
             style={styles.saveBtnWrap}>
             <LinearGradient
               colors={PROFILE_RING_COLORS}
@@ -631,7 +747,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
               end={{x: 1, y: 1}}
               style={[
                 styles.saveBtn,
-                (saving || uploadingPhoto || uploadingVideo) &&
+                (saving || uploadingPhoto || uploadingVideo || uploadingLogo) &&
                   styles.saveBtnDisabled,
               ]}>
               {saving || uploadingVideo ? (
@@ -655,7 +771,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         imageUri={cropUri}
         onCancel={handlePhotoCropCancel}
         onConfirm={handlePhotoCropConfirm}
-        title={isCompany ? 'חתוך את לוגו החברה' : 'חתוך את תמונת הפרופיל'}
+        title={
+          cropTarget === 'logo' || isCompany
+            ? 'חתוך את לוגו החברה'
+            : 'חתוך את תמונת הפרופיל'
+        }
       />
     </View>
   );
@@ -720,6 +840,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
     textAlign: 'center',
+  },
+  logoRow: {
+    // forceRTL: `row` starts on the physical right — `row-reverse` put the logo on the left.
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 14,
+    width: '100%',
+  },
+  logoAvatarWrap: {
+    position: 'relative',
+  },
+  logoEditBadgeWrap: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
   },
   changeVideoLinkText: {
     color: '#E8B34D',

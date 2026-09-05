@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
@@ -17,6 +18,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {joinAgencyWithCode} from '../utils/api';
 import {hebrewTextAlign} from '../utils/rtlLayout';
+import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const BLUE_100 = '#1e1d27';
 const CONTENT_MAX = 366;
@@ -28,6 +30,10 @@ const MIN_PASSWORD_LENGTH = 8;
  */
 const JoinAgencyScreen = ({onClose, onJoined}) => {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
+  const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);
+  const focusedTargetRef = useRef(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -63,6 +69,46 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
     }
   };
 
+  const scrollFocusedIntoView = useCallback(
+    event => {
+      const target = event?.target ?? focusedTargetRef.current;
+      if (target) focusedTargetRef.current = target;
+      const run = () => {
+        if (!scrollRef.current) return;
+        const keyboardHeight = Math.max(0, keyboardInset || 0);
+        const visibleBottom =
+          Dimensions.get('window').height -
+          keyboardHeight -
+          Math.max(insets.bottom, 12) -
+          28;
+        if (typeof target?.measureInWindow !== 'function') {
+          scrollRef.current.scrollToEnd?.({animated: true});
+          return;
+        }
+        target.measureInWindow((_x, fieldTop, _w, fieldHeight) => {
+          const fieldBottom = fieldTop + (fieldHeight || 0);
+          if (fieldBottom <= visibleBottom) return;
+          scrollRef.current.scrollTo({
+            y: scrollYRef.current + (fieldBottom - visibleBottom) + 24,
+            animated: true,
+          });
+        });
+      };
+      requestAnimationFrame(run);
+      setTimeout(run, Platform.OS === 'android' ? 280 : 100);
+      if (Platform.OS === 'android') setTimeout(run, 450);
+    },
+    [keyboardInset, insets.bottom],
+  );
+
+  useEffect(() => {
+    if (keyboardInset <= 0 || !focusedTargetRef.current) return;
+    scrollFocusedIntoView({target: focusedTargetRef.current});
+  }, [keyboardInset, scrollFocusedIntoView]);
+
+  const bottomPad =
+    Math.max(insets.bottom, 28) + 24 + Math.max(0, keyboardInset);
+
   return (
     <View style={styles.root}>
       <ImageBackground
@@ -79,14 +125,21 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView
+            ref={scrollRef}
             contentContainerStyle={[
               styles.content,
               {
                 paddingTop: Math.max(insets.top, 12) + 8,
-                paddingBottom: Math.max(insets.bottom, 28),
+                paddingBottom: bottomPad,
               },
             ]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
+            onScroll={e => {
+              scrollYRef.current = e.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
               <TouchableOpacity
@@ -127,6 +180,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 value={name}
                 onChangeText={setName}
+                onFocus={scrollFocusedIntoView}
                 textAlign="right"
               />
             </View>
@@ -142,6 +196,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
+                onFocus={scrollFocusedIntoView}
                 textAlign="right"
               />
             </View>
@@ -158,6 +213,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                onFocus={scrollFocusedIntoView}
                 textAlign="right"
               />
             </View>
@@ -174,6 +230,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
                 onChangeText={setPassword}
                 secureTextEntry
                 autoCapitalize="none"
+                onFocus={scrollFocusedIntoView}
                 textAlign="right"
               />
             </View>
@@ -190,6 +247,7 @@ const JoinAgencyScreen = ({onClose, onJoined}) => {
                 onChangeText={t => setCode(t.toUpperCase())}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                onFocus={scrollFocusedIntoView}
                 textAlign="center"
               />
             </View>

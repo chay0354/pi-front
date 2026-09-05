@@ -13,7 +13,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 /** Figma 15:10070 — success icon: profile/like.png (40×40). */
 const BG = '#2B2A39';
 const CREAM = '#F7F3E6';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 const CompanyReportSuccessModal = ({visible, onDismiss}) => {

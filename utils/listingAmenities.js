@@ -1,8 +1,19 @@
 /** Parse amenities JSON from a listing row (Hebrew keys from ad upload forms). */
 
 const BALCONY_KEYS = ['מרפסת', 'מרפסה', 'balcony', 'mirpeset'];
+const SUKKAH_BALCONY_KEYS = [
+  'מרפסת לסוכה',
+  'sukkah_balcony',
+  'כולל מרפסת לסוכה',
+];
+const SUKKAH_BALCONY_AREA_KEYS = [
+  'מרפסת לסוכה',
+  'גודל מרפסת',
+  'sukkah_balcony_area',
+  'balcony_area',
+];
 const PARKING_KEYS = ['חנייה', 'חניה', 'כמות חניות', 'parking', 'parking_spaces'];
-const ELEVATOR_KEYS = ['מעלית', 'elevator', 'maala'];
+const ELEVATOR_KEYS = ['מעלית', 'מעלית שבת', 'elevator', 'maala'];
 const MAMAD_KEYS = ['ממ"ד', 'ממ״ד', 'mamad', 'mamad_room'];
 const IMMEDIATE_KEYS = ['כניסה מיידית', 'immediate_entry', 'entry_immediate'];
 
@@ -49,6 +60,37 @@ export function profileBalconyLabel(am) {
   if (count <= 0) return 'ללא מרפסת';
   if (count === 1) return 'מרפסת';
   return `${count} מרפסות`;
+}
+
+function amenityNumericSqm(am, keys) {
+  if (!am || typeof am !== 'object') return null;
+  for (const k of keys) {
+    const v = am[k];
+    if (v === true || v === false) continue;
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
+function formatAmenitySqm(n) {
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+export function profileSukkahBalconyLabel(am) {
+  const hasSukkah =
+    amenityIsOn(am, SUKKAH_BALCONY_KEYS) ||
+    amenityNumericSqm(am, SUKKAH_BALCONY_AREA_KEYS) != null;
+  if (!hasSukkah) return 'ללא מרפסת סוכה';
+  const sqm = amenityNumericSqm(am, SUKKAH_BALCONY_AREA_KEYS);
+  const sqmLabel = formatAmenitySqm(sqm);
+  if (sqmLabel) return `מרפסת סוכה ${sqmLabel} מ"ר`;
+  return 'מרפסת סוכה';
 }
 
 export function profileParkingLabel(am) {
@@ -101,6 +143,9 @@ export function buildProfileAdFeatureLabels(listing) {
       ? Number(listing.floor)
       : null;
   const condLabel = formatConditionLabel(listing.condition);
+  const categoryNum = parseInt(listing.category ?? listing.category_id, 10);
+  const balconyLabel =
+    categoryNum === 6 ? profileSukkahBalconyLabel(am) : profileBalconyLabel(am);
 
   return [
     {iconKey: 'area', label: a != null && !isNaN(a) ? `${a} מ"ר` : 'ללא מ"ר'},
@@ -112,7 +157,7 @@ export function buildProfileAdFeatureLabels(listing) {
       iconKey: 'floor',
       label: f != null && !isNaN(f) ? `קומה ${f}` : 'ללא קומה',
     },
-    {iconKey: 'balcony', label: profileBalconyLabel(am)},
+    {iconKey: 'balcony', label: balconyLabel},
     {iconKey: 'elevator', label: profileElevatorLabel(am)},
     {iconKey: 'parking', label: profileParkingLabel(am)},
     {iconKey: 'mamad', label: profileMamadLabel(am)},

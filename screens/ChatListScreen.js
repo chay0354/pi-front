@@ -53,6 +53,7 @@ import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {
   isRegularSubscriptionType,
   isBrokerLikeSubscriptionType,
+  isProjectMarketerType,
   subscriptionTypes,
 } from '../utils/constant';
 
@@ -60,7 +61,7 @@ import {
 const CHAT_LIST_PANEL_BG = '#2B2A39';
 const HEADER_BG = '#1E1D27';
 const CARD_BG = '#252436';
-const GOLD = '#D4AF37';
+const GOLD = '#F7C63A';
 /** Category chip on chat rows (e.g. דירות) */
 const CATEGORY_BADGE_BG = '#FFC40A';
 /** Matches Settings / chat list unread badge teal */
@@ -657,15 +658,23 @@ const ChatListScreen = ({
   const isBrokerUser = isBrokerLikeSubscriptionType(currentUserType);
   const isCompanyUser = currentUserType === subscriptionTypes.company;
   const isProfessionalUser = currentUserType === subscriptionTypes.professional;
+  const isProjectMarketerUser = isProjectMarketerType(currentUserType);
   const isRegularUser = isRegularSubscriptionType(currentUserType);
   const canShowListingAdNumber = isBrokerUser || isCompanyUser;
-  /** Brokers: customer + broker groups. Regular/professional/company: one open group with all user kinds. */
+  /** Brokers: customer + broker groups. Regular/professional/company/marketer: one open group. */
   const canOpenGroups =
-    isBrokerUser || isRegularUser || isCompanyUser || isProfessionalUser;
+    isBrokerUser ||
+    isRegularUser ||
+    isCompanyUser ||
+    isProfessionalUser ||
+    isProjectMarketerUser;
   const isRegularGroupCreator = isRegularUser && !isBrokerUser;
-  /** Regular, professional, and company users share the simplified "קבוצה" flow (all user types). */
+  /** Regular, professional, company, and משווק users share the simplified "קבוצה" flow. */
   const usesSimpleGroupFlow =
-    isRegularGroupCreator || isProfessionalUser || isCompanyUser;
+    isRegularGroupCreator ||
+    isProfessionalUser ||
+    isCompanyUser ||
+    isProjectMarketerUser;
   const groupPickerAudience =
     groupFlow === 'brokers'
       ? 'broker_only'
@@ -1187,6 +1196,8 @@ const ChatListScreen = ({
             listingCategoryLabel: c.listingCategoryLabel || null,
             exclusiveOfferStatus: c.exclusiveOfferStatus || null,
             exclusiveOfferKind: c.exclusiveOfferKind || null,
+            lastMessageFromMe: c.lastMessageFromMe === true,
+            lastMessageRead: c.lastMessageRead === true,
             unreadCount:
               typeof c.unreadCount === 'number' ? Math.max(0, c.unreadCount) : 0,
           });
@@ -1516,12 +1527,28 @@ const ChatListScreen = ({
                   <View style={styles.messageRow}>
                     <View style={styles.rowMain}>
                       {renderRowMeta(conv)}
-                      <Text style={styles.messagePreview} numberOfLines={2}>
-                        {conv.preview != null &&
-                        String(conv.preview).trim() !== ''
-                          ? String(conv.preview)
-                          : 'אין הודעות'}
-                      </Text>
+                      <View style={styles.previewRow}>
+                        {conv.lastMessageFromMe ? (
+                          <MaterialCommunityIcons
+                            name="check-all"
+                            size={16}
+                            color={
+                              conv.lastMessageRead
+                                ? '#34B7F1'
+                                : 'rgba(255,255,255,0.45)'
+                            }
+                            accessibilityLabel={
+                              conv.lastMessageRead ? 'נקראה' : 'נשלחה'
+                            }
+                          />
+                        ) : null}
+                        <Text style={styles.messagePreview} numberOfLines={2}>
+                          {conv.preview != null &&
+                          String(conv.preview).trim() !== ''
+                            ? String(conv.preview)
+                            : 'אין הודעות'}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.avatarCol}>
                       <ChatListRowAvatar
@@ -2553,8 +2580,14 @@ const styles = StyleSheet.create({
     textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     lineHeight: 22,
-    width: '100%',
+    flex: 1,
     fontFamily: 'Rubik-Regular',
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
   },
   chatUnreadBadge: {
     position: 'absolute',

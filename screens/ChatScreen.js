@@ -54,8 +54,8 @@ import {
 } from '../utils/api';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {shouldShowProfileGoldRing, isRegularSubscriptionType, isBrokerLikeSubscriptionType, subscriptionTypes} from '../utils/constant';
-import {parsePostTextOverlayPayload} from '../utils/postTextOverlay';
-import PostTextOverlays from '../components/PostTextOverlays';
+import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
+import {usePostFrameAspect} from '../utils/postFrame';
 import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
@@ -93,7 +93,7 @@ function getChatRealtimeClient() {
 
 const BG = '#1a1926';
 const CARD_BG = '#252436';
-const GOLD = '#D4AF37';
+const GOLD = '#F7C63A';
 const TEXT_LIGHT = 'rgba(255,255,255,0.7)';
 
 const CHAT_BG = '#373548';
@@ -129,6 +129,42 @@ function formatVoiceDuration(totalSec) {
 
 const BUBBLE_GOLD = '#d4a84b';
 const BUBBLE_ME = '#2DD4BF';
+/** WhatsApp-style photo bubble — fill the bubble, no colored frame. */
+const CHAT_PHOTO_MAX_W = 248;
+const CHAT_PHOTO_MAX_H = 360;
+const CHAT_PHOTO_MIN_W = 168;
+const CHAT_PHOTO_FALLBACK = {width: 248, height: 186};
+
+function chatPhotoBox(naturalW, naturalH) {
+  const nw = Number(naturalW);
+  const nh = Number(naturalH);
+  if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) {
+    return CHAT_PHOTO_FALLBACK;
+  }
+  const ratio = nw / nh;
+  let w = nw;
+  let h = nh;
+  if (w > CHAT_PHOTO_MAX_W) {
+    w = CHAT_PHOTO_MAX_W;
+    h = w / ratio;
+  }
+  if (h > CHAT_PHOTO_MAX_H) {
+    h = CHAT_PHOTO_MAX_H;
+    w = h * ratio;
+  }
+  if (w < CHAT_PHOTO_MIN_W) {
+    w = CHAT_PHOTO_MIN_W;
+    h = w / ratio;
+    if (h > CHAT_PHOTO_MAX_H) {
+      h = CHAT_PHOTO_MAX_H;
+      w = h * ratio;
+    }
+  }
+  return {width: Math.round(w), height: Math.round(h)};
+}
+/** WhatsApp-style read receipt (double blue ticks). */
+const CHAT_READ_TICK_BLUE = '#34B7F1';
+const CHAT_READ_TICK_SENT = 'rgba(55,53,72,0.45)';
 const FIGMA_WELCOME_BUBBLE_BG = '#ffbb32';
 const FIGMA_MAIN_DEEP_BLUE = '#1e1d27';
 /** Header + bottom composer bar */
@@ -198,7 +234,7 @@ const isCollabOfferBody = body => {
   return text.includes(COLLAB_OFFER_BODY_MARKER);
 };
 
-const EXCLUSIVE_CTA_GOLD = ['#FEE787', '#BD9947', '#9C6522'];
+const EXCLUSIVE_CTA_GOLD = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const EXCLUSIVE_CTA_GOLD_LOCATIONS = [0.045, 0.508, 0.883];
 
 const enrichExclusiveOfferMeta = (meta, conversationIdFromResponse) => {
@@ -325,8 +361,35 @@ const normalizeChatMessage = m => {
     mediaType,
     listingId,
     listingShare,
+    isRead: m.isRead === true,
   };
 };
+
+const chatMessageIsRead = (m, peerLastReadAt) => {
+  if (!m?.isMe) return false;
+  if (m.isRead === true) return true;
+  if (!peerLastReadAt || !m.createdAt) return false;
+  const createdMs = new Date(m.createdAt).getTime();
+  const readMs = new Date(peerLastReadAt).getTime();
+  return (
+    Number.isFinite(createdMs) &&
+    Number.isFinite(readMs) &&
+    createdMs <= readMs
+  );
+};
+
+function ChatOutgoingReadTicks({isRead, color}) {
+  return (
+    <MaterialCommunityIcons
+      name="check-all"
+      size={15}
+      color={
+        color || (isRead ? CHAT_READ_TICK_BLUE : CHAT_READ_TICK_SENT)
+      }
+      accessibilityLabel={isRead ? 'נקראה' : 'נשלחה'}
+    />
+  );
+}
 
 /** Broker message: marker in body + sender is not the viewer (handles missing `isMe` on some payloads). */
 const isExclusiveOfferFromPeerForViewer = (m, viewerEmail) => {
@@ -354,6 +417,8 @@ const ChatScreen = ({
   onContactListingOwner,
 }) => {
   const insets = useSafeAreaInsets();
+  /** Shared-post cards are shaped like a feed page (single source: utils/postFrame). */
+  const postAspect = usePostFrameAspect();
   const conversation = useMemo(
     () => normalizeConversationForOpen(conversationProp),
     [conversationProp],
@@ -394,6 +459,17 @@ const ChatScreen = ({
       isBrokerLikeSubscriptionType(currentUser?.subscription_type) ||
       isBrokerLikeSubscriptionType(currentUser?.type)
     );
+  }, [currentUser?.subscription_type, currentUser?.type]);
+  const isTrueBrokerUser = useMemo(() => {
+    const t1 =
+      currentUser?.subscription_type != null
+        ? String(currentUser.subscription_type).trim().toLowerCase()
+        : '';
+    const t2 =
+      currentUser?.type != null
+        ? String(currentUser.type).trim().toLowerCase()
+        : '';
+    return t1 === 'broker' || t2 === 'broker';
   }, [currentUser?.subscription_type, currentUser?.type]);
   const isCompanyUser = useMemo(() => {
     const t1 =
@@ -443,6 +519,7 @@ const ChatScreen = ({
       : null,
   );
   const [brokenImageUrls, setBrokenImageUrls] = useState({});
+  const [chatImageSizeByUrl, setChatImageSizeByUrl] = useState({});
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -463,9 +540,10 @@ const ChatScreen = ({
   const isPeerRegularUser = peerSubscriptionType === 'user';
   const isPeerBroker = peerSubscriptionType === 'broker';
   const isPeerCompany = peerSubscriptionType === 'company';
-  /** שת״פ: broker→broker or broker→company only (company cannot offer to broker). */
+  /** שת״פ: broker→broker or broker→company only (company cannot offer to broker).
+   * משווקים do not send exclusive-offer CTAs (broker-only). */
   const isCollabOfferMode =
-    isBrokerUser && (isPeerBroker || isPeerCompany);
+    isTrueBrokerUser && (isPeerBroker || isPeerCompany);
   /** Broker→company uses project-focused copy; other שת״פ uses broker↔broker style. */
   const isCollabToCompany = isCollabOfferMode && isPeerCompany;
   /**
@@ -514,7 +592,7 @@ const ChatScreen = ({
   const canSendBrokerOffer =
     openedChatFromAd &&
     !isCurrentUserListingOwner &&
-    (isCollabOfferMode || (isBrokerUser && isPeerRegularUser));
+    (isCollabOfferMode || (isTrueBrokerUser && isPeerRegularUser));
   const peerBlocksExclusiveOffers =
     resolvedDisplay?.blockExclusiveOffers === true ||
     conversation?.blockExclusiveOffers === true;
@@ -557,6 +635,7 @@ const ChatScreen = ({
   const [showDocumentPicker, setShowDocumentPicker] = useState(false);
   /** True only while postgres_changes subscription is SUBSCRIBED. */
   const [realtimeOk, setRealtimeOk] = useState(false);
+  const [peerLastReadAt, setPeerLastReadAt] = useState(null);
   /** From GET /api/chat/group-messages */
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupMembersList, setGroupMembersList] = useState([]);
@@ -733,7 +812,8 @@ const ChatScreen = ({
     if (
       isRegularSubscriptionType(actorType) ||
       actorType === subscriptionTypes.professional ||
-      actorType === subscriptionTypes.company
+      actorType === subscriptionTypes.company ||
+      actorType === subscriptionTypes.projectMarketer
     ) {
       return 'all';
     }
@@ -881,6 +961,7 @@ const ChatScreen = ({
           if (res.conversation_id) setConversationId(res.conversation_id);
           if (res.group) setGroupDetail(res.group);
           if (Array.isArray(res.members)) setGroupMembersList(res.members);
+          setPeerLastReadAt(res.peerLastReadAt || null);
           setExclusiveOfferMeta(null);
         })
         .catch(e => {
@@ -907,6 +988,7 @@ const ChatScreen = ({
       .then(res => {
         if (res.messages) setMessages(res.messages.map(normalizeChatMessage));
         if (res.conversation_id) setConversationId(res.conversation_id);
+        setPeerLastReadAt(res.peerLastReadAt || null);
         setExclusiveOfferMeta(prev => {
           const cid =
             res.conversation_id != null
@@ -949,6 +1031,10 @@ const ChatScreen = ({
 
   const fetchMessagesRef = useRef(fetchMessages);
   fetchMessagesRef.current = fetchMessages;
+
+  useEffect(() => {
+    setPeerLastReadAt(null);
+  }, [directConversationId, groupConversationId, otherUserEmail]);
 
   useEffect(() => {
     if (!isUser || !otherUserRef) {
@@ -1375,6 +1461,18 @@ const ChatScreen = ({
             });
           },
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'chat_participants',
+            filter: `conversation_id=eq.${cid}`,
+          },
+          () => {
+            fetchMessagesRef.current();
+          },
+        )
         .subscribe(status => {
           if (cancelled) return;
           if (status === 'SUBSCRIBED') {
@@ -1458,6 +1556,19 @@ const ChatScreen = ({
     setBrokenImageUrls(prev =>
       prev[key] ? prev : {...prev, [key]: true},
     );
+  }, []);
+
+  const rememberChatImageSize = useCallback((url, width, height) => {
+    const key = String(url || '').trim();
+    if (!key) return;
+    const box = chatPhotoBox(width, height);
+    setChatImageSizeByUrl(prev => {
+      const cur = prev[key];
+      if (cur && cur.width === box.width && cur.height === box.height) {
+        return prev;
+      }
+      return {...prev, [key]: box};
+    });
   }, []);
 
   const applyConversationIdFromSend = useCallback(res => {
@@ -1687,6 +1798,9 @@ const ChatScreen = ({
     const uri = a.uri;
     const mime = a.mimeType || 'image/jpeg';
     const name = a.fileName || `photo-${Date.now()}.jpg`;
+    if (a.width && a.height) {
+      rememberChatImageSize(uri, a.width, a.height);
+    }
     setSending(true);
     try {
       const up = await uploadChatMedia({uri, type: mime, name});
@@ -1712,13 +1826,17 @@ const ChatScreen = ({
       }
       if (res.message) {
         const nm = normalizeChatMessage(res.message);
+        const mediaUrl = nm.mediaUrl || up.url;
+        if (a.width && a.height && mediaUrl) {
+          rememberChatImageSize(mediaUrl, a.width, a.height);
+        }
         setMessages(prev => [
           ...prev,
           {
             ...nm,
             id: nm.id || Date.now(),
             mediaType: nm.mediaType || 'image',
-            mediaUrl: nm.mediaUrl || up.url,
+            mediaUrl,
           },
         ]);
         applyConversationIdFromSend(res);
@@ -2485,6 +2603,7 @@ const ChatScreen = ({
           : null;
       const isExclusiveOffer =
         typeof msg.body === 'string' && isBrokerOfferBody(msg.body);
+      const messageRead = chatMessageIsRead(m, peerLastReadAt);
       const bubbleTimeLabel = m.createdAt
         ? new Date(m.createdAt).toLocaleTimeString('he-IL', {
             hour: '2-digit',
@@ -2497,6 +2616,11 @@ const ChatScreen = ({
         !hasFile &&
         !hasImage &&
         !hasAudio;
+      const isPhotoBubble = hasImage && !showSharedPostCard;
+      const isPhotoOnly = isPhotoBubble && !bodyTrim;
+      const photoBox = isPhotoBubble
+        ? chatImageSizeByUrl[msg.mediaUrl] || CHAT_PHOTO_FALLBACK
+        : null;
       return (
         <React.Fragment key={m.id}>
           <View
@@ -2556,6 +2680,8 @@ const ChatScreen = ({
                   m.isMe ? styles.bubbleMe : styles.bubbleThem,
                   hasAudio && !bodyTrim && styles.bubbleVoiceOnly,
                   isPlainTextBubble && styles.bubblePlainText,
+                  isPhotoBubble && styles.bubblePhoto,
+                  isPhotoOnly && styles.bubblePhotoOnly,
                 ]}>
                 {showSharedPostCard ? (
                   (() => {
@@ -2609,11 +2735,6 @@ const ChatScreen = ({
                       cached,
                       bodyTrim,
                     );
-                    const overlayPayload = cached?.generalDetails
-                      ? parsePostTextOverlayPayload({
-                          general_details: cached.generalDetails,
-                        })
-                      : null;
                     const openSharedPostInFeed = () => {
                       if (typeof onOpenPost !== 'function') return;
                       onOpenPost({
@@ -2639,25 +2760,22 @@ const ChatScreen = ({
                               openChatImageFullScreen(resolvedMediaUrl);
                             }
                           }}
-                          style={styles.sharedPostImageWrap}>
+                          style={[
+                            styles.sharedPostImageWrap,
+                            {aspectRatio: postAspect},
+                          ]}>
                           {resolvedMediaUrl ? (
-                            <>
-                              <Image
-                                source={{uri: resolvedMediaUrl}}
-                                style={styles.sharedPostImage}
-                                resizeMode="cover"
-                              />
-                              {overlayPayload ? (
-                                <PostTextOverlays
-                                  overlays={overlayPayload.overlays}
-                                  previewWidth={overlayPayload.previewWidth}
-                                  previewHeight={overlayPayload.previewHeight}
-                                  coordsSpace={overlayPayload.coordsSpace}
-                                  feedWidth={236}
-                                  feedHeight={236 * (12 / 9)}
-                                />
-                              ) : null}
-                            </>
+                            <FeedPostPreviewMedia
+                              listing={{
+                                feed_post: cached?.feedPost ?? true,
+                                general_details: cached?.generalDetails ?? null,
+                                main_image_url: resolvedMediaUrl,
+                                image: resolvedMediaUrl,
+                              }}
+                              style={styles.sharedPostImage}
+                              showOpenHouseChrome={false}
+                              showVideoPlayIcon={false}
+                            />
                           ) : previewLines ? (
                             <View style={styles.sharedPostImagePlaceholder}>
                               <Text
@@ -2714,7 +2832,11 @@ const ChatScreen = ({
                 ) : msg.mediaType === 'image' && msg.mediaUrl ? (
                   brokenImageUrls[msg.mediaUrl] ? (
                     <View
-                      style={[styles.bubbleImage, styles.bubbleImageBroken]}
+                      style={[
+                        styles.bubbleImage,
+                        styles.bubbleImageBroken,
+                        photoBox,
+                      ]}
                       accessibilityRole="image"
                       accessibilityLabel="לא ניתן לטעון את התמונה">
                       <MaterialCommunityIcons
@@ -2728,13 +2850,44 @@ const ChatScreen = ({
                     activeOpacity={0.92}
                     onPress={() => openChatImageFullScreen(msg.mediaUrl)}
                     accessibilityRole="imagebutton"
-                    accessibilityLabel="פתח תמונה במסך מלא">
+                    accessibilityLabel="פתח תמונה במסך מלא"
+                    style={[styles.chatPhotoTap, photoBox]}>
                     <Image
                       source={{uri: msg.mediaUrl}}
-                      style={styles.bubbleImage}
+                      style={[styles.bubbleImage, photoBox]}
                       resizeMode="cover"
+                      onLoad={e => {
+                        const src = e?.nativeEvent?.source;
+                        rememberChatImageSize(
+                          msg.mediaUrl,
+                          src?.width,
+                          src?.height,
+                        );
+                      }}
                       onError={() => markChatImageBroken(msg.mediaUrl)}
                     />
+                    {isPhotoOnly && bubbleTimeLabel ? (
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.55)']}
+                        style={styles.chatPhotoTimeBar}
+                        pointerEvents="none">
+                        <Text
+                          style={styles.chatPhotoTimeText}
+                          numberOfLines={1}>
+                          {bubbleTimeLabel}
+                        </Text>
+                        {m.isMe && !isWelcome ? (
+                          <ChatOutgoingReadTicks
+                            isRead={messageRead}
+                            color={
+                              messageRead
+                                ? CHAT_READ_TICK_BLUE
+                                : 'rgba(255,255,255,0.9)'
+                            }
+                          />
+                        ) : null}
+                      </LinearGradient>
+                    ) : null}
                   </TouchableOpacity>
                   )
                 ) : msg.mediaType === 'file' && msg.mediaUrl ? (
@@ -2787,6 +2940,8 @@ const ChatScreen = ({
                     }
                     onTogglePlay={() => toggleVoicePlayback(m.id, msg.mediaUrl)}
                     onDurationKnown={handleVoiceDurationKnown}
+                    showReadTicks={m.isMe === true && !isWelcome}
+                    isRead={messageRead}
                   />
                 ) : null}
                 {isGroupThread && !m.isMe && m.senderId ? (
@@ -2802,11 +2957,16 @@ const ChatScreen = ({
                       {bodyTrim}
                     </Text>
                     {bubbleTimeLabel ? (
-                      <Text
-                        style={styles.bubbleTimeInline}
-                        numberOfLines={1}>
-                        {bubbleTimeLabel}
-                      </Text>
+                      <View style={styles.bubbleTimeMetaInline}>
+                        <Text
+                          style={styles.bubbleTimeInline}
+                          numberOfLines={1}>
+                          {bubbleTimeLabel}
+                        </Text>
+                        {m.isMe && !isWelcome ? (
+                          <ChatOutgoingReadTicks isRead={messageRead} />
+                        ) : null}
+                      </View>
                     ) : null}
                   </View>
                 ) : bodyTrim &&
@@ -2839,10 +2999,17 @@ const ChatScreen = ({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
-                {!(hasAudio && !bodyTrim) && !isPlainTextBubble ? (
-                  <Text style={styles.bubbleTime} numberOfLines={1}>
-                    {bubbleTimeLabel}
-                  </Text>
+                {!(hasAudio && !bodyTrim) &&
+                !isPlainTextBubble &&
+                !isPhotoOnly ? (
+                  <View style={styles.bubbleTime}>
+                    <Text style={styles.bubbleTimeText} numberOfLines={1}>
+                      {bubbleTimeLabel}
+                    </Text>
+                    {m.isMe && !isWelcome ? (
+                      <ChatOutgoingReadTicks isRead={messageRead} />
+                    ) : null}
+                  </View>
                 ) : null}
               </Pressable>
             </View>
@@ -4097,19 +4264,23 @@ const ChatScreen = ({
         animationType="slide"
         presentationStyle="fullScreen"
         onRequestClose={() => setShowAddMembersModal(false)}>
-        <View style={styles.addMembersRoot}>
+        <View style={[styles.addMembersRoot, {paddingTop: insets.top}]}>
           <View style={styles.addMembersHeader}>
             <TouchableOpacity
               onPress={() => setShowAddMembersModal(false)}
-              style={styles.addMembersBackBtn}
-              activeOpacity={0.7}>
+              style={styles.addMembersSideBtn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="חזור">
               <MaterialCommunityIcons
                 name="chevron-left"
-                size={26}
+                size={28}
                 color="#fff"
               />
             </TouchableOpacity>
-            <Text style={styles.addMembersTitle}>הוסף חברים לקבוצה</Text>
+            <Text style={styles.addMembersTitle} numberOfLines={1}>
+              הוסף חברים לקבוצה
+            </Text>
             <TouchableOpacity
               onPress={submitAddMembers}
               disabled={
@@ -4118,32 +4289,103 @@ const ChatScreen = ({
                   k => addMembersSelected[k],
                 ).length === 0
               }
-              style={styles.addMembersSaveBtn}
-              activeOpacity={0.7}>
+              style={styles.addMembersSideBtn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="שמור">
               {addMembersSubmitting ? (
                 <ActivityIndicator size="small" color={GOLD} />
               ) : (
-                <Text style={styles.addMembersSaveText}>שמור</Text>
+                <Text
+                  style={[
+                    styles.addMembersSaveText,
+                    Object.keys(addMembersSelected).filter(
+                      k => addMembersSelected[k],
+                    ).length === 0 && styles.addMembersSaveTextDisabled,
+                  ]}>
+                  שמור
+                </Text>
               )}
             </TouchableOpacity>
           </View>
-          <View style={styles.addMembersSearchWrap}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color="rgba(255,255,255,0.55)"
-            />
-            <TextInput
-              style={styles.addMembersSearchInput}
-              placeholder="חפש"
-              placeholderTextColor="rgba(255,255,255,0.45)"
-              value={addMembersSearch}
-              onChangeText={setAddMembersSearch}
-            />
+          <View style={styles.addMembersSearchFullBleed}>
+            <View style={styles.addMembersSearchWrap}>
+              <TextInput
+                style={styles.addMembersSearchInput}
+                placeholder="חפש"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                value={addMembersSearch}
+                onChangeText={setAddMembersSearch}
+              />
+              <MaterialCommunityIcons
+                name="magnify"
+                size={22}
+                color="rgba(255,255,255,0.55)"
+                style={styles.addMembersSearchIcon}
+              />
+            </View>
           </View>
+          {Object.keys(addMembersSelected).some(k => addMembersSelected[k]) ? (
+            <View style={styles.addMembersChipsSection}>
+              <Text style={styles.addMembersChipsLabel}>חברים שהתווספו</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.addMembersChipsScroll}>
+                {Object.keys(addMembersSelected)
+                  .filter(k => addMembersSelected[k])
+                  .map(email => {
+                    const row = addMembersCandidates.find(
+                      r =>
+                        String(r?.email || '')
+                          .trim()
+                          .toLowerCase() === email,
+                    );
+                    const title =
+                      (row?.title && String(row.title).trim()) || email;
+                    const pic = normalizeAvatarUrl(
+                      getUserProfileImageUrl(row),
+                    );
+                    return (
+                      <View key={email} style={styles.addMembersChipCol}>
+                        <View style={styles.addMembersChipAvatarWrap}>
+                          <ProfileAvatar
+                            uri={pic}
+                            name={title}
+                            size={64}
+                            subscriptionType={
+                              row?.subscriptionType ||
+                              row?.subscription_type ||
+                              (groupAddAudience === 'regular'
+                                ? 'user'
+                                : 'broker')
+                            }
+                          />
+                          <TouchableOpacity
+                            style={styles.addMembersChipRemove}
+                            onPress={() => toggleAddMember(email)}
+                            hitSlop={{top: 6, bottom: 6, left: 6, right: 6}}
+                            accessibilityRole="button"
+                            accessibilityLabel="הסר">
+                            <Text style={styles.addMembersChipRemoveX}>×</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.addMembersChipName} numberOfLines={1}>
+                          {title}
+                        </Text>
+                      </View>
+                    );
+                  })}
+              </ScrollView>
+            </View>
+          ) : null}
           <ScrollView
             style={styles.addMembersScroll}
-            contentContainerStyle={styles.addMembersScrollContent}
+            contentContainerStyle={[
+              styles.addMembersScrollContent,
+              {paddingBottom: Math.max(insets.bottom, 16) + 24},
+            ]}
             keyboardShouldPersistTaps="handled">
             {addMembersLoading ? (
               <View style={styles.addMembersLoadingWrap}>
@@ -4154,53 +4396,69 @@ const ChatScreen = ({
                 לא נמצאו משתמשים מתאימים להוספה.
               </Text>
             ) : (
-              addMembersCandidates.map((row, i) => {
-                const email = String(row?.email || '')
-                  .trim()
-                  .toLowerCase();
-                const checked = !!addMembersSelected[email];
-                const pic = normalizeAvatarUrl(getUserProfileImageUrl(row));
-                return (
-                  <Pressable
-                    key={email || row?.id || `cand-${i}`}
-                    style={[
-                      styles.addMemberRow,
-                      i > 0 && styles.addMemberRowBorder,
-                    ]}
-                    onPress={() => toggleAddMember(email)}
-                    android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                    <View style={styles.addMemberCheckCol}>
-                      <View
-                        style={[
-                          styles.addMemberCheckOuter,
-                          checked && styles.addMemberCheckOuterOn,
-                        ]}>
-                        {checked ? (
-                          <View style={styles.addMemberCheckInner} />
+              <View style={styles.addMembersCard}>
+                {addMembersCandidates.map((row, i) => {
+                  const email = String(row?.email || '')
+                    .trim()
+                    .toLowerCase();
+                  const checked = !!addMembersSelected[email];
+                  const pic = normalizeAvatarUrl(getUserProfileImageUrl(row));
+                  const title =
+                    (row?.title && String(row.title).trim()) || email;
+                  const sub =
+                    (row?.subtitle && String(row.subtitle).trim()) || '';
+                  const hideSub =
+                    groupAddAudience === 'regular' ||
+                    !sub ||
+                    sub === title;
+                  return (
+                    <Pressable
+                      key={email || row?.id || `cand-${i}`}
+                      style={[
+                        styles.addMemberRow,
+                        i > 0 && styles.addMemberRowBorder,
+                      ]}
+                      onPress={() => toggleAddMember(email)}
+                      android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
+                      <View style={styles.addMemberCheckCol}>
+                        <View
+                          style={[
+                            styles.addMemberCheckOuter,
+                            checked && styles.addMemberCheckOuterOn,
+                          ]}>
+                          {checked ? (
+                            <MaterialCommunityIcons
+                              name="check"
+                              size={14}
+                              color={GOLD}
+                            />
+                          ) : null}
+                        </View>
+                      </View>
+                      <View style={styles.addMemberTextCol}>
+                        <Text style={styles.addMemberName} numberOfLines={1}>
+                          {title}
+                        </Text>
+                        {!hideSub ? (
+                          <Text style={styles.addMemberSub} numberOfLines={1}>
+                            {sub}
+                          </Text>
                         ) : null}
                       </View>
-                    </View>
-                    <View style={styles.addMemberTextCol}>
-                      <Text style={styles.addMemberName} numberOfLines={1}>
-                        {row?.title || email}
-                      </Text>
-                      <Text style={styles.addMemberSub} numberOfLines={1}>
-                        {row?.subtitle || email}
-                      </Text>
-                    </View>
-                    <ProfileAvatar
-                      uri={pic}
-                      name={row?.title || email}
-                      size={48}
-                      subscriptionType={
-                        row?.subscriptionType ||
-                        row?.subscription_type ||
-                        (groupAddAudience === 'regular' ? 'user' : 'broker')
-                      }
-                    />
-                  </Pressable>
-                );
-              })
+                      <ProfileAvatar
+                        uri={pic}
+                        name={title}
+                        size={56}
+                        subscriptionType={
+                          row?.subscriptionType ||
+                          row?.subscription_type ||
+                          (groupAddAudience === 'regular' ? 'user' : 'broker')
+                        }
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
             )}
           </ScrollView>
         </View>
@@ -4223,7 +4481,7 @@ const ChatScreen = ({
         description={savedGroupDescription}
         members={visibleGroupMembers}
         myEmail={myEmail}
-        isBrokerUser={isBrokerUser}
+        isBrokerUser={isTrueBrokerUser}
         busy={groupManageBusy}
         onRefresh={refreshGroupFromServer}
         onEditDescription={() => {
@@ -4677,15 +4935,13 @@ const styles = StyleSheet.create({
   addMembersHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 52,
     paddingBottom: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  addMembersBackBtn: {
-    width: 44,
+  addMembersSideBtn: {
+    width: 64,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
@@ -4696,40 +4952,100 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     textAlign: 'center',
-  },
-  addMembersSaveBtn: {
-    minWidth: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
+    writingDirection: 'rtl',
   },
   addMembersSaveText: {
     color: GOLD,
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
   },
-  addMembersSearchWrap: {
-    marginTop: 12,
-    marginHorizontal: 16,
-    minHeight: 48,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    // justifyContent: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
+  addMembersSaveTextDisabled: {
+    color: 'rgba(212,175,55,0.35)',
+  },
+  addMembersSearchFullBleed: {
+    width: '100%',
     paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  addMembersSearchWrap: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: 1000,
+    borderWidth: 1,
+    borderColor: '#8C85B3',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    position: 'relative',
   },
   addMembersSearchInput: {
+    flex: 1,
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
-    paddingLeft: 16,
-    paddingRight: 46,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingRight: 16,
+    paddingLeft: 46,
     textAlign: hebrewTextAlign,
-    flex: 1,
+    writingDirection: 'rtl',
+  },
+  addMembersSearchIcon: {
+    position: 'absolute',
+    right: 14,
+    zIndex: 1,
+  },
+  addMembersChipsSection: {
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  addMembersChipsLabel: {
+    color: '#D2D0DC',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  addMembersChipsScroll: {
+    flexDirection: 'row-reverse',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  addMembersChipCol: {
+    width: 72,
+    alignItems: 'center',
+  },
+  addMembersChipAvatarWrap: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+  },
+  addMembersChipRemove: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#3A3848',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMembersChipRemoveX: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  addMembersChipName: {
+    marginTop: 6,
+    color: '#F7F3E6',
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    width: '100%',
     writingDirection: 'rtl',
   },
   addMembersScroll: {
@@ -4738,7 +5054,11 @@ const styles = StyleSheet.create({
   },
   addMembersScrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+  },
+  addMembersCard: {
+    backgroundColor: '#252436',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   addMembersLoadingWrap: {
     paddingVertical: 28,
@@ -4749,41 +5069,39 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.65)',
     fontSize: 14,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
-    paddingTop: 12,
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    paddingTop: 16,
+    paddingHorizontal: 4,
   },
   addMemberRow: {
-    minHeight: 84,
-    paddingVertical: 14,
+    minHeight: 88,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   addMemberRowBorder: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
   addMemberCheckCol: {
-    width: 38,
-    alignItems: flexEnd,
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addMemberCheckOuter: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1,
+    borderColor: GOLD,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addMemberCheckOuterOn: {
-    borderColor: GOLD,
-    backgroundColor: 'rgba(212,175,55,0.16)',
-  },
-  addMemberCheckInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: GOLD,
+    backgroundColor: '#000000',
   },
   addMemberTextCol: {
     flex: 1,
@@ -4791,30 +5109,21 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   addMemberName: {
-    color: '#fff',
+    color: '#F7F3E6',
     fontSize: 16,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    width: '100%',
   },
   addMemberSub: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
     marginTop: 2,
-  },
-  addMemberAvatarRing: {
-    marginLeft: 12,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  addMemberAvatar: {
     width: '100%',
-    height: '100%',
   },
   exclusiveCtaWrap: {
     alignSelf: 'stretch',
@@ -5277,9 +5586,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     flexShrink: 0,
+    textAlign: 'left',
+    ...forceLtrStyle,
+  },
+  bubbleTimeMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     alignSelf: flexStart,
     marginTop: 4,
-    textAlign: 'left',
     ...forceLtrStyle,
   },
   exclusiveStatusBanner: {
@@ -5370,15 +5685,51 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   bubbleImage: {
-    width: 220,
-    height: 168,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   bubbleImageBroken: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bubblePhoto: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+    overflow: 'hidden',
+    backgroundColor: '#1a1926',
+  },
+  bubblePhotoOnly: {
+    paddingBottom: 0,
+  },
+  chatPhotoTap: {
+    overflow: 'hidden',
+  },
+  chatPhotoTimeBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 28,
+    paddingBottom: 7,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 3,
+    ...forceLtrStyle,
+  },
+  chatPhotoTimeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    lineHeight: 14,
+    textAlign: 'left',
+    flexShrink: 0,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 2,
+    ...forceLtrStyle,
   },
   fullScreenImageRoot: {
     flex: 1,
@@ -5454,7 +5805,6 @@ const styles = StyleSheet.create({
   },
   sharedPostImageWrap: {
     width: '100%',
-    aspectRatio: 9 / 12,
     backgroundColor: 'rgba(0,0,0,0.25)',
     position: 'relative',
   },
@@ -5527,6 +5877,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     ...(Platform.OS === 'web' ? {right: 12} : {left: 12}),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    ...forceLtrStyle,
+  },
+  bubbleTimeText: {
     color: 'rgba(55,53,72,0.7)',
     fontSize: 11,
     lineHeight: 14,

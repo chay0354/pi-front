@@ -1,7 +1,7 @@
 import {I18nManager, Platform} from 'react-native';
 
-/** Figma gold CTA / pill gradient — rgb(254,231,135) → rgb(189,153,71) → rgb(156,101,34) */
-export const GOLD_GRADIENT_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
+/** Yellow-gold accent — brighter/yellower than antique gold. */
+export const GOLD_GRADIENT_COLORS = ['#FFE56A', '#F7C63A', '#E5A80F'];
 export const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 const FIGMA_START = {x: 0, y: 0};

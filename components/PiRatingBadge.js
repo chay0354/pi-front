@@ -34,7 +34,7 @@ const VARIANTS = {
     wrap: {gap: 2},
     text: {
       fontSize: 22,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -1}],
+      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -5}],
     },
     ring: {width: 85, height: 85, marginLeft: -7, top: -35},
     composite: composite(59),
@@ -43,7 +43,7 @@ const VARIANTS = {
     wrap: {gap: 2, minWidth: 48, minHeight: 48},
     text: {
       fontSize: 18,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: 2}],
+      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -2}],
     },
     ring: {width: 85, height: 85, marginLeft: -7, top: -16},
     composite: composite(56),

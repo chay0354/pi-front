@@ -2,9 +2,47 @@ import {
   subscriptionTypes,
   isCompanySubscriptionType,
   isProjectMarketerType,
+  isTeamMarketerUnderManager,
+  isMarketingManager,
   BROKER_ACTIVITY_REGIONS,
   PROFESSIONAL_FILTER_TYPES,
 } from './constant';
+
+const PROFILE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Placeholder / seed emails that must never be shown as a profile identity. */
+export function isPlaceholderProfileEmail(email) {
+  const e = String(email || '')
+    .trim()
+    .toLowerCase();
+  if (!e) return true;
+  return (
+    e === 'broker-placeholder@example.com' ||
+    e.includes('placeholder') ||
+    e.endsWith('@placeholder.local')
+  );
+}
+
+export function isProfileEmailString(value) {
+  return PROFILE_EMAIL_RE.test(String(value || '').trim());
+}
+
+/** Real subscription email only — never a listing leftover or placeholder. */
+export function resolveProfileEmail(user, extras = {}) {
+  const candidates = [
+    extras.preferred,
+    user?.email,
+    extras.fallback,
+    user?.creator_email,
+  ];
+  for (const candidate of candidates) {
+    const e = String(candidate || '').trim();
+    if (e && isProfileEmailString(e) && !isPlaceholderProfileEmail(e)) {
+      return e;
+    }
+  }
+  return '';
+}
 
 /**
  * Display name shown on profile, settings, and headers — must match
@@ -29,13 +67,21 @@ export function resolveProfileDisplayName(user, {fallback = 'משתמש'} = {}) 
       user.contact_person_name ||
       '';
   } else if (isProjectMarketerType(type)) {
-    // Registered via company flow — headline is business_name, not broker_office_name.
-    name =
-      user.business_name ||
-      user.name ||
-      user.contact_person_name ||
-      user.broker_office_name ||
-      '';
+    if (isTeamMarketerUnderManager(user)) {
+      // Personal headline — business_name is copied from the marketing manager.
+      name =
+        user.name ||
+        user.contact_person_name ||
+        '';
+    } else {
+      // Registered via company flow — headline is business_name, not broker_office_name.
+      name =
+        user.business_name ||
+        user.name ||
+        user.contact_person_name ||
+        user.broker_office_name ||
+        '';
+    }
   } else {
     name =
       user.name ||
@@ -45,11 +91,63 @@ export function resolveProfileDisplayName(user, {fallback = 'משתמש'} = {}) 
       '';
   }
   const trimmed = String(name || '').trim();
-  return trimmed || fallback;
+  if (!trimmed || isProfileEmailString(trimmed) || isPlaceholderProfileEmail(trimmed)) {
+    return fallback;
+  }
+  return trimmed;
+}
+
+/** Field key for the business / office name on the edit-profile form. */
+export function getProfileBusinessNameFieldKey(subscriptionType, user = null) {
+  const t = String(subscriptionType || '').toLowerCase();
+  if (t === subscriptionTypes.professional) return 'name';
+  if (t === subscriptionTypes.broker) return 'broker_office_name';
+  if (isProjectMarketerType(t)) {
+    return isTeamMarketerUnderManager(user) ? 'name' : 'business_name';
+  }
+  if (t === subscriptionTypes.company) return 'business_name';
+  return null;
+}
+
+/**
+ * Broker, professional, and marketing managers keep a personal photo AND a
+ * company logo. Regular marketers (solo or under an agency) only have a photo.
+ * Company accounts edit the logo via the top avatar instead.
+ */
+export function hasSeparateProfileAndCompanyLogo(userOrType) {
+  if (userOrType && typeof userOrType === 'object') {
+    const t = String(
+      userOrType.subscription_type || userOrType.subscriptionType || '',
+    ).toLowerCase();
+    if (
+      t === subscriptionTypes.broker ||
+      t === subscriptionTypes.professional
+    ) {
+      return true;
+    }
+    return isMarketingManager(userOrType);
+  }
+  const t = String(userOrType || '').toLowerCase();
+  return (
+    t === subscriptionTypes.broker || t === subscriptionTypes.professional
+  );
+}
+
+export function canEditSeparateCompanyLogo(subscriptionType, user = null) {
+  const t = String(
+    subscriptionType || user?.subscription_type || user?.subscriptionType || '',
+  ).toLowerCase();
+  if (t === subscriptionTypes.broker || t === subscriptionTypes.professional) {
+    return true;
+  }
+  if (isProjectMarketerType(t)) {
+    return isMarketingManager(user || {subscription_type: t});
+  }
+  return false;
 }
 
 /** Editable profile fields per account type (keys match `subscriptions` columns). */
-export function getProfileEditFields(subscriptionType) {
+export function getProfileEditFields(subscriptionType, user = null) {
   const t = String(subscriptionType || '').toLowerCase();
   const about = {
     key: 'description',
@@ -99,12 +197,19 @@ export function getProfileEditFields(subscriptionType) {
   }
 
   if (isProjectMarketerType(t)) {
+    const nameField = isTeamMarketerUnderManager(user)
+      ? {
+          key: 'name',
+          label: 'שם המשווק',
+          placeholder: 'שם המשווק',
+        }
+      : {
+          key: 'business_name',
+          label: 'שם המשווק',
+          placeholder: 'שם המשווק',
+        };
     return [
-      {
-        key: 'business_name',
-        label: 'שם המשווק',
-        placeholder: 'שם המשווק',
-      },
+      nameField,
       {
         key: 'contact_person_name',
         label: 'איש קשר',
@@ -279,7 +384,9 @@ export function hydrateProfileEditForm(user, fields) {
     }
     if (f.key === 'name' && !val.trim()) {
       if (u.contact_person_name) val = String(u.contact_person_name);
-      else if (u.business_name) val = String(u.business_name);
+      else if (!isTeamMarketerUnderManager(u) && u.business_name) {
+        val = String(u.business_name);
+      }
     }
     if (f.key === 'contact_person_name' && !val.trim() && u.name) {
       val = String(u.name);

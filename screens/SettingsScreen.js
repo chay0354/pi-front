@@ -70,6 +70,7 @@ const SettingsScreen = ({
   onOpenFeedback,
   onOpenTermsOfUse,
   onOpenAccessibilityStatement,
+  onOpenAccessibilityMenu,
   onOpenOwnProfile,
   onEditProfile,
   unreadChatCount = 0,
@@ -194,10 +195,7 @@ const SettingsScreen = ({
     })
       .then(data => {
         if (cancelled) return;
-        // Accepted follows only (exclude pending outgoing requests).
-        const rows = (Array.isArray(data?.rows) ? data.rows : []).filter(
-          row => !row?.outgoing_follow_pending,
-        );
+        const rows = Array.isArray(data?.rows) ? data.rows : [];
         setFollowingPreviewRows(rows.slice(0, 4));
       })
       .catch(() => {
@@ -634,6 +632,28 @@ const SettingsScreen = ({
           )}
         </View>
       </View>
+
+      <View style={styles.section}>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.cardItem}
+            onPress={() =>
+              onOpenAccessibilityMenu
+                ? onOpenAccessibilityMenu()
+                : onOpenAccessibilityStatement &&
+                  onOpenAccessibilityStatement()
+            }
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="נגישות">
+            {renderChevron()}
+            <View style={styles.cardItemTextWrap}>
+              <Text style={styles.cardItemText}>נגישות</Text>
+              {renderMenuIcon('accessibility')}
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
     </ScrollView>
   );
 };
@@ -680,7 +700,7 @@ const styles = StyleSheet.create({
   },
   logoIcon: {
     height: 80,
-    width: 90,
+    width: 102,
   },
   sloganImage: {
     height: 21,

@@ -131,17 +131,37 @@ export const GeneralDetails = ({
               )}
 
               {
-                /* Distance input */
+                /* Sukkah / balcony size — stored on the amenity, not property area */
                 hasDistance && isSelected && (
                   <View style={styles.amenityOptionSecondContainer}>
                     <Title
-                      text={'גודל מרפסת'}
+                      text={
+                        typeof amenity?.distance === 'string' &&
+                        amenity.distance.trim()
+                          ? amenity.distance
+                          : 'גודל מרפסת'
+                      }
                       textStyle={[styles.inputLabel, inputLabelSpacing]}
                     />
                     <CountUpdate
                       isArea={true}
-                      count={area}
-                      setCount={setArea}
+                      count={(() => {
+                        const v = amenities[amenityKey];
+                        if (typeof v === 'number' && Number.isFinite(v)) {
+                          return Math.max(0, v);
+                        }
+                        if (typeof v === 'string' && v.trim() !== '') {
+                          const n = Number(v);
+                          if (Number.isFinite(n)) return Math.max(0, n);
+                        }
+                        return 0;
+                      })()}
+                      setCount={val =>
+                        setAmenityQuantity(
+                          amenityKey,
+                          Math.max(0, Number(val) || 0),
+                        )
+                      }
                       isDivider={false}
                       isLast={true}
                       counterInputStyle={{marginBottom: 0}}

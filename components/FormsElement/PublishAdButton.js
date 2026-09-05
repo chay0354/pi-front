@@ -17,7 +17,7 @@ import {
 
 const GRAY_BUTTON = require('../../assets/ad-uplaud/button-gray.png');
 const YELLOW_BUTTON = require('../../assets/ad-uplaud/button-yelow.png');
-const SAVE_BUTTON_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const SAVE_BUTTON_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const SAVE_BUTTON_GRADIENT_LOCATIONS = [0, 0.52, 1];
 
 function resolvePublishAspectRatios() {

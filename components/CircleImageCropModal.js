@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: CROP_SIZE / 2,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#BD9947',
+    borderColor: '#F7C63A',
     backgroundColor: '#1e1d27',
   },
   hintText: {

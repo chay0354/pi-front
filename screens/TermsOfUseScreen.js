@@ -14,7 +14,7 @@ import {TERMS_OF_USE_HEBREW} from './termsOfUseContent';
 import {hasAcceptedTerms} from '../utils/onboardingStorage';
 
 /** Figma 280:9201 — gold gradient pill (top→bottom). */
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCS = [0.0456, 0.5076, 0.8831];
 
 /** Inline link phrase → scrolls to the privacy section below. */

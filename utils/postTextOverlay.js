@@ -292,6 +292,50 @@ export const parsePostTextOverlayPayload = listing => {
 /** Links a homepage story slide back to its feed-post listing (edit sync). */
 export const FEED_POST_LISTING_ID_KEY = 'feed_listing_id';
 
+/** Editor + TikTok feed — same color-background presets, same order. */
+export const POST_BACKGROUND_GRADIENTS = [
+  ['#2B2A39', '#5149C4'],
+  ['#3B2600', '#8A5A0C'],
+  ['#3B1014', '#6B1E27'],
+  ['#043144', '#0F6F94'],
+  ['#2C1A4A', '#533288'],
+];
+
+/**
+ * Parse stored wallpaper index. `Number(null) === 0` must never win — that
+ * turned every image post into gradient wallpaper 0.
+ */
+export function parsePostBackgroundGradientIndex(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'boolean') return null;
+  const idx = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(idx) || idx < 0) return null;
+  return Math.floor(idx);
+}
+
+function isRemotePostStillUrl(raw) {
+  const uri = raw != null ? String(raw).trim() : '';
+  if (!uri || /^text-post-placeholder$/i.test(uri)) return false;
+  if (!/^https?:\/\//i.test(uri)) return false;
+  return !/\.(mp4|m3u8|webm|mov|m4v)(\?|$)/i.test(uri);
+}
+
+/** Full-screen color background for a text-on-gradient feed post, or null. */
+export function resolvePostBackgroundGradient(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  const gd =
+    listing.general_details &&
+    typeof listing.general_details === 'object' &&
+    !Array.isArray(listing.general_details)
+      ? listing.general_details
+      : parseListingGeneralDetails(listing.general_details);
+  const idx = parsePostBackgroundGradientIndex(
+    listing.postBgGradientIndex ?? gd?.post_bg_gradient_index,
+  );
+  if (idx == null) return null;
+  return POST_BACKGROUND_GRADIENTS[idx] || POST_BACKGROUND_GRADIENTS[0];
+}
+
 /** general_details fragment to persist overlay layout for a post. */
 export const buildPostTextGeneralDetails = (
   postTextMeta,
@@ -327,10 +371,9 @@ export const buildPostTextGeneralDetails = (
   if (textBakedIntoImage) {
     gd.post_text_baked = true;
   }
-  const gradientIdx = Number(backgroundGradientIndex);
-  if (Number.isFinite(gradientIdx) && gradientIdx >= 0) {
-    gd.post_bg_gradient_index = gradientIdx;
-  }
+  // Always persist null (never omit) so photo posts clear a stale 0.
+  gd.post_bg_gradient_index =
+    parsePostBackgroundGradientIndex(backgroundGradientIndex);
   return gd;
 };
 
@@ -358,12 +401,12 @@ export function parsePostEditorRestoreInfo(listing) {
     gd?.post_source_image_url != null
       ? String(gd.post_source_image_url).trim()
       : '';
-  const gradientIdx = Number(gd?.post_bg_gradient_index);
   return {
     textBaked: gd?.post_text_baked === true,
     sourceImageUrl: source || null,
-    bgGradientIndex:
-      Number.isFinite(gradientIdx) && gradientIdx >= 0 ? gradientIdx : null,
+    bgGradientIndex: parsePostBackgroundGradientIndex(
+      gd?.post_bg_gradient_index,
+    ),
   };
 }
 
@@ -388,8 +431,11 @@ export function shouldRenderPostTextOverlaysOnFeed(listing) {
     listing?.feed_post === 'true' ||
     listing?.feed_post === 't' ||
     listing?.isPost === true ||
+    listing?.isPostEntry === true ||
+    listing?.isTextOnlyPost === true ||
     listing?.type === 'post' ||
-    listing?.type === 'feed_post';
+    listing?.type === 'feed_post' ||
+    listing?.propertyType === 'post';
   if (!isFeedPost) return false;
 
   const payload = parsePostTextOverlayPayload(listing);
@@ -474,6 +520,39 @@ export function extractPostListingMediaUrls(listing) {
     videoUrl: videoUrl ? String(videoUrl).trim() : null,
     mainImageUrl: mainImageUrl ? String(mainImageUrl).trim() : null,
   };
+}
+
+/**
+ * Live wallpaper/gradient is only for text-only posts. A real photo or video
+ * always wins — including posts that leaked `post_bg_gradient_index: 0`
+ * because `Number(null) === 0`.
+ */
+export function shouldUseLiveColorPostBackground(listing) {
+  if (!resolvePostBackgroundGradient(listing)) return false;
+  const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(listing);
+  if (videoUrl) return false;
+  if (isRemotePostStillUrl(mainImageUrl)) return false;
+  const feedImages = listing?.images;
+  if (Array.isArray(feedImages)) {
+    for (const img of feedImages) {
+      const uri =
+        typeof img === 'string'
+          ? img
+          : img?.uri || img?.url || img?.image_url;
+      if (isRemotePostStillUrl(uri)) return false;
+    }
+  }
+  const listingImages = listing?.listing_images;
+  if (Array.isArray(listingImages)) {
+    for (const img of listingImages) {
+      const uri =
+        typeof img === 'string'
+          ? img
+          : img?.image_url || img?.uri || img?.url;
+      if (isRemotePostStillUrl(uri)) return false;
+    }
+  }
+  return true;
 }
 
 function parseListingGeneralDetails(raw) {
@@ -609,6 +688,28 @@ export function hydratePostEditorBlocksFromOverlays(payload, stageLayout) {
   });
 }
 
+/** Letterbox `aspect` (width/height) inside a cell. */
+export function letterboxRect(cellWidth, cellHeight, aspect) {
+  const a = aspect > 0 ? aspect : 9 / 16;
+  const cw = Math.max(0, Number(cellWidth) || 0);
+  const ch = Math.max(0, Number(cellHeight) || 0);
+  if (!(cw > 0) || !(ch > 0)) {
+    return {width: 0, height: 0, left: 0, top: 0};
+  }
+  let width = cw;
+  let height = width / a;
+  if (height > ch) {
+    height = ch;
+    width = height * a;
+  }
+  return {
+    width,
+    height,
+    left: (cw - width) / 2,
+    top: (ch - height) / 2,
+  };
+}
+
 /** Authored post canvas (the media+text stage — no editor/feed header). */
 export function resolvePostStageCanvas(payload) {
   const overlays = Array.isArray(payload?.overlays) ? payload.overlays : [];
@@ -649,6 +750,16 @@ export const scalePostTextOverlayBlock = (
     canvas = 'preview',
   },
 ) => {
+  const isThumb = Number(feedWidth) > 0 && Number(feedWidth) < 220;
+  const minFont = isThumb ? 5 : 10;
+  const snapFont = raw => Math.max(minFont, Math.round(raw));
+  // Same 2px wrap slack as the TikTok page — extra thumb slack used to
+  // shift translateX and made preview text land left of the real post.
+  const widthSlack = 2;
+  const chipExtra = (fontSize, authoredFontSize) =>
+    Number(block.bgMode) > 0
+      ? Math.ceil(20 * (fontSize / Math.max(1, authoredFontSize)))
+      : 0;
   if (canvas === 'stage') {
     const stageW =
       Number(block.stage_w) > 0
@@ -675,14 +786,15 @@ export const scalePostTextOverlayBlock = (
       Number.isFinite(stageY)
     ) {
       const scale = feedWidth / stageW;
-      const fontSize = Math.max(10, Math.round(authoredFontSize * scale));
+      const fontSize = snapFont(authoredFontSize * scale);
       return {
         translateX: Math.round(stageX * scale),
         translateY: Math.round(stageY * (feedHeight / stageH)),
         width: Math.ceil(
           (Number(block.maxWidth) > 0 ? Number(block.maxWidth) : stageW * 0.88) *
             scale +
-            2,
+            widthSlack +
+            chipExtra(fontSize, authoredFontSize),
         ),
         padding: 0,
         fontSize,
@@ -712,13 +824,10 @@ export const scalePostTextOverlayBlock = (
         stageH;
       const nFontW = Number(block.nFontW);
       const scale = feedWidth / stageW;
-      const fontSize = Math.max(
-        10,
-        Math.round(
-          Number.isFinite(nFontW) && nFontW > 0
-            ? nFontW * previewWidth * scale
-            : authoredFontSize * scale,
-        ),
+      const fontSize = snapFont(
+        Number.isFinite(nFontW) && nFontW > 0
+          ? nFontW * previewWidth * scale
+          : authoredFontSize * scale,
       );
       const nw = Number(block.nw);
       return {
@@ -727,7 +836,8 @@ export const scalePostTextOverlayBlock = (
         width: Math.ceil(
           (Number.isFinite(nw) && nw > 0 ? nw * previewWidth : stageW * 0.88) *
             scale +
-            2,
+            widthSlack +
+            chipExtra(fontSize, authoredFontSize),
         ),
         padding: 0,
         fontSize,
@@ -765,17 +875,18 @@ export const scalePostTextOverlayBlock = (
           ? nFont * feedHeight
           : authoredFontSize *
             (previewWidth > 0 ? feedWidth / previewWidth : 1);
-    const fontSize = Math.max(10, Math.round(rawFontSize));
+    const fontSize = snapFont(rawFontSize);
     const baseWidth =
       Number.isFinite(nw) && nw > 0 ? nw * feedWidth : feedWidth * 0.88;
     // Rounding + font rasterization differences can cost a fraction of a pixel
-    // and push the last word onto a new line. Widen symmetrically so the box
-    // still holds the same glyphs without shifting the text.
-    const widthSlack = 2;
+    // and push the last word onto a new line. Widen so the box still holds
+    // the same glyphs — extra slack on small thumbnails.
     return {
-      translateX: Math.round(nx * feedWidth - widthSlack / 2),
+      translateX: Math.round(nx * feedWidth),
       translateY: Math.round(ny * feedHeight),
-      width: Math.ceil(baseWidth + widthSlack),
+      width: Math.ceil(
+        baseWidth + widthSlack + chipExtra(fontSize, authoredFontSize),
+      ),
       padding: 0,
       fontSize,
       lineHeight: Math.round(fontSize * 1.15),
@@ -798,9 +909,8 @@ export const scalePostTextOverlayBlock = (
   const scaleX = hasPreview ? feedWidth / mapWidth : 1;
   const scaleY = hasPreview ? feedHeight / mapHeight : 1;
   const fontScale = hasPreview ? Math.min(scaleX, scaleY) : 1;
-  const fontSize = Math.max(
-    10,
-    Math.round((block.fontSize ?? DEFAULT_FONT_SIZE) * fontScale),
+  const fontSize = snapFont(
+    (block.fontSize ?? DEFAULT_FONT_SIZE) * fontScale,
   );
 
   const baseX = useStageRemap
@@ -814,9 +924,11 @@ export const scalePostTextOverlayBlock = (
     translateX: hasPreview ? Math.round(baseX * scaleX) : baseX,
     translateY: hasPreview ? Math.round(baseY * scaleY) : baseY,
     width:
-      block.maxWidth != null && hasPreview
+      (block.maxWidth != null && hasPreview
         ? Math.round(block.maxWidth * scaleX)
-        : Math.round(feedWidth * 0.88),
+        : Math.round(feedWidth * 0.88)) +
+      widthSlack +
+      chipExtra(fontSize, block.fontSize ?? DEFAULT_FONT_SIZE),
     padding: 0,
     fontSize,
     lineHeight: Math.round(fontSize * 1.15),

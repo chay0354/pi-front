@@ -16,6 +16,7 @@ import {
   Platform,
   Linking,
   BackHandler,
+  Animated,
 } from 'react-native';
 import {forceRtlStyle} from './utils/rtlLayout';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -78,6 +79,7 @@ import {
   FeedbackSuggestionScreen,
   TermsOfUseScreen,
   AccessibilityStatementScreen,
+  AccessibilityMenuScreen,
   ProjectMarketerPlanScreen,
   JoinAgencyScreen,
   AgencyJoinCodeScreen,
@@ -87,6 +89,10 @@ import {
 import CompanyReportSuccessModal from './components/CompanyReportSuccessModal';
 import PublishSuccessToast from './components/PublishSuccessToast';
 import {ContextHook} from './hooks/ContextHook';
+import {
+  AccessibilityProvider,
+  useAccessibility,
+} from './hooks/AccessibilityContext';
 import {PresenceProvider} from './hooks/PresenceContext';
 import {
   subscriptionTypes,
@@ -104,11 +110,13 @@ import {
 import {
   getChatUnreadCount,
   getListings,
+  getListingPreview,
   getCurrentUser,
   getSubscription,
   toSubscriptionId,
   resolveSubscriptionId,
 } from './utils/api';
+import {parseSharedPostIdFromUrl} from './utils/sharePostLink';
 import {resolveSalesImageEditorListing} from './utils/postTextOverlay';
 import {
   getUserProfileImageUrl,
@@ -189,6 +197,7 @@ const screenName = {
   favorites: 'favorites',
   feedbackSuggestion: 'feedbackSuggestion',
   termsOfUse: 'termsOfUse',
+  accessibilityMenu: 'accessibilityMenu',
   accessibilityStatement: 'accessibilityStatement',
   selectedProjects: 'selectedProjects',
   professionalsDirectory: 'professionalsDirectory',
@@ -267,6 +276,7 @@ const DEFAULT_TIKTOK_TOP_FILTER = 'pics';
  * Entry point for the PI Real Estate application
  */
 function App() {
+  const {prefs: a11yPrefs, applyEpoch, ready: a11yReady} = useAccessibility();
   const [fontsLoaded] = useFonts(criticalFonts);
 
   useEffect(() => {
@@ -288,8 +298,11 @@ function App() {
   /** After onboarding: must accept terms before using the app. */
   const [showTermsGate, setShowTermsGate] = useState(false);
   const [currentScreen, setCurrentScreen] = useState(screenName.home);
-  /** Keeps boot splash visible until HomeIntroModal has painted underneath. */
-  const [introOverlayReady, setIntroOverlayReady] = useState(false);
+  const [accessibilityStatementReturn, setAccessibilityStatementReturn] =
+    useState(screenName.settings);
+  /** Static splash stays up until the intro logo actually starts moving. */
+  const bootCoverOpacity = useRef(new Animated.Value(1)).current;
+  const [bootCoverMounted, setBootCoverMounted] = useState(true);
   const nativeSplashHiddenRef = useRef(false);
 
   const hideNativeSplashOnce = useCallback(() => {
@@ -298,34 +311,50 @@ function App() {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
-  const handleIntroMoveStart = useCallback(() => {
-    requestAnimationFrame(() => {
-      setIntroOverlayReady(true);
-      hideNativeSplashOnce();
-    });
+  const handleBootSplashFirstPaint = useCallback(() => {
+    hideNativeSplashOnce();
   }, [hideNativeSplashOnce]);
+
+  const handleIntroOverlayPainted = useCallback(() => {
+    hideNativeSplashOnce();
+  }, [hideNativeSplashOnce]);
+
+  const handleIntroMoveStart = useCallback(() => {
+    // Native-thread hide — a React unmount here re-renders the whole tree
+    // and flashes a different frame before the morph starts.
+    bootCoverOpacity.setValue(0);
+    setTimeout(() => setBootCoverMounted(false), 400);
+  }, [bootCoverOpacity]);
 
   const wantsHomeIntro =
     !hasShownHomeIntro && !showOnboarding && !showTermsGate;
 
   const isBootstrapped = fontsLoaded && appBootstrapDone;
   const showBootCover =
-    !isBootstrapped || (wantsHomeIntro && !introOverlayReady);
+    bootCoverMounted &&
+    (!isBootstrapped || (!showOnboarding && !showTermsGate));
 
   useEffect(() => {
     if (!isBootstrapped) return;
-    if (!wantsHomeIntro) {
-      setIntroOverlayReady(true);
+    if (showOnboarding || showTermsGate) {
+      bootCoverOpacity.setValue(0);
+      setBootCoverMounted(false);
       hideNativeSplashOnce();
     }
-  }, [isBootstrapped, wantsHomeIntro, hideNativeSplashOnce]);
+  }, [
+    isBootstrapped,
+    showOnboarding,
+    showTermsGate,
+    hideNativeSplashOnce,
+    bootCoverOpacity,
+  ]);
 
   useLayoutEffect(() => {
     if (!isBootstrapped) return;
-    if (!wantsHomeIntro) {
+    if (showOnboarding || showTermsGate) {
       hideNativeSplashOnce();
     }
-  }, [isBootstrapped, wantsHomeIntro, hideNativeSplashOnce]);
+  }, [isBootstrapped, showOnboarding, showTermsGate, hideNativeSplashOnce]);
 
   // Real navigation history — fixes back/close getting stuck oscillating
   // between two screens (e.g. chat <-> userProfile) when each screen's
@@ -486,6 +515,7 @@ function App() {
     useState(false);
   /** Reviews passed from UserProfileScreen when opening Figma full reviews page. */
   const [profileReviewsList, setProfileReviewsList] = useState(null);
+  const [profileReviewsVariant, setProfileReviewsVariant] = useState('reviews');
   /** One-shot: reopen the Pi AI search (home flip back face) when next showing home. */
   const [piAiReopen, setPiAiReopen] = useState(false);
   /** Snapshot of the Pi AI search (query/results/layout) so returning restores the list. */
@@ -512,6 +542,8 @@ function App() {
     editingListing: null,
     /** Sales-image edit: do not create a new story slide on finish. */
     skipStoryPublish: false,
+    /** Existing ad already has תמונה מכירתית companions (story + feed post). */
+    salesImageAlreadyMirrored: false,
     /** Stored in `ads.description` when publishing a feed post (פוסט vs בית פתוח). */
     postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
   }));
@@ -761,6 +793,25 @@ function App() {
     [handleSidebarFilterChange],
   );
 
+  const openSharedPostFromLink = useCallback(
+    async rawUrl => {
+      const listingId = parseSharedPostIdFromUrl(rawUrl);
+      if (!listingId) return false;
+      const preview = await getListingPreview(listingId);
+      const listing = {
+        id: listingId,
+        category: preview?.category ?? null,
+        feed_post: preview?.feedPost === true,
+        propertyType: preview?.propertyType ?? (preview?.feedPost ? 'post' : null),
+        description: preview?.description ?? '',
+        main_image_url: preview?.mediaUrl ?? null,
+      };
+      openListingInTikTokFeed(listing, {returnScreen: screenName.home});
+      return true;
+    },
+    [openListingInTikTokFeed],
+  );
+
   const CHAT_LAST_OPENED_KEY = 'pi_chat_last_opened';
   // Per-user key (id or email) so every new user sees "1 unread" until they open Pi welcome once
   const piWelcomeReadKey = user => {
@@ -830,6 +881,36 @@ function App() {
 
     loadUser();
   }, []);
+
+  const pendingShareUrlRef = useRef(null);
+
+  useEffect(() => {
+    const handleIncomingUrl = ({url}) => {
+      if (!url) return;
+      if (!isBootstrapped || showOnboarding || showTermsGate) {
+        pendingShareUrlRef.current = url;
+        return;
+      }
+      openSharedPostFromLink(url);
+    };
+    const sub = Linking.addEventListener('url', handleIncomingUrl);
+    Linking.getInitialURL()
+      .then(url => {
+        if (url) handleIncomingUrl({url});
+      })
+      .catch(() => {});
+    return () => {
+      sub?.remove?.();
+    };
+  }, [isBootstrapped, openSharedPostFromLink, showOnboarding, showTermsGate]);
+
+  useEffect(() => {
+    if (!isBootstrapped || showOnboarding || showTermsGate) return;
+    const queued = pendingShareUrlRef.current;
+    if (!queued) return;
+    pendingShareUrlRef.current = null;
+    openSharedPostFromLink(queued);
+  }, [isBootstrapped, openSharedPostFromLink, showOnboarding, showTermsGate]);
 
   // When current user changes, load Pi welcome read flag for this user (by id or email)
   useEffect(() => {
@@ -1183,13 +1264,15 @@ function App() {
     [profileUser],
   );
 
-  const openProfileReviewsFromProfile = useCallback(list => {
+  const openProfileReviewsFromProfile = useCallback((list, opts) => {
     setProfileReviewsList(Array.isArray(list) ? list : []);
+    setProfileReviewsVariant(opts?.variant === 'comments' ? 'comments' : 'reviews');
     setCurrentScreen(screenName.profileReviews);
   }, []);
 
   const closeProfileReviewsList = useCallback(() => {
     setProfileReviewsList(null);
+    setProfileReviewsVariant('reviews');
     setCurrentScreen(screenName.userProfile);
   }, []);
 
@@ -1207,8 +1290,14 @@ function App() {
     <ContextHook.Provider value={{currentUser, setCurrentUser}}>
       <PresenceProvider userEmail={presenceUserEmail}>
         <SafeAreaProvider>
-          <View style={[styles.container, forceRtlStyle]}>
-            {isBootstrapped ? (
+          <View
+            style={[
+              styles.container,
+              forceRtlStyle,
+              a11yPrefs.highContrast && styles.containerHighContrast,
+            ]}>
+            <View key={`a11y-${applyEpoch}`} style={styles.a11yTree}>
+            {isBootstrapped && a11yReady ? (
               <>
             <OfflineBanner />
             {/* Dev build indicator – timestamp updates when bundle rebuilds; if it changes after refresh, new code loaded */}
@@ -1234,9 +1323,6 @@ function App() {
               <View
                 style={[
                   styles.homeShell,
-                  showBootCover &&
-                    wantsHomeIntro &&
-                    styles.homeShellUnderBootCover,
                   currentScreen === screenName.tikTokFeed &&
                     styles.homeShellCached,
                 ]}
@@ -1253,6 +1339,7 @@ function App() {
                     !hasShownHomeIntro && !showOnboarding && !showTermsGate
                   }
                   onIntroModalShown={() => setHasShownHomeIntro(true)}
+                  onIntroFirstPaint={handleIntroOverlayPainted}
                   onIntroMoveStart={handleIntroMoveStart}
                   carouselCategoryId={homeCarouselCategoryId}
                   onOpenSelectedProjects={() =>
@@ -2036,6 +2123,7 @@ function App() {
               profileReviewsList && (
                 <ProfileReviewsScreen
                   reviews={profileReviewsList}
+                  variant={profileReviewsVariant}
                   onClose={closeProfileReviewsList}
                 />
               )}
@@ -2322,6 +2410,14 @@ function App() {
                     // is created with the final sales image (incl. baked text).
                     skipStoryPublish: true,
                     editingListing: resolvedEditingListing,
+                    salesImageAlreadyMirrored: Boolean(
+                      adListing?.id &&
+                        String(
+                          adListing.sales_image_url ||
+                            adListing.salesImageUrl ||
+                            '',
+                        ).trim(),
+                    ),
                     postDescriptionLabel: DEFAULT_POST_DESCRIPTION,
                   });
                   if (listingCat != null) {
@@ -2374,6 +2470,7 @@ function App() {
                     ...prev,
                     editingListing: null,
                     skipStoryPublish: false,
+                    salesImageAlreadyMirrored: false,
                   }));
                   goBack(postEditorConfig.returnScreen);
                 }}
@@ -2385,10 +2482,19 @@ function App() {
                     payload?.url &&
                     postEditorConfig.publishTarget === 'story'
                   ) {
-                    // Story is always created on ad Publish (not here).
+                    // Story/post companions already exist for this ad — ad
+                    // Publish updates them in place instead of inserting.
+                    const hadExistingSales =
+                      postEditorConfig.salesImageAlreadyMirrored === true ||
+                      String(
+                        editingListing?.sales_image_url ||
+                          editingListing?.salesImageUrl ||
+                          '',
+                      ).trim() !== '';
                     setAdsFormPendingSalesImage({
                       url: payload.url,
-                      storyAlreadyCreated: false,
+                      storyAlreadyCreated: hadExistingSales,
+                      feedPostAlreadyCreated: hadExistingSales,
                       generalDetails: payload.generalDetails || null,
                       sourceImageUrl: payload.sourceImageUrl || null,
                     });
@@ -2572,9 +2678,13 @@ function App() {
                   setCurrentScreen(screenName.feedbackSuggestion);
                 }}
                 onOpenTermsOfUse={() => setCurrentScreen(screenName.termsOfUse)}
-                onOpenAccessibilityStatement={() =>
-                  setCurrentScreen(screenName.accessibilityStatement)
+                onOpenAccessibilityMenu={() =>
+                  setCurrentScreen(screenName.accessibilityMenu)
                 }
+                onOpenAccessibilityStatement={() => {
+                  setAccessibilityStatementReturn(screenName.settings);
+                  setCurrentScreen(screenName.accessibilityStatement);
+                }}
                 onOpenFollowHub={tab => {
                   if (!currentUser) return;
                   setProfileUser(currentUser);
@@ -2615,9 +2725,22 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.settings)}
               />
             )}
+            {currentScreen === screenName.accessibilityMenu && (
+              <AccessibilityMenuScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+                onOpenStatement={() => {
+                  setAccessibilityStatementReturn(screenName.accessibilityMenu);
+                  setCurrentScreen(screenName.accessibilityStatement);
+                }}
+              />
+            )}
             {currentScreen === screenName.accessibilityStatement && (
               <AccessibilityStatementScreen
-                onClose={() => setCurrentScreen(screenName.settings)}
+                onClose={() =>
+                  setCurrentScreen(
+                    accessibilityStatementReturn || screenName.settings,
+                  )
+                }
               />
             )}
             {currentScreen === screenName.feedbackSuggestion && (
@@ -3064,11 +3187,11 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.subscriptionForm)}
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.success);
+                  setCurrentScreen(screenName.ratingIntro);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.success);
+                  setCurrentScreen(screenName.ratingIntro);
                 }}
                 subscriptionType={subscriptionTypes.broker}
                 email={subscriptionData?.email}
@@ -3104,11 +3227,11 @@ function App() {
                 }
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProfessional);
+                  setCurrentScreen(screenName.ratingIntroProfessional);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProfessional);
+                  setCurrentScreen(screenName.ratingIntroProfessional);
                 }}
                 subscriptionType={subscriptionTypes.professional}
                 email={subscriptionData?.email}
@@ -3122,7 +3245,7 @@ function App() {
                 onClose={() => setCurrentScreen(screenName.verification)}
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.success);
+                  setCurrentScreen(screenName.ratingIntro);
                 }}
                 subscriptionType={subscriptionTypes.broker}
                 email={subscriptionData?.email}
@@ -3148,7 +3271,7 @@ function App() {
                 }
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProfessional);
+                  setCurrentScreen(screenName.ratingIntroProfessional);
                 }}
                 subscriptionType={subscriptionTypes.professional}
                 email={subscriptionData?.email}
@@ -3294,11 +3417,11 @@ function App() {
                 }
                 onVerified={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProjectMarketer);
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
                 }}
                 onSkipVerifiedTest={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProjectMarketer);
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
                 }}
                 subscriptionType={subscriptionTypes.projectMarketer}
                 email={subscriptionData?.email}
@@ -3314,7 +3437,7 @@ function App() {
                 }
                 onNext={subscription => {
                   setSubscriptionData(prev => ({...prev, subscription}));
-                  setCurrentScreen(screenName.successProjectMarketer);
+                  setCurrentScreen(screenName.ratingIntroProjectMarketer);
                 }}
                 subscriptionType={subscriptionTypes.projectMarketer}
                 email={subscriptionData?.email}
@@ -3455,7 +3578,15 @@ function App() {
             ) : null}
               </>
             ) : null}
-            {showBootCover ? <BootSplashFrame /> : null}
+            {showBootCover ? (
+              <Animated.View
+                pointerEvents="none"
+                collapsable={false}
+                style={[styles.bootCover, {opacity: bootCoverOpacity}]}>
+                <BootSplashFrame onFirstPaint={handleBootSplashFirstPaint} />
+              </Animated.View>
+            ) : null}
+            </View>
           </View>
         </SafeAreaProvider>
       </PresenceProvider>
@@ -3466,7 +3597,9 @@ function App() {
 export default function RootApp() {
   return (
     <ErrorBoundary>
-      <App />
+      <AccessibilityProvider>
+        <App />
+      </AccessibilityProvider>
     </ErrorBoundary>
   );
 }
@@ -3498,6 +3631,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1e1d27',
+  },
+  a11yTree: {
+    flex: 1,
+  },
+  containerHighContrast: {
+    backgroundColor: '#000000',
+  },
+  bootCover: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10000,
+    elevation: 10000,
   },
   termsGateOverlay: {
     position: 'absolute',

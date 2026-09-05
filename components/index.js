@@ -9,6 +9,7 @@ export {TikTokHeartIcon} from './TikTokHeartIcon';
 export {PostFeedLikeIcon} from './PostFeedLikeIcon';
 export {FollowPlusBadge, FOLLOW_CHECK_COLOR} from './FollowPlusBadge';
 export {default as SharePostSheet} from './SharePostSheet';
+export {default as ExternalShareSheet} from './ExternalShareSheet';
 export {Title} from './FormsElement/Title';
 export {MultiPicturesUpload} from './FormsElement/MultiPicturesUpload';
 export {ProfilePictureUpload} from './FormsElement/ProfilePictureUpload';

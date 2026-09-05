@@ -213,7 +213,7 @@ const VerificationCodeScreen = ({
                 <ActivityIndicator color={Colors.white100} />
               ) : canSubmit ? (
                 <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}

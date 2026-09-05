@@ -21,6 +21,7 @@ import {
   Alert,
 } from 'react-native';
 import {FormScrollProvider, useFormScroll} from '../utils/formKeyboardScroll';
+import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
 import {ContextHook} from '../hooks/ContextHook';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -1242,8 +1243,10 @@ const AdsForm = ({
     }
     salesImageStoryAlreadyCreatedRef.current =
       pending.storyAlreadyCreated === true ||
-      pending.feedPostAlreadyCreated === true;
-    salesImageCompanionPendingRef.current = !salesImageStoryAlreadyCreatedRef.current;
+      pending.feedPostAlreadyCreated === true ||
+      Boolean(String(initialSalesImageUrlRef.current || '').trim());
+    salesImageCompanionPendingRef.current =
+      !salesImageStoryAlreadyCreatedRef.current;
     onPendingSalesImageConsumed?.();
   }, [pendingSalesImageFromEditor, onPendingSalesImageConsumed]);
 
@@ -1273,6 +1276,8 @@ const AdsForm = ({
   const [bnbBusinessLogoUrl, setBnbBusinessLogoUrl] = useState(null);
   const [bnbLogoCropUri, setBnbLogoCropUri] = useState(null);
   const [bnbLogoCropVisible, setBnbLogoCropVisible] = useState(false);
+  const [partnerPhotoCropUri, setPartnerPhotoCropUri] = useState(null);
+  const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
   const [salesImage, setSalesImage] = useState(null);
@@ -1356,7 +1361,7 @@ const AdsForm = ({
     );
   }, [category, currentUser?.subscription_type]);
 
-  const amenitiesWithQuantity = ['חנייה', 'מרפסת'];
+  const amenitiesWithQuantity = ['חנייה', 'מרפסת', 'מרפסת לסוכה'];
 
   // Hydrate generaldetailswithradio groups with state so count/price fields are controlled
   const hydrateGeneralDetailsWithRadio = groups => {
@@ -1552,37 +1557,76 @@ const AdsForm = ({
     }));
   };
 
+  const isPartnerAd = parseInt(category, 10) === 3;
+
+  const openPartnerPhotoCropper = uri => {
+    if (!uri) return;
+    setPartnerPhotoCropUri(uri);
+    setPartnerPhotoCropVisible(true);
+  };
+
+  const handlePartnerPhotoCropConfirm = result => {
+    if (result?.uri) {
+      setMainImage({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `partner-${Date.now()}.jpg`,
+      });
+    } else if (result?.error) {
+      alert(result.error);
+    }
+    setPartnerPhotoCropVisible(false);
+    setPartnerPhotoCropUri(null);
+  };
+
+  const handlePartnerPhotoCropCancel = () => {
+    setPartnerPhotoCropVisible(false);
+    setPartnerPhotoCropUri(null);
+  };
+
   // File upload handlers
   const handleMainImageUpload = async () => {
     if (Platform.OS === 'web' && mainImageInputRef.current) {
       mainImageInputRef.current.click();
-    } else {
-      // Native mobile - use expo-image-picker
-      try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: false,
-          quality: AD_IMAGE_PICKER_QUALITY,
-        });
-
-        if (!result.canceled && result.assets[0]) {
-          setMainImage(fileFromPickerAsset(result.assets[0], 'image'));
-        }
-      } catch (error) {
-        alert('שגיאה בבחירת תמונה: ' + error.message);
+      return;
+    }
+    try {
+      if (isPartnerAd) {
+        const permitted = await ensureMediaLibraryPermission();
+        if (!permitted) return;
       }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: isPartnerAd ? 1 : AD_IMAGE_PICKER_QUALITY,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        if (isPartnerAd) {
+          openPartnerPhotoCropper(result.assets[0].uri);
+          return;
+        }
+        setMainImage(fileFromPickerAsset(result.assets[0], 'image'));
+      }
+    } catch (error) {
+      alert('שגיאה בבחירת תמונה: ' + error.message);
     }
   };
 
   const handleMainImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      setMainImage({
-        uri: URL.createObjectURL(file),
-        type: file.type || 'image/jpeg',
-        name: file.name || `photo-${Date.now()}.jpg`,
-      });
-      // Don't upload yet - will upload when publish button is pressed
+      const uri = URL.createObjectURL(file);
+      if (isPartnerAd) {
+        openPartnerPhotoCropper(uri);
+      } else {
+        setMainImage({
+          uri,
+          type: file.type || 'image/jpeg',
+          name: file.name || `photo-${Date.now()}.jpg`,
+        });
+      }
+      event.target.value = '';
     }
   };
 
@@ -1600,8 +1644,11 @@ const AdsForm = ({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        salesImageCompanionPendingRef.current = true;
-        salesImageStoryAlreadyCreatedRef.current = false;
+        const alreadyMirrored = Boolean(
+          String(initialSalesImageUrlRef.current || '').trim(),
+        );
+        salesImageCompanionPendingRef.current = !alreadyMirrored;
+        salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
         setSalesImageEditorMeta(null);
         setSalesImage({
           uri: asset.uri,
@@ -1618,8 +1665,11 @@ const AdsForm = ({
   const handleSalesImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      salesImageCompanionPendingRef.current = true;
-      salesImageStoryAlreadyCreatedRef.current = false;
+      const alreadyMirrored = Boolean(
+        String(initialSalesImageUrlRef.current || '').trim(),
+      );
+      salesImageCompanionPendingRef.current = !alreadyMirrored;
+      salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
       setSalesImageEditorMeta(null);
       setSalesImage({
         uri: URL.createObjectURL(file),
@@ -2353,9 +2403,8 @@ const AdsForm = ({
         ? await updateListing(existingListingId, listingData)
         : await createListing(listingData);
 
-      // Mirror תמונה מכירתית as a home story (+ companion feed post on first
-      // create). On edit replace: PUT deletes the old story via
-      // syncSalesImageMirrors, then we create a fresh story with the new image.
+      // Mirror תמונה מכירתית as a home story + companion feed post on first
+      // create only. Later edits update those rows via PUT syncSalesImageMirrors.
       const publisherSubId = publisher.subscriptionId;
       const prevSalesUrl = initialSalesImageUrlRef.current
         ? String(initialSalesImageUrlRef.current).trim()
@@ -2366,11 +2415,16 @@ const AdsForm = ({
       const salesImageChangedOnEdit =
         Boolean(existingListingId && prevSalesUrl && nextSalesUrl) &&
         prevSalesUrl !== nextSalesUrl;
-      // Publish a home story for תמונה מכירתית whenever it's new/pending or replaced.
+      const hadExistingSalesImage = Boolean(
+        existingListingId && prevSalesUrl,
+      );
+      // First-time תמונה מכירתית only. Editing must update the existing
+      // companion story + post (server syncSalesImageMirrors), not insert new ones.
       const shouldCreateSalesImageStory =
         isB2BSubscriptionType(currentUser?.subscription_type) &&
         !!uploadedSalesImageUrl &&
         fieldKeys.includes('salesimage') &&
+        !hadExistingSalesImage &&
         (salesImageChangedOnEdit ||
           salesImageCompanionPendingRef.current ||
           !salesImageStoryAlreadyCreatedRef.current);
@@ -2380,6 +2434,18 @@ const AdsForm = ({
             '[AdsForm] Companion sales-image skipped: no subscription id on currentUser',
           );
         } else {
+          const listingIdForMirrors = String(
+            result?.id || result?.listing?.id || existingListingId || '',
+          ).trim();
+          const companionIds = {
+            post_kind: SALES_IMAGE_POST_KIND,
+            ...(listingIdForMirrors
+              ? {
+                  source_ad_id: listingIdForMirrors,
+                  feed_listing_id: listingIdForMirrors,
+                }
+              : {}),
+          };
           try {
             await createSalesImageStory({
               imageUrl: uploadedSalesImageUrl,
@@ -2397,11 +2463,11 @@ const AdsForm = ({
                   baked === 't' ||
                   baked === 1;
                 if (!gd || typeof gd !== 'object' || isBaked) {
-                  return {post_kind: SALES_IMAGE_POST_KIND};
+                  return companionIds;
                 }
                 return {
                   ...gd,
-                  post_kind: SALES_IMAGE_POST_KIND,
+                  ...companionIds,
                 };
               })(),
             });
@@ -2449,7 +2515,7 @@ const AdsForm = ({
                   ...(salesEditorGd && typeof salesEditorGd === 'object'
                     ? salesEditorGd
                     : {}),
-                  post_kind: SALES_IMAGE_POST_KIND,
+                  ...companionIds,
                 },
               });
             } catch (postErr) {
@@ -2535,6 +2601,9 @@ const AdsForm = ({
                     handleMainImageUpload={handleMainImageUpload}
                     handleMainImageChange={handleMainImageChange}
                     mainImageInputRef={mainImageInputRef}
+                    onEditExistingImage={() =>
+                      openPartnerPhotoCropper(mainImage?.uri)
+                    }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
                     videoFile={videoFile}
@@ -3013,17 +3082,30 @@ const AdsForm = ({
         onConfirm={handleBnbLogoCropConfirm}
         title="חתוך את לוגו העסק"
       />
+      <CircleImageCropModal
+        visible={partnerPhotoCropVisible}
+        imageUri={partnerPhotoCropUri}
+        onCancel={handlePartnerPhotoCropCancel}
+        onConfirm={handlePartnerPhotoCropConfirm}
+        title="חתוך את תמונת הפרופיל"
+      />
     </View>
   );
 };
 
 function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
   const {scrollRef, keyboardInset, onScroll} = useFormScroll();
+  const androidKb = useAndroidKeyboardComposer(Platform.OS === 'android');
   // iOS: lift sticky publish footer by keyboard height (window stays full).
-  // Android: adjustResize does not reliably clear the sticky footer / bottom
-  // fields in this app — lift the footer the same way (iOS behavior unchanged).
-  const liftForKeyboard = keyboardInset;
-  const keyboardOpen = liftForKeyboard > 0;
+  // Android: only lift the overlap that adjustResize did not already consume,
+  // same as the post editor — otherwise פרסם sits under the keys.
+  const liftForKeyboard =
+    Platform.OS === 'android'
+      ? Math.max(0, androidKb.bottomOffset)
+      : keyboardInset;
+  const androidPull = Platform.OS === 'android' ? androidKb.marginBottom : 0;
+  const keyboardOpen =
+    Platform.OS === 'android' ? androidKb.isOpen : liftForKeyboard > 0;
 
   return (
     <View style={styles.keyboardAvoid}>
@@ -3050,7 +3132,7 @@ function AdsFormKeyboardScroll({children, publishButton, bottomInset = 0}) {
           {
             // Keyboard frame already clears the home indicator — don't add it again.
             paddingBottom: keyboardOpen ? 8 : Math.max(bottomInset, 8),
-            marginBottom: liftForKeyboard,
+            marginBottom: liftForKeyboard + androidPull,
           },
         ]}>
         {publishButton}

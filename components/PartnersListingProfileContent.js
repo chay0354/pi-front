@@ -8,6 +8,7 @@ import {
   Dimensions,
 } from 'react-native';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
+import {SvgXml} from 'react-native-svg';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
 import {flexStart} from '../utils/rtlLayout';
@@ -15,10 +16,12 @@ import {flexStart} from '../utils/rtlLayout';
 const PARTNER_PREF_ICONS = {
   age: require('../assets/new-profile-pages/partheners/ages20-30.png'),
   genderMale: require('../assets/new-profile-pages/partheners/only-man.png'),
+  genderFemaleXml: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><path d="M10 26L32 11L54 26" stroke="#5ED4EA" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22.5" cy="32" r="5.4" stroke="#F6C53A" stroke-width="3.2"/><path d="M22.5 37.6L13.2 54h18.6L22.5 37.6Z" stroke="#F6C53A" stroke-width="3.2" stroke-linejoin="round"/><circle cx="41.5" cy="32" r="5.4" stroke="#F6C53A" stroke-width="3.2"/><path d="M41.5 37.6L32.2 54h18.6L41.5 37.6Z" stroke="#F6C53A" stroke-width="3.2" stroke-linejoin="round"/></svg>`,
   nonSmokers: require('../assets/new-profile-pages/partheners/no-smoke.png'),
   students: require('../assets/new-profile-pages/partheners/student.png'),
   stableJob: require('../assets/new-profile-pages/partheners/stable-job.png'),
   occasionalJob: require('../assets/new-profile-pages/partheners/not-stable-jpb.png'),
+  immediateEntry: require('../assets/apr-details/icons_5.png'),
 };
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -57,7 +60,7 @@ const PREFERENCE_META = [
   {
     key: 'immediateEntry',
     label: 'כניסה מיידית',
-    iconName: 'calendar-check-outline',
+    iconSource: PARTNER_PREF_ICONS.immediateEntry,
   },
 ];
 
@@ -87,7 +90,7 @@ function formatMoney(listing, preferPrice) {
   return `₪${Math.round(n).toLocaleString('he-IL')}`;
 }
 
-function PrefChip({label, iconSource, iconName}) {
+function PrefChip({label, iconSource, iconXml, iconName}) {
   return (
     <View style={styles.prefChip}>
       <View style={styles.prefChipInner}>
@@ -98,6 +101,8 @@ function PrefChip({label, iconSource, iconName}) {
             style={styles.prefChipIcon}
             resizeMode="contain"
           />
+        ) : iconXml ? (
+          <SvgXml xml={iconXml} width={28} height={28} />
         ) : iconName ? (
           <MaterialCommunityIcons name={iconName} size={28} color="#FFFFFF" />
         ) : null}
@@ -195,7 +200,10 @@ export default function PartnersListingProfileContent({
           genderRaw === 'male' || genderRaw === 'גבר'
             ? PARTNER_PREF_ICONS.genderMale
             : null,
-        iconName: 'account-group-outline',
+        iconXml:
+          genderRaw === 'female' || genderRaw === 'אישה'
+            ? PARTNER_PREF_ICONS.genderFemaleXml
+            : null,
       });
     }
     if (ageLabel) {
@@ -275,6 +283,7 @@ export default function PartnersListingProfileContent({
                   key={t.id}
                   label={t.label}
                   iconSource={t.iconSource}
+                  iconXml={t.iconXml}
                   iconName={t.iconName}
                 />
               ))}
@@ -285,6 +294,7 @@ export default function PartnersListingProfileContent({
                   key={t.id}
                   label={t.label}
                   iconSource={t.iconSource}
+                  iconXml={t.iconXml}
                   iconName={t.iconName}
                 />
               ))}

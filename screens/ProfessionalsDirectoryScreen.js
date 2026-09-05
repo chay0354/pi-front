@@ -209,7 +209,7 @@ const ProfessionalCard = ({
           key={videoUri}
           source={{uri: videoUri}}
           style={styles.cardMediaImage}
-          resizeMode={ResizeMode.COVER}
+          resizeMode={ResizeMode.CONTAIN}
           shouldPlay
           isMuted={muted}
           isLooping
@@ -222,7 +222,7 @@ const ProfessionalCard = ({
         <Image
           source={{uri: posterUri || mediaUrl}}
           style={styles.cardMediaImage}
-          resizeMode="cover"
+          resizeMode="contain"
         />
       );
     }
@@ -1251,7 +1251,7 @@ const styles = StyleSheet.create({
   cardMediaWebVideo: {
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'contain',
     display: 'block',
     backgroundColor: '#1E1D27',
   },

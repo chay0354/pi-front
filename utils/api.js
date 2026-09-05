@@ -5,6 +5,10 @@
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
+import {
+  resolveProfileDisplayName,
+  resolveProfileEmail,
+} from './profileFields';
 
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 const isNativeMobile = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -1159,6 +1163,8 @@ export const piAiSearchListings = async (query, listingSummaries) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, listings: listingSummaries }),
+      // Gemini model fallbacks can take >30s; Android then reports "Network request failed".
+      timeoutMs: 90000,
     });
     const data = await response.json();
     if (!response.ok || !data?.success) {
@@ -1260,14 +1266,23 @@ export const getReviews = async (targetSubscriptionId) => {
  */
 export const submitReview = async (targetSubscriptionId, rating, comment = '', reviewerName = null, reviewerImageUrl = null, reviewerSubscriptionId = null, listingId = null) => {
   try {
+    const parsedRating = rating != null && rating !== '' ? Number(rating) : null;
+    const hasStarRating =
+      parsedRating != null &&
+      Number.isFinite(parsedRating) &&
+      parsedRating >= 1 &&
+      parsedRating <= 5;
     const body = {
       target_subscription_id: targetSubscriptionId,
-      rating: Number(rating),
       comment: comment && String(comment).trim() ? String(comment).trim() : '',
       reviewer_name: reviewerName && String(reviewerName).trim() ? String(reviewerName).trim() : null,
       reviewer_image_url: reviewerImageUrl && String(reviewerImageUrl).trim() ? String(reviewerImageUrl).trim() : null,
       reviewer_subscription_id: reviewerSubscriptionId && String(reviewerSubscriptionId).trim() ? String(reviewerSubscriptionId).trim() : null,
     };
+    // Comment-only (BnB private): omit rating so older APIs don't parse 0/null as invalid.
+    if (hasStarRating) {
+      body.rating = parsedRating;
+    }
     if (listingId && String(listingId).trim()) {
       body.listing_id = String(listingId).trim();
     }
@@ -1600,6 +1615,121 @@ export const getFollowStats = async userId => {
 /**
  * Follow hub data for tabs: requests | followers | following
  */
+function followTypeLabel(type) {
+  const t = String(type || '')
+    .trim()
+    .toLowerCase();
+  if (t === 'broker') return 'תיווך';
+  if (t === 'company') return 'חברה';
+  if (t === 'project_marketer') return 'משווק פרויקטים';
+  if (t === 'professional') return 'מקצועי';
+  return 'משתמש';
+}
+
+function supabaseRestConfig() {
+  const url = String(
+    process.env.EXPO_PUBLIC_SUPABASE_URL ||
+      Constants.expoConfig?.extra?.supabaseUrl ||
+      '',
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  const key = String(
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+      Constants.expoConfig?.extra?.supabaseAnonKey ||
+      '',
+  ).trim();
+  return {url, key};
+}
+
+async function supabaseRestGet(pathWithQuery) {
+  const {url, key} = supabaseRestConfig();
+  if (!url || !key) return null;
+  const response = await fetch(`${url}/rest/v1/${pathWithQuery}`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
+function mapSubscriptionToFollowHubRow(sub, extras = {}) {
+  const name = resolveProfileDisplayName(sub, {fallback: 'משתמש'});
+  const email = resolveProfileEmail(sub);
+  const imageUrl =
+    String(sub?.profile_picture_url || '').trim() ||
+    String(sub?.company_logo_url || '').trim() ||
+    null;
+  return {
+    id: String(sub.id),
+    request_id: extras.request_id || null,
+    outgoing_follow_pending: !!extras.outgoing_follow_pending,
+    is_mutual_follow: false,
+    name,
+    email: email || null,
+    subtitle: followTypeLabel(sub?.subscription_type),
+    subscription_type:
+      sub?.subscription_type != null
+        ? String(sub.subscription_type).trim().toLowerCase()
+        : null,
+    viewer_rating_avg: null,
+    image_url: imageUrl,
+    is_self: false,
+    is_following_by_viewer: !!extras.is_following_by_viewer,
+    has_pending_request_by_viewer: !!extras.has_pending_request_by_viewer,
+    created_at: extras.created_at || null,
+  };
+}
+
+/** Live Vercel hub can still omit pending outgoing follows; read them directly. */
+async function fetchOutgoingPendingFollowRows(userId, q = '') {
+  const id = String(userId || '').trim();
+  if (!id) return [];
+  const requests = await supabaseRestGet(
+    `user_follow_requests?requester_subscription_id=eq.${encodeURIComponent(
+      id,
+    )}&status=eq.pending&select=id,target_subscription_id,created_at&order=created_at.desc`,
+  );
+  if (!Array.isArray(requests) || requests.length === 0) return [];
+  const targetIds = [
+    ...new Set(
+      requests
+        .map(r => String(r?.target_subscription_id || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (targetIds.length === 0) return [];
+  const inList = targetIds.map(tid => `"${tid}"`).join(',');
+  const subs = await supabaseRestGet(
+    `subscriptions?id=in.(${inList})&select=id,email,subscription_type,name,contact_person_name,business_name,broker_office_name,profile_picture_url,company_logo_url`,
+  );
+  const byId = {};
+  (Array.isArray(subs) ? subs : []).forEach(s => {
+    if (s?.id) byId[String(s.id)] = s;
+  });
+  const needle = String(q || '')
+    .trim()
+    .toLowerCase();
+  return requests
+    .map(req => {
+      const sub = byId[String(req.target_subscription_id || '')];
+      if (!sub) return null;
+      const row = mapSubscriptionToFollowHubRow(sub, {
+        request_id: req.id,
+        outgoing_follow_pending: true,
+        has_pending_request_by_viewer: true,
+        created_at: req.created_at,
+      });
+      if (!needle) return row;
+      const hay = `${row.name} ${row.subtitle} ${row.email || ''}`.toLowerCase();
+      return hay.includes(needle) ? row : null;
+    })
+    .filter(Boolean);
+}
+
 export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q = ''}) => {
   const params = new URLSearchParams({
     user_id: String(userId || '').trim(),
@@ -1612,7 +1742,26 @@ export const getFollowHubRows = async ({userId, viewerId, tab = 'followers', q =
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to fetch follow hub');
-  return data;
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  const ownFollowing =
+    String(tab || '').toLowerCase() === 'following' &&
+    userId &&
+    viewerId &&
+    String(userId) === String(viewerId);
+  if (!ownFollowing) {
+    return {...data, rows};
+  }
+  try {
+    const pendingRows = await fetchOutgoingPendingFollowRows(userId, q);
+    if (pendingRows.length === 0) {
+      return {...data, rows};
+    }
+    const existing = new Set(rows.map(r => String(r?.id || '')));
+    const extra = pendingRows.filter(r => !existing.has(String(r.id)));
+    return {...data, rows: [...extra, ...rows]};
+  } catch (_) {
+    return {...data, rows};
+  }
 };
 
 /**
@@ -1840,6 +1989,7 @@ export const getListings = async (options = {}) => {
       land_in_mortgage: landInMortgage,
       permit: permit,
       plan_approval: planApproval,
+      timeoutMs,
     } = options;
     const params = new URLSearchParams({status});
     if (category) {
@@ -1893,6 +2043,7 @@ export const getListings = async (options = {}) => {
       headers: {
         'Content-Type': 'application/json',
       },
+      ...(timeoutMs > 0 ? {timeoutMs} : {}),
     });
 
     // console.log(

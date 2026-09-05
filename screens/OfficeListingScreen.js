@@ -980,7 +980,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'enter' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1009,7 +1009,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'bring_in' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1038,7 +1038,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   <View style={styles.radioSpacer} />
                   {searchPurpose === 'partner' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1079,7 +1079,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                       <View style={styles.radioSpacer} />
                       {preferredApartmentType === option.value ? (
                         <LinearGradient
-                          colors={['#FEE787', '#BD9947', '#9C6522']}
+                          colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                           locations={[0.0456, 0.5076, 0.8831]}
                           start={{x: 0, y: 0}}
                           end={{x: 1, y: 1}}
@@ -1185,7 +1185,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                     <View style={styles.radioSpacer} />
                     {preferences[option.key] ? (
                       <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                         locations={[0.0456, 0.5076, 0.8831]}
                         start={{x: 0, y: 0}}
                         end={{x: 1, y: 1}}
@@ -1252,7 +1252,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                     <View style={styles.radioButton}>
                       {displayOption === 'collage' && (
                         <LinearGradient
-                          colors={['#FEE787', '#BD9947', '#9C6522']}
+                          colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                           locations={[0.0456, 0.5076, 0.8831]}
                           start={{x: 0, y: 0}}
                           end={{x: 1, y: 1}}
@@ -1286,7 +1286,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                     <View style={styles.radioButton}>
                       {displayOption === 'slideshow' && (
                         <LinearGradient
-                          colors={['#FEE787', '#BD9947', '#9C6522']}
+                          colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                           locations={[0.0456, 0.5076, 0.8831]}
                           start={{x: 0, y: 0}}
                           end={{x: 1, y: 1}}
@@ -1323,7 +1323,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   <View style={styles.radioSpacer} />
                   {propertyType === 'office' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1347,7 +1347,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   <View style={styles.radioSpacer} />
                   {propertyType === 'floor' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1460,7 +1460,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                     style={styles.segmentedButtonContainer}>
                     {condition === cond ? (
                       <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                         locations={[0.0456, 0.5076, 0.8831]}
                         start={{x: 0, y: 0}}
                         end={{x: 1, y: 1}}
@@ -1493,7 +1493,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   style={styles.purposeButtonContainer}>
                   {purpose === 'sale' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1506,7 +1506,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                         למכירה
                       </Text>
                       <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                         locations={[0.0456, 0.5076, 0.8831]}
                         start={{x: 0, y: 0}}
                         end={{x: 1, y: 1}}
@@ -1532,7 +1532,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                   style={styles.purposeButtonContainer}>
                   {purpose === 'rent' ? (
                     <LinearGradient
-                      colors={['#FEE787', '#BD9947', '#9C6522']}
+                      colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                       locations={[0.0456, 0.5076, 0.8831]}
                       start={{x: 0, y: 0}}
                       end={{x: 1, y: 1}}
@@ -1545,7 +1545,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
                         להשכרה
                       </Text>
                       <LinearGradient
-                        colors={['#FEE787', '#BD9947', '#9C6522']}
+                        colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                         locations={[0.0456, 0.5076, 0.8831]}
                         start={{x: 0, y: 0}}
                         end={{x: 1, y: 1}}

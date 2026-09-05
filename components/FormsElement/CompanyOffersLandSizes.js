@@ -52,18 +52,11 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
       <Title text="החברה מציעה קרקעות בגדלים של" required />
       {list.map((land, idx) => (
         <View key={idx}>
-          <RadioWithText
-            title={`קרקע ${idx + 1}`}
-            name={'dunam'}
-            setName={() => updateLand(idx, {unit: 'dunam'})}
-            index={0}
-            isSelected={land.unit === 'dunam'}
-            radioOptionStyle={{paddingTop: 0}}
-          />
+          <Text style={styles.landTitle}>קרקע {idx + 1}</Text>
 
           <View style={styles.radioRow}>
             <Text style={[styles.subLabel, subLabelSpacing]}>שטח הקרקע *</Text>
-            <View style={{flexDirection: 'row'}}>
+            <View style={styles.unitRow}>
               <RadioWithText
                 key={1}
                 isNotLastIndex={false}
@@ -72,6 +65,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
                 setName={() => updateLand(idx, {unit: 'sqm'})}
                 index={1}
                 isSelected={land.unit === 'sqm'}
+                inline
                 radioOptionStyle={{paddingTop: 0}}
               />
               <RadioWithText
@@ -82,6 +76,7 @@ export const CompanyOffersLandSizes = ({lands, setLands}) => {
                 setName={() => updateLand(idx, {unit: 'dunam'})}
                 index={0}
                 isSelected={land.unit === 'dunam'}
+                inline
                 radioOptionStyle={{paddingTop: 0}}
                 containerStyle={optionSpacing}
               />
@@ -127,6 +122,14 @@ const styles = StyleSheet.create({
     color: Colors.whiteGeneral,
     fontSize: 18,
     fontFamily: 'Rubik-Medium',
+    textAlign: 'left',
+    marginBottom: 4,
+  },
+  unitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   addButton: {
     marginHorizontal: 20,

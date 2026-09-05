@@ -12,7 +12,12 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {getHeaderTitle, subscriptionTypes} from '../utils/constant';
+import {
+  getHeaderTitle,
+  isCompanySubscriptionType,
+  subscriptionTypes,
+} from '../utils/constant';
+import {PiRatingBadge} from '../components/PiRatingBadge';
 import {flexEnd} from '../utils/rtlLayout';
 
 const BG = '#1e1d27';
@@ -26,6 +31,8 @@ const SubscriptionRatingIntroScreen = ({
   subscriptionType = subscriptionTypes.broker,
 }) => {
   const insets = useSafeAreaInsets();
+  const startsAtFive = isCompanySubscriptionType(subscriptionType);
+
   return (
     <View style={styles.container}>
       <View style={styles.overlay} />
@@ -64,31 +71,43 @@ const SubscriptionRatingIntroScreen = ({
 
             <View style={[styles.ratingCard, styles.ratingCardCompact]}>
               <Text style={styles.bestRatingTextLead}>
-                עליכם לקבל את הדירוג הגבוה ביותר:
+                {startsAtFive
+                  ? 'עליכם לקבל את הדירוג הגבוה ביותר:'
+                  : 'הדירוג שלכם מתחיל ב־'}
               </Text>
 
               <View style={styles.ratingPiGroup}>
-                <View style={styles.piBadgeWrap}>
-                  <Image
-                    source={require('../assets/tiktok/pistar.png')}
-                    style={styles.piBadgeIcon}
-                    resizeMode="contain"
-                  />
-                </View>
-                <Text style={styles.bestRatingGold}>5 כוכבי פאי</Text>
+                {startsAtFive ? (
+                  <View style={styles.piBadgeWrap}>
+                    <Image
+                      source={require('../assets/tiktok/pistar.png')}
+                      style={styles.piBadgeIcon}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.piBadgeWrap}>
+                    <PiRatingBadge rating={1} variant="profile" />
+                  </View>
+                )}
+                <Text style={styles.bestRatingGold}>
+                  {startsAtFive ? '5 כוכבי פאי' : '1 כוכב פאי'}
+                </Text>
               </View>
             </View>
 
             <View style={styles.infoBlock}>
               <Text style={styles.infoMain}>
-                הקפידו לשמור על דירוג גבוה,{'\n'}הוא קובע את אמינות העסק שלכם.
+                {startsAtFive
+                  ? 'הקפידו לשמור על דירוג גבוה,\nהוא קובע את אמינות העסק שלכם.'
+                  : 'כדי להגיע ל־5 כוכבי פאי יש לצבור דירוגים מלקוחות.\nהקפידו לשמור על דירוג גבוה — הוא קובע את אמינות העסק שלכם.'}
               </Text>
             </View>
           </View>
 
           <TouchableOpacity style={styles.ctaButton} onPress={onContinue}>
             <LinearGradient
-              colors={['#FEE787', '#BD9947', '#9C6522']}
+              colors={['#FFE56A', '#F7C63A', '#E5A80F']}
               locations={[0.0456, 0.5076, 0.8831]}
               start={{x: 0, y: 0}}
               end={{x: 1, y: 1}}

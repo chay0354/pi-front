@@ -14,6 +14,7 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   brokerCategories,
+  userCategories,
   DEFAULT_MONTHLY_LISTING_QUOTA,
   getAnalysisCategoriesStrip,
   canAccessListingAnalysis,
@@ -32,7 +33,7 @@ const BG = '#27262F';
 const CARD_BG = '#2B2A39';
 const DIVIDER = '#373548';
 const GOLD_ACCENT = '#E8B34D';
-const GOLD_GRADIENT = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_GRADIENT = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 const TEXT_SECONDARY = '#D2D0DC';
 
@@ -52,10 +53,13 @@ const getPublishedCountLabel = subscriptionType =>
     : 'מספר נכסים מפורסמים';
 
 const categoryMeta = listingCategoryId =>
-  brokerCategories.find(c => c.id === listingCategoryId) || null;
+  userCategories.find(c => c.id === listingCategoryId) ||
+  brokerCategories.find(c => c.id === listingCategoryId) ||
+  null;
 
-/** Crops the category asset the same way EditPublishAdScreen does. */
+/** Crops padded category tiles; Pi Partners logo is shown in full. */
 const CroppedCategoryImage = ({source, categoryId}) => {
+  const showFullLogo = Number(categoryId) === 3;
   const inner = 1 - 2 * CATEGORY_ICON_CROP;
   const imageSize = Math.ceil(CATEGORY_ICON_SIZE / inner);
   const offset = (imageSize - CATEGORY_ICON_SIZE) / 2;
@@ -79,12 +83,19 @@ const CroppedCategoryImage = ({source, categoryId}) => {
       ]}>
       <Image
         source={source}
-        style={{
-          width: imageSize,
-          height: imageSize,
-          marginLeft: -offset,
-          marginTop: -offset + (imageAdjust.marginTop ?? 0),
-        }}
+        style={
+          showFullLogo
+            ? {
+                width: CATEGORY_ICON_SIZE,
+                height: CATEGORY_ICON_SIZE,
+              }
+            : {
+                width: imageSize,
+                height: imageSize,
+                marginLeft: -offset,
+                marginTop: -offset + (imageAdjust.marginTop ?? 0),
+              }
+        }
         resizeMode="contain"
       />
     </View>

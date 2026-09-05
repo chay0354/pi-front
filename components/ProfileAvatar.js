@@ -9,21 +9,25 @@ import Svg, {
 } from 'react-native-svg';
 import {resolveSubscriptionType, shouldShowProfileGoldRing} from '../utils/constant';
 import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
+import {
+  GOLD_GRADIENT_COLORS,
+  GOLD_GRADIENT_LOCATIONS,
+} from '../utils/goldGradient';
 
 /**
  * Single source of truth for user profile photos with a subscription-type ring.
  *
  *   <ProfileAvatar uri={profileUrl} fallbackUri={companyLogoUrl} size={60} />
  *
- * Ring colors: gold gradient for broker / company / professional; teal gradient
- * for regular users (same thickness and gap as gold).
+ * Ring colors: yellow-gold gradient for broker / company / professional; teal
+ * gradient for regular users (same thickness and gap as gold).
  *
  * Order: profile photo → fallbackUri (e.g. company logo) → default no-profile image.
  */
 const RING_RATIO = 3.5 / 82; // ring band thickness
 const GAP_RATIO = 2 / 82; // transparent space between ring and photo
-export const PROFILE_RING_COLORS = ['#FEE787', '#BD9947', '#9C6522'];
-export const PROFILE_RING_LOCATIONS = [0.0456, 0.5076, 0.8831];
+export const PROFILE_RING_COLORS = GOLD_GRADIENT_COLORS;
+export const PROFILE_RING_LOCATIONS = GOLD_GRADIENT_LOCATIONS;
 /** Regular users — matches Edit Profile camera badge teal (`#5EEAD4`). */
 export const PROFILE_USER_RING_COLORS = ['#99F6E4', '#5EEAD4', '#0D9488'];
 export const PROFILE_USER_RING_LOCATIONS = PROFILE_RING_LOCATIONS;

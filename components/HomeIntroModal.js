@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   Easing,
@@ -50,20 +50,28 @@ export default function HomeIntroModal({
   onShown,
   onHidden,
   onIntroMoveStart,
+  onFirstPaint,
 }) {
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
+  const [startRect] = useState(() =>
+    getBootSplashLogoRect(screenWidth, screenHeight),
+  );
   const progress = useRef(new Animated.Value(0)).current;
   // Target is frozen once the animation starts — if targetLayout changed
   // interpolation ranges mid-flight, the already-running progress value
   // would suddenly map to a different position/scale, looking like a jump.
   const [resolvedTarget, setResolvedTarget] = useState(null);
+  const paintedRef = useRef(false);
+  const holdElapsedRef = useRef(false);
+  const moveStartedRef = useRef(false);
+  const tryStartMoveRef = useRef(() => {});
+  const onFirstPaintRef = useRef(onFirstPaint);
+  onFirstPaintRef.current = onFirstPaint;
 
-  // Initial "big logo" — same asset as Home header, just larger / centered.
-  const initialRect = useMemo(
-    () => getBootSplashLogoRect(screenWidth, screenHeight),
-    [screenWidth, screenHeight],
-  );
+  // Frozen on first overlay layout so Android inset/window changes cannot
+  // reposition the logo during the hold (that was the pre-animation jump).
+  const initialRect = startRect;
 
   const fallbackTargetRect = useMemo(
     () => getHomeHeaderLogoRect(screenWidth, insetsTop),
@@ -108,14 +116,15 @@ export default function HomeIntroModal({
         inputRange: [0, 1],
         outputRange: [1, scaleToY],
       }),
-      // Background clears so Home shows underneath while the logo stays put.
+      // Background stays put and clears early — it should not trail
+      // behind the flying logo for the full move.
       backgroundScale: progress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 1.12],
+        inputRange: [0, 0.32, 1],
+        outputRange: [1, 1.04, 1.04],
       }),
       backgroundOpacity: progress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0],
+        inputRange: [0, 0.32, 1],
+        outputRange: [1, 0, 0],
       }),
     };
   }, [resolvedTarget, fallbackTargetRect, initialRect, progress]);
@@ -134,8 +143,11 @@ export default function HomeIntroModal({
   useEffect(() => {
     if (!visible) return undefined;
     setMounted(true);
-    setResolvedTarget(null);
+    // Freeze the header target immediately so interpolation ranges never
+    // change at the moment the move starts (that remount looked like a dip).
+    setResolvedTarget(computedTargetRef.current);
     progress.setValue(0);
+    holdElapsedRef.current = false;
     // Fire immediately (not on completion) so the parent can mark "shown"
     // right away — guarantees the intro can never replay even if this
     // component unmounts mid-animation (e.g. user navigates away from Home).
@@ -145,35 +157,14 @@ export default function HomeIntroModal({
     let waitTimer;
     let handoffFrame1;
     let handoffFrame2;
+    let startFrame1;
+    let startFrame2;
 
-    const pickTarget = () => {
-      // Prefer layout math over measureInWindow: the header logo sits inside
-      // a perspective/rotateY flip face, and early measures often report a Y
-      // that's too high — animation lands high, then jumps down on handoff.
-      const measured = targetLayoutRef.current;
-      const computed = computedTargetRef.current;
-      if (
-        measured &&
-        measured.width > 0 &&
-        measured.height > 0 &&
-        Number.isFinite(measured.x) &&
-        Number.isFinite(measured.y) &&
-        Math.abs(measured.y - computed.y) <= 12 &&
-        Math.abs(measured.x - computed.x) <= 24
-      ) {
-        return {
-          x: measured.x,
-          y: measured.y,
-          width: computed.width,
-          height: computed.height,
-        };
-      }
-      return computed;
-    };
-
-    const startMove = target => {
-      onIntroMoveStart?.();
-      setResolvedTarget(target);
+    const startMove = () => {
+      if (moveStartedRef.current) return;
+      moveStartedRef.current = true;
+      // Do not setState here — rebuilding interpolations + unmounting the
+      // boot cover in the same commit is the pre-animation flicker.
       Animated.timing(progress, {
         toValue: 1,
         duration: MOVE_MS,
@@ -190,18 +181,26 @@ export default function HomeIntroModal({
           });
         });
       });
+      startFrame1 = requestAnimationFrame(() => {
+        onIntroMoveStart?.();
+      });
     };
+
+    const tryStartMove = () => {
+      if (!paintedRef.current || !holdElapsedRef.current) return;
+      startMove();
+    };
+    tryStartMoveRef.current = tryStartMove;
 
     // Hold at full initial size first, then move to a stable target —
     // captured once via resolvedTarget, never updated mid-flight.
     holdTimer = setTimeout(() => {
-      if (targetLayoutRef.current) {
-        startMove(pickTarget());
+      holdElapsedRef.current = true;
+      if (!targetLayoutRef.current) {
+        waitTimer = setTimeout(tryStartMove, TARGET_WAIT_MS);
         return;
       }
-      waitTimer = setTimeout(() => {
-        startMove(pickTarget());
-      }, TARGET_WAIT_MS);
+      tryStartMove();
     }, HOLD_BEFORE_MS);
 
     return () => {
@@ -209,6 +208,8 @@ export default function HomeIntroModal({
       clearTimeout(waitTimer);
       if (handoffFrame1) cancelAnimationFrame(handoffFrame1);
       if (handoffFrame2) cancelAnimationFrame(handoffFrame2);
+      if (startFrame1) cancelAnimationFrame(startFrame1);
+      if (startFrame2) cancelAnimationFrame(startFrame2);
     };
     // Intentionally run once on mount only, reading `visible`'s value at
     // that moment — NOT reactively on every `visible` change. onShown()
@@ -221,10 +222,25 @@ export default function HomeIntroModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleOverlayLayout = useCallback(() => {
+    if (paintedRef.current) return;
+    paintedRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onFirstPaintRef.current?.();
+        tryStartMoveRef.current();
+      });
+    });
+  }, []);
+
   if (!mounted) return null;
 
   return (
-    <View style={styles.overlayRoot} pointerEvents="auto">
+    <View
+      style={styles.overlayRoot}
+      pointerEvents="auto"
+      onLayout={handleOverlayLayout}
+      collapsable={false}>
       <Animated.View style={styles.root}>
         {/* Solid backdrop fades too — without this, the root's own opaque
             color stays visible after the image fades out, covering Home. */}
@@ -238,7 +254,7 @@ export default function HomeIntroModal({
             styles.backgroundImage,
             {
               opacity: backgroundOpacity,
-              transform: [{translateY}, {scale: backgroundScale}],
+              transform: [{scale: backgroundScale}],
             },
           ]}
           resizeMode="cover"
@@ -247,6 +263,7 @@ export default function HomeIntroModal({
         {/* Logo stays fully opaque — it IS the header logo until handoff. */}
         <Animated.View
           pointerEvents="none"
+          collapsable={false}
           style={[
             styles.logoWrap,
             {

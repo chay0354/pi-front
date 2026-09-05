@@ -101,7 +101,7 @@ const SecretCodeRecoveryScreen = ({
             <LinearGradient
               colors={
                 canSend
-                  ? ['#FEE787', '#BD9947', '#9C6522']
+                  ? ['#FFE56A', '#F7C63A', '#E5A80F']
                   : ['#4d4966', '#4d4966']
               }
               start={{x: 0, y: 0}}

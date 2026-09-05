@@ -9,6 +9,7 @@ import {
   computeBrokerProfessionalStarRating,
   isBrokerOrProfessionalSubscriptionType,
 } from './brokerProfessionalStarRating';
+import {resolveBnbListingHostType} from './userProfileImage';
 
 export const HEB_M2 = 'מ״ר';
 
@@ -74,6 +75,72 @@ const companyStatInt = n => {
   return Number.isFinite(c) && c >= 0 ? c : 0;
 };
 
+const COMPANY_STAT_KEYS = {
+  buildings: [
+    'building_count',
+    'buildingCount',
+    'companyBuildingCount',
+    'buildings',
+  ],
+  floors: ['floor_count', 'floorCount', 'companyFloorCount', 'floors'],
+  apartments: [
+    'apartment_count',
+    'apartmentCount',
+    'companyApartmentCount',
+    'apartments',
+  ],
+};
+
+function parseGeneralDetails(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function pickCompanyStatCount(listing, gd, keys) {
+  for (const key of keys) {
+    const n = numOrNull(listing?.[key] ?? gd?.[key]);
+    if (n != null && n >= 0) return n;
+  }
+  return null;
+}
+
+/**
+ * בניינים / קומות / דירות from a company project ad.
+ * Reads parsed or JSON `general_details`, plus feed-mapped aliases.
+ */
+export function readCompanyProjectStats(listing) {
+  if (!listing || typeof listing !== 'object') {
+    return {buildings: 0, floors: 0, apartments: 0};
+  }
+  const gd = parseGeneralDetails(listing.general_details) || {};
+  return {
+    buildings:
+      pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.buildings) ?? 0,
+    floors: pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.floors) ?? 0,
+    apartments:
+      pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.apartments) ?? 0,
+  };
+}
+
+export function listingHasCompanyProjectStats(listing) {
+  if (!listing || typeof listing !== 'object') return false;
+  const gd = parseGeneralDetails(listing.general_details) || {};
+  return (
+    pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.buildings) != null ||
+    pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.floors) != null ||
+    pickCompanyStatCount(listing, gd, COMPANY_STAT_KEYS.apartments) != null
+  );
+}
+
 /** Company project row: 1 → singular + number, else number + plural (natural Hebrew). */
 export const formatCompanyBuildingsLabel = n => {
   const v = companyStatInt(n);
@@ -95,10 +162,7 @@ export const formatCompanyApartmentsLabel = n => {
 
 export const buildCardStats = listing => {
   if (isCompanyListing(listing)) {
-    const gd = listing?.general_details || {};
-    const buildings = numOrNull(gd.building_count) ?? 0;
-    const floors = numOrNull(gd.floor_count) ?? 0;
-    const apartments = numOrNull(gd.apartment_count) ?? 0;
+    const {buildings, floors, apartments} = readCompanyProjectStats(listing);
     return [
       {
         key: 'buildings',
@@ -320,6 +384,12 @@ export const clampPiDisplay = n => {
   return Math.min(5, Math.max(1, x));
 };
 
+/** True when a review row has a 1–5 star rating (comment-only rows do not). */
+export const reviewHasStarRating = review => {
+  const n = Number(review?.rating);
+  return Number.isFinite(n) && n >= 1 && n <= 5;
+};
+
 /**
  * Same meaning as `displayPiRating` on `UserProfileScreen`.
  * Company: average of review star ratings (rounded), or `pi_value` when empty.
@@ -334,15 +404,13 @@ export const displayPiRatingFromReviews = (reviews, listing) => {
   }
 
   const broker = brokerPiRatingFromListing(listing);
-  if (!reviews || reviews.length === 0) {
+  const rated = (reviews || []).filter(reviewHasStarRating);
+  if (rated.length === 0) {
     return broker;
   }
 
-  const sum = reviews.reduce(
-    (acc, r) => acc + (Number(r?.rating) || 0),
-    0,
-  );
-  return clampPiDisplay(sum / reviews.length);
+  const sum = rated.reduce((acc, r) => acc + Number(r.rating), 0);
+  return clampPiDisplay(sum / rated.length);
 };
 
 /**
@@ -396,8 +464,11 @@ export const isFollowableSubscriptionType = type => {
 export const isFollowableListing = listing =>
   isFollowableSubscriptionType(subscriptionTypeFromListing(listing));
 
-/** Pi badge: only company / broker / professional — never regular `user`. */
+/** Pi badge: company / broker / professional, or BnB uploaded as עסקי. */
 export const shouldShowListingPiRating = listing => {
+  if (Number(listing?.category) === 5) {
+    return resolveBnbListingHostType(listing) === 'business';
+  }
   const t = subscriptionTypeFromListing(listing);
   if (!isRateableSubscriptionType(t)) return false;
   if (shouldShowCommercialLogoBadge(listing)) return false;

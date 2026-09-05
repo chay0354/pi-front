@@ -1,5 +1,5 @@
 import React, {useCallback, useRef} from 'react';
-import {Image, StyleSheet, View, useWindowDimensions} from 'react-native';
+import {Image, Platform, StyleSheet, View, useWindowDimensions} from 'react-native';
 
 /** assets/SplashScreen.png — the bitmap expo-splash-screen shows natively. */
 const SPLASH_IMAGE = {width: 1242, height: 2688};
@@ -35,16 +35,24 @@ export function getBootSplashLogoRect(screenWidth, screenHeight) {
   const drawnHeight = SPLASH_IMAGE.height * scale;
   const offsetX = (screenWidth - drawnWidth) / 2;
   const offsetY = (screenHeight - drawnHeight) / 2;
-  return {
+  const rect = {
     x: offsetX + SPLASH_LOGO_FRACTION.x * drawnWidth,
     y: offsetY + SPLASH_LOGO_FRACTION.y * drawnHeight,
     width: SPLASH_LOGO_FRACTION.width * drawnWidth,
     height: SPLASH_LOGO_FRACTION.height * drawnHeight,
   };
+  if (Platform.OS !== 'android') return rect;
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
 }
 
 /**
- * Static boot frame — identical to HomeIntroModal t=0 so handoffs never flash.
+ * Static boot frame — identical to HomeIntroModal at t=0 so dropping the
+ * cover never flashes a different logo/background.
  */
 export default function BootSplashFrame({onFirstPaint}) {
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
@@ -62,7 +70,11 @@ export default function BootSplashFrame({onFirstPaint}) {
   }, [onFirstPaint]);
 
   return (
-    <View style={styles.root} onLayout={handleLayout} pointerEvents="none">
+    <View
+      style={styles.root}
+      onLayout={handleLayout}
+      pointerEvents="none"
+      collapsable={false}>
       <Image
         source={require('../assets/splashBack.png')}
         style={StyleSheet.absoluteFillObject}
@@ -91,8 +103,6 @@ const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1e1d27',
-    zIndex: 10000,
-    elevation: 10000,
   },
   logo: {
     position: 'absolute',

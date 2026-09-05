@@ -88,13 +88,16 @@ const PostTextOverlays = ({
                 },
                 hasBackground && {
                   backgroundColor: visual.backgroundColor,
-                  paddingHorizontal: Math.round(10 * chipScale),
-                  paddingVertical: Math.round(4 * chipScale),
-                  borderRadius: Math.round(8 * chipScale),
+                  paddingHorizontal: Math.max(1, Math.floor(10 * chipScale)),
+                  paddingVertical: Math.max(1, Math.floor(4 * chipScale)),
+                  borderRadius: Math.max(2, Math.floor(8 * chipScale)),
                   overflow: 'hidden',
                 },
               ]}>
               <Text
+                allowFontScaling={false}
+                includeFontPadding={false}
+                textBreakStrategy="simple"
                 style={[
                   styles.text,
                   {
@@ -125,7 +128,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   text: {
-    flexShrink: 1,
+    flexShrink: 0,
   },
 });
 

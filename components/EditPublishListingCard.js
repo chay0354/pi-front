@@ -241,7 +241,8 @@ const EditPublishListingCard = ({
         <FeedPostPreviewMedia
           listing={listing}
           style={wrapStyle || styles.adImageWrap}
-          mediaStyle={imageStyle || styles.adImage}
+          showOpenHouseChrome={false}
+          cropOverflow
         />
       );
     }
@@ -408,8 +409,12 @@ const EditPublishListingCard = ({
       activeOpacity={onPress ? 0.9 : 1}
       onPress={onPress}
       disabled={!onPress}>
-      <View style={styles.adImageWrap}>
-        {renderListingMedia()}
+      <View
+        style={[
+          styles.adImageWrap,
+          postRecord && styles.adImageWrapPost,
+        ]}>
+        {renderListingMedia(styles.adImage, styles.adImageFill)}
         {onEdit ? (
           <TouchableOpacity
             style={styles.editBadge}
@@ -475,6 +480,10 @@ const styles = StyleSheet.create({
     height: 230,
     overflow: 'hidden',
   },
+  adImageWrapPost: {
+    backgroundColor: '#1a1a22',
+  },
+  adImageFill: StyleSheet.absoluteFillObject,
   adImage: {width: '100%', height: '100%'},
   adImagePlaceholder: {
     backgroundColor: '#1e1d2b',

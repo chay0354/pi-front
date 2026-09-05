@@ -20,7 +20,7 @@ export const ProposedLand = () => {
       <Title text="קרקע מוצעת" required />
       <View style={styles.radioRow}>
         <Text style={styles.subLabel}>שטח הקרקע *</Text>
-        <View style={[{flexDirection: 'row'}, forceLtrStyle]}>
+        <View style={[styles.unitRow, forceLtrStyle]}>
           <RadioWithText
             key={1}
             isNotLastIndex={false}
@@ -29,6 +29,7 @@ export const ProposedLand = () => {
             setName={setUnit}
             index={1}
             isSelected={unit === 'sqm'}
+            inline
             radioOptionStyle={{paddingTop: 0}}
           />
           <RadioWithText
@@ -39,6 +40,7 @@ export const ProposedLand = () => {
             setName={setUnit}
             index={0}
             isSelected={unit === 'dunam'}
+            inline
             radioOptionStyle={{paddingTop: 0}}
             containerStyle={{marginLeft: 20}}
           />
@@ -68,5 +70,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
+  },
+  unitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
   },
 });

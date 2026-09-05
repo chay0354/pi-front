@@ -41,10 +41,12 @@ function formatReviewDate(dateStr) {
   }
 }
 
-const ReviewRow = ({r}) => {
+const ReviewRow = ({r, hideStars = false}) => {
   const rating = Math.min(5, Math.max(1, Number(r.rating) || 1));
   const starSource = getStarSource(rating);
   const starStyle = styles.starBadge;
+  const showStars =
+    !hideStars && Number(r?.rating) >= 1 && Number(r?.rating) <= 5;
 
   return (
     <View style={styles.card}>
@@ -60,7 +62,9 @@ const ReviewRow = ({r}) => {
               Platform.OS === 'web' ? {objectFit: 'cover'} : undefined
             }
           />
-          <Image source={starSource} style={starStyle} resizeMode="contain" />
+          {showStars ? (
+            <Image source={starSource} style={starStyle} resizeMode="contain" />
+          ) : null}
         </View>
         <View style={styles.nameCol}>
           <Text style={styles.reviewerName}>{r.reviewer_name || 'משתמש'}</Text>
@@ -74,10 +78,15 @@ const ReviewRow = ({r}) => {
   );
 };
 
-const ProfileReviewsScreen = ({reviews = [], onClose}) => {
+const ProfileReviewsScreen = ({
+  reviews = [],
+  onClose,
+  variant = 'reviews',
+}) => {
   const insets = useSafeAreaInsets();
   const count = Array.isArray(reviews) ? reviews.length : 0;
-  const title = `ביקורות (${count})`;
+  const commentsOnly = variant === 'comments';
+  const title = commentsOnly ? `תגובות (${count})` : `ביקורות (${count})`;
 
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
@@ -104,12 +113,15 @@ const ProfileReviewsScreen = ({reviews = [], onClose}) => {
         ]}
         showsVerticalScrollIndicator={false}>
         {count === 0 ? (
-          <Text style={styles.empty}>אין ביקורות</Text>
+          <Text style={styles.empty}>
+            {commentsOnly ? 'אין תגובות' : 'אין ביקורות'}
+          </Text>
         ) : (
           reviews.map((r, i) => (
             <ReviewRow
               key={r.id != null ? String(r.id) : `review-${i}`}
               r={r}
+              hideStars={commentsOnly}
             />
           ))
         )}

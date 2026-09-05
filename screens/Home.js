@@ -211,6 +211,7 @@ const Home = ({
   onComplete,
   showIntroModal = false,
   onIntroModalShown,
+  onIntroFirstPaint,
   onIntroMoveStart,
 }) => {
   const insets = useSafeAreaInsets();
@@ -761,6 +762,7 @@ const Home = ({
         insetsTop={insets.top}
         onShown={onIntroModalShown}
         onHidden={() => setLogoRevealed(true)}
+        onFirstPaint={onIntroFirstPaint}
         onIntroMoveStart={onIntroMoveStart}
       />
       <HomeBackground>

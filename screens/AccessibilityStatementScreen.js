@@ -29,10 +29,15 @@ const AccessibilityStatementScreen = ({onClose}) => {
           <TouchableOpacity
             onPress={onClose}
             style={styles.backBtn}
-            hitSlop={12}>
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="חזרה">
             <Text style={styles.backChevron}>{'‹'}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={2}>
+          <Text
+            style={styles.headerTitle}
+            numberOfLines={2}
+            accessibilityRole="header">
             הצהרת נגישות — פאי 2701
           </Text>
           <View style={styles.headerSpacer} />

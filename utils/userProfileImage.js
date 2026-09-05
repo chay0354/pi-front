@@ -166,8 +166,49 @@ export function getBnbHostType(listing) {
   return fromGd === 'private' || fromGd === 'business' ? fromGd : null;
 }
 
+/**
+ * How a BnB listing was published: sheet choice (פרטי / עסקי).
+ * Missing host type: business logo or a business-like publisher → business;
+ * otherwise private (legacy regular-user ads).
+ */
+export function resolveBnbListingHostType(listing) {
+  if (!listing || Number(listing.category) !== 5) return null;
+  const explicit = getBnbHostType(listing);
+  if (explicit) return explicit;
+  if (
+    pickFirstValidImageUrl([
+      listing.bnb_business_logo_url,
+      listing.bnbBusinessLogoUrl,
+    ])
+  ) {
+    return 'business';
+  }
+  const sub = String(
+    listing.subscription_type ||
+      listing.subscriptionType ||
+      listing.creator_subscription_type ||
+      listing.created_by_subscription_type ||
+      '',
+  )
+    .toLowerCase()
+    .trim();
+  if (
+    sub === 'company' ||
+    sub === 'broker' ||
+    sub === 'professional' ||
+    sub === 'project_marketer'
+  ) {
+    return 'business';
+  }
+  return 'private';
+}
+
 export function isBnbBusinessListing(listing) {
-  return Number(listing?.category) === 5 && getBnbHostType(listing) === 'business';
+  return resolveBnbListingHostType(listing) === 'business';
+}
+
+export function isBnbPrivateListing(listing) {
+  return resolveBnbListingHostType(listing) === 'private';
 }
 
 /** Gold ring for BnB business ads even when publisher is a regular user. */

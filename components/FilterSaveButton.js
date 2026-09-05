@@ -73,7 +73,7 @@ const FilterSaveButton = ({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}>
       <LinearGradient
-        colors={['#fee787', '#bd9947', '#9c6522']}
+        colors={['#FFE56A', '#F7C63A', '#E5A80F']}
         start={{x: 0.5, y: 0}}
         end={{x: 0.5, y: 1}}
         style={[

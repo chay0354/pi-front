@@ -371,7 +371,7 @@ const CityFilterScreen = ({
                 onPress={() => setPurpose(purpose === 'sale' ? null : 'sale')}>
                 {purpose === 'sale' && (
                   <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                     locations={[0.0456, 0.5076, 0.8831]}
                     start={{x: 0.5, y: 0}}
                     end={{x: 0.5, y: 1}}
@@ -392,7 +392,7 @@ const CityFilterScreen = ({
                 onPress={() => setPurpose(purpose === 'rent' ? null : 'rent')}>
                 {purpose === 'rent' && (
                   <LinearGradient
-                    colors={['#FEE787', '#BD9947', '#9C6522']}
+                    colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                     locations={[0.0456, 0.5076, 0.8831]}
                     start={{x: 0.5, y: 0}}
                     end={{x: 0.5, y: 1}}
@@ -536,7 +536,7 @@ const CityFilterScreen = ({
               collapsable={false}>
               <View style={styles.sliderTrack} />
               <LinearGradient
-                colors={['#FEE787', '#BD9947', '#9C6522']}
+                colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                 locations={[0.0456, 0.5076, 0.8831]}
                 start={{x: 0.5, y: 0}}
                 end={{x: 0.5, y: 1}}

@@ -24,7 +24,11 @@ import {
   PROFILE_RING_LOCATIONS,
 } from './index';
 import PostTextOverlays from './PostTextOverlays';
-import {resolveStorySlideUri} from '../utils/videoPlayback';
+import {
+  cappedMuxUri,
+  muxThumbnailUri,
+  resolveStorySlideUri,
+} from '../utils/videoPlayback';
 import {
   parsePostTextOverlayPayload,
 } from '../utils/postTextOverlay';
@@ -43,7 +47,7 @@ import {
 import {flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 
 const STORY_DURATION_MS = 12000;
-const MEDIA_READY_TIMEOUT_MS = 2500;
+const MEDIA_READY_TIMEOUT_MS = 600;
 const SCREEN_W = Dimensions.get('window').width;
 const SWIPE_COMMIT_FRACTION = 0.25;
 const SWIPE_COMMIT_VELOCITY = 0.35;
@@ -99,32 +103,6 @@ function pagerOffsetBounds(panelCount) {
   return NATIVE_RTL ? {minX: 0, maxX: span} : {minX: -span, maxX: 0};
 }
 
-function buildPanelScale(translateX, panelIndex, currentPanelIndex, panelCount) {
-  const base = pagerOffsetForIndex(currentPanelIndex, panelCount);
-  const dist = panelIndex - currentPanelIndex;
-  if (dist === -1) {
-    return translateX.interpolate({
-      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
-      outputRange: [1, 0.86, 0.86],
-      extrapolate: 'clamp',
-    });
-  }
-  if (dist === 0) {
-    return translateX.interpolate({
-      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
-      outputRange: [0.92, 1, 0.92],
-      extrapolate: 'clamp',
-    });
-  }
-  if (dist === 1) {
-    return translateX.interpolate({
-      inputRange: [base - SCREEN_W, base, base + SCREEN_W],
-      outputRange: [0.86, 0.86, 1],
-      extrapolate: 'clamp',
-    });
-  }
-  return 0.86;
-}
 /** Physical-left third = previous slide; rest = next (Instagram, window coords). */
 function isStoryTapInPrevZone(gestureState) {
   const x =
@@ -136,11 +114,20 @@ function isStoryTapInPrevZone(gestureState) {
 
 const progressFillAlign = NATIVE_RTL ? 'flex-end' : 'flex-start';
 
+function storyPosterUri(uri) {
+  return muxThumbnailUri(uri, {time: 0, width: 720}) || '';
+}
+
 function preloadRingImages(ring) {
   if (!ring?.slides?.length) return;
   ring.slides.forEach(slide => {
-    const uri = slide?.media_url;
-    if (!uri || slide.media_type === 'video') return;
+    const uri = resolveStorySlideUri(slide);
+    if (!uri) return;
+    if (slide.media_type === 'video') {
+      const poster = storyPosterUri(uri);
+      if (poster) Image.prefetch(poster).catch(() => {});
+      return;
+    }
     Image.prefetch(String(uri)).catch(() => {});
   });
   const avatar = ring.profile_image_url;
@@ -164,7 +151,10 @@ function storyMediaLayout(naturalW, naturalH) {
 
 function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
   const webVideoRef = useRef(null);
-  const uri = resolveStorySlideUri(slide);
+  const rawUri = resolveStorySlideUri(slide);
+  const uri =
+    slide?.media_type === 'video' ? cappedMuxUri(rawUri) || rawUri : rawUri;
+  const posterUri = slide?.media_type === 'video' ? storyPosterUri(uri) : '';
   const [videoLayout, setVideoLayout] = useState(null);
   const [imageLayout, setImageLayout] = useState(null);
   const sizedRef = useRef(false);
@@ -179,6 +169,13 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
     setImageLayout(null);
     onMediaLayoutRef.current?.(null);
   }, [uri]);
+
+  // Off-screen neighbor already sized — tell the panel as soon as it becomes active.
+  useEffect(() => {
+    if (!isPaused && sizedRef.current) {
+      onReadyRef.current?.();
+    }
+  }, [isPaused]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -277,11 +274,12 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
               display: 'block',
               opacity: sized ? 1 : 0,
             }}
-            autoPlay={sized && !isPaused}
+            autoPlay={!isPaused}
             muted={isMuted}
             loop
             playsInline
             preload="auto"
+            poster={posterUri || undefined}
             onLoadedMetadata={e => {
               const el = e?.target || webVideoRef.current;
               if (el?.videoWidth && el?.videoHeight) {
@@ -295,6 +293,16 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
 
     return (
       <View style={styles.mediaVideoClip}>
+        {posterUri && !sized ? (
+          <Image
+            source={{uri: posterUri}}
+            style={styles.mediaFullScreen}
+            resizeMode="contain"
+            onLoad={() => {
+              if (!sizedRef.current) onReadyRef.current?.();
+            }}
+          />
+        ) : null}
         <Video
           key={String(uri)}
           source={{uri: String(uri)}}
@@ -303,10 +311,12 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
             {opacity: sized ? 1 : 0},
           ]}
           resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={sized && !isPaused}
+          shouldPlay={!isPaused}
           isMuted={isMuted}
           useNativeControls={false}
           isLooping
+          posterSource={posterUri ? {uri: posterUri} : undefined}
+          usePoster={Boolean(posterUri)}
           onLoad={status => {
             const ns = status?.naturalSize;
             if (ns?.width && ns?.height) {
@@ -317,12 +327,16 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
                 nh = ns.width;
               }
               applyNaturalSize(nw, nh);
+            } else {
+              onReadyRef.current?.();
             }
           }}
           onReadyForDisplay={event => {
             const ns = event?.naturalSize;
             if (ns?.width && ns?.height) {
               applyNaturalSize(ns.width, ns.height);
+            } else {
+              onReadyRef.current?.();
             }
           }}
         />
@@ -367,17 +381,33 @@ function StoryRingSlidePanel({
 }) {
   const slides = ring?.slides || [];
   const slide = slides[slideIndex] || slides[0] || null;
-  const [mediaLoading, setMediaLoading] = useState(isActive);
+  const slideUri = slide ? resolveStorySlideUri(slide) : null;
+  const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaFrame, setMediaFrame] = useState(null);
   const mediaReadyTimerRef = useRef(null);
+  const readyUriRef = useRef(null);
+
+  useEffect(() => {
+    readyUriRef.current = null;
+    setMediaFrame(null);
+  }, [slideUri]);
 
   useEffect(() => {
     if (!isActive) {
       setMediaLoading(false);
       return undefined;
     }
+    // Neighbor stories stay mounted; becoming active must not flash a spinner.
+    if (slideUri && readyUriRef.current === slideUri) {
+      setMediaLoading(false);
+      return undefined;
+    }
+    // Images paint immediately — no overlay. Videos show a poster instead.
+    if (slide?.media_type !== 'video') {
+      setMediaLoading(false);
+      return undefined;
+    }
     setMediaLoading(true);
-    setMediaFrame(null);
     if (mediaReadyTimerRef.current) {
       clearTimeout(mediaReadyTimerRef.current);
     }
@@ -390,16 +420,30 @@ function StoryRingSlidePanel({
         mediaReadyTimerRef.current = null;
       }
     };
-  }, [isActive, slideIndex, slide ? resolveStorySlideUri(slide) : null]);
+  }, [isActive, slideIndex, slideUri, slide?.media_type]);
+
+  useEffect(() => {
+    const nextSlide = slides[slideIndex + 1];
+    if (!nextSlide) return;
+    const nextUri = resolveStorySlideUri(nextSlide);
+    if (!nextUri) return;
+    if (nextSlide.media_type === 'video') {
+      const poster = storyPosterUri(nextUri);
+      if (poster) Image.prefetch(poster).catch(() => {});
+      return;
+    }
+    Image.prefetch(String(nextUri)).catch(() => {});
+  }, [slideIndex, slides]);
 
   const handleMediaReady = useCallback(() => {
+    readyUriRef.current = slideUri;
     if (mediaReadyTimerRef.current) {
       clearTimeout(mediaReadyTimerRef.current);
       mediaReadyTimerRef.current = null;
     }
     setMediaLoading(false);
     if (isActive) onReady?.();
-  }, [isActive, onReady]);
+  }, [isActive, onReady, slideUri]);
 
   const handleMediaLayout = useCallback(
     layout => {
@@ -423,7 +467,7 @@ function StoryRingSlidePanel({
   );
 
   const storyTextPayload = (() => {
-    if (!isActive || !slide) return null;
+    if (!slide) return null;
     const gd = slide?.general_details;
     if (!gd || typeof gd !== 'object') return null;
     const baked = gd.post_text_baked;
@@ -433,7 +477,7 @@ function StoryRingSlidePanel({
     return parsePostTextOverlayPayload({general_details: gd});
   })();
   const isOpenHouseStorySlide = (() => {
-    if (!isActive || !slide) return false;
+    if (!slide) return false;
     const listing = {
       general_details: slide.general_details,
       description: slide.description,
@@ -450,11 +494,10 @@ function StoryRingSlidePanel({
     if (!details) return '';
     return formatOpenHouseOverlayText(details.place, details.date);
   })();
-  // Same band + scale as TikTok feed (top/bottom chrome inset, feedPageHeight).
+  // Same band + scale as TikTok feed. Do not wait for mediaFrame — that delayed
+  // text until after the user had already moved on.
   const showLiveText =
-    !!storyTextPayload?.overlays?.length &&
-    mediaFrame != null &&
-    overlayBand?.height > 0;
+    !!storyTextPayload?.overlays?.length && overlayBand?.height > 0;
   const showOpenHouseOverlay = isOpenHouseStorySlide;
 
   if (!slide) {
@@ -523,9 +566,9 @@ function StoryRingSlidePanel({
           ) : null}
         </View>
       ) : null}
-      {isActive && mediaLoading ? (
+      {isActive && mediaLoading && slide?.media_type === 'video' ? (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator color="#FFFFFF" size="large" />
+          <ActivityIndicator color="#FFFFFF" size="small" />
         </View>
       ) : null}
     </View>
@@ -928,22 +971,10 @@ const StoryViewerModal = ({
             ]}>
             {pagerPanels.map((panel, index) => {
               const isCurrent = index === currentPanelIndex;
-              const panelScale = buildPanelScale(
-                translateX,
-                index,
-                currentPanelIndex,
-                pagerPanels.length,
-              );
               return (
-                <Animated.View
-                  key={panel.key}
-                  style={[
-                    styles.panelPage,
-                    {
-                      width: SCREEN_W,
-                      transform: [{scale: panelScale}],
-                    },
-                  ]}>
+                <View
+                  key={String(panel.ring?.subscription_id || panel.key)}
+                  style={[styles.panelPage, {width: SCREEN_W}]}>
                   <StoryRingSlidePanel
                     ring={panel.ring}
                     slideIndex={isCurrent ? slideIndex : 0}
@@ -952,7 +983,7 @@ const StoryViewerModal = ({
                     isActive={isCurrent}
                     overlayBand={overlayBand}
                   />
-                </Animated.View>
+                </View>
               );
             })}
           </Animated.View>
@@ -1125,7 +1156,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'transparent',
   },
   gestureLayer: {
     ...StyleSheet.absoluteFillObject,

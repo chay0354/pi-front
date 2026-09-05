@@ -17,7 +17,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
-import {flexEnd} from '../utils/rtlLayout';
+import {flexEnd, flexStart, formRtlContainerStyle, hebrewTextAlign} from '../utils/rtlLayout';
 
 import {
   applySubscriptionPromoCode,
@@ -482,7 +482,7 @@ const VerificationScreen = ({
                 <ActivityIndicator color={Colors.white100} />
               ) : isSendReady ? (
                 <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
@@ -521,8 +521,8 @@ const VerificationScreen = ({
         </View>
 
         <View style={styles.promoSection}>
-          <View style={styles.promoCard}>
-            <View style={styles.promoHeaderRow}>
+          <View style={[styles.promoCard, formRtlContainerStyle]}>
+            <View style={[styles.promoHeaderRow, formRtlContainerStyle]}>
               <MaterialCommunityIcons
                 name="ticket-percent-outline"
                 size={22}
@@ -640,7 +640,7 @@ const VerificationScreen = ({
                 <ActivityIndicator color={Colors.white100} />
               ) : canVerifyCode ? (
                 <LinearGradient
-                  colors={['#FEE787', '#BD9947', '#9C6522']}
+                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
                   locations={[0.0456, 0.5076, 0.8831]}
                   start={{x: 0, y: 0}}
                   end={{x: 1, y: 1}}
@@ -803,15 +803,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   promoHeaderRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: flexStart,
+    justifyContent: flexStart,
     gap: 8,
+    width: '100%',
   },
   promoTitle: {
     color: Colors.white100,
     fontSize: 17,
     fontFamily: 'Rubik-Medium',
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    flexShrink: 1,
   },
   promoSubtitle: {
     color: 'rgba(255,255,255,0.55)',
@@ -821,9 +826,9 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   promoAppliedBadge: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignSelf: flexStart,
     gap: 4,
   },
   promoAppliedBadgeText: {

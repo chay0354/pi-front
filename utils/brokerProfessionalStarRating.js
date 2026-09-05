@@ -37,16 +37,20 @@ export const brokerProfessionalStarsFromCount = totalCount => {
  * @returns {number} 1–5
  */
 export const computeBrokerProfessionalStarRating = reviews => {
-  if (!Array.isArray(reviews) || reviews.length === 0) {
+  const rated = (Array.isArray(reviews) ? reviews : []).filter(r => {
+    const n = Number(r?.rating);
+    return Number.isFinite(n) && n >= 1 && n <= 5;
+  });
+  if (rated.length === 0) {
     return BROKER_PRO_STARTING_STARS;
   }
 
-  let stars = brokerProfessionalStarsFromCount(reviews.length);
+  let stars = brokerProfessionalStarsFromCount(rated.length);
   if (stars <= 0) {
     return BROKER_PRO_STARTING_STARS;
   }
 
-  const sorted = [...reviews].sort(
+  const sorted = [...rated].sort(
     (a, b) => reviewTimestamp(b) - reviewTimestamp(a),
   );
   const lastWindow = sorted.slice(0, BROKER_PRO_LOW_RATING_WINDOW);

@@ -36,6 +36,7 @@ import {
   buildPiAiFilterEmptyMessage,
   buildPiAiSearchingMessage,
   filterPiAiSearchListings,
+  inferPiAiQueryConstraints,
 } from '../utils/piAiMatchListings';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import ListingGridCardFigma from './ListingGridCardFigma';
@@ -65,6 +66,18 @@ const piBadgeLtrDirection =
 /** Web StyleSheet omits direction; native uses I18nManager + forceRtlStyle on rows. */
 const listRtlDirection =
   Platform.OS === 'web' ? {direction: 'rtl'} : null;
+
+function friendlyPiAiError(err) {
+  const msg = String(err?.message || err || '');
+  if (
+    /network request failed|failed to fetch|networkerror|timeout|aborted|apiFetch/i.test(
+      msg,
+    )
+  ) {
+    return 'אין חיבור לשרת כרגע. נסה שוב בעוד רגע.';
+  }
+  return msg || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.';
+}
 
 // Palette mirrored from EditPublishAdScreen so this screen matches the rest
 // of the publishing flow.
@@ -243,6 +256,7 @@ const PiAiSearchModal = ({
         const uid = currentUser?.id != null ? String(currentUser.id) : null;
         const res = await getListings({
           status: 'published',
+          timeoutMs: 45000,
         });
         if (cancelled) {
           return;
@@ -262,7 +276,7 @@ const PiAiSearchModal = ({
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e?.message || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.');
+          setError(friendlyPiAiError(e));
           setAllListings([]);
           setResults([]);
         }
@@ -356,6 +370,7 @@ const PiAiSearchModal = ({
       if (listings.length === 0) {
         const result = await getListings({
           status: 'published',
+          timeoutMs: 45000,
         });
         listings = filterPiAiSearchListings(result?.listings || []);
         setAllListings(listings);
@@ -364,7 +379,7 @@ const PiAiSearchModal = ({
         }
       }
 
-      const filteredPool = filterListingsByParsedQuery(listings, parsed);
+      const filteredPool = filterListingsByParsedQuery(listings, parsed, q);
       if (filteredPool.length === 0) {
         setResults([]);
         setEmptyMessage(
@@ -402,7 +417,19 @@ const PiAiSearchModal = ({
       if (rows == null && !aiSaidNoMatch) {
         // Gemini unavailable — keyword rank as backup (not when AI said no match).
         const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
-        rows = rankedResult.ranked.map(r => r.listing);
+        rows = rankedResult.ranked
+          .filter(r => r.score >= 6)
+          .map(r => r.listing);
+      }
+
+      if ((!rows || rows.length === 0) && searchPool.length) {
+        const constraints = inferPiAiQueryConstraints(q);
+        if (constraints.rooms != null) {
+          const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
+          rows = rankedResult.ranked.length
+            ? rankedResult.ranked.map(r => r.listing)
+            : searchPool.slice(0, 20);
+        }
       }
 
       if (!rows || rows.length === 0) {
@@ -417,7 +444,7 @@ const PiAiSearchModal = ({
         }
       }
     } catch (e) {
-      setError(e?.message || 'שגיאה בטעינת המודעות. בדוק חיבור לשרת.');
+      setError(friendlyPiAiError(e));
     } finally {
       setLoading(false);
       setSearchingMessage('');

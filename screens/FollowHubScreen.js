@@ -23,23 +23,26 @@ import {DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {
   getFollowHubRows,
   getFollowStats,
+  getSubscription,
   respondToFollowRequest,
   sendFollowRequest,
   cancelFollowRequest,
   unfollowUser,
   toSubscriptionId,
 } from '../utils/api';
+import {
+  resolveProfileDisplayName,
+  resolveProfileEmail,
+} from '../utils/profileFields';
+import {isAdsListingRecord} from '../utils/listingShape';
 
 const TAB_REQUESTS = 'requests';
 const TAB_FOLLOWERS = 'followers';
 const TAB_FOLLOWING = 'following';
 const TAB_LIKES = 'likes';
 
-/** Same art as TikTokFeedScreen user-search rating row. */
-import {PiRatingBadge} from '../components/PiRatingBadge';
-
 /** Figma node 8:86865 — gold pill (עקוב / primary). */
-const GOLD_CTA = ['#FEE787', '#BD9947', '#9C6522'];
+const GOLD_CTA = ['#FFE56A', '#F7C63A', '#E5A80F'];
 const GOLD_CTA_LOCS = [0.0456, 0.5076, 0.8831];
 const GOLD_TEXT = '#1E1D27';
 
@@ -86,20 +89,16 @@ const FollowHubScreen = ({
 }) => {
   const insets = useSafeAreaInsets();
   const profileId = toSubscriptionId(
-    profileUser?.subscription_id || profileUser?.owner_id || profileUser?.id,
+    profileUser?.subscription_id ||
+      profileUser?.owner_id ||
+      profileUser?.creator_subscription_id ||
+      (!isAdsListingRecord(profileUser) ? profileUser?.id : null),
   );
   const viewerId = toSubscriptionId(
     currentUser?.subscription_id || currentUser?.owner_id || currentUser?.id,
   );
   const isOwnProfile = !!profileId && !!viewerId && profileId === viewerId;
-  const displayName =
-    profileUser?.creator_name ||
-    profileUser?.name ||
-    profileUser?.agent_name ||
-    profileUser?.contact_person_name ||
-    profileUser?.business_name ||
-    profileUser?.broker_office_name ||
-    '';
+  const [profileMeta, setProfileMeta] = useState(null);
 
   const tabs = useMemo(() => {
     const base = [
@@ -136,6 +135,52 @@ const FollowHubScreen = ({
   }, [safeInitialTab]);
 
   useEffect(() => {
+    if (!profileId) {
+      setProfileMeta(null);
+      return;
+    }
+    let cancelled = false;
+    getSubscription(profileId)
+      .then(data => {
+        if (cancelled || !data?.subscription) return;
+        setProfileMeta(data.subscription);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+
+  const identitySource = profileMeta || profileUser;
+  const listingIdentity = isAdsListingRecord(profileUser) && !profileMeta;
+  const displayName =
+    resolveProfileDisplayName(
+      {
+        ...(identitySource || {}),
+        name: listingIdentity
+          ? identitySource?.creator_name ||
+            identitySource?.contact_person_name ||
+            identitySource?.agent_name
+          : identitySource?.creator_name ||
+            identitySource?.name ||
+            identitySource?.agent_name,
+        subscription_type:
+          identitySource?.subscription_type ||
+          identitySource?.creator_subscription_type,
+      },
+      {fallback: ''},
+    ) ||
+    profileUser?.creator_name ||
+    profileUser?.contact_person_name ||
+    profileUser?.business_name ||
+    profileUser?.broker_office_name ||
+    '';
+  const displayEmail = resolveProfileEmail(identitySource, {
+    preferred: isOwnProfile ? currentUser?.email : profileMeta?.email,
+    fallback: isOwnProfile ? profileMeta?.email : profileUser?.email,
+  });
+
+  useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 320);
     return () => clearTimeout(t);
   }, [search]);
@@ -144,10 +189,14 @@ const FollowHubScreen = ({
     if (!profileId) return;
     try {
       const data = await getFollowStats(profileId);
+      const acceptedFollowing = Number(data?.stats?.following || 0);
+      const outgoingPending = isOwnProfile
+        ? Number(data?.stats?.following_outgoing_pending || 0)
+        : 0;
       setCounts({
         likes: Number(data?.stats?.likes || 0),
         followers: Number(data?.stats?.followers || 0),
-        following: Number(data?.stats?.following || 0),
+        following: acceptedFollowing + outgoingPending,
         pending_requests: isOwnProfile
           ? Number(data?.stats?.pending_requests || 0)
           : 0,
@@ -165,7 +214,14 @@ const FollowHubScreen = ({
         tab: activeTab,
         q: debouncedSearch,
       });
-      setRows(Array.isArray(data?.rows) ? data.rows : []);
+      const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+      setRows(nextRows);
+      if (isOwnProfile && activeTab === TAB_FOLLOWING && !debouncedSearch) {
+        setCounts(prev => ({
+          ...prev,
+          following: nextRows.length,
+        }));
+      }
     } catch (e) {
       Alert.alert('', e?.message || 'שגיאה בטעינת הרשימה');
     } finally {
@@ -377,7 +433,7 @@ const FollowHubScreen = ({
      * if they accepted and you follow, בטל מעקב. Otherwise עקוב.
      */
     if (isOwnProfile && activeTab === TAB_FOLLOWING) {
-      if (row?.has_pending_request_by_viewer) {
+      if (row?.has_pending_request_by_viewer || row?.outgoing_follow_pending) {
         return (
           <View style={styles.rowActionClusterEnd}>
             <View
@@ -483,12 +539,6 @@ const FollowHubScreen = ({
     );
   };
 
-  const formatViewerAvg = value => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return '';
-    return String(Math.round(n));
-  };
-
   const labelWithCount = tabId => {
     if (tabId === TAB_REQUESTS) return `הצעות ${counts.pending_requests}`;
     if (tabId === TAB_FOLLOWERS) return `עוקבים ${counts.followers}`;
@@ -496,12 +546,8 @@ const FollowHubScreen = ({
     return `עוקב ${counts.following}`;
   };
 
-  /** במעקב / עוקב: accepted follows only — never pending outgoing requests. */
   const displayRows = useMemo(() => {
     const list = rows || [];
-    if (activeTab === TAB_FOLLOWING) {
-      return list.filter(row => !row?.outgoing_follow_pending);
-    }
     if (!isOwnProfile && activeTab === TAB_FOLLOWERS) {
       return list.filter(row => !row?.request_id);
     }
@@ -519,7 +565,16 @@ const FollowHubScreen = ({
               color="#fff"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{displayName || 'פרופיל'}</Text>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {displayName || 'פרופיל'}
+            </Text>
+            {displayEmail ? (
+              <Text style={styles.headerEmail} numberOfLines={1}>
+                {displayEmail}
+              </Text>
+            ) : null}
+          </View>
           <View style={styles.backBtn} />
         </View>
         <View style={styles.tabsRow}>
@@ -580,7 +635,10 @@ const FollowHubScreen = ({
             const showGoldRing = shouldShowProfileGoldRing(row);
             return (
             <View
-              key={`${activeTab}-${row.id}`}
+              key={`${activeTab}-${row.id}-${
+                row.request_id ||
+                (row.outgoing_follow_pending ? 'pending' : 'accepted')
+              }`}
               style={[
                 styles.row,
                 isMutualGoldRow(row) ? styles.rowMutual : null,
@@ -618,22 +676,8 @@ const FollowHubScreen = ({
                       styles.rowName,
                       isMutualGoldRow(row) ? styles.rowNameMutual : null,
                     ]}>
-                    {row.name}
+                    {row.name || 'משתמש'}
                   </Text>
-                  <View style={styles.rowMetaRow}>
-                    <Text style={styles.rowSub}>{row.subtitle}</Text>
-                    {row?.viewer_rating_avg != null ? (
-                      <PiRatingBadge
-                        rating={Math.round(Number(row.viewer_rating_avg))}
-                        label={
-                          Math.round(Number(row.viewer_rating_avg)) >= 5
-                            ? formatViewerAvg(row.viewer_rating_avg)
-                            : undefined
-                        }
-                        variant="compactFollow"
-                      />
-                    ) : null}
-                  </View>
                 </View>
               </TouchableOpacity>
               {renderActionButton(row)}
@@ -709,10 +753,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTitleWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+  },
+  headerEmail: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'center',
+    marginTop: 2,
   },
   tabsRow: {
     flexDirection: 'row',
@@ -974,8 +1032,8 @@ const styles = StyleSheet.create({
   },
   avatarRingMutual: {
     borderWidth: 3,
-    borderColor: '#FEE787',
-    shadowColor: '#FEE787',
+    borderColor: '#FFE56A',
+    shadowColor: '#FFE56A',
     shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.45,
     shadowRadius: 6,
