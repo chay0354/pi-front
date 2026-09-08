@@ -19,11 +19,21 @@ import {Colors} from '../constants/styles';
 const CROP_SIZE = Math.min(320, Dimensions.get('window').width - 48);
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+/** Half the crop box — makes the mask ring reach past the stage corners. */
+const MASK_THICKNESS = Math.ceil(CROP_SIZE / 2);
 /** Extra slack (px) past each image edge — you can keep panning a bit after the photo ends. */
 const PAN_OVERSCROLL = 80;
 
-function getScaledLayout(imgSize, pan, zoom) {
-  const baseScale = Math.max(CROP_SIZE / imgSize.width, CROP_SIZE / imgSize.height);
+function getBaseScale(imgSize, fit) {
+  const byWidth = CROP_SIZE / imgSize.width;
+  const byHeight = CROP_SIZE / imgSize.height;
+  return fit === 'contain'
+    ? Math.min(byWidth, byHeight)
+    : Math.max(byWidth, byHeight);
+}
+
+function getScaledLayout(imgSize, pan, zoom, fit = 'cover') {
+  const baseScale = getBaseScale(imgSize, fit);
   const totalScale = baseScale * zoom;
   const displayW = imgSize.width * totalScale;
   const displayH = imgSize.height * totalScale;
@@ -45,11 +55,12 @@ function clampPan(pan, displayW, displayH) {
   };
 }
 
-function getCropRect(imgSize, pan, zoom) {
+function getCropRect(imgSize, pan, zoom, fit = 'cover') {
   const {totalScale, displayW, displayH, imageLeft, imageTop} = getScaledLayout(
     imgSize,
     pan,
     zoom,
+    fit,
   );
   const originX = Math.max(0, -imageLeft / totalScale);
   const originY = Math.max(0, -imageTop / totalScale);
@@ -95,6 +106,8 @@ const CircleImageCropModal = ({
   onCancel,
   onConfirm,
   title = 'חתוך את הלוגו',
+  shape = 'circle',
+  fit = 'cover',
 }) => {
   const insets = useSafeAreaInsets();
   const [imgSize, setImgSize] = useState({width: 1, height: 1});
@@ -122,18 +135,18 @@ const CircleImageCropModal = ({
   }, [visible, imageUri]);
 
   const cropLayout = useMemo(
-    () => getCropRect(imgSize, pan, zoom),
-    [imgSize, pan, zoom],
+    () => getCropRect(imgSize, pan, zoom, fit),
+    [imgSize, pan, zoom, fit],
   );
 
   const applyPan = useCallback(
     nextPan => {
-      const {displayW, displayH} = getScaledLayout(imgSize, nextPan, zoom);
+      const {displayW, displayH} = getScaledLayout(imgSize, nextPan, zoom, fit);
       const clamped = clampPan(nextPan, displayW, displayH);
       setPan(clamped);
       panRef.current = clamped;
     },
-    [imgSize, zoom],
+    [imgSize, zoom, fit],
   );
 
   useEffect(() => {
@@ -167,8 +180,13 @@ const CircleImageCropModal = ({
     if (!imageUri || saving) return;
     setSaving(true);
     try {
+      const keepsFullImage =
+        cropLayout.width >= imgSize.width - 2 &&
+        cropLayout.height >= imgSize.height - 2;
       let uri;
-      if (Platform.OS === 'web') {
+      if (keepsFullImage) {
+        uri = imageUri;
+      } else if (Platform.OS === 'web') {
         uri = await cropImageWeb(imageUri, cropLayout);
       } else {
         uri = await captureRef(cropRef, {
@@ -186,7 +204,7 @@ const CircleImageCropModal = ({
     } finally {
       setSaving(false);
     }
-  }, [imageUri, saving, cropLayout, onConfirm]);
+  }, [imageUri, saving, cropLayout, imgSize, onConfirm]);
 
   if (!imageUri) return null;
 
@@ -220,7 +238,7 @@ const CircleImageCropModal = ({
             <View
               ref={cropRef}
               collapsable={false}
-              style={styles.cropCircle}>
+              style={styles.cropCapture}>
               <Image
                 source={{uri: imageUri}}
                 style={{
@@ -232,8 +250,21 @@ const CircleImageCropModal = ({
                 }}
               />
             </View>
+            {shape === 'circle' ? (
+              <View pointerEvents="none" style={styles.cropMaskRing} />
+            ) : null}
+            <View
+              pointerEvents="none"
+              style={
+                shape === 'square' ? styles.cropGuideSquare : styles.cropGuideRing
+              }
+            />
           </View>
-          <Text style={styles.hintText}>גרור כדי למקם · השתמש בזום לדיוק</Text>
+          <Text style={styles.hintText}>
+            {shape === 'square'
+              ? 'התמונה המלאה בפנים · גרור או זום כדי לחתוך'
+              : 'גרור כדי למקם · השתמש בזום לדיוק'}
+          </Text>
         </View>
 
         <View style={styles.zoomRow}>
@@ -311,15 +342,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1e1d27',
+    overflow: 'hidden',
   },
-  cropCircle: {
+  /**
+   * Saved output stays a full square photo. Masking the captured view to a
+   * circle baked dark corners into the file, so re-editing showed black wedges.
+   */
+  cropCapture: {
     width: CROP_SIZE,
     height: CROP_SIZE,
-    borderRadius: CROP_SIZE / 2,
     overflow: 'hidden',
+    backgroundColor: '#1e1d27',
+  },
+  /** Ring border punches a circular hole — dims everything outside the circle. */
+  cropMaskRing: {
+    position: 'absolute',
+    left: -MASK_THICKNESS,
+    top: -MASK_THICKNESS,
+    width: CROP_SIZE + MASK_THICKNESS * 2,
+    height: CROP_SIZE + MASK_THICKNESS * 2,
+    borderRadius: CROP_SIZE / 2 + MASK_THICKNESS,
+    borderWidth: MASK_THICKNESS,
+    borderColor: 'rgba(30, 29, 39, 0.82)',
+  },
+  cropGuideRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: CROP_SIZE / 2,
     borderWidth: 2,
     borderColor: '#F7C63A',
-    backgroundColor: '#1e1d27',
+  },
+  cropGuideSquare: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 0,
+    borderWidth: 2,
+    borderColor: '#F7C63A',
   },
   hintText: {
     marginTop: 20,

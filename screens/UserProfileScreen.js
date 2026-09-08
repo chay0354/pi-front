@@ -45,7 +45,7 @@ import {
   persistUnseenLikedCount,
 } from '../utils/tikTokLikedStorage';
 import {LinearGradient} from 'expo-linear-gradient';
-import {Divider} from '../components';
+import {Divider, SharePostSheet} from '../components';
 import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import LocationMap from '../components/LocationMap';
 import RatingImprovePicker from '../components/RatingImprovePicker';
@@ -85,7 +85,6 @@ import ProfileAvatar from '../components/ProfileAvatar';
 import {PiRatingBadge} from '../components/PiRatingBadge';
 import {getPiReviewStarSource} from '../utils/piRatingBadgeAssets';
 import {FollowPlusBadge} from '../components/FollowPlusBadge';
-import ExternalShareSheet from '../components/ExternalShareSheet';
 import BnbListingProfileContent from '../components/BnbListingProfileContent';
 import PartnersListingProfileContent from '../components/PartnersListingProfileContent';
 import CompanyLandListingProfileContent from '../components/CompanyLandListingProfileContent';
@@ -3823,7 +3822,11 @@ const UserProfileScreen = ({
                   removeClippedSubviews={false}
                   showsHorizontalScrollIndicator={false}
                   style={styles.myPropertiesFlatList}
-                  contentContainerStyle={styles.myPropertiesListContent}
+                  contentContainerStyle={[
+                    styles.myPropertiesListContent,
+                    myPropertyListings.length === 1 &&
+                      styles.myPropertiesListContentSingle,
+                  ]}
                   keyExtractor={item => String(item.id)}
                   renderItem={({item}) => {
                     const imgs = item.listing_images || [];
@@ -4353,17 +4356,11 @@ const UserProfileScreen = ({
         </View>
       )}
 
-      <ExternalShareSheet
+      <SharePostSheet
         visible={listingShareOpen}
-        listing={lastAd}
-        caption={firstNonEmpty(
-          lastAd?.description,
-          lastAd?.title,
-          lastAd?.address,
-          lastAd?.location,
-          displayName,
-        )}
-        title="שיתוף מודעה"
+        post={lastAd}
+        currentUser={currentUser}
+        shareKind="listing"
         onClose={() => setListingShareOpen(false)}
       />
     </View>
@@ -4505,6 +4502,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
   },
   myPropertiesListContent: {paddingHorizontal: 12},
+  myPropertiesListContentSingle: {
+    flexGrow: 1,
+    ...forceLtrStyle,
+    justifyContent: 'flex-end',
+  },
   myPropertiesListPlaceholder: {
     paddingVertical: 24,
     paddingHorizontal: 24,

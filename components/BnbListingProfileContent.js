@@ -429,7 +429,11 @@ export default function BnbListingProfileContent({
                   <Text style={styles.tagWhiteText}>{unitLabel}</Text>
                 </View>
                 <View style={styles.piBadgeBelowTag}>
-                  <PiRatingBadge rating={displayPiRating} variant="listing" />
+                  <PiRatingBadge
+                    rating={displayPiRating}
+                    variant="listing"
+                    textStyle={styles.bnbFiveDigit}
+                  />
                 </View>
               </View>
             </View>
@@ -576,7 +580,7 @@ export default function BnbListingProfileContent({
       {serviceColumns.count > 0 ? (
         <View style={[styles.twoColGrid, {width: CONTENT_W}]}>
           <View style={styles.col}>
-            {serviceColumns.right.map(t => (
+            {serviceColumns.left.map(t => (
               <InfoChip
                 key={t.id}
                 label={t.label}
@@ -585,7 +589,7 @@ export default function BnbListingProfileContent({
             ))}
           </View>
           <View style={styles.col}>
-            {serviceColumns.left.map(t => (
+            {serviceColumns.right.map(t => (
               <InfoChip
                 key={t.id}
                 label={t.label}
@@ -666,6 +670,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     justifyContent: 'center',
     marginTop: 2,
+  },
+  bnbFiveDigit: {
+    transform: [{translateX: 3}, {translateY: 3}],
   },
   piBadge: {
     flexDirection: 'row-reverse',

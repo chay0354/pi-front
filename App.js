@@ -765,9 +765,12 @@ function App() {
     [editPublishSourceCategory, handleSidebarFilterChange, replaceCurrentScreen],
   );
 
-  /** Open a feed post by id — sets category, פוסטים sidebar, and scroll focus. */
+  /** Open a listing in the TikTok feed and scroll to it. */
   const openListingInTikTokFeed = useCallback(
-    (listing, {returnScreen = screenName.home} = {}) => {
+    (
+      listing,
+      {returnScreen = screenName.home, applyPostsFilter = true} = {},
+    ) => {
       if (!listing?.id) return;
       const listingId = String(listing.id).trim();
       const rawCat =
@@ -775,7 +778,7 @@ function App() {
       const isFeedPost = isFeedPostListingRecord(listing);
       if (Number.isFinite(rawCat) && rawCat > 0) {
         setSelectedCategory(String(rawCat));
-        if (isFeedPost) {
+        if (applyPostsFilter && isFeedPost) {
           handleSidebarFilterChange(
             String(rawCat),
             tikTokPostsSidebarFilterForCategory(rawCat),
@@ -3037,10 +3040,9 @@ function App() {
                 onOpenPost={listing => {
                   setSharedListingForChat(null);
                   openListingInTikTokFeed(listing, {
-                    returnScreen: chatReturnScreen,
+                    returnScreen: screenName.chat,
+                    applyPostsFilter: false,
                   });
-                  setChatListRefreshKey(k => k + 1);
-                  requestAnimationFrame(() => setSelectedConversation(null));
                 }}
                 onPiWelcomeOpened={async () => {
                   setPiWelcomeRead(true);

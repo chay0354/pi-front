@@ -383,7 +383,7 @@ const PiAiSearchModal = ({
       if (filteredPool.length === 0) {
         setResults([]);
         setEmptyMessage(
-          buildPiAiFilterEmptyMessage(parsed, listings.length) ||
+          buildPiAiFilterEmptyMessage(parsed, listings.length, q) ||
             `חיפשתי ב-${listings.length} מודעות ולא מצאתי התאמה.`,
         );
         return;
@@ -424,7 +424,15 @@ const PiAiSearchModal = ({
 
       if ((!rows || rows.length === 0) && searchPool.length) {
         const constraints = inferPiAiQueryConstraints(q);
-        if (constraints.rooms != null) {
+        // The pool already satisfies every hard constraint, so anything left in
+        // it is a valid answer even when Gemini declined to pick.
+        const hasHardNumbers =
+          constraints.rooms != null ||
+          constraints.area != null ||
+          constraints.floor != null ||
+          constraints.price != null ||
+          constraints.amenities != null;
+        if (hasHardNumbers) {
           const rankedResult = rankListingsByQuery(q, searchPool, {topN: 20});
           rows = rankedResult.ranked.length
             ? rankedResult.ranked.map(r => r.listing)

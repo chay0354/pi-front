@@ -1,98 +1,45 @@
 import React, {useCallback, useRef} from 'react';
-import {Image, Platform, StyleSheet, View, useWindowDimensions} from 'react-native';
+import {Image, StyleSheet, View} from 'react-native';
+import {bootFrameLtrStyle, setBootFrameSize} from '../utils/bootFrame';
 
-/** assets/SplashScreen.png — the bitmap expo-splash-screen shows natively. */
-const SPLASH_IMAGE = {width: 1242, height: 2688};
-
-/**
- * Where homeLogo.png's canvas sits inside SplashScreen.png, as a fraction of
- * that bitmap. Measured by diffing SplashScreen.png against splashBack.png
- * (the same artwork without the logo): the logo is composited at 1.5896x with
- * its content starting at (178, 824).
- */
-const SPLASH_LOGO_FRACTION = {
-  x: 0.142037,
-  y: 0.302407,
-  width: 0.716731,
-  height: 0.312243,
-};
+export {getBootSplashLogoRect} from '../utils/bootFrame';
 
 /**
- * The logo rect the native splash is already showing, so the React frame can
- * draw it in the identical spot. expo-splash-screen renders the bitmap with
- * resizeMode "cover" (CENTER_CROP): scaled uniformly to fill, centered on both
- * axes. Reproducing that here is what stops the logo jumping when the native
- * splash hides — a fixed box only lines up on one screen size.
+ * Static boot cover — the same bitmap expo-splash-screen already drew
+ * (`SplashScreen.png`, resizeMode cover, 100% of the React root).
+ * One image, no separate logo, so hiding the native splash cannot shift
+ * the building or the Pi.
  *
- * Must match HomeIntroModal's initial logo rect.
- */
-export function getBootSplashLogoRect(screenWidth, screenHeight) {
-  const scale = Math.max(
-    screenWidth / SPLASH_IMAGE.width,
-    screenHeight / SPLASH_IMAGE.height,
-  );
-  const drawnWidth = SPLASH_IMAGE.width * scale;
-  const drawnHeight = SPLASH_IMAGE.height * scale;
-  const offsetX = (screenWidth - drawnWidth) / 2;
-  const offsetY = (screenHeight - drawnHeight) / 2;
-  const rect = {
-    x: offsetX + SPLASH_LOGO_FRACTION.x * drawnWidth,
-    y: offsetY + SPLASH_LOGO_FRACTION.y * drawnHeight,
-    width: SPLASH_LOGO_FRACTION.width * drawnWidth,
-    height: SPLASH_LOGO_FRACTION.height * drawnHeight,
-  };
-  if (Platform.OS !== 'android') return rect;
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
-  };
-}
-
-/**
- * Static boot frame — identical to HomeIntroModal at t=0 so dropping the
- * cover never flashes a different logo/background.
+ * Layout is still measured here so HomeIntroModal can place its moving
+ * logo on the same box the native splash used.
  */
 export default function BootSplashFrame({onFirstPaint}) {
-  const {width: screenWidth, height: screenHeight} = useWindowDimensions();
   const reportedRef = useRef(false);
-  const logoRect = getBootSplashLogoRect(screenWidth, screenHeight);
+  const onFirstPaintRef = useRef(onFirstPaint);
+  onFirstPaintRef.current = onFirstPaint;
 
-  const handleLayout = useCallback(() => {
+  const handleLayout = useCallback(event => {
+    const {width, height} = event.nativeEvent.layout;
+    setBootFrameSize(width, height);
     if (reportedRef.current) return;
     reportedRef.current = true;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        onFirstPaint?.();
+        onFirstPaintRef.current?.();
       });
     });
-  }, [onFirstPaint]);
+  }, []);
 
   return (
     <View
-      style={styles.root}
+      style={[styles.root, bootFrameLtrStyle]}
       onLayout={handleLayout}
       pointerEvents="none"
       collapsable={false}>
       <Image
-        source={require('../assets/splashBack.png')}
-        style={StyleSheet.absoluteFillObject}
+        source={require('../assets/SplashScreen.png')}
+        style={styles.splash}
         resizeMode="cover"
-        fadeDuration={0}
-      />
-      <Image
-        source={require('../assets/homeLogo.png')}
-        style={[
-          styles.logo,
-          {
-            left: logoRect.x,
-            top: logoRect.y,
-            width: logoRect.width,
-            height: logoRect.height,
-          },
-        ]}
-        resizeMode="contain"
         fadeDuration={0}
       />
     </View>
@@ -103,8 +50,13 @@ const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1e1d27',
+    overflow: 'hidden',
   },
-  logo: {
+  splash: {
     position: 'absolute',
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%',
   },
 });

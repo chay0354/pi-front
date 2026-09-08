@@ -27,7 +27,7 @@ export const ProfileVerification = ({
         handleMainImageUpload={handleMainImageUpload}
         handleMainImageChange={handleMainImageChange}
         mainImageInputRef={mainImageInputRef}
-        circularPreview
+        previewShape="square"
         onEditExistingImage={onEditExistingImage}
       />
 

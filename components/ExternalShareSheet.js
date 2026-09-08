@@ -7,16 +7,16 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {
   EXTERNAL_SHARE_PLATFORMS,
   listingIdForShare,
   shareListingToPlatform,
 } from '../utils/externalShare';
+import ShareBrandIcon from './ShareBrandIcon';
 
 /**
  * Platform share sheet for a listing/post — WhatsApp, Instagram, Facebook,
- * TikTok, copy. Sends the /p/:id link that opens that item in the Pi app.
+ * TikTok, copy. Sends the /p/:id link that opens that post in the app.
  */
 export default function ExternalShareSheet({
   visible,
@@ -68,13 +68,7 @@ export default function ExternalShareSheet({
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={`שתף ב${item.label}`}>
-                <View style={[styles.icon, {backgroundColor: item.color}]}>
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={22}
-                    color={item.id === 'copy' ? '#1E1D27' : '#fff'}
-                  />
-                </View>
+                <ShareBrandIcon item={item} size={48} />
                 <Text style={styles.label}>{item.label}</Text>
               </TouchableOpacity>
             ))}
@@ -116,13 +110,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 58,
     gap: 6,
-  },
-  icon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   label: {
     color: 'rgba(255,255,255,0.8)',

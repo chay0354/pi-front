@@ -2,7 +2,6 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   Modal,
   TouchableOpacity,
@@ -26,6 +25,12 @@ import {
   sendGroupChatMessage,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {normalizeChatAvatarUrl} from '../utils/chatAvatar';
+import ChatListRowAvatar, {
+  CHAT_GROUP_AVATAR_PLACEHOLDER,
+  CHAT_LIST_AVATAR_PLACEHOLDER,
+} from './ChatListRowAvatar';
+import ShareBrandIcon from './ShareBrandIcon';
 import {resolveAdVideoUri} from '../utils/videoPlayback';
 import {flexStart} from '../utils/rtlLayout';
 import FeedPostPreviewMedia from './FeedPostPreviewMedia';
@@ -107,7 +112,13 @@ const SharePostSheet = ({
   onClose,
   onShareToConversation,
   onShareCounted,
+  shareKind = 'post',
 }) => {
+  const isListingShare = shareKind === 'listing';
+  const headerTitle = isListingShare ? 'שיתוף מודעה' : 'שיתוף פוסט';
+  const previewKindLabel = isListingShare ? 'מודעה להעברה' : 'פוסט להעברה';
+  const fallbackCaption = isListingShare ? 'מודעה' : 'פוסט';
+  const sendFallback = isListingShare ? 'מודעה משותפת' : 'פוסט משותף';
   /** Preview chip is shaped like a feed page (single source: utils/postFrame). */
   const postAspect = usePostFrameAspect();
   const [conversations, setConversations] = useState([]);
@@ -134,26 +145,36 @@ const SharePostSheet = ({
     try {
       const res = await getChatConversations(myEmail);
       const list = Array.isArray(res?.conversations) ? res.conversations : [];
-      const mapped = list.map(c => ({
-        id: c.otherUserEmail || c.id,
-        otherUserEmail: c.otherUserEmail || null,
-        isGroup: c.isGroup === true,
-        name: c.name || 'משתמש',
-        profileImageUrl:
-          getUserProfileImageUrl(c) ||
-          (c.groupImageUrl != null && String(c.groupImageUrl).trim()
-            ? String(c.groupImageUrl).trim()
-            : null) ||
-          (c.group_image_url != null && String(c.group_image_url).trim()
-            ? String(c.group_image_url).trim()
-            : null) ||
-          null,
-        preview: c.preview || '',
-        time: c.time || '',
-        lastMessageAt: c.lastMessageAt || null,
-        listingId: c.listingId || null,
-        listingCategoryLabel: c.listingCategoryLabel || null,
-      }));
+      const mapped = list.map(c => {
+        const peerSubTypeRaw =
+          c.subscriptionType ?? c.subscription_type ?? null;
+        const peerSubscriptionType =
+          peerSubTypeRaw != null && String(peerSubTypeRaw).trim()
+            ? String(peerSubTypeRaw).trim().toLowerCase()
+            : null;
+        return {
+          id: c.otherUserEmail || c.id,
+          otherUserEmail: c.otherUserEmail || null,
+          isGroup: c.isGroup === true,
+          name: c.name || 'משתמש',
+          profileImageUrl:
+            getUserProfileImageUrl(c) ||
+            (c.groupImageUrl != null && String(c.groupImageUrl).trim()
+              ? String(c.groupImageUrl).trim()
+              : null) ||
+            (c.group_image_url != null && String(c.group_image_url).trim()
+              ? String(c.group_image_url).trim()
+              : null) ||
+            null,
+          subscriptionType: peerSubscriptionType,
+          subscription_type: peerSubscriptionType,
+          preview: c.preview || '',
+          time: c.time || '',
+          lastMessageAt: c.lastMessageAt || null,
+          listingId: c.listingId || null,
+          listingCategoryLabel: c.listingCategoryLabel || null,
+        };
+      });
       setConversations(mapped);
     } catch (err) {
       console.warn('[SharePostSheet] fetch failed', err?.message || err);
@@ -223,7 +244,7 @@ const SharePostSheet = ({
         await sendGroupChatMessage(
           conv.id,
           myEmail,
-          caption || 'פוסט משותף',
+          sendFallback,
           imageUrl ? {type: 'image', url: imageUrl} : null,
           postId,
           true,
@@ -232,7 +253,7 @@ const SharePostSheet = ({
         await sendChatMessage(
           myEmail,
           conv.otherUserEmail,
-          caption || 'פוסט משותף',
+          sendFallback,
           receiverDisplay,
           senderDisplay,
           imageUrl ? {type: 'image', url: imageUrl} : null,
@@ -293,9 +314,12 @@ const SharePostSheet = ({
   const caption = postCaption(post);
 
   const renderConversation = ({item}) => {
-    const initial = (item.name || '?').slice(0, 1).toUpperCase();
     const isSending = sendingToId === item.id;
     const disabled = !!sendingToId;
+    const rowAvatarUrl = normalizeChatAvatarUrl(
+      getUserProfileImageUrl(item) || item.profileImageUrl || null,
+    );
+    const rowUserRef = item.otherUserEmail || item.id || null;
     return (
       <TouchableOpacity
         activeOpacity={0.85}
@@ -303,22 +327,21 @@ const SharePostSheet = ({
         style={[styles.row, disabled && !isSending && {opacity: 0.5}]}
         onPress={() => handlePickConversation(item)}>
         <View style={styles.avatarWrap}>
-          {item.profileImageUrl ? (
-            <Image
-              source={{uri: item.profileImageUrl}}
-              style={styles.avatarImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <LinearGradient
-              colors={GOLD_GRADIENT}
-              locations={GOLD_GRADIENT_LOCATIONS}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
-              style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>{initial}</Text>
-            </LinearGradient>
-          )}
+          <ChatListRowAvatar
+            uri={rowAvatarUrl}
+            debugKey={item.id ?? item.otherUserEmail ?? item.name}
+            userRef={item.isGroup === true ? null : rowUserRef}
+            subscriptionType={
+              item.subscriptionType || item.subscription_type || null
+            }
+            forceGoldRing={item.isGroup === true}
+            placeholderImage={
+              item.isGroup === true
+                ? CHAT_GROUP_AVATAR_PLACEHOLDER
+                : CHAT_LIST_AVATAR_PLACEHOLDER
+            }
+            size={44}
+          />
         </View>
         <View style={[styles.rowText, {alignItems: flexStart}]}>
           <Text style={[styles.rowName, {textAlign: 'left'}]} numberOfLines={1}>
@@ -370,7 +393,7 @@ const SharePostSheet = ({
           </View>
 
           <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>שיתוף פוסט</Text>
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
           </View>
 
           <View style={styles.platformRow}>
@@ -382,17 +405,7 @@ const SharePostSheet = ({
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={`שתף ב${item.label}`}>
-                <View
-                  style={[
-                    styles.platformIcon,
-                    {backgroundColor: item.color},
-                  ]}>
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={22}
-                    color={item.id === 'copy' ? '#1E1D27' : '#fff'}
-                  />
-                </View>
+                <ShareBrandIcon item={item} size={48} />
                 <Text style={styles.platformLabel}>{item.label}</Text>
               </TouchableOpacity>
             ))}
@@ -416,12 +429,12 @@ const SharePostSheet = ({
             </View>
             <View style={[styles.previewTextWrap, {alignItems: flexStart}]}>
               <Text style={[styles.previewLabel, {textAlign: 'left'}]}>
-                פוסט להעברה
+                {previewKindLabel}
               </Text>
               <Text
                 style={[styles.previewCaption, {textAlign: 'left'}]}
                 numberOfLines={2}>
-                {caption || 'פוסט'}
+                {caption || fallbackCaption}
               </Text>
             </View>
           </View>
@@ -518,13 +531,6 @@ const styles = StyleSheet.create({
     width: 58,
     gap: 6,
   },
-  platformIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   platformLabel: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 11,
@@ -596,18 +602,9 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: '#373548',
-  },
-  avatarImage: {width: '100%', height: '100%'},
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: {color: '#1E1D27', fontSize: 18, fontFamily: 'Rubik-Medium'},
   rowText: {flex: 1},
   rowName: {
     color: '#fff',

@@ -10,26 +10,28 @@ export const EXTERNAL_SHARE_PLATFORMS = [
   {
     id: 'whatsapp',
     label: 'וואטסאפ',
-    icon: 'whatsapp',
-    color: '#25D366',
+    image: require('../assets/share/whatsapp.png'),
+    tileRadius: 24,
   },
   {
     id: 'instagram',
     label: 'אינסטגרם',
-    icon: 'instagram',
-    color: '#E4405F',
+    image: require('../assets/share/instagram.png'),
+    tileRadius: 12,
   },
   {
     id: 'facebook',
     label: 'פייסבוק',
-    icon: 'facebook',
-    color: '#1877F2',
+    image: require('../assets/share/facebook.png'),
+    tileRadius: 24,
   },
   {
     id: 'tiktok',
     label: 'טיקטוק',
-    icon: 'music-note',
-    color: '#69C9D0',
+    image: require('../assets/share/tiktok.png'),
+    tileColor: '#000000',
+    tileRadius: 12,
+    iconPad: 7,
   },
   {
     id: 'copy',
@@ -114,7 +116,7 @@ export async function shareListingToPlatform({
     }
     Alert.alert(
       'אינסטגרם',
-      'הקישור הועתק. הדביקו אותו בסטורי או בהודעה — לחיצה עליו תפתח את המודעה באפליקציית פי.',
+      'הקישור הועתק. הדביקו אותו בסטורי או בהודעה — לחיצה תפתח את הפרסום באפליקציה אם היא מותקנת.',
     );
     countShare();
     return true;
@@ -127,7 +129,7 @@ export async function shareListingToPlatform({
     if (!opened) await openExternalUrl('https://www.tiktok.com/');
     Alert.alert(
       'טיקטוק',
-      'הקישור הועתק. הדביקו אותו ביומן או בהודעה — לחיצה עליו תפתח את המודעה באפליקציית פי.',
+      'הקישור הועתק. הדביקו אותו ביומן או בהודעה — לחיצה תפתח את הפרסום באפליקציה אם היא מותקנת.',
     );
     countShare();
     return true;
@@ -136,7 +138,7 @@ export async function shareListingToPlatform({
     await Clipboard.setStringAsync(publicUrl);
     Alert.alert(
       'הקישור הועתק',
-      'מי שלוחץ על הקישור יגיע למודעה הזו באפליקציית פי.',
+      'מי שלוחץ על הקישור ייכנס לפרסום באפליקציה אם היא מותקנת, ואחרת לחנות.',
     );
     countShare();
     return true;

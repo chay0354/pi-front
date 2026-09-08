@@ -39,6 +39,8 @@ export default function FeedPostPreviewMedia({
   showVideoPlayIcon = true,
   /** Scale to cell width and clip top/bottom instead of letterboxing. */
   cropOverflow = false,
+  /** Live text overlays on the authored canvas. Off in chat so the name is not doubled. */
+  showTextOverlays = true,
   children,
 }) {
   const feedPageSize = useFeedPostPageSize();
@@ -63,11 +65,32 @@ export default function FeedPostPreviewMedia({
   const videoPosterUri = useMemo(() => {
     const explicit = posterUri != null ? String(posterUri).trim() : '';
     if (explicit && /^https?:\/\//i.test(explicit)) return explicit;
+    const fromListing =
+      listing?.poster_url ||
+      listing?.posterUrl ||
+      listing?.thumbnail_url ||
+      listing?.thumbnailUrl ||
+      null;
+    const listingPoster =
+      fromListing != null ? String(fromListing).trim() : '';
+    if (listingPoster && /^https?:\/\//i.test(listingPoster)) {
+      return listingPoster;
+    }
     const mux = muxThumbnailUri(videoUrl, {time: 0, width: 480});
-    return mux || '';
-  }, [posterUri, videoUrl]);
+    if (mux) return mux;
+    const still =
+      imageUrl != null && /^https?:\/\//i.test(String(imageUrl))
+        ? String(imageUrl).trim()
+        : '';
+    if (still && !/\.(mp4|mov|m4v|webm|m3u8)(\?|#|$)/i.test(still)) {
+      return still;
+    }
+    return '';
+  }, [posterUri, videoUrl, imageUrl, listing]);
   const showOverlays =
-    Boolean(overlayPayload?.overlays?.length) && restoreInfo.textBaked !== true;
+    showTextOverlays !== false &&
+    Boolean(overlayPayload?.overlays?.length) &&
+    restoreInfo.textBaked !== true;
   const postFrame = useMemo(() => {
     if (!(layout.width > 0) || !(layout.height > 0)) {
       return {width: layout.width, height: layout.height, left: 0, top: 0};
@@ -130,18 +153,30 @@ export default function FeedPostPreviewMedia({
             style={styles.mediaFill}
           />
         ) : stillUri ? (
-          <PostFrameFitWidthImage
-            uri={stillUri}
-            frameWidth={postFrame.width}
-            frameHeight={postFrame.height}
-          />
+          <>
+            <PostFrameFitWidthImage
+              uri={stillUri}
+              frameWidth={postFrame.width}
+              frameHeight={postFrame.height}
+            />
+            {showVideoPlayIcon && videoUrl ? (
+              <View style={styles.playOverlay} pointerEvents="none">
+                <Image
+                  source={require('../assets/play-button.png')}
+                  style={styles.playIcon}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+          </>
         ) : videoUrl ? (
           <VideoPreviewThumb
             uri={videoUrl}
+            posterUri={videoPosterUri || undefined}
             style={[styles.mediaFill, {borderRadius: 0}]}
             videoStyle={styles.mediaFill}
             showPlayIcon={showVideoPlayIcon}
-            resizeMode="contain"
+            resizeMode={cropOverflow ? 'cover' : 'contain'}
           />
         ) : imageUrl ? (
           <PostFrameFitWidthImage
@@ -195,17 +230,28 @@ export default function FeedPostPreviewMedia({
 const styles = StyleSheet.create({
   frame: {
     overflow: 'hidden',
-    backgroundColor: '#1a1a22',
+    backgroundColor: '#2B2A39',
   },
   postCanvas: {
     position: 'absolute',
     overflow: 'hidden',
-    backgroundColor: '#1a1a22',
+    backgroundColor: '#2B2A39',
   },
   mediaFill: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+  },
+  playIcon: {
+    width: 52,
+    height: 52,
+    opacity: 0.92,
   },
   openHouseRoot: {
     ...StyleSheet.absoluteFillObject,

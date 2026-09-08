@@ -73,6 +73,10 @@ const HomeStoryStrip = ({rings = [], onRingPress, loading = false}) => {
     );
   }
 
+  if (!loading && rings.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.stripWrap}>
       <FlatList

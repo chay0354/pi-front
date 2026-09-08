@@ -1278,6 +1278,7 @@ const AdsForm = ({
   const [bnbLogoCropVisible, setBnbLogoCropVisible] = useState(false);
   const [partnerPhotoCropUri, setPartnerPhotoCropUri] = useState(null);
   const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
+  const [partnerPhotoSourceUri, setPartnerPhotoSourceUri] = useState(null);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
   const [salesImage, setSalesImage] = useState(null);
@@ -1560,8 +1561,12 @@ const AdsForm = ({
   const isPartnerAd = parseInt(category, 10) === 3;
 
   const openPartnerPhotoCropper = uri => {
-    if (!uri) return;
-    setPartnerPhotoCropUri(uri);
+    const source = uri || partnerPhotoSourceUri || mainImage?.uri;
+    if (!source) return;
+    if (uri && uri !== partnerPhotoSourceUri) {
+      setPartnerPhotoSourceUri(uri);
+    }
+    setPartnerPhotoCropUri(source);
     setPartnerPhotoCropVisible(true);
   };
 
@@ -2602,7 +2607,9 @@ const AdsForm = ({
                     handleMainImageChange={handleMainImageChange}
                     mainImageInputRef={mainImageInputRef}
                     onEditExistingImage={() =>
-                      openPartnerPhotoCropper(mainImage?.uri)
+                      openPartnerPhotoCropper(
+                        partnerPhotoSourceUri || mainImage?.uri,
+                      )
                     }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
@@ -3087,7 +3094,9 @@ const AdsForm = ({
         imageUri={partnerPhotoCropUri}
         onCancel={handlePartnerPhotoCropCancel}
         onConfirm={handlePartnerPhotoCropConfirm}
-        title="חתוך את תמונת הפרופיל"
+        title="חתוך את התמונה"
+        shape="square"
+        fit="contain"
       />
     </View>
   );

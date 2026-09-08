@@ -103,6 +103,7 @@ const SubscriptionFormScreen = ({
   const [circleCropVisible, setCircleCropVisible] = useState(false);
   /** 'profile' | 'logo' — which field the circle crop writes into */
   const [circleCropTarget, setCircleCropTarget] = useState('logo');
+  const [profilePictureSourceUri, setProfilePictureSourceUri] = useState(null);
   const profilePictureInputRef = useRef(null);
   const profileVideoPreviewRef = useRef(null);
 
@@ -233,11 +234,16 @@ const SubscriptionFormScreen = ({
   const handleCircleCropConfirm = result => {
     if (result?.uri) {
       const stamp = Date.now();
-      setCompanyLogo({
+      const file = {
         uri: result.uri,
         type: 'image/jpeg',
-        name: `logo-${stamp}.jpg`,
-      });
+        name: `${circleCropTarget === 'logo' ? 'logo' : 'profile'}-${stamp}.jpg`,
+      };
+      if (circleCropTarget === 'logo') {
+        setCompanyLogo(file);
+      } else {
+        setProfilePicture(file);
+      }
     }
     setCircleCropVisible(false);
     setCircleCropUri(null);
@@ -248,7 +254,16 @@ const SubscriptionFormScreen = ({
     setCircleCropUri(null);
   };
 
-  // Pick profile picture — native square crop (default cube editor), no circle modal.
+  const openProfilePictureCropper = uri => {
+    const source = uri || profilePictureSourceUri || profilePicture?.uri;
+    if (!source) return;
+    if (uri && uri !== profilePictureSourceUri) {
+      setProfilePictureSourceUri(uri);
+    }
+    openCircleCropper(source, 'profile');
+  };
+
+  // Same in-app circle crop as company logo — not the system square editor.
   const handleProfilePictureUpload = async () => {
     if (Platform.OS === 'web' && profilePictureInputRef.current) {
       profilePictureInputRef.current.click();
@@ -260,13 +275,12 @@ const SubscriptionFormScreen = ({
       if (!permitted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 1,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setProfilePicture(buildPickedImageFile(result.assets[0], 'profile'));
+        openProfilePictureCropper(result.assets[0].uri);
       }
     } catch (error) {
       Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`);
@@ -276,8 +290,9 @@ const SubscriptionFormScreen = ({
   const handleProfilePictureChange = event => {
     const file = event.target.files?.[0];
     if (file) {
-      setProfilePicture(buildWebPickedFile(file, 'profile'));
+      openProfilePictureCropper(URL.createObjectURL(file));
     }
+    if (event.target) event.target.value = '';
   };
 
   // Pick company logo → round cropper
@@ -695,6 +710,12 @@ const SubscriptionFormScreen = ({
                   mainImageInputRef={profilePictureInputRef}
                   title="תמונת פרופיל"
                   required={false}
+                  previewShape="circle"
+                  onEditExistingImage={() =>
+                    openProfilePictureCropper(
+                      profilePictureSourceUri || profilePicture?.uri,
+                    )
+                  }
                 />
               ) : (
                 <>
@@ -864,6 +885,12 @@ const SubscriptionFormScreen = ({
               mainImageInputRef={profilePictureInputRef}
               title="תמונת פרופיל"
               required
+              previewShape="circle"
+              onEditExistingImage={() =>
+                openProfilePictureCropper(
+                  profilePictureSourceUri || profilePicture?.uri,
+                )
+              }
             />
           </View>
         ) : null}
@@ -1329,7 +1356,7 @@ const SubscriptionFormScreen = ({
       title={
         circleCropTarget === 'logo'
           ? `חתוך את לוגו ה${orgLogoLabel}`
-          : 'חתוך תמונה'
+          : 'חתוך את תמונת הפרופיל'
       }
     />
     </>

@@ -39,15 +39,19 @@ import {
   createChatGroup,
   uploadGroupImage,
   getChatParticipantDisplay,
-  getResolvedApiUrl,
   deleteChatConversation,
   updateSubscriptionProfile,
 } from '../utils/api';
 import {ContextHook} from '../hooks/ContextHook';
 import * as ImagePicker from 'expo-image-picker';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
+import {normalizeChatAvatarUrl} from '../utils/chatAvatar';
 import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import ProfileAvatar from '../components/ProfileAvatar';
+import ChatListRowAvatar, {
+  CHAT_GROUP_AVATAR_PLACEHOLDER,
+  CHAT_LIST_AVATAR_PLACEHOLDER,
+} from '../components/ChatListRowAvatar';
 import CircleImageCropModal from '../components/CircleImageCropModal';
 import {ensureMediaLibraryPermission} from '../utils/mediaLibraryPermission';
 import {
@@ -150,7 +154,7 @@ function groupPickReducer(state, action) {
           const title = row.title != null ? String(row.title) : key;
           const subtitle = row.subtitle != null ? String(row.subtitle) : '';
           const avatarUrl =
-            normalizeChatListAvatarUri(
+            normalizeChatAvatarUrl(
               getUserProfileImageUrl(row) ||
                 row.profile_picture_url ||
                 row.profileImageUrl ||
@@ -206,230 +210,6 @@ function formatRelativeTimeHebrew(iso) {
   if (sec < 86400) return `לפני ${Math.floor(sec / 3600)} שעות`;
   if (sec < 604800) return `לפני ${Math.floor(sec / 86400)} ימים`;
   return d.toLocaleDateString('he-IL');
-}
-
-function normalizeChatListAvatarUri(value) {
-  if (value == null) return null;
-  const raw = String(value).trim();
-  if (!raw) return null;
-  const lower = raw.toLowerCase();
-  if (
-    lower.includes('/assets/assets/image-copy-10.png') ||
-    lower.endsWith('/image-copy-10.png') ||
-    lower === 'image-copy-10.png'
-  ) {
-    return null;
-  }
-  if (raw.startsWith('//')) return `https:${raw}`;
-  if (/^(file:|blob:)/i.test(raw)) return null;
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      return encodeURI(raw);
-    } catch (_) {
-      return raw;
-    }
-  }
-  const sb = process.env.EXPO_PUBLIC_SUPABASE_URL
-    ? String(process.env.EXPO_PUBLIC_SUPABASE_URL).trim()
-    : '';
-  let origin = sb;
-  if (origin && !/^https?:\/\//i.test(origin)) origin = `https://${origin}`;
-  if (origin) {
-    try {
-      const u = new URL(origin);
-      origin = `${u.protocol}//${u.host}`;
-    } catch (_) {
-      origin = origin.replace(/\/+$/, '');
-    }
-    if (raw.startsWith('/storage/v1/object/public/')) return `${origin}${raw}`;
-    if (raw.startsWith('storage/v1/object/public/')) return `${origin}/${raw}`;
-    if (raw.startsWith('/storage/v1/object/sign/')) return `${origin}${raw}`;
-    if (raw.startsWith('storage/v1/object/sign/')) return `${origin}/${raw}`;
-    if (raw.startsWith('/object/public/')) return `${origin}/storage/v1${raw}`;
-    if (raw.startsWith('object/public/')) return `${origin}/storage/v1/${raw}`;
-    if (raw.startsWith('/public/')) return `${origin}/storage/v1/object${raw}`;
-    if (raw.startsWith('public/')) return `${origin}/storage/v1/object/${raw}`;
-    if (raw.startsWith('/profile-pics/'))
-      return `${origin}/storage/v1/object/public${raw}`;
-    if (raw.startsWith('profile-pics/'))
-      return `${origin}/storage/v1/object/public/${raw}`;
-    if (raw.startsWith('/company-logos/'))
-      return `${origin}/storage/v1/object/public${raw}`;
-    if (raw.startsWith('company-logos/'))
-      return `${origin}/storage/v1/object/public/${raw}`;
-    if (/^[^/]+\/.+/.test(raw))
-      return `${origin}/storage/v1/object/public/${raw}`;
-  }
-  try {
-    if (/^https?:\/\//i.test(raw)) return encodeURI(raw);
-    return raw;
-  } catch (_) {
-    return raw;
-  }
-}
-
-const CHAT_LIST_AVATAR_PX = 56;
-const CHAT_LIST_AVATAR_PLACEHOLDER = DEFAULT_PI_PROFILE_AVATAR;
-
-/**
- * RN Web: `Image` often renders blank inside circular overflow + % sizes. Use DOM `img` with fixed px.
- */
-function ChatListRowAvatar({
-  uri,
-  debugKey,
-  userRef,
-  subscriptionType,
-  forceGoldRing = false,
-  placeholderImage = CHAT_LIST_AVATAR_PLACEHOLDER,
-}) {
-  const trimmed = uri != null && String(uri).trim() ? String(uri).trim() : null;
-  const initialSubType =
-    subscriptionType != null && String(subscriptionType).trim()
-      ? String(subscriptionType).trim().toLowerCase()
-      : null;
-  const [resolvedUri, setResolvedUri] = useState(trimmed);
-  const [resolvedSubscriptionType, setResolvedSubscriptionType] = useState(
-    initialSubType,
-  );
-  const [lookupTried, setLookupTried] = useState(false);
-  const [useProxyStream, setUseProxyStream] = useState(false);
-  const proxyBase = getResolvedApiUrl();
-  const sourceUri =
-    resolvedUri && useProxyStream
-      ? `${proxyBase}/api/chat/avatar-url?src=${encodeURIComponent(resolvedUri)}`
-      : resolvedUri;
-  useEffect(() => {
-    setResolvedUri(trimmed);
-    setResolvedSubscriptionType(initialSubType);
-    setLookupTried(false);
-    setUseProxyStream(false);
-  }, [trimmed, initialSubType]);
-
-  // Resolve ring color even when the avatar image loads fine (type was only
-  // fetched before on image error, so every row defaulted to the teal ring).
-  useEffect(() => {
-    if (forceGoldRing || initialSubType || !userRef || lookupTried) return;
-    let cancelled = false;
-    setLookupTried(true);
-    (async () => {
-      try {
-        const res = await getChatParticipantDisplay(userRef);
-        if (cancelled) return;
-        const subType =
-          res?.subscription_type != null && String(res.subscription_type).trim()
-            ? String(res.subscription_type).trim().toLowerCase()
-            : null;
-        if (subType) setResolvedSubscriptionType(subType);
-        const fallback =
-          normalizeChatListAvatarUri(
-            res?.profileImageUrl || res?.profile_picture_url || null,
-          ) || null;
-        if (fallback && !trimmed) {
-          setResolvedUri(fallback);
-        }
-      } catch (_) {
-        /* keep teal until type is known */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [forceGoldRing, initialSubType, userRef, lookupTried, trimmed]);
-
-  useEffect(() => {
-    logProfilePic(`ChatListRowAvatar.pull.${String(debugKey || 'row')}`, {
-      row: debugKey || null,
-      resolvedUri: trimmed || null,
-      mode: useProxyStream ? 'proxy-stream-fallback' : 'direct-native-image',
-      requestUrl: sourceUri || null,
-      userRef: userRef || null,
-      lookupTried,
-      useProxyStream,
-      subscriptionType: resolvedSubscriptionType,
-    });
-  }, [
-    debugKey,
-    trimmed,
-    resolvedUri,
-    sourceUri,
-    userRef,
-    lookupTried,
-    useProxyStream,
-    resolvedSubscriptionType,
-  ]);
-
-  const handleImageError = useCallback(async () => {
-    logProfilePic(`ChatListRowAvatar.error.${String(debugKey || 'row')}`, {
-      row: debugKey || null,
-      failedUri: sourceUri || resolvedUri || null,
-      userRef: userRef || null,
-      lookupTried,
-      useProxyStream,
-    });
-    if (resolvedUri && !useProxyStream) {
-      setUseProxyStream(true);
-      return;
-    }
-    if (resolvedUri && useProxyStream && lookupTried) {
-      // Direct + proxy failed and we already attempted API lookup; force placeholder.
-      setResolvedUri(null);
-      return;
-    }
-    if (lookupTried || !userRef) return;
-    setLookupTried(true);
-    try {
-      const res = await getChatParticipantDisplay(userRef);
-      const fallback =
-        normalizeChatListAvatarUri(
-          res?.profileImageUrl || res?.profile_picture_url || null,
-        ) || null;
-      const subType =
-        res?.subscription_type != null && String(res.subscription_type).trim()
-          ? String(res.subscription_type).trim().toLowerCase()
-          : null;
-      logProfilePic(`ChatListRowAvatar.lookup.${String(debugKey || 'row')}`, {
-        row: debugKey || null,
-        userRef,
-        apiSuccess: !!res?.success,
-        apiProfileImageUrl: res?.profileImageUrl ?? null,
-        fallbackUri: fallback,
-        subscriptionType: subType,
-      });
-      if (subType) {
-        setResolvedSubscriptionType(subType);
-      }
-      if (fallback && fallback !== resolvedUri) {
-        setResolvedUri(fallback);
-        setUseProxyStream(false);
-      } else if (!fallback) {
-        setResolvedUri(null);
-      } else if (fallback === resolvedUri && useProxyStream) {
-        // Lookup returned the same already-failing URL; show placeholder.
-        setResolvedUri(null);
-      }
-    } catch (e) {
-      logProfilePic(
-        `ChatListRowAvatar.lookupFail.${String(debugKey || 'row')}`,
-        {
-          row: debugKey || null,
-          userRef,
-          error: e?.message ? String(e.message) : 'lookup_failed',
-        },
-      );
-      setResolvedUri(null);
-    }
-  }, [debugKey, resolvedUri, sourceUri, userRef, lookupTried, useProxyStream]);
-
-  return (
-    <ProfileAvatar
-      uri={sourceUri}
-      size={CHAT_LIST_AVATAR_PX}
-      subscriptionType={resolvedSubscriptionType}
-      forceGoldRing={forceGoldRing === true}
-      placeholderImage={placeholderImage}
-      onImageError={handleImageError}
-    />
-  );
 }
 
 /**
@@ -807,7 +587,7 @@ const ChatListScreen = ({
       rowTitle: row?.title ?? null,
       rowProfile_picture_url: row?.profile_picture_url ?? null,
       rowProfileImageUrl: row?.profileImageUrl ?? null,
-      resolvedFromRow: normalizeChatListAvatarUri(
+      resolvedFromRow: normalizeChatAvatarUrl(
         getUserProfileImageUrl(row) || null,
       ),
     });
@@ -860,7 +640,7 @@ const ChatListScreen = ({
         .toLowerCase();
       if (!key) continue;
       const existing = groupMemberMeta[key] || null;
-      const resolvedExisting = normalizeChatListAvatarUri(
+      const resolvedExisting = normalizeChatAvatarUrl(
         existing?.avatarUrl || null,
       );
       if (resolvedExisting) continue;
@@ -868,7 +648,7 @@ const ChatListScreen = ({
       groupMetaLookupInFlight.current.add(key);
       getChatParticipantDisplay(key)
         .then(res => {
-          const avatarUrl = normalizeChatListAvatarUri(
+          const avatarUrl = normalizeChatAvatarUrl(
             res?.profileImageUrl || res?.profile_picture_url || null,
           );
           const name =
@@ -914,10 +694,10 @@ const ChatListScreen = ({
             .toLowerCase() === key,
       );
       const meta = groupMemberMeta[key] || null;
-      const resolvedCandidate = normalizeChatListAvatarUri(
+      const resolvedCandidate = normalizeChatAvatarUrl(
         getUserProfileImageUrl(rowFromList) || null,
       );
-      const resolvedMeta = normalizeChatListAvatarUri(meta?.avatarUrl || null);
+      const resolvedMeta = normalizeChatAvatarUrl(meta?.avatarUrl || null);
       const resolvedFinal = resolvedCandidate || resolvedMeta || null;
       return {
         email: key,
@@ -1508,7 +1288,7 @@ const ChatListScreen = ({
             {filtered.map((conv, index) => {
               const rawPeerPic =
                 conv.id === '1' ? null : getUserProfileImageUrl(conv);
-              const rowAvatarUrl = normalizeChatListAvatarUri(rawPeerPic);
+              const rowAvatarUrl = normalizeChatAvatarUrl(rawPeerPic);
               const rowDebugKey =
                 conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
               const rowUserRef = conv.otherUserEmail || conv.id || null;
@@ -1571,7 +1351,7 @@ const ChatListScreen = ({
                         }
                         placeholderImage={
                           conv.isGroup === true
-                            ? require('../assets/pi-chat/groupe-icon-small.png')
+                            ? CHAT_GROUP_AVATAR_PLACEHOLDER
                             : CHAT_LIST_AVATAR_PLACEHOLDER
                         }
                       />
@@ -1785,7 +1565,7 @@ const ChatListScreen = ({
                             .toLowerCase() === key,
                       );
                       const meta = groupMemberMeta[key] || {title: em};
-                      const pic = normalizeChatListAvatarUri(
+                      const pic = normalizeChatAvatarUrl(
                         getUserProfileImageUrl(rowFromList) ||
                           rowFromList?.profile_picture_url ||
                           rowFromList?.profileImageUrl ||

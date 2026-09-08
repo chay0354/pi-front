@@ -149,11 +149,16 @@ function resolveUploadFileName(file, isVideoFolder) {
 }
 
 /** Large files bypass Vercel body limits — upload directly to Supabase via signed URL. */
-async function requestUploadSignedUrl(folder, fileName, contentType) {
+async function requestUploadSignedUrl(folder, fileName, contentType, bucket) {
   const response = await apiFetch(`${apiBase()}/api/upload/signed-url`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({folder, fileName, contentType}),
+    body: JSON.stringify({
+      folder,
+      fileName,
+      contentType,
+      ...(bucket ? {bucket} : {}),
+    }),
     timeoutMs: 30000,
   });
   const responseText = await response.text();
@@ -237,6 +242,7 @@ async function uploadFileViaSignedUrl(file, folder = 'general', options = {}) {
     folder,
     fileName,
     mimeType,
+    options?.bucket,
   );
   await putLocalFileToSignedUrl(file, signedUrl, mimeType);
   return {
@@ -2737,7 +2743,10 @@ export const sendGroupChatMessage = async (
   if (
     media &&
     media.url &&
-    (media.type === 'image' || media.type === 'audio' || media.type === 'file')
+    (media.type === 'image' ||
+      media.type === 'audio' ||
+      media.type === 'file' ||
+      media.type === 'video')
   ) {
     payload.media_type = media.type;
     payload.media_url = String(media.url).trim();
@@ -2918,7 +2927,7 @@ export const respondToExclusiveOffer = async ({userEmail, conversationId, accept
  * @returns {Promise<{ success: boolean, message: object }>}
  */
 /**
- * @param {{ type: 'image'|'audio'|'file', url: string }} [media] - optional; use with empty body for media-only messages
+ * @param {{ type: 'image'|'audio'|'file'|'video', url: string }} [media] - optional; use with empty body for media-only messages
  * @param {string|null} [listingId] - optional ads.id (UUID); stored on message for inbox listing badges
  * @param {boolean} [listingShare] - true when sharing a feed post (card UI); false for normal text
  */
@@ -2936,7 +2945,10 @@ export const sendChatMessage = async (
   const hasMedia =
     media &&
     media.url &&
-    (media.type === 'image' || media.type === 'audio' || media.type === 'file');
+    (media.type === 'image' ||
+      media.type === 'audio' ||
+      media.type === 'file' ||
+      media.type === 'video');
   if (!senderEmail || !receiverEmail || (!text && !hasMedia)) {
     throw new Error('senderEmail, receiverEmail and body or media required');
   }
@@ -2995,11 +3007,8 @@ export const deleteChatMessage = async (messageId, userEmail) => {
   return data;
 };
 
-/**
- * Upload a chat image or voice note to Supabase Storage bucket "chat" (via backend).
- * @param {{ uri: string, type?: string, name?: string }} file
- */
-export const uploadChatMedia = async (file) => {
+/** Legacy proxy upload — Vercel rejects bodies over ~4.5MB, so videos 413 here. */
+const uploadChatMediaViaProxy = async (file) => {
   const formData = new FormData();
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');
@@ -3013,10 +3022,33 @@ export const uploadChatMedia = async (file) => {
   try {
     data = JSON.parse(responseText);
   } catch {
-    throw new Error(`Upload failed (${response.status})`);
+    throwForUploadStatus(response.status, responseText.slice(0, 200));
   }
-  if (!response.ok) throw new Error(data.error || data.details || 'Failed to upload media');
+  if (!response.ok) {
+    if (response.status === 413) throwForUploadStatus(413);
+    throw new Error(data.error || data.details || 'Failed to upload media');
+  }
   return data;
+};
+
+/**
+ * Upload a chat photo, video, voice note, or document to Supabase bucket "chat".
+ *
+ * Goes straight to Supabase via a signed URL: routing the bytes through Vercel
+ * caps the file at ~4.5MB, which made every video fail with 413.
+ * @param {{ uri: string, type?: string, name?: string }} file
+ */
+export const uploadChatMedia = async (file) => {
+  try {
+    const result = await uploadFileViaSignedUrl(file, 'chat', {bucket: 'chat'});
+    if (result?.url) return {success: true, url: result.url};
+    throw new Error('Upload failed');
+  } catch (error) {
+    // A backend without chat-bucket signed URLs still handles small files.
+    const message = errorMessageFromUnknown(error, '');
+    if (/גדול מדי/.test(message)) throw error;
+    return await uploadChatMediaViaProxy(file);
+  }
 };
 
 /**

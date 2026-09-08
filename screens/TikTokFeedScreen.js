@@ -3701,6 +3701,22 @@ const TikTokFeedScreen = ({
           }
           }
 
+          const focusId =
+            focusListingId != null ? String(focusListingId).trim() : '';
+          if (focusId) {
+            const alreadyShown = displayListings.some(
+              l => String(l?.id ?? '').trim() === focusId,
+            );
+            if (!alreadyShown) {
+              const focused = filteredListings.find(
+                l => String(l?.id ?? '').trim() === focusId,
+              );
+              if (focused) {
+                displayListings = [focused, ...displayListings];
+              }
+            }
+          }
+
           const viewerSubIdForPrefetch = resolveFollowUuid(
             currentUser?.subscription_id,
             currentUser?.owner_id,
@@ -3800,6 +3816,7 @@ const TikTokFeedScreen = ({
     currentUser?.id,
     isProfilePostsFeed,
     profilePostsSubId,
+    focusListingId,
   ]);
 
   // Map tik image numbers to require statements
@@ -10397,8 +10414,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
-    alignSelf: 'stretch',
-    width: '100%',
+    alignSelf: flexStart,
     maxWidth: '100%',
     minWidth: 0,
   },

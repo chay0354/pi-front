@@ -34,7 +34,7 @@ export const PriceCount = ({
   const [draftPrice, setDraftPrice] = useState(() =>
     formatPriceInputDisplay(price),
   );
-  const inputWidth = Math.max(20, String(draftPrice || '').length * 11);
+  const inputWidth = Math.max(36, String(draftPrice || '').length * 14 + 10);
 
   useEffect(() => {
     if (isFocusedRef.current) return;

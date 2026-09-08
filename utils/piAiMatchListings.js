@@ -259,13 +259,54 @@ function listingPurposeKindForAi(listing) {
   return '';
 }
 
+/** Amenities arrive as an object, an array, or a JSON string. */
+function parseAmenities(value) {
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!s) return null;
+  if (s.startsWith('{') || s.startsWith('[')) {
+    try {
+      return JSON.parse(s);
+    } catch (_) {
+      return s;
+    }
+  }
+  return s;
+}
+
+const AMENITY_OFF_VALUES = /^(?:false|לא|ללא|אין|0)$/i;
+
+/**
+ * Flatten amenities to readable text ("מעלית, כמות חניות 2"). The object form
+ * used to serialize to nothing, which hid parking / elevator from Pi AI.
+ */
 function amenitiesTextForAi(listing) {
-  const a = listing?.amenities;
+  const a = parseAmenities(listing?.amenities);
   if (Array.isArray(a)) {
     return a
       .map(x => String(x || '').trim())
       .filter(Boolean)
       .join(', ');
+  }
+  if (a && typeof a === 'object') {
+    const out = [];
+    for (const [key, value] of Object.entries(a)) {
+      const label = String(key || '').trim();
+      if (!label) continue;
+      if (value === true || value === 'true' || value === 'כן') {
+        out.push(label);
+        continue;
+      }
+      if (typeof value === 'number' && value > 0) {
+        out.push(`${label} ${value}`);
+        continue;
+      }
+      const s = value != null ? String(value).trim() : '';
+      if (s && !AMENITY_OFF_VALUES.test(s)) out.push(`${label} ${s}`);
+    }
+    return out.join(', ');
   }
   if (typeof a === 'string') return a.trim();
   return '';
@@ -333,7 +374,10 @@ export function buildListingAiSummary(listing) {
     listingSubscriberNumber(listing) || listing.subscriber_number,
     20,
   );
-  set('price', listing.price, 20);
+  // חדש מקבלן ads price/size each unit type separately — send them all so a
+  // "עד 2 מיליון" or "100 מ״ר" query can match on any single offer.
+  const offerPrices = projectOfferNumbers(listing, '_price');
+  set('price', offerPrices.length ? offerPrices.join('/') : listing.price, 80);
   set('budget', listing.budget, 20);
   set('price_per_night', listing.price_per_night, 20);
   const offered = projectOfferRoomTypes(listing);
@@ -347,7 +391,8 @@ export function buildListingAiSummary(listing) {
   } else {
     set('rooms', listing.rooms, 20);
   }
-  set('area', listing.area, 12);
+  const offerAreas = projectOfferNumbers(listing, '_area');
+  set('area', offerAreas.length ? offerAreas.join('/') : listing.area, 60);
   set('floor', listing.floor, 10);
   set('search_purpose', listing.search_purpose || listing.searchPurposeKey, 20);
   set('condition', listing.condition, 30);
@@ -367,7 +412,7 @@ export function buildListingAiSummary(listing) {
     set('preferred_age_max', listing.preferred_age_max, 6);
   }
   set('preferences', preferencesTextForAi(listing), 120);
-  set('amenities', amenitiesTextForAi(listing), 120);
+  set('amenities', amenitiesTextForAi(listing), 200);
   const descExtra = [];
   for (const name of publishers) descExtra.push(`חברת ${name}`);
   const subForDesc = listingSubscriberNumber(listing);
@@ -574,17 +619,272 @@ function inferRoomsFromQuery(query) {
   return null;
 }
 
+const NUM_RE = '(\\d[\\d,]*(?:\\.\\d+)?)';
+const MONEY_UNIT_RE = '(מיליון|מליון|אלף|אלפים|k)';
+const CURRENCY_RE = '(?:₪|שח|שקלים|שקל)';
+/** A number is only read as money when a unit or a currency follows it. */
+const MONEY_RE = `${NUM_RE}\\s*(?:${MONEY_UNIT_RE}\\s*(?:${CURRENCY_RE})?|${CURRENCY_RE})`;
+/** normalizeHebrewQuery strips quotes, so מ"ר and מ״ר both arrive as מר. */
+const SQM_RE = '(?:מר|מ2|sqm|מטר(?:ים)?(?:\\s*(?:רבוע(?:ים)?|מרובע(?:ים)?))?)';
+
+function toPlainNumber(raw) {
+  if (raw == null) return null;
+  const n = Number(String(raw).replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function moneyValue(numStr, unitStr) {
+  const n = toPlainNumber(numStr);
+  if (n == null) return null;
+  const unit = String(unitStr || '');
+  if (/מיליון|מליון/.test(unit)) return n * 1000000;
+  if (/אלף|אלפים|k/.test(unit)) return n * 1000;
+  return n;
+}
+
+function boundedRange(min, max) {
+  const lo = Number.isFinite(min) ? min : null;
+  const hi = Number.isFinite(max) ? max : null;
+  if (lo == null && hi == null) return null;
+  if (lo != null && hi != null && lo > hi) return {min: hi, max: lo};
+  return {min: lo, max: hi};
+}
+
+/** "בין 80 ל-100 מ״ר" · "עד 120 מ״ר" · "מעל 90 מ״ר" · "100 מ״ר" */
+export function inferAreaFromQuery(q) {
+  const span = q.match(
+    new RegExp(`בין\\s*${NUM_RE}\\s*(?:ל|עד|לבין)\\s*-?\\s*${NUM_RE}\\s*${SQM_RE}`),
+  );
+  if (span) {
+    const lo = toPlainNumber(span[1]);
+    const hi = toPlainNumber(span[2]);
+    if (lo != null && hi != null) return boundedRange(lo, hi);
+  }
+  const upTo = q.match(
+    new RegExp(`(?:עד|מקסימום|לא יותר מ|פחות מ)\\s*-?\\s*${NUM_RE}\\s*${SQM_RE}`),
+  );
+  if (upTo) {
+    const v = toPlainNumber(upTo[1]);
+    if (v != null) return boundedRange(null, v);
+  }
+  const from = q.match(
+    new RegExp(
+      `(?:מעל|לפחות|יותר מ|החל מ|מינימום)\\s*-?\\s*${NUM_RE}\\s*${SQM_RE}`,
+    ),
+  );
+  if (from) {
+    const v = toPlainNumber(from[1]);
+    if (v != null) return boundedRange(v, null);
+  }
+  const bare = q.match(new RegExp(`${NUM_RE}\\s*${SQM_RE}`));
+  if (bare) {
+    const v = toPlainNumber(bare[1]);
+    // A plain "100 מ״ר" is an approximation, not a spec — keep a band.
+    if (v != null && v > 0) {
+      return {...boundedRange(Math.floor(v * 0.85), Math.ceil(v * 1.15)), about: v};
+    }
+  }
+  return null;
+}
+
+/** "קומת קרקע" · "קומה 3" · "עד קומה 4" · "מקומה 5 ומעלה" */
+export function inferFloorFromQuery(q) {
+  if (/קומת\s*קרקע/.test(q) || /קומה\s*0(?!\d)/.test(q)) {
+    return boundedRange(0, 0);
+  }
+  const upTo = q.match(new RegExp(`(?:עד|מתחת ל|לא מעל)\\s*קומה\\s*${NUM_RE}`));
+  if (upTo) {
+    const v = toPlainNumber(upTo[1]);
+    if (v != null) return boundedRange(null, v);
+  }
+  const fromUp = q.match(
+    new RegExp(`מ?קומה\\s*${NUM_RE}\\s*(?:ומעלה|ומעל|והלאה)`),
+  );
+  if (fromUp) {
+    const v = toPlainNumber(fromUp[1]);
+    if (v != null) return boundedRange(v, null);
+  }
+  const above = q.match(new RegExp(`מעל\\s*קומה\\s*${NUM_RE}`));
+  if (above) {
+    const v = toPlainNumber(above[1]);
+    if (v != null) return boundedRange(v + 1, null);
+  }
+  const exact = q.match(new RegExp(`קומה\\s*${NUM_RE}`));
+  if (exact) {
+    const v = toPlainNumber(exact[1]);
+    if (v != null) return boundedRange(v, v);
+  }
+  return null;
+}
+
+/** "עד 2 מיליון" · "בין 1.5 ל-2 מיליון" · "מעל 850 אלף" · "5000 ש״ח" */
+export function inferPriceFromQuery(q) {
+  const span = q.match(
+    new RegExp(
+      `בין\\s*${NUM_RE}\\s*${MONEY_UNIT_RE}?\\s*(?:${CURRENCY_RE})?\\s*(?:ל|עד|לבין)\\s*-?\\s*${MONEY_RE}`,
+    ),
+  );
+  if (span) {
+    const hi = moneyValue(span[3], span[4]);
+    // "בין 1.5 ל-2 מיליון": the unit is stated once, at the end.
+    const lo = moneyValue(span[1], span[2] || span[4]);
+    if (lo != null && hi != null) return boundedRange(lo, hi);
+  }
+  const upTo = q.match(
+    new RegExp(
+      `(?:עד|מקסימום|לא יותר מ|פחות מ|מתחת ל|תקציב(?:\\s*של)?)\\s*-?\\s*${MONEY_RE}`,
+    ),
+  );
+  if (upTo) {
+    const v = moneyValue(upTo[1], upTo[2]);
+    if (v != null) return boundedRange(null, v);
+  }
+  const from = q.match(
+    new RegExp(`(?:מעל|לפחות|יותר מ|החל מ)\\s*-?\\s*${MONEY_RE}`),
+  );
+  if (from) {
+    const v = moneyValue(from[1], from[2]);
+    if (v != null) return boundedRange(v, null);
+  }
+  const bare = q.match(new RegExp(MONEY_RE));
+  if (bare) {
+    const v = moneyValue(bare[1], bare[2]);
+    // A bare budget reads as a ceiling; leave a little headroom.
+    if (v != null) return {...boundedRange(null, Math.round(v * 1.1)), about: v};
+  }
+  return null;
+}
+
+/** Amenities the query explicitly asks for (never the "בלי מעלית" case). */
+const AMENITY_QUERY_RULES = [
+  {
+    id: 'parking',
+    label: 'חניה',
+    ask: 'חני(?:ה|יה|ות|ון)',
+    keys: ['חני', 'parking'],
+  },
+  {id: 'elevator', label: 'מעלית', ask: 'מעלית', keys: ['מעלית', 'elevator']},
+  {id: 'balcony', label: 'מרפסת', ask: 'מרפס', keys: ['מרפס', 'balcony']},
+  {
+    id: 'mamad',
+    label: 'ממ"ד',
+    ask: 'ממד|מרחב מוגן',
+    keys: ['ממד', 'mamad', 'מרחב מוגן'],
+  },
+];
+
+export function inferAmenitiesFromQuery(q) {
+  const out = [];
+  for (const rule of AMENITY_QUERY_RULES) {
+    if (!new RegExp(rule.ask).test(q)) continue;
+    if (new RegExp(`(?:בלי|ללא)\\s+(?:${rule.ask})`).test(q)) continue;
+    out.push(rule);
+  }
+  return out.length ? out : null;
+}
+
+/** Splits the "/"-joined lists the summary uses for חדש מקבלן unit types. */
+function numericListValues(raw) {
+  if (raw == null || raw === '') return [];
+  return String(raw)
+    .split(/[/|;]/)
+    .map(part => Number(String(part).replace(/,/g, '').trim()))
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
+function projectOfferNumbers(listing, suffix) {
+  const po = getProjectOffers(listing);
+  if (!po) return [];
+  const out = [];
+  for (const [key, value] of Object.entries(po)) {
+    if (!key.endsWith(suffix)) continue;
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0 && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+/** Every m² the ad offers — one per unit type on חדש מקבלן projects. */
+export function listingAreaValues(listing) {
+  return [
+    ...numericListValues(listing?.area),
+    ...projectOfferNumbers(listing, '_area'),
+  ];
+}
+
+export function listingPriceValues(listing) {
+  return [
+    ...numericListValues(listing?.price),
+    ...numericListValues(listing?.budget),
+    ...numericListValues(listing?.price_per_night),
+    ...projectOfferNumbers(listing, '_price'),
+  ];
+}
+
+export function listingFloorValues(listing) {
+  const raw = listing?.floor;
+  if (raw == null || raw === '') return [];
+  const s = String(raw).trim();
+  if (/קרקע|ground/i.test(s)) return [0];
+  return (s.match(/-?\d+(?:\.\d+)?/g) || [])
+    .map(Number)
+    .filter(n => Number.isFinite(n));
+}
+
+/**
+ * No value on the ad → keep it and let Gemini judge; a value outside the
+ * requested range → drop it. Dropping silent ads would gut the results,
+ * since plenty of listings never fill in area or floor.
+ */
+function valuesFitRange(values, range) {
+  if (!range) return true;
+  if (!values.length) return true;
+  return values.some(
+    v =>
+      (range.min == null || v >= range.min) &&
+      (range.max == null || v <= range.max),
+  );
+}
+
+/** true / false / null when the ad simply does not mention it. */
+function listingHasAmenity(listing, keys) {
+  const hit = text => {
+    const norm = normalizeHebrewQuery(text);
+    return keys.some(k => norm.includes(k));
+  };
+  const a = parseAmenities(listing?.amenities);
+  if (Array.isArray(a)) {
+    return a.some(x => hit(String(x || '')));
+  }
+  if (a && typeof a === 'object') {
+    let mentioned = false;
+    for (const [key, value] of Object.entries(a)) {
+      if (!hit(key)) continue;
+      mentioned = true;
+      if (value === true || value === 'true' || value === 'כן') return true;
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return true;
+    }
+    return mentioned ? false : null;
+  }
+  if (typeof a === 'string' && a.trim()) return hit(a);
+  return null;
+}
+
 export function inferPiAiQueryConstraints(query) {
   const q = String(query || '')
     .trim()
     .toLowerCase();
+  const norm = normalizeHebrewQuery(q);
+  // "קומת קרקע" is a floor, not a land ad — drop it before the type keywords.
+  const typeQ = q.replace(/קומת\s*קרקע/g, ' ');
   let cats = null;
-  if (/שותפ/.test(q)) cats = ['3'];
-  else if (/(?:צימר|\bbnb\b|לינה)/i.test(q)) cats = ['5'];
-  else if (/משרד/.test(q)) cats = ['2'];
-  else if (/(?:מגרש|קרקע|גוש|חלקה)/.test(q)) cats = ['7'];
-  else if (/מסחר/.test(q)) cats = ['8'];
-  else if (/(?:דיר|בית|יוקר|פנטהאוז)/.test(q)) cats = [...HOME_CATS];
+  if (/שותפ/.test(typeQ)) cats = ['3'];
+  else if (/(?:צימר|\bbnb\b|לינה)/i.test(typeQ)) cats = ['5'];
+  else if (/משרד/.test(typeQ)) cats = ['2'];
+  else if (/(?:מגרש|קרקע|גוש|חלקה)/.test(typeQ)) cats = ['7'];
+  else if (/מסחר/.test(typeQ)) cats = ['8'];
+  else if (/(?:דיר|בית|יוקר|פנטהאוז)/.test(typeQ)) cats = [...HOME_CATS];
 
   let purpose = null;
   const rent = /להשכרה|לשכור|שכירות|השכרה/.test(q);
@@ -592,7 +892,15 @@ export function inferPiAiQueryConstraints(query) {
   if (rent && !sale) purpose = 'rent';
   else if (sale && !rent) purpose = 'sale';
 
-  return {cats, purpose, rooms: inferRoomsFromQuery(q)};
+  return {
+    cats,
+    purpose,
+    rooms: inferRoomsFromQuery(q),
+    area: inferAreaFromQuery(norm),
+    floor: inferFloorFromQuery(norm),
+    price: inferPriceFromQuery(norm),
+    amenities: inferAmenitiesFromQuery(norm),
+  };
 }
 
 function listingFitsPiAiConstraints(listing, constraints) {
@@ -606,6 +914,20 @@ function listingFitsPiAiConstraints(listing, constraints) {
   }
   if (constraints.rooms != null) {
     if (!listingOffersRoomCount(listing, constraints.rooms)) return false;
+  }
+  if (!valuesFitRange(listingAreaValues(listing), constraints.area)) {
+    return false;
+  }
+  if (!valuesFitRange(listingFloorValues(listing), constraints.floor)) {
+    return false;
+  }
+  if (!valuesFitRange(listingPriceValues(listing), constraints.price)) {
+    return false;
+  }
+  if (constraints.amenities) {
+    for (const rule of constraints.amenities) {
+      if (listingHasAmenity(listing, rule.keys) === false) return false;
+    }
   }
   return true;
 }
@@ -634,16 +956,45 @@ export function filterListingsByParsedQuery(listings, parsed, query) {
   });
 }
 
+/** "עד 120 מ״ר" / "מ-80 מ״ר" / "80–120 מ״ר" for the empty-state copy. */
+function describeRange(range, suffix) {
+  if (!range) return null;
+  const fmt = n => Math.round(n).toLocaleString('he-IL');
+  // Echo the number the user typed, not the tolerance band around it.
+  if (range.about != null) return `כ-${fmt(range.about)}${suffix}`;
+  if (range.min != null && range.max != null) {
+    return range.min === range.max
+      ? `${fmt(range.min)}${suffix}`
+      : `${fmt(range.min)}–${fmt(range.max)}${suffix}`;
+  }
+  if (range.max != null) return `עד ${fmt(range.max)}${suffix}`;
+  return `מ-${fmt(range.min)}${suffix}`;
+}
+
 /**
  * @param {ReturnType<typeof parsePiAiQuery>} parsed
  * @param {number} totalBefore
+ * @param {string} [query]
  * @returns {string|null}
  */
-export function buildPiAiFilterEmptyMessage(parsed, totalBefore) {
+export function buildPiAiFilterEmptyMessage(parsed, totalBefore, query) {
   const parts = [];
   if (parsed?.city) parts.push(`ב${parsed.city}`);
   if (parsed?.purpose === 'rent') parts.push('להשכרה');
   if (parsed?.purpose === 'sale') parts.push('למכירה');
+
+  const constraints = inferPiAiQueryConstraints(query || parsed?.raw || '');
+  if (constraints.rooms != null) parts.push(`${constraints.rooms} חדרים`);
+  const area = describeRange(constraints.area, ' מ"ר');
+  if (area) parts.push(area);
+  const floor = describeRange(constraints.floor, '');
+  if (floor) parts.push(`קומה ${floor}`);
+  const price = describeRange(constraints.price, ' ₪');
+  if (price) parts.push(price);
+  if (constraints.amenities) {
+    for (const rule of constraints.amenities) parts.push(rule.label);
+  }
+
   if (!parts.length) return null;
   return `לא נמצאו מודעות ${parts.join(' · ')} מתוך ${totalBefore} מודעות שפורסמו.`;
 }

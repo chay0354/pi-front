@@ -31,7 +31,7 @@ export const CounterStepper = ({
   const resolvedWidth =
     inputWidth != null
       ? inputWidth
-      : Math.max(20, String(value ?? '').length * 11);
+      : Math.max(36, String(value ?? '').length * 14 + 10);
   const lastPressAtRef = useRef(0);
 
   const runStep = handler => {
@@ -155,6 +155,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     textAlign: 'center',
     paddingVertical: 0,
+    paddingHorizontal: 0,
   },
   valueText: {
     color: Colors.whiteGeneral,

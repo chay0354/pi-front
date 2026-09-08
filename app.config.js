@@ -104,6 +104,18 @@ module.exports = {
             {scheme: 'pifrontend', host: 'post', pathPrefix: '/'},
           ],
         },
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          category: ['BROWSABLE', 'DEFAULT'],
+          data: [
+            {
+              scheme: 'https',
+              host: 'pi-back.vercel.app',
+              pathPrefix: '/p/',
+            },
+          ],
+        },
       ],
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',

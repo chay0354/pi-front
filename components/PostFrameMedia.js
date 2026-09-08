@@ -36,8 +36,8 @@ export default function PostFrameFitWidthImage({
       <Image
         source={{uri}}
         {...IMAGE_PROPS}
-        style={[layout || {width: frameWidth, height: frameHeight}, imageStyle]}
-        resizeMode={layout ? 'stretch' : 'contain'}
+        style={[layout ? layout : styles.fill, imageStyle]}
+        resizeMode={layout ? 'stretch' : 'cover'}
         onLoad={event => {
           const src = event?.nativeEvent?.source;
           const w = Number(src?.width) || 0;
@@ -60,5 +60,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  fill: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
 });

@@ -1,17 +1,41 @@
-import React, {useRef} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {Image, Platform, StyleSheet, View} from 'react-native';
 import {Video, ResizeMode} from 'expo-av';
+import {muxThumbnailUri} from '../../utils/videoPlayback';
 
+const IMAGE_PROPS = Platform.OS === 'android' ? {fadeDuration: 0} : undefined;
+const VIDEO_FILE_RE = /\.(mp4|mov|m4v|webm|m3u8)(\?|#|$)/i;
+
+function isRemoteStill(uri) {
+  const s = uri != null ? String(uri).trim() : '';
+  if (!s || !/^https?:\/\//i.test(s)) return false;
+  if (VIDEO_FILE_RE.test(s) || /stream\.mux\.com/i.test(s)) return false;
+  return true;
+}
+
+/**
+ * Chat / card preview of a video: prefer a JPEG poster (Mux thumbnail or an
+ * explicit still) so the first paint is a photo, not a black Video surface
+ * waiting on ExoPlayer.
+ */
 export function VideoPreviewThumb({
   uri,
+  posterUri = null,
   style,
   videoStyle,
   showPlayIcon = true,
   resizeMode = 'cover',
 }) {
   const videoRef = useRef(null);
-  if (!uri) return null;
+  const [frameReady, setFrameReady] = useState(false);
+  const poster = useMemo(() => {
+    if (isRemoteStill(posterUri)) return String(posterUri).trim();
+    return muxThumbnailUri(uri, {time: 0, width: 480}) || '';
+  }, [posterUri, uri]);
 
+  if (!uri && !poster) return null;
+
+  const cover = resizeMode === 'contain' ? 'contain' : 'cover';
   const playOverlay = showPlayIcon ? (
     <View style={styles.playOverlay} pointerEvents="none">
       <Image
@@ -22,6 +46,20 @@ export function VideoPreviewThumb({
     </View>
   ) : null;
 
+  if (poster) {
+    return (
+      <View style={[styles.frame, style]}>
+        <Image
+          source={{uri: poster}}
+          {...IMAGE_PROPS}
+          style={[styles.media, videoStyle]}
+          resizeMode={cover}
+        />
+        {playOverlay}
+      </View>
+    );
+  }
+
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.frame, style]}>
@@ -29,7 +67,7 @@ export function VideoPreviewThumb({
           src={uri}
           style={{
             ...styles.webVideo,
-            objectFit: resizeMode === 'contain' ? 'contain' : 'cover',
+            objectFit: cover,
             ...(videoStyle || {}),
           }}
           controls={false}
@@ -48,14 +86,19 @@ export function VideoPreviewThumb({
         ref={videoRef}
         key={uri}
         source={{uri}}
-        style={[styles.video, videoStyle]}
+        style={[
+          styles.media,
+          videoStyle,
+          !frameReady && styles.mediaPending,
+        ]}
         resizeMode={
-          resizeMode === 'contain' ? ResizeMode.CONTAIN : ResizeMode.COVER
+          cover === 'contain' ? ResizeMode.CONTAIN : ResizeMode.COVER
         }
         useNativeControls={false}
         shouldPlay={false}
         isMuted
         isLooping={false}
+        onReadyForDisplay={() => setFrameReady(true)}
         onLoad={() => {
           videoRef.current?.setPositionAsync(0).catch(() => {});
         }}
@@ -71,18 +114,21 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#1a1a22',
+    backgroundColor: '#2B2A39',
   },
-  video: {
+  media: {
     width: '100%',
     height: '100%',
+  },
+  mediaPending: {
+    opacity: 0,
   },
   webVideo: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
     display: 'block',
-    backgroundColor: '#1a1a22',
+    backgroundColor: '#2B2A39',
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

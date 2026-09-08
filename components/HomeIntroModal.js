@@ -7,7 +7,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import {getBootSplashLogoRect} from './BootSplashFrame';
+import {
+  bootFrameLtrStyle,
+  getBootFrameSize,
+  getBootSplashLogoRect,
+  isSameRect,
+  setBootFrameSize,
+  subscribeBootFrame,
+} from '../utils/bootFrame';
 
 const HOLD_BEFORE_MS = 300; // stay at full initial size before moving
 const MOVE_MS = 1800; // slow move up + shrink, all together
@@ -54,8 +61,11 @@ export default function HomeIntroModal({
 }) {
   const {width: screenWidth, height: screenHeight} = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
-  const [startRect] = useState(() =>
-    getBootSplashLogoRect(screenWidth, screenHeight),
+  // Same measured box BootSplashFrame drew into — never the window, which on
+  // Android is taller than the React root by the nav-bar padding and would
+  // place this logo well away from the one already on screen.
+  const [frame, setFrame] = useState(
+    () => getBootFrameSize() || {width: screenWidth, height: screenHeight},
   );
   const progress = useRef(new Animated.Value(0)).current;
   // Target is frozen once the animation starts — if targetLayout changed
@@ -69,35 +79,36 @@ export default function HomeIntroModal({
   const onFirstPaintRef = useRef(onFirstPaint);
   onFirstPaintRef.current = onFirstPaint;
 
-  // Frozen on first overlay layout so Android inset/window changes cannot
-  // reposition the logo during the hold (that was the pre-animation jump).
-  const initialRect = startRect;
-
-  const fallbackTargetRect = useMemo(
-    () => getHomeHeaderLogoRect(screenWidth, insetsTop),
-    [screenWidth, insetsTop],
+  const initialRect = useMemo(
+    () => getBootSplashLogoRect(frame.width, frame.height),
+    [frame],
   );
 
-  const {
-    translateX,
-    translateY,
-    scaleX,
-    scaleY,
-    backgroundScale,
-    backgroundOpacity,
-  } = useMemo(() => {
-    // Always interpolate using *some* target (real once resolved, fallback
-    // shape until then) so the transform array's structure never changes
-    // between renders — switching it from [] to populated mid-flight was
-    // causing React Native's native driver to visibly reset/re-attach the
-    // view for a frame, looking like a jump right as the hold ends.
-    const effectiveTarget = resolvedTarget || fallbackTargetRect;
-    const scaleToX = effectiveTarget.width / initialRect.width;
-    const scaleToY = effectiveTarget.height / initialRect.height;
-    const initialCenterX = initialRect.x + initialRect.width / 2;
-    const initialCenterY = initialRect.y + initialRect.height / 2;
-    const targetCenterX = effectiveTarget.x + effectiveTarget.width / 2;
-    const targetCenterY = effectiveTarget.y + effectiveTarget.height / 2;
+  const fallbackTargetRect = useMemo(
+    () => getHomeHeaderLogoRect(frame.width, insetsTop),
+    [frame, insetsTop],
+  );
+
+  // Always interpolate using *some* target (real once resolved, fallback
+  // shape until then) so the transform array's structure never changes
+  // between renders — switching it from [] to populated mid-flight was
+  // causing React Native's native driver to visibly reset/re-attach the
+  // view for a frame, looking like a jump right as the hold ends.
+  const effectiveTarget = resolvedTarget || fallbackTargetRect;
+  // Depend on the numbers, not the rect objects: a re-render that recomputes
+  // an identical rect must not hand the native driver fresh nodes.
+  const {x: targetX, y: targetY, width: targetW, height: targetH} =
+    effectiveTarget;
+  const {x: initialX, y: initialY, width: initialW, height: initialH} =
+    initialRect;
+
+  const {translateX, translateY, scaleX, scaleY, backgroundOpacity} = useMemo(() => {
+    const scaleToX = targetW / initialW;
+    const scaleToY = targetH / initialH;
+    const initialCenterX = initialX + initialW / 2;
+    const initialCenterY = initialY + initialH / 2;
+    const targetCenterX = targetX + targetW / 2;
+    const targetCenterY = targetY + targetH / 2;
     return {
       translateX: progress.interpolate({
         inputRange: [0, 1],
@@ -116,29 +127,53 @@ export default function HomeIntroModal({
         inputRange: [0, 1],
         outputRange: [1, scaleToY],
       }),
-      // Background stays put and clears early — it should not trail
-      // behind the flying logo for the full move.
-      backgroundScale: progress.interpolate({
-        inputRange: [0, 0.32, 1],
-        outputRange: [1, 1.04, 1.04],
-      }),
+      // The backdrop only fades — never scales. Any movement here reads as
+      // the whole screen jumping the instant the logo starts travelling.
       backgroundOpacity: progress.interpolate({
         inputRange: [0, 0.32, 1],
         outputRange: [1, 0, 0],
       }),
     };
-  }, [resolvedTarget, fallbackTargetRect, initialRect, progress]);
+  }, [
+    progress,
+    targetX,
+    targetY,
+    targetW,
+    targetH,
+    initialX,
+    initialY,
+    initialW,
+    initialH,
+  ]);
 
   // Always-current layouts, readable from inside timers without a stale
   // closure (the start effect below only depends on `visible` / mount).
   const targetLayoutRef = useRef(targetLayout);
   const computedTargetRef = useRef(fallbackTargetRect);
+  const insetsTopRef = useRef(insetsTop);
   useEffect(() => {
     targetLayoutRef.current = targetLayout;
   }, [targetLayout]);
   useEffect(() => {
     computedTargetRef.current = fallbackTargetRect;
   }, [fallbackTargetRect]);
+  useEffect(() => {
+    insetsTopRef.current = insetsTop;
+  }, [insetsTop]);
+
+  // Follow BootSplashFrame's box while both are on screen. Ignored once the
+  // move is running — repositioning the logo mid-flight is a visible jump,
+  // and by then it is heading for the header rect anyway.
+  useEffect(
+    () =>
+      subscribeBootFrame(next => {
+        if (moveStartedRef.current) return;
+        setFrame(prev =>
+          prev.width === next.width && prev.height === next.height ? prev : next,
+        );
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -165,24 +200,31 @@ export default function HomeIntroModal({
       moveStartedRef.current = true;
       // Do not setState here — rebuilding interpolations + unmounting the
       // boot cover in the same commit is the pre-animation flicker.
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: MOVE_MS,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({finished}) => {
-        if (!finished) return;
-        // Reveal the real header logo first, then drop the overlay after
-        // two frames so they share a paint — no gap, no double logo flash.
-        onHidden?.();
-        handoffFrame1 = requestAnimationFrame(() => {
-          handoffFrame2 = requestAnimationFrame(() => {
-            setMounted(false);
+      //
+      // Drop the boot cover first and give it two frames to paint. This
+      // overlay is pixel-identical to it at progress 0, so the swap is
+      // invisible; starting the timing first hands over a frame that has
+      // already travelled, which is what read as a jump.
+      onIntroMoveStart?.();
+      startFrame1 = requestAnimationFrame(() => {
+        startFrame2 = requestAnimationFrame(() => {
+          Animated.timing(progress, {
+            toValue: 1,
+            duration: MOVE_MS,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }).start(({finished}) => {
+            if (!finished) return;
+            // Reveal the real header logo first, then drop the overlay after
+            // two frames so they share a paint — no gap, no double logo flash.
+            onHidden?.();
+            handoffFrame1 = requestAnimationFrame(() => {
+              handoffFrame2 = requestAnimationFrame(() => {
+                setMounted(false);
+              });
+            });
           });
         });
-      });
-      startFrame1 = requestAnimationFrame(() => {
-        onIntroMoveStart?.();
       });
     };
 
@@ -222,7 +264,26 @@ export default function HomeIntroModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleOverlayLayout = useCallback(() => {
+  const handleOverlayLayout = useCallback(event => {
+    const {width, height} = event.nativeEvent.layout;
+    // BootSplashFrame owns the cached frame; only seed it if it never ran, so
+    // the two covers can never end up scaled off different boxes.
+    if (!getBootFrameSize()) setBootFrameSize(width, height);
+    const measured = getBootFrameSize();
+    // Nothing here may run once the logo is in flight: rebuilding the start
+    // rect or the interpolation ranges mid-move is exactly the jump we are
+    // trying to remove.
+    if (measured && !moveStartedRef.current) {
+      setFrame(prev =>
+        prev.width === measured.width && prev.height === measured.height
+          ? prev
+          : measured,
+      );
+      // Re-freeze the header target now the frame and insets have settled.
+      const target = getHomeHeaderLogoRect(measured.width, insetsTopRef.current);
+      computedTargetRef.current = target;
+      setResolvedTarget(prev => (isSameRect(prev, target) ? prev : target));
+    }
     if (paintedRef.current) return;
     paintedRef.current = true;
     requestAnimationFrame(() => {
@@ -237,7 +298,7 @@ export default function HomeIntroModal({
 
   return (
     <View
-      style={styles.overlayRoot}
+      style={[styles.overlayRoot, bootFrameLtrStyle]}
       pointerEvents="auto"
       onLayout={handleOverlayLayout}
       collapsable={false}>
@@ -250,13 +311,7 @@ export default function HomeIntroModal({
         />
         <Animated.Image
           source={require('../assets/splashBack.png')}
-          style={[
-            styles.backgroundImage,
-            {
-              opacity: backgroundOpacity,
-              transform: [{scale: backgroundScale}],
-            },
-          ]}
+          style={[styles.backgroundImage, {opacity: backgroundOpacity}]}
           resizeMode="cover"
           fadeDuration={0}
         />
@@ -287,10 +342,16 @@ export default function HomeIntroModal({
 }
 
 const styles = StyleSheet.create({
+  /**
+   * No background colour here on purpose: this root is never animated, so an
+   * opaque fill would hide Home for the whole move instead of only until
+   * `backdrop` finishes fading.
+   */
   overlayRoot: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     elevation: 9999,
+    overflow: 'hidden',
   },
   root: {
     flex: 1,
@@ -300,7 +361,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e1d27',
   },
   backgroundImage: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    top: 0,
     width: '100%',
     height: '100%',
   },

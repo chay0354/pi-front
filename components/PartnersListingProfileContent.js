@@ -11,7 +11,7 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {SvgXml} from 'react-native-svg';
 import LocationMap from './LocationMap';
 import PartnersSmartInfoBlock from './PartnersSmartInfoBlock';
-import {flexStart} from '../utils/rtlLayout';
+import {flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 
 const PARTNER_PREF_ICONS = {
   age: require('../assets/new-profile-pages/partheners/ages20-30.png'),
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   tagsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: flexStart,
     width: '100%',
   },
   tagWhite: {
@@ -370,14 +370,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 16,
     color: DEEP,
-    textAlign: 'left',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
   },
   listingTitle: {
     fontFamily: 'Rubik-SemiBold',
     fontSize: 32,
     lineHeight: 37,
     color: CREAM,
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
     alignSelf: flexStart,
     width: '100%',
@@ -422,9 +423,10 @@ const styles = StyleSheet.create({
   budgetValue: {
     fontFamily: 'Rubik-SemiBold',
     fontSize: 28,
-    lineHeight: 31,
+    lineHeight: 38,
     color: '#FFFFFF',
     textAlign: 'center',
+    paddingHorizontal: 8,
   },
   sectionHeading: {
     fontFamily: 'Rubik-Regular',

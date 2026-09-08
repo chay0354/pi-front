@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const STORAGE_KEY = 'pi_accessibility_prefs_v1';
 
 export const FONT_SCALE_MIN = 1;
-export const FONT_SCALE_MAX = 2;
-export const FONT_SCALE_STEP = 0.15;
+export const FONT_SCALE_MAX = 1.2;
+export const FONT_SCALE_STEP = 0.1;
 
 export const DEFAULT_ACCESSIBILITY_PREFS = {
   fontScale: 1,

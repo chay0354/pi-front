@@ -23,7 +23,8 @@ import {
 } from 'react-native';
 import {createClient} from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import {Audio} from 'expo-av';
+import {Audio, ResizeMode, Video} from 'expo-av';
+import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -73,6 +74,7 @@ import {
   hebrewTextAlign,
 } from '../utils/rtlLayout';
 import {isFeedPostListingRecord} from '../utils/listingShape';
+import {muxThumbnailUri} from '../utils/videoPlayback';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -162,6 +164,24 @@ function chatPhotoBox(naturalW, naturalH) {
   }
   return {width: Math.round(w), height: Math.round(h)};
 }
+
+/**
+ * Shared post/ad cards keep the exact feed-page shape so the post is never
+ * cropped or zoomed — only scaled down. Allowed to be taller than a photo
+ * bubble so the authored text stays readable.
+ */
+const CHAT_SHARED_POST_MAX_H = 420;
+
+function chatSharedPostBox(aspect) {
+  const ratio = Number(aspect) > 0 ? Number(aspect) : 9 / 16;
+  let w = CHAT_PHOTO_MAX_W;
+  let h = w / ratio;
+  if (h > CHAT_SHARED_POST_MAX_H) {
+    h = CHAT_SHARED_POST_MAX_H;
+    w = h * ratio;
+  }
+  return {width: Math.round(w), height: Math.round(h)};
+}
 /** WhatsApp-style read receipt (double blue ticks). */
 const CHAT_READ_TICK_BLUE = '#34B7F1';
 const CHAT_READ_TICK_SENT = 'rgba(55,53,72,0.45)';
@@ -195,12 +215,14 @@ const isUserConversation = conv => conv && conv.id && conv.id !== '1';
 const WELCOME_PI_AVATAR = require('../assets/chat/welcome-pi-avatar.png');
 /** Matches SharePostSheet fallback body — hide under bubble when post card is shown. */
 const SHARE_POST_DEFAULT_CAPTION = 'פוסט משותף';
+const SHARE_LISTING_DEFAULT_CAPTION = 'מודעה משותפת';
 /** Many feed posts use description `'פוסט'` (PostEditor); SharePostSheet sends that as caption → must still open rich card. */
 const isSharePlaceholderCaption = raw => {
   const t = String(raw || '').trim();
   if (!t) return true;
   if (t === SHARE_POST_DEFAULT_CAPTION) return true;
-  if (t === 'פוסט') return true;
+  if (t === SHARE_LISTING_DEFAULT_CAPTION) return true;
+  if (t === 'פוסט' || t === 'מודעה') return true;
   if (/^פוסט\s*$/u.test(t)) return true;
   return false;
 };
@@ -215,6 +237,46 @@ const sharedPostPreviewText = (cachedListing, bodyTrim) => {
   if (bodyTrim && !isSharePlaceholderCaption(bodyTrim)) return bodyTrim;
   return '';
 };
+
+const isChatVideoUrl = url => {
+  const u = String(url || '').trim().toLowerCase();
+  if (!u) return false;
+  return (
+    /\.(mp4|mov|m4v|webm|m3u8)(\?|#|$)/i.test(u) ||
+    u.includes('stream.mux.com') ||
+    u.includes('/video/')
+  );
+};
+
+function chatStillOrPoster(url, extraStill) {
+  const still = extraStill != null ? String(extraStill).trim() : '';
+  if (still && /^https?:\/\//i.test(still) && !isChatVideoUrl(still)) {
+    return still;
+  }
+  const raw = url != null ? String(url).trim() : '';
+  if (raw && !isChatVideoUrl(raw) && /^https?:\/\//i.test(raw)) return raw;
+  return muxThumbnailUri(raw, {time: 0, width: 480}) || '';
+}
+
+function prefetchChatMediaUri(url) {
+  const u = url != null ? String(url).trim() : '';
+  if (!u || !/^https?:\/\//i.test(u)) return;
+  if (isChatVideoUrl(u)) {
+    const poster = muxThumbnailUri(u, {time: 0, width: 480});
+    if (poster) Image.prefetch(poster).catch(() => {});
+    return;
+  }
+  Image.prefetch(u).catch(() => {});
+}
+
+/**
+ * Only the poster's name goes on a shared card. The card renders the post's own
+ * text layers, so echoing the description here would print it twice.
+ */
+const sharedCardDisplayName = cachedListing =>
+  cachedListing?.creatorName != null
+    ? String(cachedListing.creatorName).trim()
+    : '';
 
 /** Substring used in broker exclusive-offer messages and to detect them in history. */
 const EXCLUSIVE_OFFER_BODY_MARKER = 'להציע בלעדיות על הנכס';
@@ -343,7 +405,9 @@ const normalizeChatMessage = m => {
   let mediaType = null;
   if (rawType != null && String(rawType).trim() !== '') {
     const t = String(rawType).trim().toLowerCase();
-    if (t === 'image' || t === 'audio' || t === 'file') mediaType = t;
+    if (t === 'image' || t === 'audio' || t === 'file' || t === 'video') {
+      mediaType = t;
+    }
   }
   const lid = m.listingId ?? m.listing_id;
   const listingId =
@@ -632,6 +696,7 @@ const ChatScreen = ({
   });
   const voicePlayBeganRef = useRef(false);
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState(null);
+  const [fullScreenVideoUrl, setFullScreenVideoUrl] = useState(null);
   const [showDocumentPicker, setShowDocumentPicker] = useState(false);
   /** True only while postgres_changes subscription is SUBSCRIBED. */
   const [realtimeOk, setRealtimeOk] = useState(false);
@@ -1544,10 +1609,26 @@ const ChatScreen = ({
         });
         return next;
       });
+      entries.forEach(([, val]) => {
+        prefetchChatMediaUri(val?.posterUrl);
+        prefetchChatMediaUri(val?.mediaUrl);
+        prefetchChatMediaUri(val?.videoHlsUrl);
+      });
     })();
     return () => {
       cancelled = true;
     };
+  }, [messages]);
+
+  useEffect(() => {
+    messages.forEach(raw => {
+      const url =
+        raw?.mediaUrl ||
+        raw?.media_url ||
+        raw?.media?.url ||
+        null;
+      prefetchChatMediaUri(url);
+    });
   }, [messages]);
 
   const markChatImageBroken = useCallback(url => {
@@ -1796,8 +1877,16 @@ const ChatScreen = ({
     if (result.canceled || !result.assets?.[0]) return;
     const a = result.assets[0];
     const uri = a.uri;
-    const mime = a.mimeType || 'image/jpeg';
-    const name = a.fileName || `photo-${Date.now()}.jpg`;
+    const pickedIsVideo =
+      a.type === 'video' ||
+      (a.mimeType != null &&
+        String(a.mimeType).toLowerCase().startsWith('video/'));
+    const mediaType = pickedIsVideo ? 'video' : 'image';
+    const mime =
+      a.mimeType || (pickedIsVideo ? 'video/mp4' : 'image/jpeg');
+    const name =
+      a.fileName ||
+      (pickedIsVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`);
     if (a.width && a.height) {
       rememberChatImageSize(uri, a.width, a.height);
     }
@@ -1807,7 +1896,7 @@ const ChatScreen = ({
       let res;
       if (isGroupThread && groupConversationId) {
         res = await sendGroupChatMessage(groupConversationId, myEmail, '', {
-          type: 'image',
+          type: mediaType,
           url: up.url,
         });
       } else {
@@ -1819,7 +1908,7 @@ const ChatScreen = ({
           receiverDisplay,
           senderDisplay,
           {
-            type: 'image',
+            type: mediaType,
             url: up.url,
           },
         );
@@ -1835,7 +1924,7 @@ const ChatScreen = ({
           {
             ...nm,
             id: nm.id || Date.now(),
-            mediaType: nm.mediaType || 'image',
+            mediaType: nm.mediaType || mediaType,
             mediaUrl,
           },
         ]);
@@ -1843,7 +1932,7 @@ const ChatScreen = ({
         if (onMessageSent) onMessageSent();
       }
     } catch (e) {
-      Alert.alert('', e?.message || 'העלאת התמונה נכשלה');
+      Alert.alert('', e?.message || 'העלאת המדיה נכשלה');
     } finally {
       setSending(false);
     }
@@ -1859,12 +1948,13 @@ const ChatScreen = ({
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
+        videoMaxDuration: 120,
       });
       await sendPickedChatImage(result);
     } catch (e) {
-      Alert.alert('', e?.message || 'העלאת התמונה נכשלה');
+      Alert.alert('', e?.message || 'העלאת המדיה נכשלה');
       setSending(false);
     }
   };
@@ -2286,7 +2376,17 @@ const ChatScreen = ({
   const openChatImageFullScreen = useCallback(url => {
     const u = url != null ? String(url).trim() : '';
     if (!u) return;
+    if (isChatVideoUrl(u)) {
+      setFullScreenVideoUrl(u);
+      return;
+    }
     setFullScreenImageUrl(u);
+  }, []);
+
+  const openChatVideoFullScreen = useCallback(url => {
+    const u = url != null ? String(url).trim() : '';
+    if (!u) return;
+    setFullScreenVideoUrl(u);
   }, []);
 
   const openChatFile = useCallback(url => {
@@ -2562,6 +2662,7 @@ const ChatScreen = ({
       const bodyTrim = String(msg.body || '').trim();
       const hasAudio = msg.mediaType === 'audio' && msg.mediaUrl;
       const hasImage = msg.mediaType === 'image' && msg.mediaUrl;
+      const hasVideo = msg.mediaType === 'video' && msg.mediaUrl;
       const hasFile = msg.mediaType === 'file' && msg.mediaUrl;
       const fileDisplayName = hasFile
         ? chatFileDisplayName(bodyTrim, msg.mediaUrl)
@@ -2570,6 +2671,7 @@ const ChatScreen = ({
       const legacyInferredShare =
         !!msg.listingId &&
         !hasAudio &&
+        !hasVideo &&
         (hasImage || isSharePlaceholderCaption(bodyTrim));
       /**
        * Explicit share (`listing_share`): always use post card — never plain bubble for body "פוסט".
@@ -2612,15 +2714,28 @@ const ChatScreen = ({
         : '';
       const isPlainTextBubble =
         !!bodyTrim &&
-        !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
+        !showSharedPostCard &&
         !hasFile &&
         !hasImage &&
+        !hasVideo &&
         !hasAudio;
       const isPhotoBubble = hasImage && !showSharedPostCard;
-      const isPhotoOnly = isPhotoBubble && !bodyTrim;
+      const isVideoBubble = hasVideo && !showSharedPostCard;
+      const isEdgeMediaBubble =
+        isPhotoBubble || isVideoBubble || showSharedPostCard;
+      const isPhotoOnly =
+        (isPhotoBubble || isVideoBubble) && !bodyTrim;
+      const isShareMediaOnly = showSharedPostCard;
       const photoBox = isPhotoBubble
         ? chatImageSizeByUrl[msg.mediaUrl] || CHAT_PHOTO_FALLBACK
-        : null;
+        : isVideoBubble
+          ? chatImageSizeByUrl[msg.mediaUrl] || {
+              width: CHAT_PHOTO_MAX_W,
+              height: Math.round(CHAT_PHOTO_MAX_W * 1.15),
+            }
+          : showSharedPostCard
+            ? chatSharedPostBox(postAspect)
+            : null;
       return (
         <React.Fragment key={m.id}>
           <View
@@ -2680,8 +2795,8 @@ const ChatScreen = ({
                   m.isMe ? styles.bubbleMe : styles.bubbleThem,
                   hasAudio && !bodyTrim && styles.bubbleVoiceOnly,
                   isPlainTextBubble && styles.bubblePlainText,
-                  isPhotoBubble && styles.bubblePhoto,
-                  isPhotoOnly && styles.bubblePhotoOnly,
+                  isEdgeMediaBubble && styles.bubblePhoto,
+                  (isPhotoOnly || isShareMediaOnly) && styles.bubblePhotoOnly,
                 ]}>
                 {showSharedPostCard ? (
                   (() => {
@@ -2735,49 +2850,71 @@ const ChatScreen = ({
                       cached,
                       bodyTrim,
                     );
+                    const shareName = sharedCardDisplayName(cached);
+                    const isListingShareCard = cached?.feedPost === false;
+                    const shareBadgeLabel = isListingShareCard
+                      ? 'מודעה'
+                      : 'פוסט';
+                    const mediaIsVideo = isChatVideoUrl(resolvedMediaUrl);
+                    const stillPoster = chatStillOrPoster(
+                      resolvedMediaUrl,
+                      cached?.posterUrl || cached?.mediaUrl,
+                    );
+                    const listingVideoUrl = mediaIsVideo
+                      ? resolvedMediaUrl
+                      : cached?.videoHlsUrl ||
+                        (cached?.mediaUrl && isChatVideoUrl(cached.mediaUrl)
+                          ? cached.mediaUrl
+                          : null);
                     const openSharedPostInFeed = () => {
                       if (typeof onOpenPost !== 'function') return;
+                      const isFeedPostShare = !isListingShareCard;
                       onOpenPost({
                         id: msg.listingId,
                         mediaUrl: resolvedMediaUrl,
                         body: m.body,
                         category: cached?.category ?? null,
                         general_details: cached?.generalDetails ?? null,
-                        feedPost: cached?.feedPost ?? true,
+                        feedPost: isFeedPostShare,
+                        // snake_case + propertyType are what the feed reads to
+                        // pick the posts filter and scroll to the right item.
+                        feed_post: isFeedPostShare,
+                        propertyType: isFeedPostShare ? 'post' : null,
                       });
                     };
                     return (
-                      <View style={styles.sharedPostCard}>
-                        <TouchableOpacity
-                          activeOpacity={0.9}
-                          onPress={() => {
-                            if (
-                              isProfessionalNotificationMsg ||
-                              !resolvedMediaUrl
-                            ) {
-                              openSharedPostInFeed();
-                            } else {
-                              openChatImageFullScreen(resolvedMediaUrl);
-                            }
-                          }}
-                          style={[
-                            styles.sharedPostImageWrap,
-                            {aspectRatio: postAspect},
-                          ]}>
+                      <TouchableOpacity
+                        activeOpacity={0.92}
+                        onPress={openSharedPostInFeed}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isListingShareCard ? 'פתח את המודעה' : 'פתח את הפוסט'
+                        }
+                        style={[styles.chatPhotoTap, photoBox]}>
                           {resolvedMediaUrl ? (
                             <FeedPostPreviewMedia
                               listing={{
                                 feed_post: cached?.feedPost ?? true,
                                 general_details: cached?.generalDetails ?? null,
-                                main_image_url: resolvedMediaUrl,
-                                image: resolvedMediaUrl,
+                                main_image_url: mediaIsVideo
+                                  ? stillPoster || null
+                                  : resolvedMediaUrl,
+                                image: mediaIsVideo
+                                  ? stillPoster || null
+                                  : resolvedMediaUrl,
+                                video_url: listingVideoUrl,
+                                video_hls_url: cached?.videoHlsUrl || null,
+                                poster_url: stillPoster || null,
                               }}
-                              style={styles.sharedPostImage}
-                              showOpenHouseChrome={false}
-                              showVideoPlayIcon={false}
+                              style={[styles.sharedPostImage, photoBox]}
+                              showVideoPlayIcon={mediaIsVideo}
                             />
                           ) : previewLines ? (
-                            <View style={styles.sharedPostImagePlaceholder}>
+                            <View
+                              style={[
+                                styles.sharedPostImagePlaceholder,
+                                photoBox,
+                              ]}>
                               <Text
                                 style={styles.sharedPostPlaceholderBody}
                                 numberOfLines={8}>
@@ -2785,7 +2922,11 @@ const ChatScreen = ({
                               </Text>
                             </View>
                           ) : (
-                            <View style={styles.sharedPostImagePlaceholder}>
+                            <View
+                              style={[
+                                styles.sharedPostImagePlaceholder,
+                                photoBox,
+                              ]}>
                               <MaterialCommunityIcons
                                 name="image-outline"
                                 size={36}
@@ -2793,40 +2934,43 @@ const ChatScreen = ({
                               />
                             </View>
                           )}
+                          <View style={styles.sharedPostBadge} pointerEvents="none">
+                            <Text style={styles.sharedPostBadgeText}>
+                              {shareBadgeLabel}
+                            </Text>
+                          </View>
                           <LinearGradient
                             colors={['transparent', 'rgba(0,0,0,0.55)']}
-                            style={styles.sharedPostGradient}
-                            pointerEvents="none"
-                          />
-                          <View style={styles.sharedPostBadge}>
-                            <MaterialCommunityIcons
-                              name="play-circle"
-                              size={12}
-                              color="#1E1D27"
-                            />
-                            <Text style={styles.sharedPostBadgeText}>פוסט</Text>
-                          </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          activeOpacity={0.85}
-                          onPress={openSharedPostInFeed}
-                          style={styles.sharedPostFooter}>
-                          <MaterialCommunityIcons
-                            name="chevron-left"
-                            size={18}
-                            color="rgba(255,255,255,0.85)"
-                          />
-                          <Text
-                            style={styles.sharedPostFooterText}
-                            numberOfLines={
-                              resolvedMediaUrl && previewLines ? 2 : 1
-                            }>
-                            {resolvedMediaUrl && previewLines
-                              ? previewLines
-                              : 'צפייה בפוסט'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                            style={styles.sharedMediaCaptionBar}
+                            pointerEvents="none">
+                            {shareName ? (
+                              <Text
+                                style={styles.sharedPostNameOnMedia}
+                                numberOfLines={1}>
+                                {shareName}
+                              </Text>
+                            ) : null}
+                            {bubbleTimeLabel ? (
+                              <View style={styles.chatPhotoTimeMeta}>
+                                <Text
+                                  style={styles.chatPhotoTimeText}
+                                  numberOfLines={1}>
+                                  {bubbleTimeLabel}
+                                </Text>
+                                {m.isMe && !isWelcome ? (
+                                  <ChatOutgoingReadTicks
+                                    isRead={messageRead}
+                                    color={
+                                      messageRead
+                                        ? CHAT_READ_TICK_BLUE
+                                        : 'rgba(255,255,255,0.9)'
+                                    }
+                                  />
+                                ) : null}
+                              </View>
+                            ) : null}
+                          </LinearGradient>
+                      </TouchableOpacity>
                     );
                   })()
                 ) : msg.mediaType === 'image' && msg.mediaUrl ? (
@@ -2856,6 +3000,7 @@ const ChatScreen = ({
                       source={{uri: msg.mediaUrl}}
                       style={[styles.bubbleImage, photoBox]}
                       resizeMode="cover"
+                      fadeDuration={0}
                       onLoad={e => {
                         const src = e?.nativeEvent?.source;
                         rememberChatImageSize(
@@ -2890,6 +3035,44 @@ const ChatScreen = ({
                     ) : null}
                   </TouchableOpacity>
                   )
+                ) : isVideoBubble ? (
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => openChatVideoFullScreen(msg.mediaUrl)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="פתח סרטון במסך מלא"
+                    style={[styles.chatPhotoTap, photoBox]}>
+                    <VideoPreviewThumb
+                      uri={msg.mediaUrl}
+                      posterUri={chatStillOrPoster(msg.mediaUrl)}
+                      style={[styles.bubbleImage, photoBox, {borderRadius: 0}]}
+                      videoStyle={styles.bubbleImage}
+                      showPlayIcon
+                      resizeMode="cover"
+                    />
+                    {isPhotoOnly && bubbleTimeLabel ? (
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.55)']}
+                        style={styles.chatPhotoTimeBar}
+                        pointerEvents="none">
+                        <Text
+                          style={styles.chatPhotoTimeText}
+                          numberOfLines={1}>
+                          {bubbleTimeLabel}
+                        </Text>
+                        {m.isMe && !isWelcome ? (
+                          <ChatOutgoingReadTicks
+                            isRead={messageRead}
+                            color={
+                              messageRead
+                                ? CHAT_READ_TICK_BLUE
+                                : 'rgba(255,255,255,0.9)'
+                            }
+                          />
+                        ) : null}
+                      </LinearGradient>
+                    ) : null}
+                  </TouchableOpacity>
                 ) : msg.mediaType === 'file' && msg.mediaUrl ? (
                   <TouchableOpacity
                     activeOpacity={0.85}
@@ -2970,8 +3153,9 @@ const ChatScreen = ({
                     ) : null}
                   </View>
                 ) : bodyTrim &&
-                !(showSharedPostCard && isSharePlaceholderCaption(bodyTrim)) &&
-                !hasFile ? (
+                !showSharedPostCard &&
+                !hasFile &&
+                !hasVideo ? (
                   <Text style={styles.bubbleText}>{bodyTrim}</Text>
                 ) : null}
                 {isProfessionalNotificationMsg &&
@@ -3001,7 +3185,8 @@ const ChatScreen = ({
                 ) : null}
                 {!(hasAudio && !bodyTrim) &&
                 !isPlainTextBubble &&
-                !isPhotoOnly ? (
+                !isPhotoOnly &&
+                !isShareMediaOnly ? (
                   <View style={styles.bubbleTime}>
                     <Text style={styles.bubbleTimeText} numberOfLines={1}>
                       {bubbleTimeLabel}
@@ -3918,7 +4103,7 @@ const ChatScreen = ({
                   onPress={canSendChatMedia ? handlePickFromGallery : undefined}
                   disabled={!canSendChatMedia}
                   accessibilityRole="button"
-                  accessibilityLabel="בחר תמונה מהגלריה">
+                  accessibilityLabel="בחר תמונה או סרטון מהגלריה">
                   <MaterialCommunityIcons name="plus" size={22} color="#fff" />
                 </TouchableOpacity>
                 <View style={styles.inputPillWrap}>
@@ -4588,6 +4773,33 @@ const ChatScreen = ({
             style={styles.fullScreenImage}
             resizeMode="contain"
           />
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!fullScreenVideoUrl}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setFullScreenVideoUrl(null)}>
+        <View style={styles.fullScreenImageRoot}>
+          <TouchableOpacity
+            style={[styles.fullScreenImageCloseBtn, {top: insets.top + 10}]}
+            onPress={() => setFullScreenVideoUrl(null)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="סגור">
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {fullScreenVideoUrl ? (
+            <Video
+              source={{uri: fullScreenVideoUrl}}
+              style={styles.fullScreenImage}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              useNativeControls
+              isLooping={false}
+            />
+          ) : null}
         </View>
       </Modal>
 
@@ -5687,7 +5899,7 @@ const styles = StyleSheet.create({
   bubbleImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: '#2B2A39',
   },
   bubbleImageBroken: {
     alignItems: 'center',
@@ -5698,7 +5910,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingBottom: 0,
     overflow: 'hidden',
-    backgroundColor: '#1a1926',
+    backgroundColor: '#2B2A39',
   },
   bubblePhotoOnly: {
     paddingBottom: 0,
@@ -5718,6 +5930,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 3,
+    ...forceLtrStyle,
+  },
+  sharedMediaCaptionBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 28,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  sharedPostNameOnMedia: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: 'Rubik-SemiBold',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    width: '100%',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 2,
+  },
+  chatPhotoTimeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 3,
+    width: '100%',
     ...forceLtrStyle,
   },
   chatPhotoTimeText: {
@@ -5797,15 +6039,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   sharedPostCard: {
-    width: 236,
-    borderRadius: 14,
     overflow: 'hidden',
-    marginBottom: 6,
-    backgroundColor: 'rgba(0,0,0,0.22)',
+    backgroundColor: '#2B2A39',
   },
   sharedPostImageWrap: {
     width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    height: '100%',
+    backgroundColor: '#2B2A39',
     position: 'relative',
   },
   sharedPostImage: {width: '100%', height: '100%'},

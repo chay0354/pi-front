@@ -20,26 +20,36 @@ export const ProfilePictureUpload = ({
   mainImageInputRef,
   title = 'תמונת נושא או הדמייה',
   required = true,
-  circularPreview = false,
+  /** 'free' (default), 'circle', or 'square' framed preview. */
+  previewShape = 'free',
   onEditExistingImage,
 }) => {
   const hasImage = Boolean(mainImage?.uri);
   const showEdit = hasImage && typeof onEditExistingImage === 'function';
+  const isFramed = previewShape === 'circle' || previewShape === 'square';
+
+  const frameStyle = !hasImage
+    ? styles.rectHit
+    : previewShape === 'circle'
+      ? styles.circleHit
+      : previewShape === 'square'
+        ? styles.squareHit
+        : styles.rectHit;
 
   return (
     <>
       <Title text={title} required={required} />
       <View style={styles.fixedImageContainer}>
         <TouchableOpacity
-          style={circularPreview ? styles.circleHit : styles.rectHit}
+          style={frameStyle}
           onPress={handleMainImageUpload}
           activeOpacity={0.85}
           disabled={uploadProgress.mainImage}>
           {hasImage ? (
             <Image
               source={{uri: mainImage.uri}}
-              style={circularPreview ? styles.circleImage : styles.fixedImage}
-              resizeMode={circularPreview ? 'cover' : 'contain'}
+              style={isFramed ? styles.framedImage : styles.fixedImage}
+              resizeMode={previewShape === 'circle' ? 'cover' : 'contain'}
             />
           ) : (
             <View style={styles.emptyState}>
@@ -85,7 +95,7 @@ export const ProfilePictureUpload = ({
   );
 };
 
-const CIRCLE = 168;
+const FRAME = 198;
 
 const styles = StyleSheet.create({
   fixedImageContainer: {
@@ -108,12 +118,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   circleHit: {
-    width: CIRCLE,
-    height: CIRCLE,
-    borderRadius: CIRCLE / 2,
+    width: 168,
+    height: 168,
+    borderRadius: 84,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#F7C63A',
+  },
+  squareHit: {
+    width: FRAME,
+    height: FRAME,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#F7C63A',
+    backgroundColor: '#1E1D27',
   },
   useImage: {
     width: 55,
@@ -149,7 +168,7 @@ const styles = StyleSheet.create({
     height: 198,
     maxHeight: 198,
   },
-  circleImage: {
+  framedImage: {
     width: '100%',
     height: '100%',
   },

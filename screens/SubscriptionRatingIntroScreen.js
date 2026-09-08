@@ -91,7 +91,7 @@ const SubscriptionRatingIntroScreen = ({
                   </View>
                 )}
                 <Text style={styles.bestRatingGold}>
-                  {startsAtFive ? '5 כוכבי פאי' : '1 כוכב פאי'}
+                  {startsAtFive ? '5 כוכבי פאי' : 'כוכב פאי אחד'}
                 </Text>
               </View>
             </View>
