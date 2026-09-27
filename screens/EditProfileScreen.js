@@ -16,13 +16,18 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import {ProfileAvatar, PROFILE_RING_COLORS, PROFILE_RING_LOCATIONS, PROFILE_USER_RING_COLORS, PROFILE_USER_RING_LOCATIONS} from '../components';
+import {
+  ProfileAvatar,
+  PROFILE_RING_COLORS,
+  PROFILE_RING_LOCATIONS,
+} from '../components';
 import {VideoPreviewThumb} from '../components/FormsElement/VideoPreviewThumb';
 import {ContextHook} from '../hooks/ContextHook';
 import {
   subscriptionTypes,
-  shouldShowProfileGoldRing,
+  isB2BSubscriptionType,
   getProfessionalSpecializationsForTypes,
+  usesOrgLogoAsAvatar,
 } from '../utils/constant';
 import {
   getUserProfilePhotoUrl,
@@ -61,18 +66,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const subTypeLower = String(type).toLowerCase();
-  const isCompany = subTypeLower === subscriptionTypes.company;
-  const hasGoldRing = shouldShowProfileGoldRing(subTypeLower);
-  /** Camera badge uses the opposite ring palette so it stands out on the avatar. */
-  const cameraBadgeColors = hasGoldRing
-    ? PROFILE_USER_RING_COLORS
-    : PROFILE_RING_COLORS;
-  const cameraBadgeLocations = hasGoldRing
-    ? PROFILE_USER_RING_LOCATIONS
-    : PROFILE_RING_LOCATIONS;
+  /** Company + משווק: logo only — no separate profile photo or video. */
+  const logoOnlyProfile = usesOrgLogoAsAvatar(subTypeLower);
+  const canEditProfilePhoto = !logoOnlyProfile;
   const canEditProfileVideo =
-    subTypeLower === subscriptionTypes.broker ||
-    subTypeLower === subscriptionTypes.professional;
+    isB2BSubscriptionType(subTypeLower) && !logoOnlyProfile;
   const canEditCompanyLogo = canEditSeparateCompanyLogo(
     subTypeLower,
     currentUser,
@@ -87,11 +85,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const [form, setForm] = useState(() =>
     hydrateProfileEditForm(currentUser, getProfileEditFields(type, currentUser)),
   );
-  const [photoUrl, setPhotoUrl] = useState(() =>
-    isCompany
-      ? getUserCompanyLogoUrl(currentUser) || getUserProfilePhotoUrl(currentUser)
-      : getUserProfilePhotoUrl(currentUser) ||
-        getUserCompanyLogoUrl(currentUser),
+  const [photoUrl, setPhotoUrl] = useState(
+    () =>
+      getUserProfilePhotoUrl(currentUser) ||
+      getUserCompanyLogoUrl(currentUser),
   );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [profileVideoUrl, setProfileVideoUrl] = useState(() =>
@@ -331,7 +328,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       }
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
-    Object.assign(payload, buildProfilePhotoSavePayload(type, photoUrl));
+    if (canEditProfilePhoto) {
+      Object.assign(payload, buildProfilePhotoSavePayload(photoUrl));
+    }
     if (canEditCompanyLogo && logoUrl) {
       payload.company_logo_url = logoUrl;
     }
@@ -372,7 +371,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     try {
       const res = await updateSubscriptionProfile(subId, payload);
       const updated = res?.subscription || null;
-      const photoPatch = buildProfilePhotoSavePayload(type, photoUrl);
+      const photoPatch = canEditProfilePhoto
+        ? buildProfilePhotoSavePayload(photoUrl)
+        : {};
       const logoPatch =
         canEditCompanyLogo && logoUrl
           ? {company_logo_url: logoUrl, companyLogoUrl: logoUrl}
@@ -434,49 +435,54 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           }}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}>
-          {/* Avatar with change button */}
+          {/* Avatar — company/marketer show logo only (edited in לוגו חברה). */}
           <View style={styles.avatarSection}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handlePickPhoto}
-              style={styles.avatarWrap}>
-              <ProfileAvatar
-                uri={photoUrl}
-                name={displayName}
-                size={104}
-                subscriptionType={currentUser}
-                fallbackResizeMode="contain"
-              />
-              <View style={styles.avatarEditBadgeWrap}>
-                {uploadingPhoto ? (
-                  <View
-                    style={[
-                      styles.avatarEditBadge,
-                      {
-                        backgroundColor: cameraBadgeColors[1],
-                      },
-                    ]}>
-                    <ActivityIndicator size="small" color="#1E1D27" />
+            {canEditProfilePhoto ? (
+              <>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={handlePickPhoto}
+                  style={styles.avatarWrap}>
+                  <ProfileAvatar
+                    uri={photoUrl}
+                    name={displayName}
+                    size={104}
+                    subscriptionType={currentUser}
+                    fallbackResizeMode="contain"
+                  />
+                  <View style={styles.avatarEditBadgeWrap}>
+                    {uploadingPhoto ? (
+                      <View style={styles.avatarEditBadge}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      </View>
+                    ) : (
+                      <View style={styles.avatarEditBadge}>
+                        <MaterialCommunityIcons
+                          name="camera"
+                          size={13}
+                          color="#FFFFFF"
+                        />
+                      </View>
+                    )}
                   </View>
-                ) : (
-                  <LinearGradient
-                    colors={cameraBadgeColors}
-                    locations={cameraBadgeLocations}
-                    start={{x: 0, y: 0}}
-                    end={{x: 1, y: 1}}
-                    style={styles.avatarEditBadge}>
-                    <MaterialCommunityIcons
-                      name="camera"
-                      size={18}
-                      color="#1E1D27"
-                    />
-                  </LinearGradient>
-                )}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.7}>
+                  <Text style={styles.changePhotoText}>
+                    {photoUrl ? 'שינוי תמונה' : 'העלאת תמונה'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.avatarWrap}>
+                <ProfileAvatar
+                  uri={logoUrl || photoUrl}
+                  name={displayName}
+                  size={104}
+                  subscriptionType={currentUser}
+                  fallbackResizeMode="contain"
+                />
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.7}>
-              <Text style={styles.changePhotoText}>שינוי תמונה</Text>
-            </TouchableOpacity>
+            )}
           </View>
 
           {canEditProfileVideo ? (
@@ -680,32 +686,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                         (businessNameFieldKey && form[businessNameFieldKey]) ||
                         displayName
                       }
-                      size={72}
+                      size={100}
                       subscriptionType={currentUser}
                       fallbackResizeMode="contain"
                     />
                     <View style={styles.logoEditBadgeWrap}>
                       {uploadingLogo ? (
-                        <View
-                          style={[
-                            styles.avatarEditBadge,
-                            {backgroundColor: cameraBadgeColors[1]},
-                          ]}>
-                          <ActivityIndicator size="small" color="#1E1D27" />
+                        <View style={styles.logoCameraBadge}>
+                          <ActivityIndicator size="small" color="#FFFFFF" />
                         </View>
                       ) : (
-                        <LinearGradient
-                          colors={cameraBadgeColors}
-                          locations={cameraBadgeLocations}
-                          start={{x: 0, y: 0}}
-                          end={{x: 1, y: 1}}
-                          style={styles.avatarEditBadge}>
+                        <View style={styles.logoCameraBadge}>
                           <MaterialCommunityIcons
                             name="camera"
-                            size={16}
-                            color="#1E1D27"
+                            size={13}
+                            color="#FFFFFF"
                           />
-                        </LinearGradient>
+                        </View>
                       )}
                     </View>
                   </TouchableOpacity>
@@ -772,7 +769,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         onCancel={handlePhotoCropCancel}
         onConfirm={handlePhotoCropConfirm}
         title={
-          cropTarget === 'logo' || isCompany
+          cropTarget === 'logo'
             ? 'חתוך את לוגו החברה'
             : 'חתוך את תמונת הפרופיל'
         }
@@ -822,17 +819,17 @@ const styles = StyleSheet.create({
   },
   avatarEditBadgeWrap: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: 2,
+    // forceRTL flips left/right. Physical right matches the upload badge.
+    ...(Platform.OS === 'web' ? {right: 2} : {left: 2}),
   },
   avatarEditBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: BG,
   },
   changePhotoText: {
     color: '#FFFFFF',
@@ -854,8 +851,16 @@ const styles = StyleSheet.create({
   },
   logoEditBadgeWrap: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: 2,
+    ...(Platform.OS === 'web' ? {right: 2} : {left: 2}),
+  },
+  logoCameraBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   changeVideoLinkText: {
     color: '#E8B34D',

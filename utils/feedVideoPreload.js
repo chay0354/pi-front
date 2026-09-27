@@ -103,32 +103,39 @@ function firstHlsEntry(playlistText) {
   return '';
 }
 
+/** Only one HLS warm-up at a time — a fast swipe must not stack segment downloads. */
+let hlsPrefetchAbort = null;
+
 /**
  * Warm the exact request chain ExoPlayer will make for an HLS stream:
  * master playlist -> first variant playlist -> first media segment.
  * The client cache isn't shared with ExoPlayer, but this primes DNS/TLS and
  * (most importantly) Mux's CDN edge, so the player's own requests are hits.
+ * A newer prefetch aborts the previous one so playback keeps the bandwidth.
  */
-async function prefetchHlsChain(masterUrl) {
+async function prefetchHlsChain(masterUrl, signal) {
   try {
-    const masterRes = await fetch(masterUrl);
+    const masterRes = await fetch(masterUrl, {signal});
     if (!masterRes.ok) return;
     const master = await masterRes.text();
+    if (signal?.aborted) return;
     const variantUrl = resolveHlsUri(masterUrl, firstHlsEntry(master));
     if (!variantUrl) return;
     // Entry may already be a segment if this was a media (not master) playlist.
     if (!/\.m3u8(\?|$)/i.test(variantUrl)) {
-      await fetch(variantUrl, {headers: {Range: 'bytes=0-524287'}});
+      await fetch(variantUrl, {signal, headers: {Range: 'bytes=0-524287'}});
       return;
     }
-    const variantRes = await fetch(variantUrl);
+    const variantRes = await fetch(variantUrl, {signal});
     if (!variantRes.ok) return;
     const variant = await variantRes.text();
+    if (signal?.aborted) return;
     const segmentUrl = resolveHlsUri(variantUrl, firstHlsEntry(variant));
     if (!segmentUrl) return;
-    await fetch(segmentUrl, {headers: {Range: 'bytes=0-524287'}});
+    await fetch(segmentUrl, {signal, headers: {Range: 'bytes=0-524287'}});
   } catch {
     // Prefetch is best-effort; the player fetches everything itself anyway.
+    // AbortError is expected when the next swipe replaces this warm-up.
   }
 }
 
@@ -145,7 +152,10 @@ function prefetchNativeVideoUri(key) {
   nativeVideoPrefetchSet.add(key);
   nativeVideoPrefetchKeys.push(key);
   if (/\.m3u8(\?|$)/i.test(key) || /stream\.mux\.com/i.test(key)) {
-    prefetchHlsChain(key);
+    hlsPrefetchAbort?.abort?.();
+    const controller = new AbortController();
+    hlsPrefetchAbort = controller;
+    prefetchHlsChain(key, controller.signal);
     return;
   }
   // Progressive MP4: warm the moov atom + first media bytes.
@@ -181,10 +191,25 @@ export function prefetchFeedVideoUri(uri) {
   prefetchNativeVideoUri(key);
 }
 
-/** Prefetch posters + video files for a slice of feed items. */
-export function prefetchFeedWindowMedia(items, startIndex, count, Image) {
+/**
+ * Prefetch posters + photos for a slice of feed items.
+ * Video files are warmed only for `videoIndex` (the next page). Warming every
+ * video in the window stacks HLS downloads on top of the playing one and the
+ * feed starts hitching after a few swipes.
+ */
+export function prefetchFeedWindowMedia(
+  items,
+  startIndex,
+  count,
+  Image,
+  videoIndex = null,
+) {
   if (!Array.isArray(items) || items.length === 0 || startIndex < 0) return;
   const end = Math.min(items.length, startIndex + Math.max(1, count));
+  const warmVideoAt =
+    videoIndex == null
+      ? new Set([startIndex, startIndex + 1])
+      : new Set([videoIndex]);
   for (let i = startIndex; i < end; i++) {
     const item = items[i];
     const poster = resolveFeedVideoPosterUri(item);
@@ -193,7 +218,7 @@ export function prefetchFeedWindowMedia(items, startIndex, count, Image) {
     }
     const videoUri = resolveFeedVideoUri(item);
     if (videoUri) {
-      prefetchFeedVideoUri(videoUri);
+      if (warmVideoAt.has(i)) prefetchFeedVideoUri(videoUri);
       continue;
     }
     const uris = [];

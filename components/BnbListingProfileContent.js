@@ -189,7 +189,7 @@ function parseJsonObject(val) {
   return null;
 }
 
-const IGNORE_SERVICE_FACILITY_KEYS = new Set(['floor', 'laundry']);
+const IGNORE_SERVICE_FACILITY_KEYS = new Set(['floor']);
 
 function collectServiceKeys(listing) {
   const sf = parseJsonObject(

@@ -5,6 +5,7 @@ export const BNB_SERVICE_ICONS = {
   pool: require('../assets/new-profile-pages/bnb/services/pool.png'),
   merger: require('../assets/new-profile-pages/bnb/services/AC.png'),
   fridge: require('../assets/new-profile-pages/bnb/services/frige.png'),
+  laundry: require('../assets/new-profile-pages/bnb/services/laundry.png'),
   eater: require('../assets/new-profile-pages/bnb/services/food.png'),
   kitchen: require('../assets/new-profile-pages/bnb/services/kitchen.png'),
   locker: require('../assets/new-profile-pages/bnb/services/locker.png'),

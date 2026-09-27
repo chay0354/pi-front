@@ -1206,7 +1206,12 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
             {/* Container 5: Budget */}
             <View style={styles.formContainer}>
-              <Title text="התקציב שלי" required />
+              <Title
+                text={
+                  searchPurpose === 'bring_in' ? 'שכר דירה' : 'התקציב שלי'
+                }
+                required
+              />
               <CardPriceField
                 price={budget}
                 setPrice={setBudget}

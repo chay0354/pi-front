@@ -1,11 +1,12 @@
 import {
   subscriptionTypes,
+  isB2BSubscriptionType,
   isCompanySubscriptionType,
   isProjectMarketerType,
   isTeamMarketerUnderManager,
-  isMarketingManager,
   BROKER_ACTIVITY_REGIONS,
-  PROFESSIONAL_FILTER_TYPES,
+  BROKER_SPECIALIZATIONS,
+  PROFESSIONAL_SIGNUP_TYPES,
 } from './constant';
 
 const PROFILE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -110,40 +111,22 @@ export function getProfileBusinessNameFieldKey(subscriptionType, user = null) {
 }
 
 /**
- * Broker, professional, and marketing managers keep a personal photo AND a
- * company logo. Regular marketers (solo or under an agency) only have a photo.
- * Company accounts edit the logo via the top avatar instead.
+ * Every account except רגיל keeps a personal photo AND a company logo: the
+ * photo is the avatar everywhere, the logo only appears under פרטי התקשרות.
  */
 export function hasSeparateProfileAndCompanyLogo(userOrType) {
   if (userOrType && typeof userOrType === 'object') {
-    const t = String(
+    return isB2BSubscriptionType(
       userOrType.subscription_type || userOrType.subscriptionType || '',
-    ).toLowerCase();
-    if (
-      t === subscriptionTypes.broker ||
-      t === subscriptionTypes.professional
-    ) {
-      return true;
-    }
-    return isMarketingManager(userOrType);
+    );
   }
-  const t = String(userOrType || '').toLowerCase();
-  return (
-    t === subscriptionTypes.broker || t === subscriptionTypes.professional
-  );
+  return isB2BSubscriptionType(userOrType);
 }
 
 export function canEditSeparateCompanyLogo(subscriptionType, user = null) {
-  const t = String(
+  return isB2BSubscriptionType(
     subscriptionType || user?.subscription_type || user?.subscriptionType || '',
-  ).toLowerCase();
-  if (t === subscriptionTypes.broker || t === subscriptionTypes.professional) {
-    return true;
-  }
-  if (isProjectMarketerType(t)) {
-    return isMarketingManager(user || {subscription_type: t});
-  }
-  return false;
+  );
 }
 
 /** Editable profile fields per account type (keys match `subscriptions` columns). */
@@ -160,6 +143,12 @@ export function getProfileEditFields(subscriptionType, user = null) {
 
   if (t === subscriptionTypes.broker) {
     return [
+      {
+        key: 'specializations',
+        label: 'תחומי התמחות',
+        type: 'chips',
+        options: BROKER_SPECIALIZATIONS,
+      },
       {
         key: 'activity_regions',
         label: 'אזור פעילות',
@@ -283,7 +272,7 @@ export function getProfileEditFields(subscriptionType, user = null) {
         key: 'types',
         label: 'סוג',
         type: 'chips',
-        options: PROFESSIONAL_FILTER_TYPES,
+        options: PROFESSIONAL_SIGNUP_TYPES,
       },
       {
         key: 'specializations',

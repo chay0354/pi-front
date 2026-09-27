@@ -74,23 +74,58 @@ const collectTypes = professional => {
     .filter(Boolean);
 };
 
-/** Pros: התמחויות. Brokers: אזורי פעילות (same chip row under the address). */
-const collectTags = professional => {
-  const fromRegions = Array.isArray(professional?.activity_regions)
-    ? professional.activity_regions
-    : [];
-  const fromSpecs = Array.isArray(professional?.specializations)
-    ? professional.specializations
-    : [];
-  const source = isBrokerDirectoryItem(professional)
-    ? fromRegions.length > 0
-      ? fromRegions
-      : fromSpecs
-    : fromSpecs;
-  return source
-    .map(v => String(v || '').trim())
-    .filter(Boolean)
+/** DB values arrive either as an array or as a JSON string of that array. */
+const asTagList = value => {
+  if (Array.isArray(value)) {
+    return value.map(v => String(v || '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return asTagList(parsed);
+    } catch (_) {
+      // A plain label, not JSON.
+    }
+    return [raw];
+  }
+  return [];
+};
+
+const cleanTagList = list =>
+  asTagList(list)
+    .filter((v, i, arr) => v && arr.indexOf(v) === i)
     .slice(0, 3);
+
+const normalizeSearchText = value =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[״"׳']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Every word must appear somewhere. "עורך דין ירושלים" matches across fields. */
+const searchTextMatches = (haystack, query) => {
+  const q = normalizeSearchText(query);
+  if (!q) return true;
+  const hay = normalizeSearchText(haystack);
+  return q.split(' ').every(token => hay.includes(token));
+};
+
+/** Pros + brokers: תחומי התמחות — the chip row right under סוג. */
+const collectTags = professional =>
+  cleanTagList(professional?.specializations);
+
+/**
+ * Brokers only: אזורי פעילות — its own chip row below תחומי התמחות.
+ * Older backends aliased a broker's specializations to their regions, so drop
+ * regions that already showed up as expertise instead of repeating them.
+ */
+const collectRegionTags = professional => {
+  if (!isBrokerDirectoryItem(professional)) return [];
+  const specs = new Set(cleanTagList(professional?.specializations));
+  return cleanTagList(professional?.activity_regions).filter(v => !specs.has(v));
 };
 
 /** Mux HLS (or raw MP4 fallback) for a professional's intro video, if any. */
@@ -159,6 +194,7 @@ const ProfessionalCard = ({
   isVideoActive = false,
 }) => {
   const tags = collectTags(professional);
+  const regionTags = collectRegionTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const videoUri = resolveProfessionalVideoUri(professional);
@@ -172,6 +208,7 @@ const ProfessionalCard = ({
   ).trim();
   const address = String(professional?.address || 'מיקום לא זמין').trim();
   const description = String(professional?.bio || 'ללא תיאור').trim();
+
   const webVideoRef = useCallback(
     node => {
       if (!node) return;
@@ -188,46 +225,7 @@ const ProfessionalCard = ({
     [muted, isVideoActive],
   );
 
-  const renderMedia = () => {
-    if (videoUri && isVideoActive) {
-      if (Platform.OS === 'web') {
-        return (
-          <video
-            ref={webVideoRef}
-            src={videoUri}
-            style={styles.cardMediaWebVideo}
-            autoPlay
-            muted={muted}
-            loop
-            playsInline
-            poster={posterUri || undefined}
-          />
-        );
-      }
-      return (
-        <Video
-          key={videoUri}
-          source={{uri: videoUri}}
-          style={styles.cardMediaImage}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay
-          isMuted={muted}
-          isLooping
-          useNativeControls={false}
-        />
-      );
-    }
-    if (posterUri || mediaUrl) {
-      return (
-        <Image
-          source={{uri: posterUri || mediaUrl}}
-          style={styles.cardMediaImage}
-          resizeMode="contain"
-        />
-      );
-    }
-    return <View style={[styles.cardMediaImage, styles.cardMediaFallback]} />;
-  };
+  const stillUri = posterUri || mediaUrl || null;
 
   return (
     <TouchableOpacity
@@ -235,7 +233,39 @@ const ProfessionalCard = ({
       onPress={onPress}
       activeOpacity={0.9}>
       <View style={styles.cardMedia}>
-        {renderMedia()}
+        {videoUri && isVideoActive ? (
+          Platform.OS === 'web' ? (
+            <video
+              ref={webVideoRef}
+              src={videoUri}
+              style={styles.cardMediaWebVideo}
+              autoPlay
+              muted={muted}
+              loop
+              playsInline
+              poster={stillUri || undefined}
+            />
+          ) : (
+            <Video
+              key={videoUri}
+              source={{uri: videoUri}}
+              style={styles.cardMediaImage}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay
+              isMuted={muted}
+              isLooping
+              useNativeControls={false}
+            />
+          )
+        ) : stillUri ? (
+          <Image
+            source={{uri: stillUri}}
+            style={styles.cardMediaImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.cardMediaImage, styles.cardMediaFallback]} />
+        )}
         <LinearGradient
           colors={['rgba(129,129,129,0)', 'rgba(0,0,0,0.5)']}
           start={{x: 0.5, y: 0}}
@@ -301,14 +331,29 @@ const ProfessionalCard = ({
           />
         </View>
 
-        <View style={styles.tagsRow}>
-          {tags.map(tag => (
-            <View key={tag} style={styles.tagChip}>
-              <Text style={styles.tagText} numberOfLines={1}>
-                {tag}
-              </Text>
+        <View style={styles.tagRowsGroup}>
+          {tags.length > 0 ? (
+            <View style={styles.tagsRow}>
+              {tags.map(tag => (
+                <View key={tag} style={styles.tagChip}>
+                  <Text style={styles.tagText} numberOfLines={1}>
+                    {tag}
+                  </Text>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
+          {regionTags.length > 0 ? (
+            <View style={styles.tagsRow}>
+              {regionTags.map(tag => (
+                <View key={tag} style={styles.tagChip}>
+                  <Text style={styles.tagText} numberOfLines={1}>
+                    {tag}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <Text style={styles.descriptionText} numberOfLines={1}>
@@ -336,6 +381,7 @@ const ProfessionalCard = ({
 
 const ProfessionalListCard = ({professional, onPress}) => {
   const tags = collectTags(professional);
+  const regionTags = collectRegionTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
   const title = String(
@@ -400,14 +446,29 @@ const ProfessionalListCard = ({professional, onPress}) => {
         </View>
       </View>
 
-      <View style={[styles.listTagsRow, listRtlDirection]}>
-        {tags.map(tag => (
-          <View key={tag} style={styles.listTagChip}>
-            <Text style={styles.listTagText} numberOfLines={1}>
-              {tag}
-            </Text>
+      <View style={styles.listTagRowsGroup}>
+        {tags.length > 0 ? (
+          <View style={[styles.listTagsRow, listRtlDirection]}>
+            {tags.map(tag => (
+              <View key={tag} style={styles.listTagChip}>
+                <Text style={styles.listTagText} numberOfLines={1}>
+                  {tag}
+                </Text>
+              </View>
+            ))}
           </View>
-        ))}
+        ) : null}
+        {regionTags.length > 0 ? (
+          <View style={[styles.listTagsRow, listRtlDirection]}>
+            {regionTags.map(tag => (
+              <View key={tag} style={styles.listTagChip}>
+                <Text style={styles.listTagText} numberOfLines={1}>
+                  {tag}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -488,8 +549,8 @@ const ProfessionalsDirectoryScreen = ({
     const base = professionals.filter(item => {
       const itemTypes = collectTypes(item);
       const itemTags = [
-        ...(Array.isArray(item?.specializations) ? item.specializations : []),
-        ...(Array.isArray(item?.activity_regions) ? item.activity_regions : []),
+        ...asTagList(item?.specializations),
+        ...asTagList(item?.activity_regions),
       ];
       const haystack = [
         item?.display_name,
@@ -498,29 +559,23 @@ const ProfessionalsDirectoryScreen = ({
         isBrokerDirectoryItem(item) ? 'תיווך' : '',
         ...itemTags,
         ...itemTypes,
-      ]
-        .map(v => String(v || '').toLowerCase())
-        .join(' ');
-      if (q && !haystack.includes(q)) return false;
+      ].join(' ');
+      if (!searchTextMatches(haystack, q)) return false;
 
-      const locationQuery = String(appliedLocation || '')
-        .trim()
-        .toLowerCase();
+      const locationQuery = String(appliedLocation || '').trim();
       if (locationQuery) {
         const locationHaystack = [
           item?.address,
           item?.display_name,
           item?.bio,
           ...itemTags,
-        ]
-          .map(v => String(v || '').toLowerCase())
-          .join(' ');
-        if (!locationHaystack.includes(locationQuery)) return false;
+        ].join(' ');
+        if (!searchTextMatches(locationHaystack, locationQuery)) return false;
       }
 
-      // Type chips are professional סוג filters — brokers always stay in the
-      // directory (shown as תיווך) and are not excluded by those filters.
-      if (appliedTypeFilters.length > 0 && !isBrokerDirectoryItem(item)) {
+      // Brokers count as תיווך, so they match that chip and are excluded by
+      // every other one — same rule as any professional's סוג.
+      if (appliedTypeFilters.length > 0) {
         if (
           !appliedTypeFilters.some(filterType =>
             professionalMatchesTypeFilter(filterType, itemTypes),
@@ -530,10 +585,10 @@ const ProfessionalsDirectoryScreen = ({
         }
       }
 
+      // התמחות chips only ever list specializations; activity regions are a
+      // separate field and are matched through the מיקום box instead.
       if (appliedExpertiseFilters.length > 0) {
-        const expertiseSet = new Set(
-          itemTags.map(v => String(v || '').trim()),
-        );
+        const expertiseSet = new Set(asTagList(item?.specializations));
         if (!appliedExpertiseFilters.some(tag => expertiseSet.has(tag)))
           return false;
       }
@@ -1213,6 +1268,10 @@ const styles = StyleSheet.create({
     height: 66,
     borderRadius: 1000,
   },
+  /** Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. */
+  listTagRowsGroup: {
+    gap: 6,
+  },
   listTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1240,20 +1299,18 @@ const styles = StyleSheet.create({
   cardMedia: {
     height: 212,
     position: 'relative',
-    backgroundColor: '#1E1D27',
-    overflow: 'hidden',
+    backgroundColor: '#E0DEF7',
   },
   cardMediaImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#1E1D27',
   },
   cardMediaWebVideo: {
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
+    objectFit: 'cover',
     display: 'block',
-    backgroundColor: '#1E1D27',
+    backgroundColor: '#1a1a22',
   },
   cardMediaFallback: {
     backgroundColor: '#5A5670',
@@ -1383,6 +1440,10 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: 18,
     height: 18,
+  },
+  /** Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. */
+  tagRowsGroup: {
+    gap: 6,
   },
   tagsRow: {
     flexDirection: 'row',

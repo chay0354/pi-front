@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -17,13 +16,20 @@ import {
   isCompanySubscriptionType,
   subscriptionTypes,
 } from '../utils/constant';
-import {PiRatingBadge} from '../components/PiRatingBadge';
 import {flexEnd} from '../utils/rtlLayout';
+import {SvgXml} from '../utils/svgXml';
+import {
+  RATING_INTRO_GIFT_XML,
+  RATING_INTRO_NUMBERED_STARS,
+} from '../assets/subscription-rating/ratingIntroAssets';
+
+const COMPANY_STAR_VALUES = [1, 2, 3, 4, 5];
 
 const BG = '#1e1d27';
 const MODAL_BACKDROP = '#00000080';
 const CARD_BG = '#2b2a39';
 const INNER_BG = '#343246';
+const NUMBERED_STAR_SIZE = 30;
 
 const SubscriptionRatingIntroScreen = ({
   onClose,
@@ -31,7 +37,7 @@ const SubscriptionRatingIntroScreen = ({
   subscriptionType = subscriptionTypes.broker,
 }) => {
   const insets = useSafeAreaInsets();
-  const startsAtFive = isCompanySubscriptionType(subscriptionType);
+  const isCompany = isCompanySubscriptionType(subscriptionType);
 
   return (
     <View style={styles.container}>
@@ -60,57 +66,71 @@ const SubscriptionRatingIntroScreen = ({
         <View style={styles.popup}>
           <View style={styles.popupTopGroup}>
             <View style={styles.giftWrap}>
-              <View style={styles.giftTopBar} />
-              <View style={styles.giftBody} />
-              <View style={styles.giftRibbonVertical} />
-              <View style={styles.giftBowLeft} />
-              <View style={styles.giftBowRight} />
+              <SvgXml xml={RATING_INTRO_GIFT_XML} width={40} height={40} />
             </View>
 
             <Text style={styles.title}>איזה יופי שהצטרפתם אלינו!</Text>
 
-            <View style={[styles.ratingCard, styles.ratingCardCompact]}>
-              <Text style={styles.bestRatingTextLead}>
-                {startsAtFive
-                  ? 'עליכם לקבל את הדירוג הגבוה ביותר:'
-                  : 'הדירוג שלכם מתחיל ב־'}
-              </Text>
-
-              <View style={styles.ratingPiGroup}>
-                {startsAtFive ? (
-                  <View style={styles.piBadgeWrap}>
+            <View
+              style={[styles.ratingCard, isCompany && styles.companyRatingCard]}>
+              {isCompany ? (
+                <>
+                  <View style={styles.numberedStarRow}>
+                    {COMPANY_STAR_VALUES.map(value => (
+                      <View key={value} style={styles.numberedStar}>
+                        <SvgXml
+                          xml={RATING_INTRO_NUMBERED_STARS[value - 1]}
+                          width={NUMBERED_STAR_SIZE}
+                          height={NUMBERED_STAR_SIZE}
+                        />
+                        <Text style={styles.numberedStarLabel}>
+                          {String(value)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.companyStarBlock}>
+                    <Image
+                      source={require('../assets/tiktok/pistar.png')}
+                      style={styles.companyPiBadge}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.companyCopy}>
+                      <Text style={styles.bestRatingTextLead}>
+                        קיבלתם את הדירוג הגבוה ביותר!
+                      </Text>
+                      <Text style={styles.companyGold}>5 כוכבי פאי</Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.bestRatingTextLead}>
+                    עליכם לקבל את הדירוג הגבוה ביותר:
+                  </Text>
+                  <View style={styles.starWithGold}>
                     <Image
                       source={require('../assets/tiktok/pistar.png')}
                       style={styles.piBadgeIcon}
                       resizeMode="contain"
                     />
+                    <Text style={styles.bestRatingGold}>5 כוכבי פאי</Text>
                   </View>
-                ) : (
-                  <View style={styles.piBadgeWrap}>
-                    <PiRatingBadge rating={1} variant="profile" />
-                  </View>
-                )}
-                <Text style={styles.bestRatingGold}>
-                  {startsAtFive ? '5 כוכבי פאי' : 'כוכב פאי אחד'}
-                </Text>
-              </View>
+                </>
+              )}
             </View>
 
-            <View style={styles.infoBlock}>
-              <Text style={styles.infoMain}>
-                {startsAtFive
-                  ? 'הקפידו לשמור על דירוג גבוה,\nהוא קובע את אמינות העסק שלכם.'
-                  : 'כדי להגיע ל־5 כוכבי פאי יש לצבור דירוגים מלקוחות.\nהקפידו לשמור על דירוג גבוה — הוא קובע את אמינות העסק שלכם.'}
-              </Text>
-            </View>
+            <Text style={styles.infoMain}>
+              {'הקפידו לשמור על דירוג גבוה,\nהוא קובע את אמינות העסק שלכם.'}
+            </Text>
           </View>
 
           <TouchableOpacity style={styles.ctaButton} onPress={onContinue}>
             <LinearGradient
-              colors={['#FFE56A', '#F7C63A', '#E5A80F']}
+              colors={['#FEE787', '#BD9947', '#9C6522']}
               locations={[0.0456, 0.5076, 0.8831]}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
+              start={{x: 0.5, y: 0}}
+              end={{x: 0.5, y: 1}}
               style={styles.ctaGradient}>
               <Text style={styles.ctaText}>מעולה, בואו נתחיל!</Text>
             </LinearGradient>
@@ -171,7 +191,7 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BG,
     paddingHorizontal: 20,
     paddingTop: 28,
-    paddingBottom: 24,
+    paddingBottom: 28,
     alignItems: 'center',
     gap: 32,
   },
@@ -185,65 +205,6 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-  },
-  giftTopBar: {
-    position: 'absolute',
-    top: 11,
-    width: 32,
-    height: 8,
-    borderRadius: 2,
-    borderWidth: 2,
-    borderColor: '#ffc40a',
-    backgroundColor: 'transparent',
-  },
-  giftBody: {
-    position: 'absolute',
-    top: 19,
-    width: 26,
-    height: 18,
-    borderWidth: 2,
-    borderColor: '#ffc40a',
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
-    backgroundColor: 'transparent',
-  },
-  giftRibbonVertical: {
-    position: 'absolute',
-    top: 11,
-    width: 2,
-    height: 26,
-    backgroundColor: '#ffc40a',
-    borderRadius: 1,
-  },
-  giftBowLeft: {
-    position: 'absolute',
-    top: 3,
-    left: 9,
-    width: 11,
-    height: 8,
-    borderWidth: 2,
-    borderColor: '#15e3ff',
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    transform: [{rotate: '-6deg'}],
-    backgroundColor: 'transparent',
-  },
-  giftBowRight: {
-    position: 'absolute',
-    top: 3,
-    right: 9,
-    width: 11,
-    height: 8,
-    borderWidth: 2,
-    borderColor: '#15e3ff',
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    transform: [{rotate: '6deg'}],
-    backgroundColor: 'transparent',
   },
   title: {
     color: '#f7f3e6',
@@ -260,16 +221,46 @@ const styles = StyleSheet.create({
     backgroundColor: INNER_BG,
     paddingVertical: 20,
     alignItems: 'center',
-    gap: 18,
-  },
-  ratingCardCompact: {
     gap: 24,
-    paddingVertical: 20,
   },
-  ratingPiGroup: {
+  companyRatingCard: {
+    gap: 12,
+    paddingBottom: 18,
+  },
+  companyStarBlock: {
     width: '100%',
     alignItems: 'center',
-    gap: 10,
+    marginTop: -6,
+  },
+  numberedStarRow: {
+    // forceRTL turns `row` into right→left. `row-reverse` puts 1 on the left.
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    width: '100%',
+  },
+  numberedStar: {
+    width: NUMBERED_STAR_SIZE,
+    height: NUMBERED_STAR_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numberedStarLabel: {
+    ...StyleSheet.absoluteFillObject,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    color: BG,
+    fontSize: 14,
+    lineHeight: 30,
+    letterSpacing: 0.54,
+    fontFamily: 'Rubik-Medium',
+  },
+  starWithGold: {
+    width: '100%',
+    alignItems: 'center',
+    overflow: 'visible',
+    marginTop: -28,
   },
   bestRatingTextLead: {
     color: Colors.white100,
@@ -277,16 +268,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 22,
     fontFamily: 'Rubik-Medium',
+    writingDirection: 'rtl',
   },
-  piBadgeWrap: {
-    width: 84,
-    height: 84,
+  companyPiBadge: {
+    width: 88,
+    height: 88,
+  },
+  companyCopy: {
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    marginTop: -12,
+  },
+  companyGold: {
+    color: '#ffbf3e',
+    textAlign: 'center',
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: 'Rubik-Medium',
+    writingDirection: 'rtl',
   },
   piBadgeIcon: {
-    width: 84,
-    height: 84,
+    width: 88,
+    height: 88,
   },
   bestRatingGold: {
     color: '#ffbf3e',
@@ -294,11 +298,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 22,
     fontFamily: 'Rubik-Medium',
-  },
-  infoBlock: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 18,
+    marginTop: -16,
+    zIndex: 2,
   },
   infoMain: {
     color: Colors.white100,
@@ -313,7 +314,6 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 1000,
     overflow: 'hidden',
-    marginTop: 4,
   },
   ctaGradient: {
     width: '100%',

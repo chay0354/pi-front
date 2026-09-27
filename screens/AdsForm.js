@@ -39,6 +39,7 @@ import {
   resolveSubscriptionId,
 } from '../utils/api';
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
+import {getUserBnbHostLock} from '../utils/bnbHostLock';
 import {
   brokerCategoryForm,
   companyCategoryForm,
@@ -759,6 +760,8 @@ const AdsForm = ({
     }
   }, [category, formList, initialListing, price]);
 
+  const lockedBnbHostType = getUserBnbHostLock(currentUser);
+
   useEffect(() => {
     if (initialListing) {
       const gd = initialListing.general_details;
@@ -775,11 +778,12 @@ const AdsForm = ({
       return;
     }
     setBnbHostType(
-      initialBnbHostType === 'private' || initialBnbHostType === 'business'
-        ? initialBnbHostType
-        : null,
+      lockedBnbHostType ||
+        (initialBnbHostType === 'private' || initialBnbHostType === 'business'
+          ? initialBnbHostType
+          : null),
     );
-  }, [initialListing, initialBnbHostType]);
+  }, [initialListing, initialBnbHostType, lockedBnbHostType]);
 
   // Pre-fill form when editing an existing listing
   useEffect(() => {
@@ -1099,6 +1103,26 @@ const AdsForm = ({
     } else {
       setCompanyLandParcels([]);
     }
+    {
+      const rawPl =
+        initialListing.proposed_land ?? initialListing.proposedLand;
+      let pl = rawPl;
+      if (typeof rawPl === 'string' && rawPl.trim()) {
+        try {
+          pl = JSON.parse(rawPl);
+        } catch {
+          pl = null;
+        }
+      }
+      if (pl && typeof pl === 'object') {
+        setProposedLand({
+          unit: pl.unit === 'sqm' ? 'sqm' : 'dunam',
+          area: Number(pl.area) > 0 ? Number(pl.area) : 0.5,
+        });
+      } else {
+        setProposedLand({unit: 'dunam', area: 0.5});
+      }
+    }
     if (initialListing.sale_at_presale !== undefined) {
       setSaleAtPresale(
         initialListing.sale_at_presale === true ||
@@ -1337,6 +1361,11 @@ const AdsForm = ({
   const [cat8WholeFloorRepeatCount, setCat8WholeFloorRepeatCount] = useState(0);
   /** Company category 7 (קרקעות): dynamic קרקע rows — persisted as `company_offers_land_sizes` */
   const [companyLandParcels, setCompanyLandParcels] = useState([]);
+  /** Broker / regular user category 7 — persisted as `proposed_land`. */
+  const [proposedLand, setProposedLand] = useState({
+    unit: 'dunam',
+    area: 0.5,
+  });
 
   const selectedAdditionalImagesCount = additionalImages.filter(Boolean).length;
   const totalSelectedImages =
@@ -2360,8 +2389,10 @@ const AdsForm = ({
               })(),
               constructionStatus: constructionStatus || undefined,
               ...(listingCategory === 5 &&
-                (bnbHostType === 'private' || bnbHostType === 'business') && {
-                  bnbHostType,
+                (lockedBnbHostType ||
+                  bnbHostType === 'private' ||
+                  bnbHostType === 'business') && {
+                  bnbHostType: lockedBnbHostType || bnbHostType,
                 }),
               ...(listingCategory === 5 &&
                 bnbHostType === 'business' &&
@@ -2393,6 +2424,11 @@ const AdsForm = ({
                 hotDeal: !!hotDeal,
               }),
               ...(listingCategory === 7 && {
+                proposedLand: {
+                  unit: proposedLand.unit === 'sqm' ? 'sqm' : 'dunam',
+                  area: Number(proposedLand.area) || 0,
+                  price: parseFloat(price) || 0,
+                },
                 companyOffersLandSizes: (Array.isArray(companyLandParcels)
                   ? companyLandParcels
                   : []
@@ -2655,7 +2691,13 @@ const AdsForm = ({
                     key="price"
                     price={category === 3 ? budget : price}
                     setPrice={category === 3 ? setBudget : setPrice}
-                    title={category === 3 ? 'התקציב שלי' : 'מחיר'}
+                    title={
+                      category === 3
+                        ? searchPurpose === 'bring_in'
+                          ? 'שכר דירה'
+                          : 'התקציב שלי'
+                        : 'מחיר'
+                    }
                     counterStep={
                       category === 3
                         ? PRICE_COUNTER_STEP_ROOMMATE_BUDGET
@@ -2768,7 +2810,19 @@ const AdsForm = ({
                   />
                 );
               case 'proposedland':
-                return <ProposedLand key="proposedland" />;
+                return (
+                  <ProposedLand
+                    key="proposedland"
+                    unit={proposedLand.unit}
+                    setUnit={next =>
+                      setProposedLand(prev => ({...prev, unit: next}))
+                    }
+                    area={proposedLand.area}
+                    setArea={next =>
+                      setProposedLand(prev => ({...prev, area: next}))
+                    }
+                  />
+                );
               case 'radiooptions':
                 return (
                   <RadioOptions

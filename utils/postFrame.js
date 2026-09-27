@@ -111,3 +111,33 @@ export function resolvePostFrameCoverWidth(
     top: (ch - height) / 2,
   };
 }
+
+/**
+ * Scale the post so it covers the whole cell (no letterbox on any edge).
+ * Overflow is clipped by the cell — used by the profile 6-post grid.
+ */
+export function resolvePostFrameCoverCell(
+  cellWidth,
+  cellHeight,
+  overlayPayload,
+  pageSize = feedPageSize,
+) {
+  const aspect = resolvePostFrameAspect(overlayPayload, pageSize);
+  const cw = Math.max(0, Number(cellWidth) || 0);
+  const ch = Math.max(0, Number(cellHeight) || 0);
+  if (!(cw > 0) || !(ch > 0) || !(aspect > 0)) {
+    return {width: cw, height: ch, left: 0, top: 0};
+  }
+  let width = cw;
+  let height = cw / aspect;
+  if (height < ch) {
+    height = ch;
+    width = ch * aspect;
+  }
+  return {
+    width,
+    height,
+    left: (cw - width) / 2,
+    top: (ch - height) / 2,
+  };
+}

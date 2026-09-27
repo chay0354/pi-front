@@ -1,8 +1,4 @@
-import {
-  resolveSubscriptionType,
-  shouldShowProfileGoldRing,
-  subscriptionTypes,
-} from './constant';
+import {resolveSubscriptionType, shouldShowProfileGoldRing} from './constant';
 
 /** @type {Map<string, string>} */
 const profilePicLogLastSig = new Map();
@@ -30,30 +26,15 @@ function trimUrl(value) {
 /**
  * Keep profile photo columns and camelCase aliases in sync on user objects.
  *
- * Company accounts edit `company_logo_url`, but most avatars resolve
- * `profile_picture_url` first — without syncing both, a logo change looks
- * like it never saved.
+ * The logo is a separate asset now, so it is only used as the avatar for
+ * legacy accounts that registered before the profile photo became mandatory.
  */
 export function normalizeUserProfileAliases(user) {
   if (user == null || typeof user !== 'object') return user;
-  const type = resolveSubscriptionType(user);
-  const isCompany = type === subscriptionTypes.company;
-
-  const profilePic = trimUrl(user.profile_picture_url) || trimUrl(user.profileImageUrl);
+  const profilePic =
+    trimUrl(user.profile_picture_url) || trimUrl(user.profileImageUrl);
   const companyLogo =
     trimUrl(user.company_logo_url) || trimUrl(user.companyLogoUrl);
-
-  if (isCompany) {
-    const pic = companyLogo || profilePic;
-    if (!pic) return user;
-    return {
-      ...user,
-      profile_picture_url: pic,
-      profileImageUrl: pic,
-      company_logo_url: pic,
-      companyLogoUrl: pic,
-    };
-  }
 
   const pic = profilePic || companyLogo;
   if (!pic) return user;
@@ -65,18 +46,10 @@ export function normalizeUserProfileAliases(user) {
 }
 
 /** PATCH payload keys for the profile photo shown in edit + profile screens. */
-export function buildProfilePhotoSavePayload(subscriptionType, photoUrl) {
+export function buildProfilePhotoSavePayload(photoUrl) {
   const url = trimUrl(photoUrl);
-  const payload = {};
-  if (!url) return payload;
-  const type = resolveSubscriptionType(subscriptionType);
-  if (type === subscriptionTypes.company) {
-    payload.company_logo_url = url;
-    payload.profile_picture_url = url;
-  } else {
-    payload.profile_picture_url = url;
-  }
-  return payload;
+  if (!url) return {};
+  return {profile_picture_url: url};
 }
 
 function isProfileImagePlaceholder(value) {
@@ -226,27 +199,30 @@ function getListingPublisherProfilePhoto(listing) {
       listing.creatorProfileImageUrl,
       listing.profile_image_url,
       listing.profileImageUrl,
-    ])
+    ]) ||
+    getUserCompanyLogoUrl(listing)
   );
+}
+
+/** BnB ad logo uploaded in the listing form. Not the account profile photo. */
+export function getBnbBusinessLogoUrl(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  return pickFirstValidImageUrl([
+    listing.bnb_business_logo_url,
+    listing.bnbBusinessLogoUrl,
+  ]);
 }
 
 /**
  * Feed/list avatar for TikTok sidebar and grid cards.
- * BnB business: uploaded business logo when present, else publisher profile photo.
- * BnB private / other: standard profile resolution (regular users keep teal ring).
+ * BnB: the publisher's profile photo. The business logo is only a fallback
+ * when that regular user never uploaded a profile photo.
+ * Other categories: standard profile resolution.
  */
 export function getListingFeedAvatarUrl(listing) {
   if (!listing || typeof listing !== 'object') return null;
   if (Number(listing?.category) === 5) {
-    if (isBnbBusinessListing(listing)) {
-      const businessLogo = pickFirstValidImageUrl([
-        listing.bnb_business_logo_url,
-        listing.bnbBusinessLogoUrl,
-      ]);
-      if (businessLogo) return businessLogo;
-      return getListingPublisherProfilePhoto(listing);
-    }
-    return getListingPublisherProfilePhoto(listing);
+    return getListingPublisherProfilePhoto(listing) || getBnbBusinessLogoUrl(listing);
   }
   return getUserProfileImageUrl(listing);
 }
@@ -255,6 +231,10 @@ export function getListingFeedAvatarUrl(listing) {
  * Resolve the best avatar/profile image URL from user-like objects
  * (subscription, currentUser, listing, chat participant, review user).
  * Prefers personal photo, then creator-specific listing fields, then company logo.
+ *
+ * BnB business hosts are regular `user` accounts that often never uploaded a
+ * profile photo — their only image is the business logo on the ad, so it is the
+ * last resort here instead of falling through to the empty-avatar placeholder.
  *
  * @param {object|null|undefined} entity
  * @returns {string|null}
@@ -275,6 +255,10 @@ export function getUserProfileImageUrl(entity) {
       entity.profile_image_url,
       entity.profileImageUrl,
     ]) ||
-    getUserCompanyLogoUrl(entity)
+    getUserCompanyLogoUrl(entity) ||
+    pickFirstValidImageUrl([
+      entity.bnb_business_logo_url,
+      entity.bnbBusinessLogoUrl,
+    ])
   );
 }

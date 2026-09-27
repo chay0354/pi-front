@@ -24,7 +24,7 @@ const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
 
 /**
  * Shown right before a new feed post is published. Lets the poster tag the post
- * with professional types so matching `professional` subscriptions get a chat
+ * with professional types so matching professionals and, for תיווך, brokers get a chat
  * notification from the system "עדכונים על פוסטים רלוונטים" account.
  */
 const PostTargetProfessionalsSheet = ({visible, onSkip, onConfirm, submitting = false}) => {

@@ -52,6 +52,10 @@ import {listingImageUrls} from '../utils/listingGridCardFigma';
 import {resolveListingEditVideoSourceUrl} from '../utils/videoPlayback';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {flexStart} from '../utils/rtlLayout';
+import {
+  getUserBnbHostLock,
+  shouldShowBnbCreateOption,
+} from '../utils/bnbHostLock';
 
 const FROZEN_IDS_KEY = 'pi_edit_frozen_listing_ids';
 
@@ -1208,8 +1212,10 @@ const EditPublishAdScreen = ({
 
   const openCreateListing = (opts = {}) => {
     setShowCreateSheet(false);
+    const lockedHost = getUserBnbHostLock(currentUser);
+    const nextOpts = lockedHost ? {...opts, bnbHostType: lockedHost} : opts;
     onCreateAd &&
-      onCreateAd(selectedListingCategoryId ?? selectedCategoryId, opts);
+      onCreateAd(selectedListingCategoryId ?? selectedCategoryId, nextOpts);
   };
 
   const openCreatePost = (opts = {}) => {
@@ -1421,7 +1427,8 @@ const EditPublishAdScreen = ({
               {showListingCreateInSheet &&
                 (isBnbCategory ? (
                   <>
-                    {!isCompanySubscriptionType(currentUser?.subscription_type) ? (
+                    {!isCompanySubscriptionType(currentUser?.subscription_type) &&
+                    shouldShowBnbCreateOption(currentUser, 'private') ? (
                       <>
                         <CreateAdSheetRow
                           title="פרסם כפרטי"
@@ -1431,23 +1438,31 @@ const EditPublishAdScreen = ({
                             openCreateListing({bnbHostType: 'private'})
                           }
                         />
-                        <CreateAdSheetDivider />
+                        {shouldShowBnbCreateOption(currentUser, 'business') ? (
+                          <CreateAdSheetDivider />
+                        ) : null}
                       </>
                     ) : null}
-                    <CreateAdSheetRow
-                      title="פרסם כעסק"
-                      subtitle="פרסם חדר או אתר נופש עסקי"
-                      iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                      onPress={() =>
-                        openCreateListing({bnbHostType: 'business'})
-                      }
-                    />
+                    {shouldShowBnbCreateOption(currentUser, 'business') ? (
+                      <CreateAdSheetRow
+                        title="פרסם כעסק"
+                        subtitle="פרסם חדר או אתר נופש עסקי"
+                        iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                        onPress={() =>
+                          openCreateListing({bnbHostType: 'business'})
+                        }
+                      />
+                    ) : null}
                   </>
                 ) : (
                   <CreateAdSheetRow
                     title={
                       isOfficesListingCategory
-                        ? 'משרד'
+                        ? isCompanySubscriptionType(
+                            currentUser?.subscription_type,
+                          )
+                          ? 'פרסמו פרויקט'
+                          : 'משרד'
                         : isPartnersCategory
                           ? 'פרסם מודעה'
                           : isLandListingCategory

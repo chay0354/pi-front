@@ -624,8 +624,8 @@ export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
     }
   }
 
-  // Company / video-tab flows attach the same cropped file as both profile + logo.
-  // If one pre-upload succeeds and the other fails, keep both columns filled.
+  // A user may reuse the same cropped image as both photo and logo. If one
+  // pre-upload succeeds and the other fails, keep both columns filled.
   const sameLogoAsProfile =
     Boolean(files.companyLogo) &&
     Boolean(files.profilePicture) &&
@@ -1339,6 +1339,7 @@ export const registerRegularUser = async ({
   businessAddress = null,
   profilePictureUrl = null,
   password = null,
+  bnbHostLock = null,
 } = {}) => {
   const normalizedEmail = email && String(email).trim() ? String(email).trim().toLowerCase() : '';
   const pwd = password != null ? String(password) : '';
@@ -1363,6 +1364,9 @@ export const registerRegularUser = async ({
         business_address: businessAddress,
         profile_picture_url: profilePictureUrl,
         password: pwd,
+        ...(bnbHostLock === 'private' || bnbHostLock === 'business'
+          ? {bnb_host_lock: bnbHostLock}
+          : {}),
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1383,7 +1387,7 @@ export const registerRegularUser = async ({
  */
 export const loginOrRegisterWithGoogle = async (
   idToken,
-  {phone = null, name = null, businessAddress = null, intent = 'register'} = {},
+  {phone = null, name = null, businessAddress = null, intent = 'register', bnbHostLock = null} = {},
 ) => {
   const token = idToken != null ? String(idToken).trim() : '';
   if (!token) {
@@ -1402,6 +1406,9 @@ export const loginOrRegisterWithGoogle = async (
           businessAddress != null && String(businessAddress).trim()
             ? String(businessAddress).trim()
             : null,
+        ...(bnbHostLock === 'private' || bnbHostLock === 'business'
+          ? {bnb_host_lock: bnbHostLock}
+          : {}),
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1426,7 +1433,7 @@ export const loginOrRegisterWithGoogle = async (
  */
 export const loginOrRegisterWithApple = async (
   identityToken,
-  {phone = null, name = null, businessAddress = null, intent = 'register'} = {},
+  {phone = null, name = null, businessAddress = null, intent = 'register', bnbHostLock = null} = {},
 ) => {
   const token = identityToken != null ? String(identityToken).trim() : '';
   if (!token) {
@@ -1446,6 +1453,9 @@ export const loginOrRegisterWithApple = async (
           businessAddress != null && String(businessAddress).trim()
             ? String(businessAddress).trim()
             : null,
+        ...(bnbHostLock === 'private' || bnbHostLock === 'business'
+          ? {bnb_host_lock: bnbHostLock}
+          : {}),
       }),
     });
     const data = await response.json().catch(() => ({}));

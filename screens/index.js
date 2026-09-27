@@ -44,6 +44,7 @@ export {default as TermsOfUseScreen} from './TermsOfUseScreen';
 export {default as AccessibilityStatementScreen} from './AccessibilityStatementScreen';
 export {default as AccessibilityMenuScreen} from './AccessibilityMenuScreen';
 export {default as ProjectMarketerPlanScreen} from './ProjectMarketerPlanScreen';
+export {default as CompanyPlanScreen} from './CompanyPlanScreen';
 export {default as JoinAgencyScreen} from './JoinAgencyScreen';
 export {default as AgencyJoinCodeScreen} from './AgencyJoinCodeScreen';
 export {default as AgencyMembersScreen} from './AgencyMembersScreen';

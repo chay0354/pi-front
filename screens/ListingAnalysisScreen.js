@@ -57,9 +57,8 @@ const categoryMeta = listingCategoryId =>
   brokerCategories.find(c => c.id === listingCategoryId) ||
   null;
 
-/** Crops padded category tiles; Pi Partners logo is shown in full. */
+/** Crops padded category tiles so the Pi character fills the cell. */
 const CroppedCategoryImage = ({source, categoryId}) => {
-  const showFullLogo = Number(categoryId) === 3;
   const inner = 1 - 2 * CATEGORY_ICON_CROP;
   const imageSize = Math.ceil(CATEGORY_ICON_SIZE / inner);
   const offset = (imageSize - CATEGORY_ICON_SIZE) / 2;
@@ -83,19 +82,12 @@ const CroppedCategoryImage = ({source, categoryId}) => {
       ]}>
       <Image
         source={source}
-        style={
-          showFullLogo
-            ? {
-                width: CATEGORY_ICON_SIZE,
-                height: CATEGORY_ICON_SIZE,
-              }
-            : {
-                width: imageSize,
-                height: imageSize,
-                marginLeft: -offset,
-                marginTop: -offset + (imageAdjust.marginTop ?? 0),
-              }
-        }
+        style={{
+          width: imageSize,
+          height: imageSize,
+          marginLeft: -offset,
+          marginTop: -offset + (imageAdjust.marginTop ?? 0),
+        }}
         resizeMode="contain"
       />
     </View>

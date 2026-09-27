@@ -123,30 +123,59 @@ function parseListingNumericPrice(listing) {
   return 0;
 }
 
+function parseProposedLandObject(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof raw === 'object' ? raw : null;
+}
+
 /** Company parcels, or broker/user `proposed_land` + listing price as a single offer row. */
 export function normalizeLandOfferParcels(listing) {
   const companyRows = normalizeCompanyLandParcels(listing);
   if (companyRows.length > 0) return companyRows;
 
-  const pl = listing?.proposed_land ?? listing?.proposedLand;
-  if (!pl || typeof pl !== 'object') return [];
+  const pl = parseProposedLandObject(
+    listing?.proposed_land ?? listing?.proposedLand,
+  );
+  if (pl) {
+    const unit = pl.unit === 'sqm' ? 'sqm' : 'dunam';
+    const area = Number(pl.area) || 0;
+    const price =
+      pl.price != null && pl.price !== ''
+        ? Number(pl.price) || 0
+        : parseListingNumericPrice(listing);
+    if (area > 0 || price > 0) {
+      return [{unit, area, price}];
+    }
+  }
 
-  const unit = pl.unit === 'sqm' ? 'sqm' : 'dunam';
-  const area = Number(pl.area) || 0;
-  const price =
-    pl.price != null && pl.price !== ''
-      ? Number(pl.price) || 0
-      : parseListingNumericPrice(listing);
-
-  if (area <= 0 && price <= 0) return [];
-  return [{unit, area: area > 0 ? area : 1, price}];
+  // Older broker/user land ads never persisted `proposed_land` — still show
+  // the offer card from the listing-level price / area when those exist.
+  // Company ads keep their own parcel rows only (listing.price is a dummy default).
+  const st = String(
+    listing?.subscription_type ?? listing?.subscriptionType ?? '',
+  ).toLowerCase();
+  if (st === 'company') return [];
+  const price = parseListingNumericPrice(listing);
+  const area = Number(listing?.area) || 0;
+  if (price <= 0 && area <= 0) return [];
+  return [{unit: 'dunam', area, price}];
 }
 
 export function landOffersSectionTitle(listing) {
   const st = String(
     listing?.subscription_type ?? listing?.subscriptionType ?? '',
   ).toLowerCase();
-  return st === 'company' ? 'החברה מציעה' : 'קרקע מוצעת';
+  if (st === 'company') return 'החברה מציעה';
+  if (st === 'broker') return 'המתווך מציע';
+  return 'ההצעה:';
 }
 
 export function buildCompanyLandAttrChips(listing) {

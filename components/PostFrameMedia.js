@@ -14,6 +14,8 @@ export default function PostFrameFitWidthImage({
   frameHeight,
   imageStyle,
   onError,
+  /** Fill the frame completely (crop overflow) instead of fitting to width. */
+  cover = false,
 }) {
   const [natural, setNatural] = useState(null);
 
@@ -25,7 +27,7 @@ export default function PostFrameFitWidthImage({
     if (w > 0 && h > 0) setNatural({width: w, height: h});
   }, []);
 
-  const layout = natural
+  const layout = !cover && natural
     ? fitWidthMediaLayout(frameWidth, natural.width, natural.height)
     : null;
 
@@ -36,18 +38,22 @@ export default function PostFrameFitWidthImage({
       <Image
         source={{uri}}
         {...IMAGE_PROPS}
-        style={[layout ? layout : styles.fill, imageStyle]}
-        resizeMode={layout ? 'stretch' : 'cover'}
-        onLoad={event => {
-          const src = event?.nativeEvent?.source;
-          const w = Number(src?.width) || 0;
-          const h = Number(src?.height) || 0;
-          if (w > 0 && h > 0) {
-            applyNaturalSize(w, h);
-            return;
-          }
-          Image.getSize(uri, applyNaturalSize, () => {});
-        }}
+        style={[cover ? styles.fill : layout ? layout : styles.fill, imageStyle]}
+        resizeMode={cover ? 'cover' : layout ? 'stretch' : 'cover'}
+        onLoad={
+          cover
+            ? undefined // cover fills the frame — natural size is never read
+            : event => {
+                const src = event?.nativeEvent?.source;
+                const w = Number(src?.width) || 0;
+                const h = Number(src?.height) || 0;
+                if (w > 0 && h > 0) {
+                  applyNaturalSize(w, h);
+                  return;
+                }
+                Image.getSize(uri, applyNaturalSize, () => {});
+              }
+        }
         onError={onError}
       />
     </View>

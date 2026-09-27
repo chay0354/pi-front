@@ -269,7 +269,10 @@ const SettingsScreen = ({
       showsVerticalScrollIndicator={false}>
       {/* Header with X button */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.closeButton}
+          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
           <Text style={styles.closeIcon}>✕</Text>
         </TouchableOpacity>
         <View style={styles.logoSection}>
@@ -674,17 +677,18 @@ const styles = StyleSheet.create({
   },
   header: {
     width: '100%',
+    minHeight: 106,
     alignItems: 'center',
-    paddingTop: 20,
+    justifyContent: 'flex-start',
     position: 'relative',
+    overflow: 'visible',
   },
   closeButton: {
     position: 'absolute',
-    top: '50%',
+    top: 20,
     right: 0,
-    width: 40,
-    height: 40,
-    marginTop: -20,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -693,19 +697,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: Colors.white100,
     fontWeight: '300',
+    lineHeight: 20,
   },
   logoSection: {
+    width: 318,
     alignItems: 'center',
-    gap: 8,
+    gap: 14,
   },
   logoIcon: {
-    height: 80,
-    width: 102,
+    width: 82,
+    height: 78,
+    flexShrink: 0,
   },
+  // Figma node 7:23338 — 135x14 cap box, 17 tall once the "J" descender is included.
   sloganImage: {
-    height: 21,
-    width: 100,
-    marginTop: 4,
+    width: 135,
+    height: 17,
+    flexShrink: 0,
   },
   section: {
     width: '100%',

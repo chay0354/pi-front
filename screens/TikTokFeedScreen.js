@@ -117,7 +117,11 @@ import {
   uploadFile,
   measureDistancesBatchWithGemini,
 } from '../utils/api';
-import {getUserProfileImageUrl, getListingFeedAvatarUrl, shouldForceGoldRingForListing} from '../utils/userProfileImage';
+import {getUserProfileImageUrl, getListingFeedAvatarUrl, getBnbBusinessLogoUrl, shouldForceGoldRingForListing} from '../utils/userProfileImage';
+import {
+  getUserBnbHostLock,
+  shouldShowBnbCreateOption,
+} from '../utils/bnbHostLock';
 import {parseLandBlockParcelFromListing} from '../utils/enrichListingForUserProfile';
 import {normalizeLandOfferParcels} from '../utils/landListingFields';
 import {
@@ -443,7 +447,7 @@ const mergeListingRows = (target, rows) => {
 const isNewsSidebarFilterDef = filter =>
   filter?.id === 'new' && filter?.ads_only === true;
 
-/** הדמיות sidebar: company ads the creator chose to display as video (not main image / collage). */
+/** הדמיות sidebar: company ads that carry a video, whatever their display mode. */
 const isRenderingsSidebarFilterDef = filter =>
   filter?.id === 'renderings' &&
   String(filter?.subscription_type || '').toLowerCase() === 'company' &&
@@ -454,13 +458,16 @@ const isRenderingsSidebarListing = listing => {
   if (String(listing?.subscription_type || '').toLowerCase() !== 'company') {
     return false;
   }
-  const hasVideo =
-    listingHasPlayableVideo(listing) || Boolean(resolveAdVideoUri(listing));
-  if (!hasVideo) return false;
-  // Transformed feed: type is 'video' only when feed_display_priority is video.
-  if (listing.type === 'images') return false;
-  return normalizeListingFeedDisplayPriority(listing) === 'video';
+  // Display mode is ignored here — a company ad qualifies as soon as it has a
+  // video, and הדמיות then plays that video instead of the main image.
+  return listingHasPlayableVideo(listing) || Boolean(resolveAdVideoUri(listing));
 };
+
+/** Inside הדמיות the video is the page, even when the ad is set to "תמונה ראשית". */
+const asRenderingsVideoListing = listing =>
+  listing && listing.type !== 'video'
+    ? {...listing, type: 'video', feed_display_priority: 'video'}
+    : listing;
 
 /** Company ads: `construction_status` from DB may be English keys or Hebrew labels from the form. */
 function companyConstructionStatusMatches(listing, target) {
@@ -2571,6 +2578,10 @@ const TikTokFeedScreen = ({
       });
       return;
     }
+    const lockedHost = getUserBnbHostLock(currentUser);
+    if (lockedHost) {
+      opts = {...(opts || {}), bnbHostType: lockedHost};
+    }
     const isCompanyOrBroker =
       sub === subscriptionTypes.company ||
       isBrokerLikeSubscriptionType(sub);
@@ -3427,6 +3438,15 @@ const TikTokFeedScreen = ({
                 isUploaded: true,
                 fromDatabase: true,
                 profileImageUrl: getListingFeedAvatarUrl(listing),
+                creator_profile_image_url:
+                  listing.creator_profile_image_url ||
+                  listing.creatorProfileImageUrl ||
+                  null,
+                profile_image_url: listing.profile_image_url || null,
+                profile_picture_url:
+                  listing.profile_picture_url ||
+                  listing.profilePictureUrl ||
+                  null,
                 creator_name: listing.creator_name || null,
                 creator_email: listing.creator_email || null,
                 creator_business_address:
@@ -3632,8 +3652,10 @@ const TikTokFeedScreen = ({
             !isProfilePostsFeed &&
             renderingsSidebarFilterActive
           ) {
-            // הדמיות: company ads with a video AND display mode "וידיאו" (not main image).
-            displayListings = displayListings.filter(isRenderingsSidebarListing);
+            // הדמיות: every company ad that has a video, forced to play it.
+            displayListings = displayListings
+              .filter(isRenderingsSidebarListing)
+              .map(asRenderingsVideoListing);
           }
           if (landFilter?.land_in_mortgage) {
             const need = String(landFilter.land_in_mortgage).trim();
@@ -5360,6 +5382,7 @@ const TikTokFeedScreen = ({
       start,
       end - start + 1,
       Image,
+      currentIndex + 1,
     );
   }, [currentIndex, videos]);
 
@@ -5471,11 +5494,11 @@ const TikTokFeedScreen = ({
     if (!feedListRef.current || videos.length === 0) return;
     const targetY = currentIndexRef.current * feedPageHeight;
     feedListRef.current.scrollToOffset({offset: targetY, animated: false});
-  }, [feedPageHeight, videos.length]);
+  }, [feedPageHeight]);
 
   useEffect(() => {
     setScrollAnchorIndex(0);
-  }, [selectedCategory, videos.length]);
+  }, [selectedCategory]);
 
   useEffect(() => {
     if (videos.length === 0) {
@@ -5554,9 +5577,6 @@ const TikTokFeedScreen = ({
         setCurrentIndex(idx);
         setScrollAnchorIndex(idx);
         activateFeedVideoAt(idx);
-        const start = Math.max(0, idx - FEED_PRELOAD_ABOVE_COUNT);
-        const end = Math.min(videos.length - 1, idx + FEED_PRELOAD_BELOW_COUNT);
-        prefetchFeedWindowMedia(videos, start, end - start + 1, Image);
         return;
       }
       setScrollAnchorIndex(prev => (prev === idx ? prev : idx));
@@ -6354,13 +6374,15 @@ const TikTokFeedScreen = ({
       return [];
     };
     const getSubtitle = listing => {
+      const subType = String(listing?.subscription_type || '').toLowerCase();
+      // Brokers are always labelled by their סוג — their תחומי התמחות belong on
+      // the profile, not in this one-line subtitle.
+      if (isBrokerLikeSubscriptionType(subType)) return 'תיווך';
       const specialties = normalizeList(listing?.creator_specialties);
       const creatorTypes = normalizeList(listing?.creator_types);
       if (specialties[0]) return specialties[0];
       if (creatorTypes[0]) return creatorTypes[0];
-      const subType = String(listing?.subscription_type || '').toLowerCase();
       if (subType === subscriptionTypes.company) return 'חברה';
-      if (isBrokerLikeSubscriptionType(subType)) return 'תיווך';
       if (subType === subscriptionTypes.professional) return 'נותן שירות';
       return 'משתמש';
     };
@@ -6376,7 +6398,10 @@ const TikTokFeedScreen = ({
       if (!keyRaw || !name) return;
       const key = String(keyRaw).toLowerCase();
       const existing = byKey.get(key);
+      // Same avatar the sidebar and the grid cards use: profile photo, then
+      // the BnB business logo only when there is no profile photo.
       const avatar =
+        getListingFeedAvatarUrl(listing) ||
         getUserProfileImageUrl(listing) ||
         listing?.profileImageUrl ||
         listing?.creator_profile_image_url ||
@@ -6704,7 +6729,11 @@ const TikTokFeedScreen = ({
     pageProfileUrl,
     isActivePage,
     sidebarDragMode = false,
-  ) => (
+  ) => {
+    const logoFallback = getBnbBusinessLogoUrl(video);
+    const profileFallbackUri =
+      logoFallback && logoFallback !== pageProfileUrl ? logoFallback : null;
+    return (
     <>
       <View style={styles.sidebarProfileWrap}>
         {sidebarDragMode ? (
@@ -6721,6 +6750,7 @@ const TikTokFeedScreen = ({
             }>
             <ProfileAvatar
               uri={pageProfileUrl}
+              fallbackUri={profileFallbackUri}
               size={60}
               subscriptionType={video}
               forceGoldRing={shouldForceGoldRingForListing(video)}
@@ -6745,6 +6775,7 @@ const TikTokFeedScreen = ({
             }>
             <ProfileAvatar
               uri={pageProfileUrl}
+              fallbackUri={profileFallbackUri}
               size={60}
               subscriptionType={video}
               forceGoldRing={shouldForceGoldRingForListing(video)}
@@ -6917,7 +6948,8 @@ const TikTokFeedScreen = ({
       </View>
       ) : null}
     </>
-  );
+    );
+  };
 
   const renderFeedPageSidebar = (video, index) => {
     const isActivePage = index === currentIndex;
@@ -7934,6 +7966,7 @@ const TikTokFeedScreen = ({
             const likes = hashtagCellLikes(listing);
             const authorName = String(listing?.creator_name || '').trim();
             const authorAvatar =
+              getListingFeedAvatarUrl(listing) ||
               getUserProfileImageUrl(listing) ||
               listing?.creator_profile_image_url ||
               listing?.profile_image_url ||
@@ -8639,10 +8672,10 @@ const TikTokFeedScreen = ({
                 overScrollMode="never"
                 keyboardShouldPersistTaps="handled"
                 initialNumToRender={FEED_PRELOAD_BELOW_COUNT + 1}
-                maxToRenderPerBatch={FEED_PRELOAD_BELOW_COUNT + 1}
+                maxToRenderPerBatch={2}
                 windowSize={FEED_FLATLIST_WINDOW_SIZE}
                 removeClippedSubviews={false}
-                updateCellsBatchingPeriod={16}
+                updateCellsBatchingPeriod={50}
               />
               {showFeedLoading ? (
                 <View
@@ -8702,7 +8735,8 @@ const TikTokFeedScreen = ({
             {showListingPublishInTikTokSheet &&
               (selectedCategory === 5 || selectedCategory === '5' ? (
                 <>
-                  {!isCompanySubscriptionType(currentUser?.subscription_type) ? (
+                  {!isCompanySubscriptionType(currentUser?.subscription_type) &&
+                  shouldShowBnbCreateOption(currentUser, 'private') ? (
                     <>
                       <CreateAdSheetRow
                         title="פרסם כפרטי"
@@ -8712,17 +8746,21 @@ const TikTokFeedScreen = ({
                           closeSheetAndOpenListing({bnbHostType: 'private'})
                         }
                       />
-                      <CreateAdSheetDivider />
+                      {shouldShowBnbCreateOption(currentUser, 'business') ? (
+                        <CreateAdSheetDivider />
+                      ) : null}
                     </>
                   ) : null}
-                  <CreateAdSheetRow
-                    title="פרסם כעסק"
-                    subtitle="פרסם חדר או אתר נופש עסקי"
-                    iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
-                    onPress={() =>
-                      closeSheetAndOpenListing({bnbHostType: 'business'})
-                    }
-                  />
+                  {shouldShowBnbCreateOption(currentUser, 'business') ? (
+                    <CreateAdSheetRow
+                      title="פרסם כעסק"
+                      subtitle="פרסם חדר או אתר נופש עסקי"
+                      iconSource={require('../assets/ad-uplaud/bnb-bussiness.png')}
+                      onPress={() =>
+                        closeSheetAndOpenListing({bnbHostType: 'business'})
+                      }
+                    />
+                  ) : null}
                 </>
               ) : (
                 <CreateAdSheetRow

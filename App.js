@@ -81,6 +81,7 @@ import {
   AccessibilityStatementScreen,
   AccessibilityMenuScreen,
   ProjectMarketerPlanScreen,
+  CompanyPlanScreen,
   JoinAgencyScreen,
   AgencyJoinCodeScreen,
   AgencyMembersScreen,
@@ -122,6 +123,7 @@ import {
   getUserProfileImageUrl,
   normalizeUserProfileAliases,
 } from './utils/userProfileImage';
+import {normalizeBnbHostType} from './utils/bnbHostLock';
 import {getChatListingCategoryLabel} from './utils/chatListingCategory';
 import {normalizeConversationForOpen} from './utils/chatDefaults';
 import {
@@ -145,6 +147,8 @@ const screenName = {
   settings: 'settings',
   login: 'login',
   subscription: 'subscription',
+  /** חברות — plan picker, then the existing company subscription flow. */
+  companyPlan: 'companyPlan',
   subscriptionCompany: 'subscriptionCompany',
   subscriptionProfessional: 'subscriptionProfessional',
   subscriptionForm: 'subscriptionForm',
@@ -434,6 +438,8 @@ function App() {
   const [subscriptionData, setSubscriptionData] = useState(null); // Store subscription data between screens
   /** משווק פרויקטים plan chosen on the picker; forwarded to the registration form. */
   const [marketerPlan, setMarketerPlan] = useState(null);
+  /** מנוי לחברות plan chosen on the picker; forwarded to the registration form. */
+  const [companyPlan, setCompanyPlan] = useState(null);
   /** Team member a marketing manager is currently inspecting (ניהול משווקים). */
   const [agencyMember, setAgencyMember] = useState(null);
   /** When set, ניתוח מודעות loads this member's listings (manager agency view). */
@@ -628,8 +634,18 @@ function App() {
 
   const completeGuestRegistration = useCallback(
     user => {
-      setCurrentUser(user);
       const intent = guestPublishAfterAuth;
+      const justCreated = user?._justCreated === true;
+      const {_justCreated, ...cleanUser} = user || {};
+      const intentLock =
+        intent?.type === 'bnbAd'
+          ? normalizeBnbHostType(intent.bnbHostType)
+          : null;
+      const nextUser =
+        justCreated && intentLock
+          ? {...cleanUser, bnb_host_lock: intentLock}
+          : cleanUser;
+      setCurrentUser(nextUser);
       setGuestPublishAfterAuth(null);
       const back = returnToScreenAfterAuth;
       setReturnToScreenAfterAuth(null);
@@ -1727,16 +1743,14 @@ function App() {
                       professional?.profile_image_url || null,
                     profile_picture_url:
                       professional?.profile_image_url || null,
-                    // Brokers from this directory must stay brokers (מתווך + אזורי פעילות).
+                    // Brokers from this directory must stay brokers
+                    // (מתווך + תחומי התמחות + אזורי פעילות, kept as separate fields).
                     subscription_type:
                       subType === 'broker'
                         ? subscriptionTypes.broker
                         : subscriptionTypes.professional,
-                    activity_regions:
-                      professional?.activity_regions ||
-                      (subType === 'broker'
-                        ? professional?.specializations
-                        : null),
+                    activity_regions: professional?.activity_regions || null,
+                    specializations: professional?.specializations || null,
                   });
                   setCurrentScreen(screenName.userProfile);
                 }}
@@ -2623,7 +2637,8 @@ function App() {
                 }
                 onOpenSubscription={type => {
                   if (type === subscriptionTypes.company) {
-                    setCurrentScreen(screenName.subscriptionCompany);
+                    setCompanyPlan(null);
+                    setCurrentScreen(screenName.companyPlan);
                   } else if (type === subscriptionTypes.professional) {
                     setCurrentScreen(screenName.subscriptionProfessional);
                   } else if (type === subscriptionTypes.projectMarketer) {
@@ -3114,6 +3129,13 @@ function App() {
                   guestPublishAfterAuth?.type === 'bnbAd' &&
                   guestPublishAfterAuth?.bnbHostType === 'business'
                 }
+                bnbHostLock={
+                  guestPublishAfterAuth?.type === 'bnbAd'
+                    ? guestPublishAfterAuth?.bnbHostType === 'business'
+                      ? 'business'
+                      : 'private'
+                    : null
+                }
                 onSuccess={completeGuestRegistration}
                 onCancel={() => {
                   setGuestPublishAfterAuth(null);
@@ -3132,9 +3154,18 @@ function App() {
                 currentUser={currentUser}
               />
             )}
+            {currentScreen === screenName.companyPlan && (
+              <CompanyPlanScreen
+                onClose={() => setCurrentScreen(screenName.settings)}
+                onSelectPlan={plan => {
+                  setCompanyPlan(plan);
+                  setCurrentScreen(screenName.subscriptionCompany);
+                }}
+              />
+            )}
             {currentScreen === screenName.subscriptionCompany && (
               <SubscriptionScreen
-                onClose={() => setCurrentScreen(screenName.settings)}
+                onClose={() => setCurrentScreen(screenName.companyPlan)}
                 onStart={() =>
                   setCurrentScreen(screenName.subscriptionFormCompany)
                 }
@@ -3170,6 +3201,7 @@ function App() {
                   setCurrentScreen(screenName.verificationCompany);
                 }}
                 subscriptionType={subscriptionTypes.company}
+                companyPlan={companyPlan}
               />
             )}
             {currentScreen === screenName.subscriptionFormProfessional && (

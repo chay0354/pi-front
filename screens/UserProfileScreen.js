@@ -1,4 +1,11 @@
-import React, {useState, useRef, useEffect, useCallback, useLayoutEffect} from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+} from 'react';
 import {
   View,
   ScrollView,
@@ -67,6 +74,7 @@ import {
 } from '../utils/listingGridCardFigma';
 import {resolveFeedVideoPosterUri, resolveFeedVideoUri} from '../utils/feedVideoPreload';
 import {muxThumbnailUri} from '../utils/videoPlayback';
+import {supabaseThumbUri} from '../utils/imageThumb';
 import {
   getListingFeedAvatarUrl,
   getUserProfileImageUrl,
@@ -95,6 +103,7 @@ import {
   isCompanySubscriptionType,
   isBrokerLikeSubscriptionType,
   isProjectMarketerType,
+  usesOrgLogoAsAvatar,
   getProjectMarketerRoleLabel,
   isMarketingManager,
   isTeamMarketerUnderManager,
@@ -129,9 +138,18 @@ const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const POST_GRID_COLUMNS = 3;
 const POST_GRID_ROWS = 2;
 const POST_GRID_PAGE_SIZE = POST_GRID_COLUMNS * POST_GRID_ROWS;
-const POST_GRID_CELL_WIDTH = SCREEN_WIDTH / POST_GRID_COLUMNS;
+/** Hairline gutter between tiles — same look as the feed 3×2 grid. */
+const POST_GRID_GAP = 2;
+const POST_GRID_CELL_WIDTH =
+  (SCREEN_WIDTH - POST_GRID_GAP * (POST_GRID_COLUMNS - 1)) / POST_GRID_COLUMNS;
 const POST_GRID_ROW_HEIGHT = POST_GRID_CELL_WIDTH / 0.78;
-const POST_GRID_PAGE_HEIGHT = POST_GRID_ROW_HEIGHT * POST_GRID_ROWS + 2;
+/** CDN thumbnail width for a grid tile — cell width at ~3x DPR, capped. */
+const POST_GRID_THUMB_WIDTH = Math.min(
+  480,
+  Math.ceil(POST_GRID_CELL_WIDTH * 3),
+);
+const POST_GRID_PAGE_HEIGHT =
+  POST_GRID_ROW_HEIGHT * POST_GRID_ROWS + POST_GRID_GAP * (POST_GRID_ROWS - 1);
 const LAST_AD_IMAGE_HEIGHT = 320;
 const SMART_BTN_SIZE = Math.floor((SCREEN_WIDTH - 48 - 10) / 2); // 2 cols, padding 24*2, gap 10
 
@@ -528,6 +546,10 @@ const UserProfileScreen = ({
   const [parentAgency, setParentAgency] = useState(null);
   const [userListings, setUserListings] = useState([]);
   const [userListingsLoading, setUserListingsLoading] = useState(false);
+  /** Posts-only slice, fetched in parallel so the 6-post grid paints without
+   * waiting for the full owner listings payload (ads + posts). */
+  const [postGridListings, setPostGridListings] = useState([]);
+  const [postGridLoading, setPostGridLoading] = useState(true);
   useEffect(() => {
     setResolvedCreator(null);
     setParentAgency(null);
@@ -739,6 +761,35 @@ const UserProfileScreen = ({
       })
       .finally(() => {
         if (!cancelled) setUserListingsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [creatorId]);
+
+  // Posts-only fetch for the grid — much smaller than the full owner payload,
+  // so the 6 tiles show up first. `userListings` still fills in anything the
+  // server-side feed_post filter misses.
+  useEffect(() => {
+    if (!creatorId) {
+      setPostGridListings([]);
+      setPostGridLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPostGridLoading(true);
+    getListings({subscription_id: creatorId, feed_post: true})
+      .then(result => {
+        if (cancelled || !result?.success) return;
+        setPostGridListings(
+          Array.isArray(result.listings) ? result.listings : [],
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPostGridListings([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPostGridLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1079,21 +1130,22 @@ const UserProfileScreen = ({
     getUserProfilePhotoUrl(user) ||
     getUserProfilePhotoUrl(profile) ||
     '';
-  const displayImageRaw = isCompanySubscriptionType(
-    resolvedCreator?.subscription_type || user?.subscription_type,
-  )
-    ? getUserCompanyLogoUrl(resolvedCreator) ||
-      getUserCompanyLogoUrl(user) ||
-      headerProfilePhoto ||
-      profile?.profileImageUrl ||
-      profile?.company_logo_url
-    : headerProfilePhoto ||
-      user?.profileImageUrl ||
-      user?.profile_image_url ||
-      user?.profile_picture_url ||
-      user?.creator_profile_image_url ||
-      resolvedCreator?.profilePictureUrl ||
-      profile.profileImageUrl;
+  // Company + משווק use the org logo as the avatar.
+  const displayImageRaw =
+    headerProfilePhoto ||
+    (usesOrgLogoAsAvatar(
+      resolvedCreator?.subscription_type || user?.subscription_type,
+    )
+      ? getUserCompanyLogoUrl(resolvedCreator) ||
+        getUserCompanyLogoUrl(user) ||
+        profile?.profileImageUrl ||
+        profile?.company_logo_url
+      : user?.profileImageUrl ||
+        user?.profile_image_url ||
+        user?.profile_picture_url ||
+        user?.creator_profile_image_url ||
+        resolvedCreator?.profilePictureUrl ||
+        profile.profileImageUrl);
   const displayImage =
     typeof displayImageRaw === 'string' ? displayImageRaw.trim() : '';
   const displayImageSource = displayImage ? {uri: displayImage} : null;
@@ -1118,7 +1170,7 @@ const UserProfileScreen = ({
       if (personal) return {uri: personal};
     }
     if (
-      isCompanySubscriptionType(
+      usesOrgLogoAsAvatar(
         resolvedCreator?.subscription_type || user?.subscription_type,
       ) &&
       logoImage
@@ -1133,14 +1185,28 @@ const UserProfileScreen = ({
     }
     return displayImageSource;
   })();
+  /** Business accounts show their company logo under פרטי התקשרות, never the avatar. */
+  const contactUsesCompanyLogo =
+    hasSeparateProfileAndCompanyLogo(profileSubject) ||
+    hasSeparateProfileAndCompanyLogo(
+      resolvedCreator?.subscription_type || user?.subscription_type,
+    );
+  /**
+   * BnB business hosts upload a logo inside the ad's פרטי התקשרות section
+   * (ads.bnb_business_logo_url). Show that logo here instead of the host's
+   * personal photo. Private hosts have none, so they keep the old avatar.
+   */
+  const bnbContactLogo = (() => {
+    const raw = bnbFeedListing?.bnb_business_logo_url;
+    return typeof raw === 'string' ? raw.trim() : '';
+  })();
   const contactLogoRaw = agencyContact?.logo
     ? agencyContact.logo
-    : hasSeparateProfileAndCompanyLogo(profileSubject) ||
-        isCompanySubscriptionType(
-          resolvedCreator?.subscription_type || user?.subscription_type,
-        )
-      ? logoImage
-      : headerProfilePhoto || logoImage;
+    : bnbContactLogo
+      ? bnbContactLogo
+      : contactUsesCompanyLogo
+        ? logoImage || headerProfilePhoto
+        : headerProfilePhoto || logoImage;
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
   const contactPhones = (() => {
@@ -1436,8 +1502,11 @@ const UserProfileScreen = ({
   })();
   const lastAdHasVideo = lastAdImages.some(item => item?.isVideo);
   const openedFromPost = isPostListingRecord(user);
-  const recentPostGridImages = (() => {
-    const rows = Array.isArray(userListings) ? [...userListings] : [];
+  const recentPostGridImages = useMemo(() => {
+    const rows = [
+      ...(Array.isArray(postGridListings) ? postGridListings : []),
+      ...(Array.isArray(userListings) ? userListings : []),
+    ];
     if (user && isPostListingRecord(user)) {
       rows.unshift(user);
     }
@@ -1520,7 +1589,19 @@ const UserProfileScreen = ({
         return grid ? {...grid, listingId: item?.id, listing: item} : null;
       })
       .filter(Boolean);
-  })();
+  }, [postGridListings, userListings, user]);
+
+  // Warm the first page of thumbnails so the tiles paint together, not one by one.
+  useEffect(() => {
+    const firstPage = recentPostGridImages.slice(0, POST_GRID_PAGE_SIZE);
+    for (const item of firstPage) {
+      const uri = item?.posterUri || (item?.isVideo ? null : item?.uri);
+      if (!uri || !/^https?:/i.test(uri)) continue;
+      const target =
+        supabaseThumbUri(uri, {width: POST_GRID_THUMB_WIDTH}) || uri;
+      Image.prefetch(target).catch(() => {});
+    }
+  }, [recentPostGridImages]);
 
   const handlePostGridPress = useCallback(
     item => {
@@ -1615,6 +1696,8 @@ const UserProfileScreen = ({
                 listing={item.listing}
                 posterUri={item.posterUri}
                 style={StyleSheet.absoluteFill}
+                cropOverflow
+                stillMaxWidth={POST_GRID_THUMB_WIDTH}
                 showVideoPlayIcon={false}
               />
               <View
@@ -1647,6 +1730,8 @@ const UserProfileScreen = ({
               listing={item.listing}
               posterUri={item.posterUri}
               style={StyleSheet.absoluteFill}
+              cropOverflow
+              stillMaxWidth={POST_GRID_THUMB_WIDTH}
             />
             {viewBadge}
           </View>
@@ -1657,7 +1742,7 @@ const UserProfileScreen = ({
   );
 
   /** Always 2×3 per page; swipe horizontally for more pages when >6 posts. */
-  const postGridPages = (() => {
+  const postGridPages = useMemo(() => {
     const posts = recentPostGridImages;
     if (posts.length === 0) {
       return [Array.from({length: POST_GRID_PAGE_SIZE}, () => null)];
@@ -1672,7 +1757,7 @@ const UserProfileScreen = ({
       pages.push(page);
     }
     return pages;
-  })();
+  }, [recentPostGridImages]);
 
   const [postGridPageIndex, setPostGridPageIndex] = useState(0);
   const postGridPagerRef = useRef(null);
@@ -1687,6 +1772,9 @@ const UserProfileScreen = ({
         inverted={false}
         nestedScrollEnabled
         removeClippedSubviews={false}
+        initialNumToRender={1}
+        maxToRenderPerBatch={1}
+        windowSize={3}
         showsHorizontalScrollIndicator={false}
         style={[
           styles.lastAdPostGridPager,
@@ -2224,6 +2312,14 @@ const UserProfileScreen = ({
   /** Post grid + profile-only TikTok feed — any profile with posts, not only own or TikTok-post entry. */
   const showProfilePostGrid =
     !isDedicatedListingAdProfile && recentPostGridImages.length > 0;
+  /**
+   * The empty 3×2 placeholder cells are only a loading skeleton — a profile with
+   * no posts at all must not show them.
+   */
+  const hasProfilePostGridItems = recentPostGridImages.length > 0;
+  const profilePostGridLoading = postGridLoading || userListingsLoading;
+  const renderProfilePostGrid =
+    hasProfilePostGridItems || profilePostGridLoading;
   const openedFromProfessionalsDirectory = Boolean(
     user?._fromProfessionalsDirectory,
   );
@@ -2263,13 +2359,21 @@ const UserProfileScreen = ({
   const showProfessionalFigmaProfile =
     isProfessional && !isDedicatedListingAdProfile;
   const showProfessionalStandardPostGrid = showProfessionalFigmaProfile;
-  const showProfilePostGridAtTop = showProfessionalStandardPostGrid
-    ? true
-    : isOwnProfile
-      ? showOwnProfilePostGridAtTop
-      : showCompanySubscriptionPostGridAtTop
-        ? true
-        : showProfilePostGrid && !forceListingAdProfile;
+  /**
+   * בעלי מקצוע בתחום הנדל״ן only: both brokers and professionals open on the
+   * 6-post profile, never on their latest listing. Other entry points keep
+   * the listing hero.
+   */
+  const showDirectoryPostProfile =
+    openedFromProfessionalsDirectory && !isDedicatedListingAdProfile;
+  const showProfilePostGridAtTop =
+    showProfessionalStandardPostGrid || showDirectoryPostProfile
+      ? true
+      : isOwnProfile
+        ? showOwnProfilePostGridAtTop
+        : showCompanySubscriptionPostGridAtTop
+          ? true
+          : showProfilePostGrid && !forceListingAdProfile;
   /** Legacy directory path only — Figma pro layout keeps the grid at the top. */
   const showProfilePostGridAfterBio =
     !showProfessionalFigmaProfile &&
@@ -2291,6 +2395,14 @@ const UserProfileScreen = ({
     (showLandProfileContactAndReviews ||
       showCompanyBnbProfileContactAndReviews ||
       (!isDedicatedListingAdProfile || showProfileRatingFeatures));
+  /**
+   * BnB hosts are regular-user accounts, so `isRegularUserAdView` used to hide
+   * פרטי התקשרות on every BnB ad. The block renders for any BnB listing now —
+   * the rest of the regular-user ad layout is untouched.
+   */
+  const showContactDetailsBlock =
+    isBnbListingAdProfile ||
+    (!isRegularUserAdView && showListingContactAndReviews);
   const showListingFeedbackSection =
     isBnbCommentsOnly ||
     isBnbReviewsWithStars ||
@@ -2585,8 +2697,8 @@ const UserProfileScreen = ({
     const lid = String(bnbFeedListing.id).trim();
     return reviews.filter(r => {
       const rid = r.listing_id != null ? String(r.listing_id).trim() : '';
-      if (rid) return rid === lid;
-      return isBnbReviewsWithStars;
+      // Private and business ads from the same account stay separate.
+      return rid === lid;
     });
   }, [
     reviews,
@@ -2595,14 +2707,24 @@ const UserProfileScreen = ({
     isBnbReviewsWithStars,
   ]);
 
-  const displayPiRating = React.useMemo(
-    () =>
-      displayPiRatingFromReviews(listingReviews, {
-        pi_value: brokerPiRating,
-        subscription_type: profileSubscriptionType,
-      }),
-    [listingReviews, brokerPiRating, profileSubscriptionType],
-  );
+  const displayPiRating = React.useMemo(() => {
+    if (isBnbReviewsWithStars) {
+      // This business ad only. No reviews yet → 1 star, not the account default of 5.
+      return displayPiRatingFromReviews(listingReviews, {
+        pi_value: 1,
+        subscription_type: 'user',
+      });
+    }
+    return displayPiRatingFromReviews(listingReviews, {
+      pi_value: brokerPiRating,
+      subscription_type: profileSubscriptionType,
+    });
+  }, [
+    isBnbReviewsWithStars,
+    listingReviews,
+    brokerPiRating,
+    profileSubscriptionType,
+  ]);
 
   // Filter out display name from tags so it doesn't appear as a specialty/region
   const tagLabel = s =>
@@ -2654,6 +2776,18 @@ const UserProfileScreen = ({
   const profileSpecialtyEmptyText = isBroker && !isProjectMarketer
     ? 'אין אזורי פעילות'
     : 'אין התמחויות';
+  /**
+   * Brokers get their own תחומי התמחות row, rendered above אזור פעילות.
+   * Older backends aliased a broker's specializations to their activity regions,
+   * so drop anything that is really just a region and would show up twice.
+   */
+  const showBrokerExpertiseBlock = isBroker && !isProjectMarketer;
+  const brokerExpertiseTags = showBrokerExpertiseBlock
+    ? (() => {
+        const regionSet = new Set(filteredActivityRegions.map(tagLabel));
+        return brokerSpecializationsDisplay.filter(t => !regionSet.has(t));
+      })()
+    : [];
 
   const renderProfessionalTypeTags = (labels, extraStyle) => {
     const list = Array.isArray(labels) ? labels : [];
@@ -2820,8 +2954,7 @@ const UserProfileScreen = ({
   const heroNavPaddingTop = showFixedCompanyHero ? top + 8 : top + 10;
 
   /** Phone / Pi chat — bottom of פרטי התקשרות (never duplicate in the header row). */
-  const showProfileMessagingCta =
-    !isOwnProfile && showListingContactAndReviews;
+  const showProfileMessagingCta = !isOwnProfile && showContactDetailsBlock;
 
   /** Phone / Pi chat only — never includes דווח (report always renders at scroll bottom). */
   const renderProfileMessagingCta = extraStyle => {
@@ -2991,7 +3124,9 @@ const UserProfileScreen = ({
           )}
 
         {/* Last ad card - full width, no bubble */}
-        {(lastAd || showProfilePostGridAtTop) && (
+        {(showProfilePostGridAtTop
+          ? renderProfilePostGrid
+          : Boolean(lastAd)) && (
           <View style={styles.lastAdCard}>
             <View
               style={
@@ -3704,6 +3839,30 @@ const UserProfileScreen = ({
                   (!user?._fromTikTokPost && !isBroker)) && (
                   <View style={styles.brokerCardBottomSectionDivider} />
                 )}
+                {!hideCompanyPostSpecialtiesBlock && showBrokerExpertiseBlock && (
+                  <>
+                    <Text style={styles.brokerCardBottomSectionTitle}>
+                      תחומי התמחות
+                    </Text>
+                    <View style={styles.brokerCardBottomTags}>
+                      {brokerExpertiseTags.length > 0 ? (
+                        brokerExpertiseTags.map((s, i) => (
+                          <View
+                            key={`broker-expertise-${i}`}
+                            style={styles.brokerCardBottomTag}>
+                            <Text style={styles.brokerCardBottomTagText}>
+                              {s}
+                            </Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.brokerCardBottomTagEmpty}>
+                          אין תחומי התמחות
+                        </Text>
+                      )}
+                    </View>
+                  </>
+                )}
                 {!hideCompanyPostSpecialtiesBlock && !isProjectMarketer && (
                   <>
                     <Text style={styles.brokerCardBottomSectionTitle}>
@@ -3753,7 +3912,7 @@ const UserProfileScreen = ({
           </View>
         )}
 
-        {showProfilePostGridAfterBio ? (
+        {showProfilePostGridAfterBio && renderProfilePostGrid ? (
           <View style={styles.lastAdCard}>
             <View style={styles.lastAdImageWrapGridMode}>
               {renderProfilePostGridContent()}
@@ -3915,10 +4074,10 @@ const UserProfileScreen = ({
           )}
 
         {/* Contact Details – פרטי התקשרות */}
-        {!isRegularUserAdView && showListingContactAndReviews && (
+        {showContactDetailsBlock && (
           <View style={styles.contactDetailsDivider} />
         )}
-        {!isRegularUserAdView && showListingContactAndReviews && (
+        {showContactDetailsBlock && (
           <View style={styles.contactDetailsSection}>
             <Text style={styles.contactDetailsTitle}>פרטי התקשרות</Text>
             <View style={styles.contactDetailsContent}>
@@ -4011,7 +4170,7 @@ const UserProfileScreen = ({
             {renderProfileMessagingCta(styles.contactDetailsCtaSection)}
           </View>
         )}
-        {!isRegularUserAdView && showListingContactAndReviews && (
+        {showContactDetailsBlock && (
           <View style={styles.contactDetailsDivider} />
         )}
 
@@ -5181,20 +5340,21 @@ const styles = StyleSheet.create({
   lastAdGrid: {
     width: '100%',
     height: '100%',
+    justifyContent: 'space-between',
   },
   lastAdGridRow: {
     flexDirection: 'row-reverse',
     width: '100%',
+    height: POST_GRID_ROW_HEIGHT,
+    justifyContent: 'space-between',
   },
-  // Outer cell holds gutter padding; inner holds aspectRatio (padding+aspectRatio on one view clips bottoms).
   lastAdGridItem: {
-    width: '33.3333%',
-    padding: 1,
+    width: POST_GRID_CELL_WIDTH,
+    height: POST_GRID_ROW_HEIGHT,
   },
-  // aspectRatio = width/height; below 1 yields taller cells than 1:1 (opened-from-post grid).
   lastAdGridItemInner: {
-    width: '100%',
-    aspectRatio: 0.78,
+    width: POST_GRID_CELL_WIDTH,
+    height: POST_GRID_ROW_HEIGHT,
     overflow: 'hidden',
   },
   lastAdGridPlaceholderCell: {

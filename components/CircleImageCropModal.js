@@ -17,8 +17,10 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 
 const CROP_SIZE = Math.min(320, Dimensions.get('window').width - 48);
-const MIN_ZOOM = 1;
+/** 25% — same floor as before the 10% steps, so minus can pass 100%. */
+const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.1;
 /** Half the crop box — makes the mask ring reach past the stage corners. */
 const MASK_THICKNESS = Math.ceil(CROP_SIZE / 2);
 /** Extra slack (px) past each image edge — you can keep panning a bit after the photo ends. */
@@ -76,6 +78,36 @@ function getCropRect(imgSize, pan, zoom, fit = 'cover') {
     imageLeft,
     imageTop,
   };
+}
+
+/** Zoomed-out frame: the photo sits inside the square with the editor background. */
+async function composeFramedImageWeb(imageUri, layout) {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = CROP_SIZE;
+        canvas.height = CROP_SIZE;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#1e1d27';
+        ctx.fillRect(0, 0, CROP_SIZE, CROP_SIZE);
+        ctx.drawImage(
+          img,
+          layout.imageLeft,
+          layout.imageTop,
+          layout.displayW,
+          layout.displayH,
+        );
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = imageUri;
+  });
 }
 
 async function cropImageWeb(imageUri, cropRect) {
@@ -173,21 +205,30 @@ const CircleImageCropModal = ({
   );
 
   const adjustZoom = delta => {
-    setZoom(prev => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta)));
+    setZoom(prev => {
+      const stepped = Math.round((prev + delta) * 10) / 10;
+      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, stepped));
+    });
   };
 
   const handleConfirm = useCallback(async () => {
     if (!imageUri || saving) return;
     setSaving(true);
     try {
+      const shrunkInsideFrame =
+        cropLayout.displayW < CROP_SIZE - 1 ||
+        cropLayout.displayH < CROP_SIZE - 1;
       const keepsFullImage =
+        !shrunkInsideFrame &&
         cropLayout.width >= imgSize.width - 2 &&
         cropLayout.height >= imgSize.height - 2;
       let uri;
       if (keepsFullImage) {
         uri = imageUri;
       } else if (Platform.OS === 'web') {
-        uri = await cropImageWeb(imageUri, cropLayout);
+        uri = shrunkInsideFrame
+          ? await composeFramedImageWeb(imageUri, cropLayout)
+          : await cropImageWeb(imageUri, cropLayout);
       } else {
         uri = await captureRef(cropRef, {
           format: 'jpg',
@@ -270,7 +311,7 @@ const CircleImageCropModal = ({
         <View style={styles.zoomRow}>
           <TouchableOpacity
             style={styles.zoomBtn}
-            onPress={() => adjustZoom(-0.25)}
+            onPress={() => adjustZoom(-ZOOM_STEP)}
             disabled={zoom <= MIN_ZOOM}
             accessibilityRole="button"
             accessibilityLabel="הקטן">
@@ -279,7 +320,7 @@ const CircleImageCropModal = ({
           <Text style={styles.zoomLabel}>{Math.round(zoom * 100)}%</Text>
           <TouchableOpacity
             style={styles.zoomBtn}
-            onPress={() => adjustZoom(0.25)}
+            onPress={() => adjustZoom(ZOOM_STEP)}
             disabled={zoom >= MAX_ZOOM}
             accessibilityRole="button"
             accessibilityLabel="הגדל">

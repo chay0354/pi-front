@@ -7,13 +7,18 @@ import {RadioWithText} from './RadioWithText';
 import {CountUpdate} from './CountUpdate';
 import {forceLtrStyle} from '../../utils/rtlLayout';
 
-export const ProposedLand = () => {
-  const [unit, setUnit] = useState('dunam'); // 'dunam' or 'sqm'
-  const [value, setValue] = useState(0.5);
-
-  const inc = () => setValue(prev => Math.round((prev + 0.5) * 10) / 10);
-  const dec = () =>
-    setValue(prev => Math.max(0, Math.round((prev - 0.5) * 10) / 10));
+export const ProposedLand = ({
+  unit: unitProp,
+  setUnit: setUnitProp,
+  area: areaProp,
+  setArea: setAreaProp,
+}) => {
+  const [unitLocal, setUnitLocal] = useState('dunam');
+  const [valueLocal, setValueLocal] = useState(0.5);
+  const unit = unitProp ?? unitLocal;
+  const value = areaProp ?? valueLocal;
+  const setUnit = setUnitProp ?? setUnitLocal;
+  const setValue = setAreaProp ?? setValueLocal;
 
   return (
     <FormContainer>

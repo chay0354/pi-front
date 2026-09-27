@@ -34,8 +34,21 @@ coverage/
 **/__tests__/
 Thumbs.db
 
-# Design-only or huge local folders (add paths here if you keep large Figma exports in-repo)
-# Example: assets/profile-company-office/
+# Local artifacts that bloat the EAS upload (was 1.4GB)
+releases/
+build/
+*.apk
+.tmp-*/
+.tmp-*
+inspect-archive/
+eas-plain.txt
+eas-raw.log
+eas-build.log
+eas-build-decompressed.txt
+play-testers.csv
+build-list.json
+build-view.json
+
 
 # Windows reserved-name junk if it ever gets created in the tree
 nul

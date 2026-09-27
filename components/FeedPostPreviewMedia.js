@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {View, Image, Text, StyleSheet} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {VideoPreviewThumb} from './FormsElement/VideoPreviewThumb';
@@ -12,11 +12,13 @@ import {
   shouldUseLiveColorPostBackground,
 } from '../utils/postTextOverlay';
 import {
+  resolvePostFrameCoverCell,
   resolvePostFrameCoverWidth,
   resolvePostFrameInCell,
   useFeedPostPageSize,
 } from '../utils/postFrame';
 import {muxThumbnailUri} from '../utils/videoPlayback';
+import {supabaseThumbUri} from '../utils/imageThumb';
 import {
   formatOpenHouseOverlayText,
   getOpenHouseDetailsFromListing,
@@ -41,10 +43,14 @@ export default function FeedPostPreviewMedia({
   cropOverflow = false,
   /** Live text overlays on the authored canvas. Off in chat so the name is not doubled. */
   showTextOverlays = true,
+  /** Request a CDN-resized still at this width (small tiles). Falls back to
+   * the original URL if the resized variant fails to load. */
+  stillMaxWidth = 0,
   children,
 }) {
   const feedPageSize = useFeedPostPageSize();
   const [layout, setLayout] = useState({width: 0, height: 0});
+  const [thumbFailed, setThumbFailed] = useState(false);
   const overlayPayload = useMemo(
     () => parsePostTextOverlayPayload(listing),
     [listing],
@@ -96,7 +102,7 @@ export default function FeedPostPreviewMedia({
       return {width: layout.width, height: layout.height, left: 0, top: 0};
     }
     const resolve = cropOverflow
-      ? resolvePostFrameCoverWidth
+      ? resolvePostFrameCoverCell
       : resolvePostFrameInCell;
     return resolve(
       layout.width,
@@ -117,6 +123,13 @@ export default function FeedPostPreviewMedia({
     (!isColorTextPost && imageUrl && /^https?:\/\//i.test(String(imageUrl))
       ? String(imageUrl)
       : '');
+  const displayStillUri = useMemo(() => {
+    if (!stillUri || thumbFailed || !(stillMaxWidth > 0)) return stillUri;
+    return supabaseThumbUri(stillUri, {width: stillMaxWidth}) || stillUri;
+  }, [stillUri, stillMaxWidth, thumbFailed]);
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [stillUri]);
 
   return (
     <View
@@ -155,9 +168,15 @@ export default function FeedPostPreviewMedia({
         ) : stillUri ? (
           <>
             <PostFrameFitWidthImage
-              uri={stillUri}
+              uri={displayStillUri}
               frameWidth={postFrame.width}
               frameHeight={postFrame.height}
+              cover={cropOverflow}
+              onError={
+                displayStillUri !== stillUri
+                  ? () => setThumbFailed(true)
+                  : undefined
+              }
             />
             {showVideoPlayIcon && videoUrl ? (
               <View style={styles.playOverlay} pointerEvents="none">
@@ -183,6 +202,7 @@ export default function FeedPostPreviewMedia({
             uri={imageUrl}
             frameWidth={postFrame.width}
             frameHeight={postFrame.height}
+            cover={cropOverflow}
           />
         ) : null}
         {showOverlays && postFrame.width > 0 && postFrame.height > 0 ? (

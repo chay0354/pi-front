@@ -31,6 +31,8 @@ const UserRegistrationScreen = ({
   selectedCategory: _selectedCategory,
   /** Guest BnB "פרסם כעסק" — gold ring on registration only; account stays regular user. */
   bnbBusinessRegistration = false,
+  /** Guest BnB sheet choice — lock a newly created account to this host type. */
+  bnbHostLock = null,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
@@ -102,6 +104,15 @@ const UserRegistrationScreen = ({
   const MIN_PASSWORD_LENGTH = 8;
   const GOOGLE_BUTTON_IMAGE = require('../assets/registrations/google.png');
   const APPLE_BUTTON_IMAGE = require('../assets/registrations/apple.png');
+  const isBnbBusinessSignup =
+    bnbBusinessRegistration || bnbHostLock === 'business';
+  const nameFieldLabel = isBnbBusinessSignup ? 'שם העסק' : 'שם מלא';
+  const nameFieldPlaceholder = isBnbBusinessSignup
+    ? 'שם העסק'
+    : 'שם פרטי ומשפחה';
+  const nameRequiredMessage = isBnbBusinessSignup
+    ? 'אנא הזן שם עסק'
+    : 'אנא הזן שם מלא';
 
   const finishAuthWithSubscription = useCallback(
     (
@@ -134,6 +145,7 @@ const UserRegistrationScreen = ({
         profile_picture_url:
           sub.profile_picture_url || fallbackProfilePictureUrl || null,
         status: sub.status || 'verified',
+        _justCreated: reg.created === true,
       };
 
       if (onSuccess) onSuccess(user);
@@ -228,7 +240,7 @@ const UserRegistrationScreen = ({
     const addressTrim = address.trim();
 
     if (!name) {
-      setErrorMessage('אנא הזן שם מלא');
+      setErrorMessage(nameRequiredMessage);
       return;
     }
     if (!emailTrim) {
@@ -285,6 +297,10 @@ const UserRegistrationScreen = ({
           businessAddress: addressTrim || null,
           profilePictureUrl,
           password,
+          bnbHostLock:
+            bnbHostLock === 'business' || bnbHostLock === 'private'
+              ? bnbHostLock
+              : null,
         });
       } catch (regErr) {
         console.error('registerRegularUser threw:', regErr);
@@ -324,7 +340,11 @@ const UserRegistrationScreen = ({
     const nameTrim = socialName.trim();
     const phoneTrim = socialPhone.trim();
     if (!nameTrim) {
-      showSocialError(`אנא הזן שם מלא לפני ההרשמה עם ${providerLabel}`);
+      showSocialError(
+        isBnbBusinessSignup
+          ? `אנא הזן שם עסק לפני ההרשמה עם ${providerLabel}`
+          : `אנא הזן שם מלא לפני ההרשמה עם ${providerLabel}`,
+      );
       return null;
     }
     if (!phoneTrim) {
@@ -469,12 +489,12 @@ const UserRegistrationScreen = ({
 
               <View style={styles.inputWrap}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.label}>שם מלא</Text>
+                  <Text style={styles.label}>{nameFieldLabel}</Text>
                   <Text style={styles.requiredMark}>*</Text>
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="שם פרטי ומשפחה"
+                  placeholder={nameFieldPlaceholder}
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={fullName}
                   onChangeText={setFullName}
@@ -615,12 +635,16 @@ const UserRegistrationScreen = ({
             <View style={styles.socialWrap}>
               <View style={styles.inputWrap}>
                 <View style={styles.labelRow}>
-                  <Text style={styles.label}>שם מלא להרשמה עם Google / Apple</Text>
+                  <Text style={styles.label}>
+                    {isBnbBusinessSignup
+                      ? 'שם העסק להרשמה עם Google / Apple'
+                      : 'שם מלא להרשמה עם Google / Apple'}
+                  </Text>
                   <Text style={styles.requiredMark}>*</Text>
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="שם פרטי ומשפחה"
+                  placeholder={nameFieldPlaceholder}
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={socialName}
                   onChangeText={text => {
@@ -720,6 +744,11 @@ const UserRegistrationScreen = ({
           phone={socialPhone.trim()}
           name={socialName.trim() || null}
           businessAddress={address.trim() || null}
+          bnbHostLock={
+            bnbHostLock === 'business' || bnbHostLock === 'private'
+              ? bnbHostLock
+              : null
+          }
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
               fallbackPhone: socialPhone.trim(),
@@ -738,6 +767,11 @@ const UserRegistrationScreen = ({
           phone={socialPhone.trim()}
           name={socialName.trim() || null}
           businessAddress={address.trim() || null}
+          bnbHostLock={
+            bnbHostLock === 'business' || bnbHostLock === 'private'
+              ? bnbHostLock
+              : null
+          }
           onSuccess={reg =>
             finishAuthWithSubscription(reg, {
               fallbackPhone: socialPhone.trim(),

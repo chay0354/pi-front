@@ -19,6 +19,7 @@ export default function GoogleRegistrationAuth({
   name = null,
   businessAddress = null,
   intent = 'register',
+  bnbHostLock = null,
 }) {
   const busyRef = useRef(false);
   const lastHandledNonceRef = useRef(0);
@@ -32,6 +33,7 @@ export default function GoogleRegistrationAuth({
     name,
     businessAddress,
     intent,
+    bnbHostLock,
   };
 
   useEffect(() => {
@@ -69,12 +71,14 @@ export default function GoogleRegistrationAuth({
           name: nameVal,
           businessAddress: addressVal,
           intent: intentVal,
+          bnbHostLock: bnbHostLockVal,
         } = propsRef.current;
         const reg = await loginOrRegisterWithGoogle(idToken, {
           phone: phoneVal,
           name: nameVal,
           businessAddress: addressVal,
           intent: intentVal,
+          bnbHostLock: bnbHostLockVal,
         });
         if (!reg?.success || !reg?.subscription?.id) {
           propsRef.current.onError?.(

@@ -48,7 +48,7 @@ module.exports = {
   expo: {
     name: 'pi 2701',
     slug: 'pi-frontend',
-    version: '1.0.10',
+    version: '1.0.11',
     scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/app-icon/icon.png',
@@ -95,7 +95,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 44,
+      versionCode: 45,
       intentFilters: [
         {
           action: 'VIEW',

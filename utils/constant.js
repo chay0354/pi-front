@@ -72,10 +72,47 @@ export const MARKETER_PLAN_SEATS = {
   [MARKETER_PLANS.team10]: 10,
 };
 
+/** מנוי לחברות plans. Company accounts only — brokers/pros/marketers are unaffected. */
+export const COMPANY_PLANS = {
+  projects5: 'projects5',
+  projects10: 'projects10',
+  multi: 'multi',
+};
+
+/**
+ * Max concurrently published listings per company plan. `null` = unlimited.
+ * Feed posts never count against this — only real estate ads do.
+ */
+export const COMPANY_PLAN_LISTING_LIMIT = {
+  [COMPANY_PLANS.projects5]: 5,
+  [COMPANY_PLANS.projects10]: 10,
+  [COMPANY_PLANS.multi]: null,
+};
+
+export const COMPANY_PLAN_LABELS = {
+  [COMPANY_PLANS.projects5]: 'מנוי ל-5 פרוייקטים',
+  [COMPANY_PLANS.projects10]: 'מנוי ל-10 פרוייקטים',
+  [COMPANY_PLANS.multi]: 'מנוי-ללא הגבלה פאי מולטי',
+};
+
+/** Listing cap for a company account, or null when unlimited / not a company. */
+export function getCompanyListingLimit(user) {
+  if (!user || typeof user !== 'object') return null;
+  const plan = String(user.company_plan ?? user.companyPlan ?? '').trim();
+  if (!plan) return null;
+  return COMPANY_PLAN_LISTING_LIMIT[plan] ?? null;
+}
+
 export function isProjectMarketerType(type) {
   return (
     String(type || '').trim().toLowerCase() === subscriptionTypes.projectMarketer
   );
+}
+
+/** Company + משווק: the org logo is the avatar (no separate profile photo). */
+export function usesOrgLogoAsAvatar(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  return t === subscriptionTypes.company || t === subscriptionTypes.projectMarketer;
 }
 
 /** Broker + משווק פרויקטים — same upload forms, profiles, feed overlays, and filters. */
@@ -464,6 +501,14 @@ export function getListingSheetCopy(selectedCategory, subscriptionType) {
   }
   if (cat === 4 || cat === 6 || cat === 12) {
     return {title: 'נכס', subtitle: 'פרסם נכס למכירה או השכרה'};
+  }
+  if (cat === 2) {
+    const isCompany =
+      resolveSubscriptionType(subscriptionType) === subscriptionTypes.company;
+    return {
+      title: isCompany ? 'פרסמו פרויקט' : 'משרד',
+      subtitle: 'פרסם משרד למכירה או השכרה',
+    };
   }
   return {title: 'משרד', subtitle: 'פרסם משרד למכירה או השכרה'};
 }
@@ -911,7 +956,7 @@ export const getHeaderTitle = subscriptionType => {
   }
 };
 
-/** Professionals directory filter — סוג (fixed list). */
+/** Professionals directory filter — סוג (fixed list). Brokers are listed as תיווך. */
 export const PROFESSIONAL_FILTER_TYPES = [
   'תיווך',
   'עורך דין',
@@ -921,6 +966,15 @@ export const PROFESSIONAL_FILTER_TYPES = [
   'אדריכלות',
   'מלווה משקיעים',
 ];
+
+/**
+ * סוג options a בעל מקצוע can register / edit.
+ * תיווך is excluded: brokers have their own account type with אזור פעילות and
+ * תחומי התמחות, so it must not be pickable as a professional trade.
+ */
+export const PROFESSIONAL_SIGNUP_TYPES = PROFESSIONAL_FILTER_TYPES.filter(
+  type => type !== 'תיווך',
+);
 
 /** Professionals directory filter — התמחות options per סוג. */
 export const PROFESSIONAL_SPECIALIZATIONS_BY_TYPE = {
@@ -992,6 +1046,13 @@ export const PROFESSIONAL_TYPE_DB_ALIASES = {
   'מלווה משקיעים': ['מלווה משקיעים'],
 };
 
+/**
+ * תחומי התמחות for מתווכים — the same list the professionals filter offers
+ * under תיווך, so brokers and the directory filter stay in sync.
+ */
+export const BROKER_SPECIALIZATIONS =
+  PROFESSIONAL_SPECIALIZATIONS_BY_TYPE['תיווך'];
+
 export function getProfessionalSpecializationsForTypes(selectedTypes = []) {
   const seen = new Set();
   const out = [];
@@ -1016,6 +1077,7 @@ export function professionalMatchesTypeFilter(filterType, itemTypes) {
 // Shared BnB (category 5) ad form fields – used by user, broker, and company
 const bnbFormFields = [
   {key: 'multiimagewithvideo', wayToDisplayAd: true},
+  {key: 'displayoptions'},
   {key: 'hospitalitynature'},
   {
     key: 'propertytype',

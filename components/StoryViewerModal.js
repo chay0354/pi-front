@@ -749,7 +749,7 @@ const StoryViewerModal = ({
 
   const goNext = useCallback(() => {
     const i = slideIndexRef.current;
-    if (i + 1 >= total) {
+      if (i + 1 >= total) {
       if (hasNextUser) {
         commitUserSwitch('next');
       } else {
@@ -960,7 +960,7 @@ const StoryViewerModal = ({
       <View style={styles.root}>
         <View style={[styles.mediaLayer, storyPagerLtrStyle]}>
           <Animated.View
-            style={[
+              style={[
               styles.pagerRow,
               storyPagerLtrStyle,
               {
@@ -978,7 +978,7 @@ const StoryViewerModal = ({
                   <StoryRingSlidePanel
                     ring={panel.ring}
                     slideIndex={isCurrent ? slideIndex : 0}
-                    isMuted={isMuted}
+              isMuted={isMuted}
                     isPaused={!isCurrent || isUserPanning || isUserSwitching}
                     isActive={isCurrent}
                     overlayBand={overlayBand}

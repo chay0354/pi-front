@@ -30,9 +30,9 @@ import {
   getHeaderTitle,
   subscriptionTypes,
   BROKER_ACTIVITY_REGIONS,
-  PROFESSIONAL_FILTER_TYPES,
+  BROKER_SPECIALIZATIONS,
+  PROFESSIONAL_SIGNUP_TYPES,
   getProfessionalSpecializationsForTypes,
-  MARKETER_PLANS,
 } from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
 import {checkEmailAvailable} from '../utils/api';
@@ -48,22 +48,22 @@ const SubscriptionFormScreen = ({
   onNext,
   subscriptionType = subscriptionTypes.broker,
   marketerPlan = null,
+  companyPlan = null,
 }) => {
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
   /** משווק פרויקטים reuses the company form, with marketer wording. */
   const isProjectMarketerFlow =
     subscriptionType === subscriptionTypes.projectMarketer;
-  /** Solo marketer — profile photo only, no company-logo upload. */
-  const isRegularMarketerSignup =
-    isProjectMarketerFlow && marketerPlan === MARKETER_PLANS.single;
   const isCompanyFlow =
     subscriptionType === subscriptionTypes.company || isProjectMarketerFlow;
   const orgNameLabel = isProjectMarketerFlow ? 'שם המשווק' : 'שם החברה';
   const orgLogoLabel = isProjectMarketerFlow ? 'משווק' : 'חברה';
+  const companyLogoLabel = `לוגו ${orgLogoLabel}`;
   const orgWebsiteLabel = isProjectMarketerFlow
     ? 'כתובת אתר המשווק'
     : 'כתובת אתר החברה';
+  /** Which uploader the pill track shows — both stay filled when you switch. */
   const [activeTab, setActiveTab] = useState('images'); // 'images' or 'video'
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedSpecializations, setSelectedSpecializations] = useState([]);
@@ -125,15 +125,16 @@ const SubscriptionFormScreen = ({
     [],
   );
 
-  const types = PROFESSIONAL_FILTER_TYPES;
+  const types = PROFESSIONAL_SIGNUP_TYPES;
 
   const specializationOptions = useMemo(
     () => getProfessionalSpecializationsForTypes(selectedTypes),
     [selectedTypes],
   );
 
-  // Activity regions for broker subscription
+  // Activity regions + תחומי התמחות for broker subscription
   const activityRegions = BROKER_ACTIVITY_REGIONS;
+  const brokerSpecializations = BROKER_SPECIALIZATIONS;
 
   const toggleType = type => {
     setSelectedTypes(prev => {
@@ -364,43 +365,27 @@ const SubscriptionFormScreen = ({
       const missingFields = [];
 
       if (isCompanyFlow) {
+        if (!companyLogo) missingFields.push(companyLogoLabel);
         if (!companyName) missingFields.push(orgNameLabel);
         if (!contactPersonName) missingFields.push('שם איש קשר');
         if (!companyEmail) missingFields.push('כתובת מייל');
         if (!officePhone) missingFields.push('מספר טלפון משרד');
         if (!businessAddress.trim()) missingFields.push('כתובת חברה');
-        if (isRegularMarketerSignup && !profilePicture) {
-          missingFields.push('תמונת פרופיל');
-        }
+      } else if (subscriptionType === subscriptionTypes.broker) {
+        if (!profilePicture) missingFields.push('תמונת פרופיל');
+        if (!companyLogo) missingFields.push(companyLogoLabel);
+        if (!brokerageLicenseNumber) missingFields.push('מספר רשיון תיווך');
+        if (!brokerOfficeName) missingFields.push('שם משרד המתווך');
+        if (!agentName) missingFields.push('שם הסוכן');
+        if (!email) missingFields.push('כתובת מייל');
+        if (!phone1) missingFields.push('מספר טלפון');
       } else {
-        // Broker/professional validation
-        if (subscriptionType === subscriptionTypes.broker) {
-          if (!brokerageLicenseNumber) missingFields.push('מספר רשיון תיווך');
-          if (!brokerOfficeName) missingFields.push('שם משרד המתווך');
-          if (!agentName) missingFields.push('שם הסוכן');
-          if (!email) missingFields.push('כתובת מייל');
-          if (!phone1) missingFields.push('מספר טלפון');
-          if (activeTab === 'images' && !profilePicture) {
-            missingFields.push('תמונת פרופיל');
-          }
-          if (activeTab === 'video' && !video) missingFields.push('סרטון');
-          if (activeTab === 'video' && !companyLogo) {
-            missingFields.push('לוגו חברה');
-          }
-        } else {
-          // Professional validation (keep existing)
-          if (!businessName) missingFields.push('שם העסק');
-          if (!businessAddress) missingFields.push('כתובת בית העסק');
-          if (!email) missingFields.push('כתובת מייל');
-          if (!phone1) missingFields.push('מספר טלפון');
-          if (activeTab === 'images' && !profilePicture) {
-            missingFields.push('תמונת פרופיל');
-          }
-          if (activeTab === 'video' && !video) missingFields.push('סרטון');
-          if (activeTab === 'video' && !companyLogo) {
-            missingFields.push('לוגו חברה');
-          }
-        }
+        if (!profilePicture) missingFields.push('תמונת פרופיל');
+        if (!companyLogo) missingFields.push(companyLogoLabel);
+        if (!businessName) missingFields.push('שם העסק');
+        if (!businessAddress) missingFields.push('כתובת בית העסק');
+        if (!email) missingFields.push('כתובת מייל');
+        if (!phone1) missingFields.push('מספר טלפון');
       }
 
       if (missingFields.length > 0) {
@@ -439,6 +424,9 @@ const SubscriptionFormScreen = ({
               ...(isProjectMarketerFlow && marketerPlan
                 ? {marketerPlan}
                 : null),
+              ...(!isProjectMarketerFlow && companyPlan
+                ? {companyPlan}
+                : null),
             }
           : subscriptionType === subscriptionTypes.broker
             ? {
@@ -451,6 +439,7 @@ const SubscriptionFormScreen = ({
                 phone: phone1,
                 email,
                 description,
+                specializations: selectedSpecializations,
                 activityRegions: selectedRegions,
               }
             : {
@@ -483,8 +472,6 @@ const SubscriptionFormScreen = ({
           companyLogo.uri.startsWith('https://'));
 
       const attachCompanyLogoAsAvatar = () => {
-        // Company registration + broker/pro video tab: logo is the avatar.
-        // Persist on both columns so profile/feed fallbacks always find it.
         if (companyLogoIsUrl) {
           formData.profile_picture_url = companyLogo.uri;
           formData.company_logo_url = companyLogo.uri;
@@ -494,32 +481,32 @@ const SubscriptionFormScreen = ({
         }
       };
 
-      if (isRegularMarketerSignup) {
-        if (profilePicIsUrl) {
-          formData.profile_picture_url = profilePicture.uri;
-        } else if (profilePicture) {
-          files.profilePicture = profilePicture;
-        }
-      } else if (isCompanyFlow) {
-        // Company flow has no image/video tabs — only the org logo.
+      if (isCompanyFlow) {
+        // Company signup has no image/video tabs — the logo is the avatar.
         attachCompanyLogoAsAvatar();
-      } else if (activeTab === 'video') {
-        attachCompanyLogoAsAvatar();
-        if (video) files.video = video;
       } else {
-        // Photo profile: only תמונת פרופיל — no separate company logo.
+        // Photo, logo and video are independent: the photo is the avatar
+        // everywhere, the logo is only used in פרטי התקשרות, and the video
+        // (when given) replaces the photo inside בעלי מקצוע בתחום הנדל״ן.
         if (profilePicIsUrl) {
           formData.profile_picture_url = profilePicture.uri;
         } else if (profilePicture) {
           files.profilePicture = profilePicture;
         }
+
+        if (companyLogoIsUrl) {
+          formData.company_logo_url = companyLogo.uri;
+        } else if (companyLogo) {
+          files.companyLogo = companyLogo;
+        }
+
+        if (video) files.video = video;
       }
 
       const userEmail = isCompanyFlow ? companyEmail : email;
-      const localProfileImage =
-        isCompanyFlow || activeTab === 'video'
-          ? companyLogo?.uri || null
-          : profilePicture?.uri || null;
+      const localProfileImage = isCompanyFlow
+        ? companyLogo?.uri || null
+        : profilePicture?.uri || companyLogo?.uri || null;
 
       // Defer API submit until step 2 "שלח קוד אימות" — avoids email on screen open.
       if (onNext) {
@@ -544,28 +531,28 @@ const SubscriptionFormScreen = ({
     }
   };
 
+  /** Broker / professional: photo + logo required; video is optional. */
+  const profileMediaOk = !!profilePicture && !!companyLogo;
   const companyCanProceed =
     companyName.trim() &&
     contactPersonName.trim() &&
     officePhone.trim() &&
     companyEmail.trim() &&
     businessAddress.trim() &&
-    (!isRegularMarketerSignup || !!profilePicture);
-  const brokerMediaOk =
-    activeTab === 'video' ? !!video && !!companyLogo : !!profilePicture;
+    !!companyLogo;
   const brokerCanProceed =
     brokerageLicenseNumber.trim() &&
     brokerOfficeName.trim() &&
     agentName.trim() &&
     phone1.trim() &&
     email.trim() &&
-    brokerMediaOk;
+    profileMediaOk;
   const professionalCanProceed =
     businessName.trim() &&
     businessAddress.trim() &&
     phone1.trim() &&
     email.trim() &&
-    brokerMediaOk;
+    profileMediaOk;
 
   const renderCompanyLabel = (label, required = false) => (
     <View style={styles.companyLabelRow}>
@@ -641,8 +628,7 @@ const SubscriptionFormScreen = ({
           </View>
         )}
 
-        {/* Tab Selector - Only for non-company */}
-        {!isCompanyFlow && (
+        {!isCompanyFlow ? (
           <View style={styles.mediaTypeSection}>
             <Text style={styles.mediaTypeSelectorTitle}>
               בחר את סוג התצוגה של הפרופיל שלך
@@ -651,166 +637,167 @@ const SubscriptionFormScreen = ({
               style={styles.brokerTabContainer}
               {...mediaTabPanResponder.panHandlers}
               collapsable={false}>
-            <TouchableOpacity
-              style={styles.brokerTabPill}
-              activeOpacity={0.9}
-              onPress={() => setActiveTab('images')}>
-              {activeTab === 'images' ? (
-                <LinearGradient
-                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{x: 0.5, y: 0}}
-                  end={{x: 0.5, y: 1}}
-                  style={StyleSheet.absoluteFill}
-                />
-              ) : null}
-              <Text
-                style={[
-                  styles.brokerTabPillText,
-                  activeTab === 'images' && styles.brokerTabPillTextActive,
-                ]}>
-                תמונה
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.brokerTabPill}
-              activeOpacity={0.9}
-              onPress={() => setActiveTab('video')}>
-              {activeTab === 'video' ? (
-                <LinearGradient
-                  colors={['#FFE56A', '#F7C63A', '#E5A80F']}
-                  locations={[0.0456, 0.5076, 0.8831]}
-                  start={{x: 0.5, y: 0}}
-                  end={{x: 0.5, y: 1}}
-                  style={StyleSheet.absoluteFill}
-                />
-              ) : null}
-              <Text
-                style={[
-                  styles.brokerTabPillText,
-                  activeTab === 'video' && styles.brokerTabPillTextActive,
-                ]}>
-                סרטון
-              </Text>
-            </TouchableOpacity>
-          </View>
-          </View>
-        )}
-
-        {/* Profile Picture and Additional Images Section - Only for non-company */}
-        {!isCompanyFlow && (
-          <>
-            <View style={styles.sectionContainer}>
-              {activeTab === 'images' ? (
-                <ProfilePictureUpload
-                  mainImage={profilePicture}
-                  uploadProgress={{mainImage: false}}
-                  handleMainImageUpload={handleProfilePictureUpload}
-                  handleMainImageChange={handleProfilePictureChange}
-                  mainImageInputRef={profilePictureInputRef}
-                  title="תמונת פרופיל"
-                  required={false}
-                  previewShape="circle"
-                  onEditExistingImage={() =>
-                    openProfilePictureCropper(
-                      profilePictureSourceUri || profilePicture?.uri,
-                    )
-                  }
-                />
-              ) : (
-                <>
-                  <Text style={styles.brokerCardTitle}>סרטון</Text>
-                  {video ? (
-                    <View style={styles.videoPreviewContainer}>
-                      <TouchableOpacity
-                        activeOpacity={0.92}
-                        onPress={pickVideo}
-                        style={styles.videoPreviewFrame}>
-                        <Video
-                          ref={profileVideoPreviewRef}
-                          key={video.uri}
-                          source={{uri: video.uri}}
-                          style={styles.videoPreviewVideo}
-                          resizeMode={ResizeMode.COVER}
-                          useNativeControls={false}
-                          shouldPlay={false}
-                          isMuted
-                          isLooping={false}
-                          onLoad={() => {
-                            profileVideoPreviewRef.current
-                              ?.setPositionAsync(0)
-                              .catch(() => {});
-                          }}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.videoRemoveButton}
-                        onPress={() => setVideo(null)}
-                        accessibilityLabel="הסר סרטון"
-                        hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                        <MaterialCommunityIcons
-                          name="close-thick"
-                          size={20}
-                          color={Colors.white100}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={pickVideo}
-                      style={styles.imageUploadContainer}>
-                      <View style={styles.videoUploadPlaceholder}>
-                        <MaterialCommunityIcons
-                          name="video-outline"
-                          size={64}
-                          color="rgba(255,255,255,0.4)"
-                        />
-                        <Text style={styles.videoUploadPlaceholderText}>
-                          העלה סרטון
-                        </Text>
-                        <View style={styles.videoUploadButton}>
-                          <Text style={styles.videoUploadButtonText}>
-                            העלאת סרטון
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
+              <TouchableOpacity
+                style={styles.brokerTabPill}
+                activeOpacity={0.9}
+                onPress={() => setActiveTab('images')}>
+                {activeTab === 'images' ? (
+                  <LinearGradient
+                    colors={['#FFE56A', '#F7C63A', '#E5A80F']}
+                    locations={[0.0456, 0.5076, 0.8831]}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
+                <Text
+                  style={[
+                    styles.brokerTabPillText,
+                    activeTab === 'images' && styles.brokerTabPillTextActive,
+                  ]}>
+                  תמונה
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.brokerTabPill}
+                activeOpacity={0.9}
+                onPress={() => setActiveTab('video')}>
+                {activeTab === 'video' ? (
+                  <LinearGradient
+                    colors={['#FFE56A', '#F7C63A', '#E5A80F']}
+                    locations={[0.0456, 0.5076, 0.8831]}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
+                <Text
+                  style={[
+                    styles.brokerTabPillText,
+                    activeTab === 'video' && styles.brokerTabPillTextActive,
+                  ]}>
+                  סרטון
+                </Text>
+              </TouchableOpacity>
             </View>
+          </View>
+        ) : null}
 
-            {/* Company logo only for video profile — photo flow uses תמונת פרופיל instead */}
-            {activeTab === 'video' ? (
-              <>
-                <View style={styles.companyLogoWrap}>
+        {!isCompanyFlow ? (
+        <View style={styles.sectionContainer}>
+          {activeTab === 'images' ? (
+            <ProfilePictureUpload
+              mainImage={profilePicture}
+              uploadProgress={{mainImage: false}}
+              handleMainImageUpload={handleProfilePictureUpload}
+              handleMainImageChange={handleProfilePictureChange}
+              mainImageInputRef={profilePictureInputRef}
+              title="תמונת פרופיל"
+              required
+              previewShape="circle"
+              onEditExistingImage={() =>
+                openProfilePictureCropper(
+                  profilePictureSourceUri || profilePicture?.uri,
+                )
+              }
+            />
+          ) : (
+            <>
+              <Text style={styles.brokerCardTitle}>סרטון</Text>
+              {video ? (
+                <View style={styles.videoPreviewContainer}>
                   <TouchableOpacity
-                    onPress={pickCompanyLogo}
-                    style={styles.companyLogoTouch}>
-                    <View style={styles.companyLogoCircle}>
-                      <View style={styles.companyLogoInnerFrame}>
-                        {companyLogo ? (
-                          <Image
-                            source={{uri: companyLogo.uri}}
-                            style={styles.companyLogoImageFilled}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Text style={styles.companyLogoPlaceholderText}>
-                            לוגו{'\n'}חברה
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.companyLogoAddBadge}>
-                      <Text style={styles.companyLogoAddBadgeText}>+</Text>
-                    </View>
+                    activeOpacity={0.92}
+                    onPress={pickVideo}
+                    style={styles.videoPreviewFrame}>
+                    <Video
+                      ref={profileVideoPreviewRef}
+                      key={video.uri}
+                      source={{uri: video.uri}}
+                      style={styles.videoPreviewVideo}
+                      resizeMode={ResizeMode.COVER}
+                      useNativeControls={false}
+                      shouldPlay={false}
+                      isMuted
+                      isLooping={false}
+                      onLoad={() => {
+                        profileVideoPreviewRef.current
+                          ?.setPositionAsync(0)
+                          .catch(() => {});
+                      }}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.videoRemoveButton}
+                    onPress={() => setVideo(null)}
+                    accessibilityLabel="הסר סרטון"
+                    hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                    <MaterialCommunityIcons
+                      name="close-thick"
+                      size={20}
+                      color={Colors.white100}
+                    />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.companyDivider} />
-              </>
-            ) : null}
+              ) : (
+                <TouchableOpacity
+                  onPress={pickVideo}
+                  style={styles.imageUploadContainer}>
+                  <View style={styles.videoUploadPlaceholder}>
+                    <MaterialCommunityIcons
+                      name="video-outline"
+                      size={64}
+                      color="rgba(255,255,255,0.4)"
+                    />
+                    <Text style={styles.videoUploadPlaceholderText}>
+                      העלה סרטון
+                    </Text>
+                    <View style={styles.videoUploadButton}>
+                      <Text style={styles.videoUploadButtonText}>
+                        העלאת סרטון
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+        ) : null}
 
+        <View style={styles.companyLogoWrap}>
+          <TouchableOpacity
+            onPress={pickCompanyLogo}
+            style={styles.companyLogoTouch}>
+            <View style={styles.companyLogoCircle}>
+              <View style={styles.companyLogoInnerFrame}>
+                {companyLogo ? (
+                  <Image
+                    source={{uri: companyLogo.uri}}
+                    style={styles.companyLogoImageFilled}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text style={styles.companyLogoPlaceholderText}>
+                    לוגו{'\n'}
+                    {orgLogoLabel}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.companyLogoAddBadge}>
+              <MaterialCommunityIcons
+                name="camera"
+                size={13}
+                color="#FFFFFF"
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.companyDivider} />
+
+        {!isCompanyFlow && (
+          <>
             {/* Type Section - Only for professional */}
             {subscriptionType === subscriptionTypes.professional && (
               <View style={styles.professionalTagSection}>
@@ -872,57 +859,6 @@ const SubscriptionFormScreen = ({
                 )}
               </View>
             )}
-          </>
-        )}
-
-        {isRegularMarketerSignup ? (
-          <View style={styles.sectionContainer}>
-            <ProfilePictureUpload
-              mainImage={profilePicture}
-              uploadProgress={{mainImage: false}}
-              handleMainImageUpload={handleProfilePictureUpload}
-              handleMainImageChange={handleProfilePictureChange}
-              mainImageInputRef={profilePictureInputRef}
-              title="תמונת פרופיל"
-              required
-              previewShape="circle"
-              onEditExistingImage={() =>
-                openProfilePictureCropper(
-                  profilePictureSourceUri || profilePicture?.uri,
-                )
-              }
-            />
-          </View>
-        ) : null}
-
-        {isCompanyFlow && !isRegularMarketerSignup && (
-          <>
-            <View style={styles.companyLogoWrap}>
-              <TouchableOpacity
-                onPress={pickCompanyLogo}
-                style={styles.companyLogoTouch}>
-                <View style={styles.companyLogoCircle}>
-                  <View style={styles.companyLogoInnerFrame}>
-                    {companyLogo ? (
-                      <Image
-                        source={{uri: companyLogo.uri}}
-                        style={styles.companyLogoImageFilled}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Text style={styles.companyLogoPlaceholderText}>
-                        לוגו{'\n'}
-                        {orgLogoLabel}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.companyLogoAddBadge}>
-                  <Text style={styles.companyLogoAddBadgeText}>+</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.companyDivider} />
           </>
         )}
 
@@ -1085,6 +1021,32 @@ const SubscriptionFormScreen = ({
             </>
           ) : subscriptionType === subscriptionTypes.broker ? (
             <>
+              {/* Specializations Section - Only for broker, above אזור פעילות */}
+              <View style={styles.brokerSection}>
+                <Text style={styles.brokerSectionTitle}>תחומי התמחות</Text>
+                <View style={styles.brokerChipsContainer}>
+                  {brokerSpecializations.map((specialization, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.brokerChip,
+                        selectedSpecializations.includes(specialization) &&
+                          styles.brokerChipSelected,
+                      ]}
+                      onPress={() => toggleSpecialization(specialization)}>
+                      <Text
+                        style={[
+                          styles.brokerChipText,
+                          selectedSpecializations.includes(specialization) &&
+                            styles.brokerChipTextSelected,
+                        ]}>
+                        {specialization}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               {/* Activity Area Section - Only for broker */}
               <View style={styles.brokerSection}>
                 <Text style={styles.brokerSectionTitle}>אזור פעילות</Text>
@@ -1647,16 +1609,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   companyLogoTouch: {
-    width: 104,
-    height: 104,
+    width: 100,
+    height: 100,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
   },
   companyLogoCircle: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 2,
     borderColor: '#F4AD39',
     alignItems: 'center',
@@ -1664,9 +1626,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   companyLogoInnerFrame: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: '#2f2d43',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1685,21 +1647,15 @@ const styles = StyleSheet.create({
   },
   companyLogoAddBadge: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-    backgroundColor: '#1e1d27',
+    bottom: 2,
+    // forceRTL flips left/right. Physical right on native and on web.
+    ...(Platform.OS === 'web' ? {right: 2} : {left: 2}),
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  companyLogoAddBadgeText: {
-    color: '#ffffff',
-    fontSize: 24,
-    fontFamily: 'Rubik-Regular',
-    lineHeight: 24,
-    marginTop: -1,
   },
   companyDivider: {
     height: 1,

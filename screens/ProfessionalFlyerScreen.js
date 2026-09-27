@@ -72,6 +72,17 @@ const collectTags = professional =>
     .filter((v, i, arr) => arr.indexOf(v) === i)
     .slice(0, 6);
 
+/** Brokers only — אזור פעילות renders in its own section under תחומי התמחות. */
+const collectRegions = professional =>
+  (Array.isArray(professional?.activity_regions)
+    ? professional.activity_regions
+    : []
+  )
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .slice(0, 6);
+
 const formatReviewDate = value => {
   if (!value) return '';
   const date = new Date(value);
@@ -154,6 +165,10 @@ const ProfessionalFlyerScreen = ({
   const email = String(professional?.email || '').trim();
   const phones = useMemo(() => collectPhones(professional), [professional]);
   const tags = useMemo(() => collectTags(professional), [professional]);
+  const activityRegions = useMemo(
+    () => collectRegions(professional),
+    [professional],
+  );
 
   const averageRating = useMemo(
     () =>
@@ -309,6 +324,22 @@ const ProfessionalFlyerScreen = ({
             )}
           </View>
         </View>
+
+        {activityRegions.length > 0 ? (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>אזור פעילות</Text>
+              <View style={styles.tagsRow}>
+                {activityRegions.map(region => (
+                  <View key={region} style={styles.tagChip}>
+                    <Text style={styles.tagText}>{region}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.divider} />
 
