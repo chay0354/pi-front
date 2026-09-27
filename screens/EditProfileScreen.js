@@ -937,9 +937,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   chipsWrap: {
-    flexDirection: 'row-reverse',
+    // Hebrew chips start on the physical right.
+    // Android RTL + row-reverse packed the first chip to the left; `row` starts on the right.
+    // iOS row-reverse under an LTR lock starts on the right (plain `row` would start on the left).
+    flexDirection: Platform.OS === 'ios' ? 'row-reverse' : 'row',
     flexWrap: 'wrap',
     gap: 8,
+    width: '100%',
+    justifyContent: 'flex-start',
+    ...(Platform.OS === 'ios' ? {direction: 'ltr'} : null),
   },
   chip: {
     borderRadius: 20,

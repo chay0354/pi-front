@@ -25,7 +25,10 @@
     "open-web": "start http://localhost:8084",
     "build:apk": "node scripts/clean-dist-for-eas.js && npx eas-cli@latest build --platform android --profile preview --non-interactive",
     "build:bundle": "node scripts/clean-dist-for-eas.js && cd android && gradlew.bat bundleRelease",
-    "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1"
+    "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1",
+    "test:user-types": "node --test ../qa/tests/user-types.test.js",
+    "test:open-account:phone": "node ../qa/tests/open-account-on-phone.js",
+    "test:steps:phone": "node ../qa/tests/show-steps-on-phone.js"
   },
   "dependencies": {
     "@expo-google-fonts/alef": "^0.4.1",

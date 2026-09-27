@@ -1873,20 +1873,43 @@ const ChatScreen = ({
     }
   };
 
+  const iosChatLibraryOptions =
+    Platform.OS === 'ios'
+      ? {
+          // Passthrough leaves a Photos reference iOS cannot upload. Export a
+          // real H.264 file, and turn HEIC into a JPEG the bucket accepts.
+          videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+          preferredAssetRepresentationMode:
+            ImagePicker.UIImagePickerPreferredAssetRepresentationMode
+              .Compatible,
+        }
+      : {};
+
   const sendPickedChatImage = async result => {
     if (result.canceled || !result.assets?.[0]) return;
     const a = result.assets[0];
     const uri = a.uri;
     const pickedIsVideo =
       a.type === 'video' ||
+      a.type === 'pairedVideo' ||
       (a.mimeType != null &&
-        String(a.mimeType).toLowerCase().startsWith('video/'));
+        String(a.mimeType).toLowerCase().startsWith('video/')) ||
+      (a.duration != null && Number(a.duration) > 0 && a.type !== 'image');
     const mediaType = pickedIsVideo ? 'video' : 'image';
-    const mime =
+    let mime =
       a.mimeType || (pickedIsVideo ? 'video/mp4' : 'image/jpeg');
-    const name =
+    let name =
       a.fileName ||
       (pickedIsVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`);
+    if (Platform.OS === 'ios') {
+      if (pickedIsVideo) {
+        mime = 'video/mp4';
+        name = String(name).replace(/\.[^.]+$/, '') + '.mp4';
+      } else if (/^image\/hei[cf]$/i.test(mime)) {
+        mime = 'image/jpeg';
+        name = String(name).replace(/\.(heic|heif)$/i, '.jpg');
+      }
+    }
     if (a.width && a.height) {
       rememberChatImageSize(uri, a.width, a.height);
     }
@@ -1942,15 +1965,24 @@ const ChatScreen = ({
     if (!myEmail || sending || isRecording) return;
     if (!(isDirectPeer || (isGroupThread && groupConversationId))) return;
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (lib.status !== 'granted') {
-        Alert.alert('', 'נדרשת גישה לתמונות');
-        return;
+      if (Platform.OS === 'ios') {
+        // iOS 14+ PHPicker opens without full library access. `limited` is a
+        // successful choice — blocking on anything but `granted` skips the picker.
+        try {
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        } catch (_) {}
+      } else {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (lib.status !== 'granted') {
+          Alert.alert('', 'נדרשת גישה לתמונות');
+          return;
+        }
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
         videoMaxDuration: 120,
+        ...iosChatLibraryOptions,
       });
       await sendPickedChatImage(result);
     } catch (e) {
@@ -1984,6 +2016,7 @@ const ChatScreen = ({
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,
+        ...iosChatLibraryOptions,
       });
       await sendPickedChatImage(result);
     } catch (e) {

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {Title} from './Title';
 import {Colors} from '../../constants/styles';
 
@@ -21,6 +22,8 @@ export const MultiPicturesUpload = ({
   handleAdditionalImageChange,
   mainImageInputRef,
   additionalImageInputRefs,
+  onEditMainImage,
+  onEditAdditionalImage,
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
 
@@ -28,24 +31,42 @@ export const MultiPicturesUpload = ({
     return (
       <View style={styles.additionalImagesGrid}>
         {array.map(index => (
-          <TouchableOpacity
-            key={index}
-            style={styles.imagePlaceholder}
-            onPress={() => handleAdditionalImageUpload(index)}
-            disabled={uploadProgress[`additional-${index}`]}>
-            {uploadProgress[`additional-${index}`] ? (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="small" color="#fff" />
+          <View key={index} style={styles.imagePlaceholder}>
+            <TouchableOpacity
+              style={styles.imagePlaceholderHit}
+              onPress={() => handleAdditionalImageUpload(index)}
+              disabled={uploadProgress[`additional-${index}`]}>
+              {uploadProgress[`additional-${index}`] ? (
+                <View style={styles.uploadingContainer}>
+                  <ActivityIndicator size="small" color="#fff" />
+                </View>
+              ) : additionalImages[index] ? (
+                <Image
+                  source={{uri: additionalImages[index].uri}}
+                  style={styles.uploadedImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.plusIcon}>+</Text>
+              )}
+            </TouchableOpacity>
+            {additionalImages[index]?.uri &&
+            typeof onEditAdditionalImage === 'function' ? (
+              <View style={styles.thumbEditWrap} pointerEvents="box-none">
+                <TouchableOpacity
+                  style={styles.thumbEdit}
+                  onPress={() => onEditAdditionalImage(index)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="עריכת תמונה">
+                  <MaterialCommunityIcons
+                    name="crop"
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
               </View>
-            ) : additionalImages[index] ? (
-              <Image
-                source={{uri: additionalImages[index].uri}}
-                style={styles.uploadedImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text style={styles.plusIcon}>+</Text>
-            )}
+            ) : null}
             {Platform.OS === 'web' && (
               <input
                 ref={el => (additionalImageInputRefs.current[index] = el)}
@@ -55,7 +76,7 @@ export const MultiPicturesUpload = ({
                 onChange={e => handleAdditionalImageChange(index, e)}
               />
             )}
-          </TouchableOpacity>
+          </View>
         ))}
       </View>
     );
@@ -64,25 +85,41 @@ export const MultiPicturesUpload = ({
   return (
     <>
       <Title text={'תמונת נושא או הדמייה'} required />
-      <TouchableOpacity
-        style={styles.imageUploadArea}
-        onPress={handleMainImageUpload}>
-        {uploadProgress.mainImage ? (
-          <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="small" color="#fff" />
-            <Text style={styles.uploadButtonText}>מעלה תמונה...</Text>
+      <View style={styles.imageUploadArea}>
+        <TouchableOpacity
+          style={styles.imageUploadHit}
+          onPress={handleMainImageUpload}
+          disabled={uploadProgress.mainImage}>
+          {uploadProgress.mainImage ? (
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.uploadButtonText}>מעלה תמונה...</Text>
+            </View>
+          ) : mainImage ? (
+            <Image
+              source={{uri: mainImage.uri}}
+              style={styles.uploadedImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.uploadButtonContainer}>
+              <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        {mainImage?.uri && typeof onEditMainImage === 'function' ? (
+          <View style={styles.editChipWrap} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.editChip}
+              onPress={onEditMainImage}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="עריכת תמונה">
+              <MaterialCommunityIcons name="crop" size={16} color="#FFFFFF" />
+              <Text style={styles.editChipText}>עריכה</Text>
+            </TouchableOpacity>
           </View>
-        ) : mainImage ? (
-          <Image
-            source={{uri: mainImage.uri}}
-            style={styles.uploadedImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.uploadButtonContainer}>
-            <Text style={styles.uploadButtonText}>העלאת תמונה</Text>
-          </View>
-        )}
+        ) : null}
         {Platform.OS === 'web' && (
           <input
             ref={mainImageInputRef}
@@ -92,7 +129,7 @@ export const MultiPicturesUpload = ({
             onChange={handleMainImageChange}
           />
         )}
-      </TouchableOpacity>
+      </View>
       <Title text={'תמונות נוספות'} textStyle={styles.sectionTitle} />
       {MoreImagesRender([0, 1])}
       {MoreImagesRender([2, 3])}
@@ -133,6 +170,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#2B2A39',
+    overflow: 'hidden',
+  },
+  imageUploadHit: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editChipWrap: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  editChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(30, 29, 39, 0.88)',
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+  },
+  editChipText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   uploadingContainer: {
     width: '100%',
@@ -170,11 +235,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderStyle: 'dashed',
     borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#2B2A39',
     marginBottom: 10,
     overflow: 'hidden',
+  },
+  imagePlaceholderHit: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbEditWrap: {
+    position: 'absolute',
+    bottom: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  thumbEdit: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30, 29, 39, 0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   plusIcon: {
     color: Colors.whiteGeneral,

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
@@ -335,6 +336,9 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 48,
     minHeight: 48,
+    ...(Platform.OS === 'ios'
+      ? {alignSelf: 'flex-start', position: 'relative'}
+      : null),
   },
   piBadgeImage: {
     width: 85,
@@ -342,6 +346,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     marginLeft: -7,
     top: -20,
+    ...(Platform.OS === 'ios' ? {left: 0, marginLeft: 0} : null),
   },
   piBadgeText: {
     color: GOLD_PI,

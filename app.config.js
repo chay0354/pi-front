@@ -95,7 +95,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 45,
+      versionCode: 46,
       intentFilters: [
         {
           action: 'VIEW',

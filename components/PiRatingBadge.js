@@ -24,17 +24,17 @@ const composite = width => ({
 
 /**
  * Rating 5 draws the digit next to the ring art. Transforms are not mirrored
- * by RTL (unlike margins), so translateX is the reliable way to close the gap
- * to the star; translateY drops the digit to sit on the star's centre line.
+ * by RTL. iPhone keeps the digit a little left of the star. Android uses the
+ * last committed offset, which sits the digit against the star.
  */
-const DIGIT_TOWARD_STAR = 3;
+const DIGIT_SHIFT_X = Platform.OS === 'ios' ? -6 : 3;
 
 const VARIANTS = {
   profile: {
     wrap: {gap: 2},
     text: {
       fontSize: 22,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -5}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -5}],
     },
     ring: {width: 85, height: 85, marginLeft: -7, top: -35},
     composite: composite(59),
@@ -43,7 +43,7 @@ const VARIANTS = {
     wrap: {gap: 2, minWidth: 48, minHeight: 48},
     text: {
       fontSize: 18,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -2}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -2}],
     },
     ring: {width: 85, height: 85, marginLeft: -7, top: -16},
     composite: composite(56),
@@ -54,7 +54,7 @@ const VARIANTS = {
       fontSize: 14,
       lineHeight: 20,
       fontWeight: '500',
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: 1}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: 1}],
     },
     ring: {width: 60, height: 60, marginLeft: -6, top: -22},
     composite: composite(39),
@@ -65,7 +65,7 @@ const VARIANTS = {
       fontSize: 17,
       lineHeight: 22,
       fontWeight: '500',
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -2}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -2}],
     },
     ring: {width: 60, height: 60, marginLeft: -6, top: -22},
     composite: composite(42),
@@ -77,7 +77,7 @@ const VARIANTS = {
       lineHeight: 26,
       letterSpacing: 0.16,
       top: 4,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -3}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -3}],
     },
     ring: {width: 72, height: 72, marginLeft: -7, top: -20},
     composite: composite(48),
@@ -89,7 +89,7 @@ const VARIANTS = {
       lineHeight: 30,
       letterSpacing: 0.2,
       top: 4,
-      transform: [{translateX: DIGIT_TOWARD_STAR}, {translateY: -4}],
+      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -4}],
     },
     ring: {width: 72, height: 72, marginLeft: -7, top: -20},
     composite: composite(50),
@@ -108,6 +108,8 @@ export function PiRatingBadge({
   textStyle,
   /** Optional display text (e.g. formatted average) — five-star layouts only. */
   label,
+  /** Extra style for the separate 5-star ring, not the digit. */
+  ringStyle,
   accessibilityLabel = 'דירוג Pi',
 }) {
   const n = normalizePiRating(rating);
@@ -119,7 +121,12 @@ export function PiRatingBadge({
   if (variant === 'compactFollow') {
     if (isFive) {
       return (
-        <View style={[styles.compactFollowWrap, style]}>
+        <View
+          style={[
+            styles.compactFollowWrap,
+            Platform.OS === 'ios' ? forceLtrStyle : null,
+            style,
+          ]}>
           <Text style={[styles.compactFollowText, textStyle]}>{displayLabel}</Text>
           <View style={styles.compactFiveWrap} pointerEvents="none">
             <Image
@@ -144,7 +151,16 @@ export function PiRatingBadge({
   if (variant === 'compactSearch') {
     if (isFive) {
       return (
-        <View style={[styles.compactSearchGroup, style]}>
+        <View
+          style={[
+            styles.compactSearchGroup,
+            // iOS lays this row out left-to-right, which put the star before
+            // the digit. row-reverse under an LTR lock puts the digit first.
+            Platform.OS === 'ios'
+              ? [forceLtrStyle, {flexDirection: 'row-reverse'}]
+              : null,
+            style,
+          ]}>
           <View style={styles.compactFiveWrap} pointerEvents="none">
             <Image
               source={PI_RATING_FIVE_STARS_COMPACT}
@@ -169,12 +185,27 @@ export function PiRatingBadge({
   if (isFive) {
     return (
       <View
-        style={[styles.badgeWrap, v.wrap, forceLtrStyle, style]}
+        style={[
+          styles.badgeWrap,
+          v.wrap,
+          forceLtrStyle,
+          style,
+          // Android RTL + row-reverse puts the digit on the left and the
+          // absolute ring on its right. iOS row-reverse under the LTR lock
+          // swaps them, so the iPhone row is a plain left-to-right row.
+          Platform.OS === 'ios'
+            ? {
+                alignSelf: 'flex-start',
+                position: 'relative',
+                flexDirection: 'row',
+              }
+            : null,
+        ]}
         pointerEvents="box-none">
         <Text style={[styles.badgeText, v.text, textStyle]}>{displayLabel}</Text>
         <Image
           source={PI_RATING_BADGE_RING}
-          style={[styles.badgeRing, v.ring]}
+          style={[styles.badgeRing, v.ring, ringStyle]}
           resizeMode="cover"
           accessibilityLabel={accessibilityLabel}
         />
@@ -217,7 +248,7 @@ const styles = StyleSheet.create({
   compactFollowWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Platform.OS === 'ios' ? 10 : 4,
   },
   compactFollowText: {
     color: 'rgba(255,255,255,0.8)',
@@ -248,7 +279,7 @@ const styles = StyleSheet.create({
   compactSearchGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: Platform.OS === 'ios' ? 8 : 2,
   },
   compactSearchText: {
     color: 'rgba(255,255,255,0.8)',

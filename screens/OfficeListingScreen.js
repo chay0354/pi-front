@@ -668,7 +668,12 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
               address: address.trim(),
               phone: phone.trim(),
               description: description.trim(),
-              displayOption: displayOption || null,
+              displayOption:
+                (uploadedMainImageUrl ? 1 : 0) +
+                  uploadedAdditionalImageUrls.filter(Boolean).length >=
+                  2
+                  ? displayOption || null
+                  : null,
               mainImageUrl: uploadedMainImageUrl,
               additionalImageUrls: uploadedAdditionalImageUrls.filter(
                 url => url !== null && url !== undefined && url !== '',

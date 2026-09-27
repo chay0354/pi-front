@@ -1461,7 +1461,7 @@ const EditPublishAdScreen = ({
                         ? isCompanySubscriptionType(
                             currentUser?.subscription_type,
                           )
-                          ? 'פרסמו פרויקט'
+                          ? 'משרדים'
                           : 'משרד'
                         : isPartnersCategory
                           ? 'פרסם מודעה'
@@ -1477,7 +1477,11 @@ const EditPublishAdScreen = ({
                       isPartnersCategory
                         ? 'צור מודעה כדי להיכנס, להכניס או למצוא שותף'
                         : isOfficesListingCategory
-                          ? 'פרסם משרד למכירה או השכרה'
+                          ? isCompanySubscriptionType(
+                              currentUser?.subscription_type,
+                            )
+                            ? 'פרסמו פרויקט'
+                            : 'פרסם משרד למכירה או השכרה'
                           : isLandListingCategory
                             ? 'פרסם קרקע'
                             : getCreateSheetListingAssetSubtitle(

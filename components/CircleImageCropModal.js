@@ -140,6 +140,11 @@ const CircleImageCropModal = ({
   title = 'חתוך את הלוגו',
   shape = 'circle',
   fit = 'cover',
+  /**
+   * Draw on top of an already-open modal instead of presenting a second one.
+   * iOS cannot present two RN modals; the crop screen never appears.
+   */
+  embedded = false,
 }) => {
   const insets = useSafeAreaInsets();
   const [imgSize, setImgSize] = useState({width: 1, height: 1});
@@ -247,15 +252,7 @@ const CircleImageCropModal = ({
     }
   }, [imageUri, saving, cropLayout, imgSize, onConfirm]);
 
-  if (!imageUri) return null;
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={false}
-      statusBarTranslucent={Platform.OS === 'android'}
-      onRequestClose={onCancel}>
+  const frame = !imageUri ? null : (
       <View
         style={[
           styles.root,
@@ -342,11 +339,37 @@ const CircleImageCropModal = ({
           )}
         </TouchableOpacity>
       </View>
+  );
+
+  if (embedded) {
+    if (!visible || !frame) return null;
+    return <View style={styles.embeddedHost}>{frame}</View>;
+  }
+
+  if (!frame) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      statusBarTranslucent={Platform.OS === 'android'}
+      onRequestClose={onCancel}>
+      {frame}
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  embeddedHost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    elevation: 50,
+  },
   root: {
     flex: 1,
     backgroundColor: '#1e1d27',

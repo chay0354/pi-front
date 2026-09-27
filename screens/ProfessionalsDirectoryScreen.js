@@ -1184,6 +1184,7 @@ const styles = StyleSheet.create({
     minWidth: 48,
     minHeight: 48,
     ...forceLtrStyle,
+    ...(Platform.OS === 'ios' ? {alignSelf: 'flex-start'} : null),
   },
   listPiBadgeText: {
     color: '#FFD275',
@@ -1203,6 +1204,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     marginLeft: -7,
     top: -20,
+    ...(Platform.OS === 'ios' ? {left: 0, marginLeft: 0} : null),
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   listTitleText: {
@@ -1380,6 +1382,7 @@ const styles = StyleSheet.create({
     minWidth: 48,
     minHeight: 48,
     ...forceLtrStyle,
+    ...(Platform.OS === 'ios' ? {alignSelf: 'flex-start'} : null),
   },
   cardPiBadgeText: {
     color: '#FFD275',
@@ -1399,6 +1402,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     marginLeft: -7,
     top: -20,
+    ...(Platform.OS === 'ios' ? {left: 0, marginLeft: 0} : null),
     ...(Platform.OS === 'web' ? {objectFit: 'cover'} : {}),
   },
   cardTitle: {

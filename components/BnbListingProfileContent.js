@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Platform,
 } from 'react-native';
 import {SimpleLineIcons, MaterialCommunityIcons} from '@expo/vector-icons';
 import LocationMap from './LocationMap';
@@ -672,7 +673,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bnbFiveDigit: {
-    transform: [{translateX: 3}, {translateY: 3}],
+    transform: [
+      {translateX: Platform.OS === 'ios' ? -6 : 3},
+      {translateY: 3},
+    ],
   },
   piBadge: {
     flexDirection: 'row-reverse',
@@ -680,6 +684,9 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 48,
     minHeight: 48,
+    ...(Platform.OS === 'ios'
+      ? {alignSelf: 'flex-start', position: 'relative'}
+      : null),
   },
   piBadgeText: {
     color: GOLD_PI,
@@ -692,6 +699,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     marginLeft: -7,
     top: -16,
+    ...(Platform.OS === 'ios' ? {left: 0, marginLeft: 0} : null),
   },
   tagsRow: {
     flexDirection: 'row',

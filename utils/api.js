@@ -68,10 +68,16 @@ async function ensureUploadableLocalUri(uri, hintName = 'upload.bin') {
   if (!normalized) return '';
   if (!isNativeMobile) return normalized;
 
+  const cacheRoot = FileSystem.cacheDirectory || '';
+  const iosPickerFile =
+    Platform.OS === 'ios' &&
+    normalized.startsWith('file://') &&
+    !(cacheRoot && normalized.startsWith(cacheRoot));
   const needsCopy =
     normalized.startsWith('content://') ||
     normalized.startsWith('ph://') ||
-    normalized.startsWith('assets-library://');
+    normalized.startsWith('assets-library://') ||
+    iosPickerFile;
   if (!needsCopy) return normalized;
 
   const safe =
@@ -79,8 +85,15 @@ async function ensureUploadableLocalUri(uri, hintName = 'upload.bin') {
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .replace(/^_+|_+$/g, '') || 'upload.bin';
   const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safe}`;
-  await FileSystem.copyAsync({from: normalized, to: dest});
-  return dest;
+  try {
+    await FileSystem.copyAsync({from: normalized, to: dest});
+    return dest;
+  } catch (error) {
+    // A normal iOS file:// that we could not copy is still worth uploading.
+    // ph:// / content:// copies must succeed or the upload has no bytes.
+    if (iosPickerFile) return normalized;
+    throw error;
+  }
 }
 
 function throwForUploadStatus(status, bodyPreview = '') {
@@ -221,6 +234,11 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
     const result = await FileSystem.uploadAsync(signedUrl, uri, {
       httpMethod: 'PUT',
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      // iOS background uploads never finish for gallery files (the promise
+      // hangs or the body never arrives). Foreground matches a normal PUT.
+      ...(Platform.OS === 'ios'
+        ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
+        : {}),
       headers: {
         'Content-Type': mimeType,
       },
@@ -277,6 +295,9 @@ async function uploadNativeMultipart(url, file, fieldName, parameters = {}) {
   const result = await FileSystem.uploadAsync(url, uri, {
     httpMethod: 'POST',
     uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    ...(Platform.OS === 'ios'
+      ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
+      : {}),
     fieldName,
     mimeType,
     parameters: Object.fromEntries(
@@ -3057,6 +3078,27 @@ export const uploadChatMedia = async (file) => {
     // A backend without chat-bucket signed URLs still handles small files.
     const message = errorMessageFromUnknown(error, '');
     if (/גדול מדי/.test(message)) throw error;
+    // iOS fetch(FormData) drops gallery files. The native uploader reads the
+    // cached file directly. Android keeps the existing fetch fallback.
+    if (Platform.OS === 'ios') {
+      const response = await uploadNativeMultipart(
+        `${apiBase()}/api/chat/upload-media`,
+        file,
+        'file',
+      );
+      const responseText = await response.text();
+      let data;
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throwForUploadStatus(response.status, responseText.slice(0, 200));
+      }
+      if (!response.ok) {
+        if (response.status === 413) throwForUploadStatus(413);
+        throw new Error(data.error || data.details || 'Failed to upload media');
+      }
+      return data;
+    }
     return await uploadChatMediaViaProxy(file);
   }
 };
@@ -3066,6 +3108,26 @@ export const uploadChatMedia = async (file) => {
  * @param {{ uri: string, type?: string, name?: string }} file
  */
 export const uploadGroupImage = async (file) => {
+  // iOS fetch(FormData) drops the gallery/crop file. Native multipart reads it.
+  // Android keeps the existing fetch path.
+  if (Platform.OS === 'ios') {
+    const response = await uploadNativeMultipart(
+      `${apiBase()}/api/chat/upload-group-image`,
+      file,
+      'file',
+    );
+    const responseText = await response.text();
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      throw new Error(`Upload failed (${response.status})`);
+    }
+    if (!response.ok) {
+      throw new Error(data.error || data.details || 'Failed to upload group image');
+    }
+    return data;
+  }
   const formData = new FormData();
   const toAppend = await toFormDataFile(file, 'file');
   if (!toAppend) throw new Error('No file to upload');

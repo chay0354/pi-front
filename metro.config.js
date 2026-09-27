@@ -1,3 +1,7 @@
+// Lazy bundles are multipart/mixed and start with a carriage return.
+// The iOS dev client parses that body as JavaScript and fails on `\r`.
+process.env.EXPO_NO_METRO_LAZY = '1';
+
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);

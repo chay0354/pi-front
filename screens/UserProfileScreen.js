@@ -183,11 +183,18 @@ const isVideoLikeMediaUrl = url => {
 };
 
 /**
- * Profile ad hero carousel — the list itself is held LTR with `direction`, not
- * a scaleX mirror, so slides must NOT be flipped back: a lone scaleX(-1) has
- * nothing to cancel and renders every photo and video mirrored.
+ * Profile carousels. Android honors direction:ltr (index 0 at x=0).
+ * iOS keeps the first page at the far offset, same as the story pager.
  */
 const heroCarouselListStyle = forceLtrStyle;
+
+function iosPagingOffset(index, count, pageSize) {
+  const n = Math.max(1, Number(count) || 1);
+  const size = Math.max(1, Number(pageSize) || 1);
+  const i = Math.max(0, Math.min(n - 1, Number(index) || 0));
+  if (Platform.OS !== 'ios' || n <= 1) return i * size;
+  return (n - 1 - i) * size;
+}
 /** Dots / counters stay LTR so they match swipe index on native RTL. */
 const heroCarouselDotsStyle = forceLtrStyle;
 
@@ -1784,22 +1791,23 @@ const UserProfileScreen = ({
         keyExtractor={(_, pageIndex) => `post-grid-page-${pageIndex}`}
         getItemLayout={(_, index) => ({
           length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
+          offset: iosPagingOffset(index, postGridPages.length, SCREEN_WIDTH),
           index,
         })}
+        initialScrollIndex={0}
         viewabilityConfig={postGridViewabilityConfig}
         onViewableItemsChanged={onPostGridViewableItemsChanged}
         onScrollToIndexFailed={handlePostGridScrollToIndexFailed}
         renderItem={({item: pageItems, index: pageIndex}) => (
-          <View
-            style={[
-              styles.lastAdGridPage,
-              forceLtrStyle,
-              {
-                width: SCREEN_WIDTH,
-                height: POST_GRID_PAGE_HEIGHT,
-              },
-            ]}>
+            <View
+              style={[
+                styles.lastAdGridPage,
+                forceLtrStyle,
+                {
+                  width: SCREEN_WIDTH,
+                  height: POST_GRID_PAGE_HEIGHT,
+                },
+              ]}>
             <View style={[styles.lastAdGrid, forceLtrStyle]}>
               {Array.from({length: POST_GRID_ROWS}, (_, rowIndex) => (
                 <View
@@ -3148,9 +3156,14 @@ const UserProfileScreen = ({
                     style={heroCarouselListStyle}
                     contentContainerStyle={heroCarouselListStyle}
                     showsHorizontalScrollIndicator={false}
+                    initialScrollIndex={0}
                     getItemLayout={(_, index) => ({
                       length: lastAdCardWidth,
-                      offset: lastAdCardWidth * index,
+                      offset: iosPagingOffset(
+                        index,
+                        lastAdImages.length,
+                        lastAdCardWidth,
+                      ),
                       index,
                     })}
                     viewabilityConfig={lastAdViewabilityConfig}
@@ -3300,7 +3313,12 @@ const UserProfileScreen = ({
                   ) : (
                     <>
                       <View style={styles.lastAdPiAndPurposeRow}>
-                        {renderPiRating() || <View />}
+                        {(showProfileRatingFeatures && !isRegularUserAdView ? (
+                          <PiRatingBadge
+                            rating={displayPiRating}
+                            variant="profile"
+                          />
+                        ) : null) || <View />}
                         {isProfessional ? (
                           <Text
                             style={styles.lastAdProfessionalName}
@@ -4443,9 +4461,14 @@ const UserProfileScreen = ({
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
             extraData={fullScreenImageIndex}
+            initialScrollIndex={0}
             getItemLayout={(data, index) => ({
               length: Dimensions.get('window').width,
-              offset: Dimensions.get('window').width * index,
+              offset: iosPagingOffset(
+                index,
+                lastAdImages.length,
+                Dimensions.get('window').width,
+              ),
               index,
             })}
             viewabilityConfig={fullScreenViewabilityConfig}
@@ -5343,7 +5366,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   lastAdGridRow: {
-    flexDirection: 'row-reverse',
+    // Android RTL + row-reverse puts post 1 on the physical left.
+    // iOS honors direction and would start row-reverse on the right,
+    // so the iPhone row stays plain LTR.
+    flexDirection: Platform.OS === 'ios' ? 'row' : 'row-reverse',
+    ...(Platform.OS === 'ios' ? {direction: 'ltr'} : null),
     width: '100%',
     height: POST_GRID_ROW_HEIGHT,
     justifyContent: 'space-between',
@@ -5422,11 +5449,15 @@ const styles = StyleSheet.create({
   },
   lastAdImagePlaceholder: {alignItems: 'center', justifyContent: 'center'},
   lastAdPiAndPurposeRow: {
-    flexDirection: 'row-reverse',
+    // Android RTL + row-reverse: star on the left, PRE SELL on the right.
+    // iOS row-reverse under an LTR lock swaps those two, so the iPhone row
+    // is a plain left-to-right row. Android keeps row-reverse.
+    flexDirection: Platform.OS === 'ios' ? 'row' : 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: 8,
+    ...(Platform.OS === 'ios' ? {direction: 'ltr'} : null),
   },
   lastAdPiBadge: {
     flexDirection: 'row-reverse',
@@ -5439,6 +5470,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     marginLeft: -7,
     top: -35,
+    ...(Platform.OS === 'ios' ? {left: 0, marginLeft: 0} : null),
   },
   lastAdPiText: {
     color: '#FFD275',

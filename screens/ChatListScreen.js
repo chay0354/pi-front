@@ -44,6 +44,7 @@ import {
 } from '../utils/api';
 import {ContextHook} from '../hooks/ContextHook';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {normalizeChatAvatarUrl} from '../utils/chatAvatar';
 import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
@@ -59,6 +60,7 @@ import {
   isBrokerLikeSubscriptionType,
   isProjectMarketerType,
   subscriptionTypes,
+  usesOpenChatGroupFlow,
 } from '../utils/constant';
 
 /** Main chats list panel — matches Figma node 8:3115 */
@@ -450,11 +452,7 @@ const ChatListScreen = ({
     isProjectMarketerUser;
   const isRegularGroupCreator = isRegularUser && !isBrokerUser;
   /** Regular, professional, company, and משווק users share the simplified "קבוצה" flow. */
-  const usesSimpleGroupFlow =
-    isRegularGroupCreator ||
-    isProfessionalUser ||
-    isCompanyUser ||
-    isProjectMarketerUser;
+  const usesSimpleGroupFlow = usesOpenChatGroupFlow(currentUserType);
   const groupPickerAudience =
     groupFlow === 'brokers'
       ? 'broker_only'
@@ -756,7 +754,13 @@ const ChatListScreen = ({
     async result => {
       setGroupCropVisible(false);
       setGroupCropUri(null);
-      if (result?.uri) await uploadGroupAvatarCrop(result.uri);
+      if (result?.uri) {
+        await uploadGroupAvatarCrop(result.uri);
+        return;
+      }
+      if (result?.error) {
+        Alert.alert('', String(result.error));
+      }
     },
     [uploadGroupAvatarCrop],
   );
@@ -783,15 +787,40 @@ const ChatListScreen = ({
         input.click();
         return;
       }
-      const permitted = await ensureMediaLibraryPermission();
-      if (!permitted) return;
+      if (Platform.OS === 'ios') {
+        // iOS 14+ PHPicker opens without full library access. Blocking on
+        // anything but `granted` skips the picker, so Android still gates.
+        try {
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        } catch (_) {}
+      } else {
+        const permitted = await ensureMediaLibraryPermission();
+        if (!permitted) return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 1,
+        ...(Platform.OS === 'ios'
+          ? {
+              preferredAssetRepresentationMode:
+                ImagePicker.UIImagePickerPreferredAssetRepresentationMode
+                  .Compatible,
+            }
+          : null),
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      setGroupCropUri(result.assets[0].uri);
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      let uri = result.assets[0].uri;
+      if (Platform.OS === 'ios') {
+        // Keep a cache copy. The picker file can disappear before the crop
+        // screen (drawn inside this modal) reads it.
+        try {
+          const dest = `${FileSystem.cacheDirectory}group-pick-${Date.now()}.jpg`;
+          await FileSystem.copyAsync({from: uri, to: dest});
+          uri = dest;
+        } catch (_) {}
+      }
+      setGroupCropUri(uri);
       setGroupCropVisible(true);
     } catch (e) {
       Alert.alert('', e?.message ? String(e.message) : 'בחירת התמונה נכשלה');
@@ -1597,7 +1626,11 @@ const ChatListScreen = ({
                               hitSlop={{top: 6, bottom: 6, left: 6, right: 6}}
                               accessibilityRole="button"
                               accessibilityLabel="הסר">
-                              <Text style={styles.ncChipRemoveX}>×</Text>
+                              <MaterialCommunityIcons
+                                name="close"
+                                size={14}
+                                color="#FFFFFF"
+                              />
                             </TouchableOpacity>
                           </View>
                           <Text style={styles.ncChipName} numberOfLines={1}>
@@ -2131,15 +2164,27 @@ const ChatListScreen = ({
               )}
             </ScrollView>
           )}
+          {Platform.OS === 'ios' ? (
+            <CircleImageCropModal
+              embedded
+              visible={groupCropVisible}
+              imageUri={groupCropUri}
+              onCancel={handleGroupCropCancel}
+              onConfirm={handleGroupCropConfirm}
+              title="חתוך את תמונת הקבוצה"
+            />
+          ) : null}
         </View>
       </Modal>
-      <CircleImageCropModal
-        visible={groupCropVisible}
-        imageUri={groupCropUri}
-        onCancel={handleGroupCropCancel}
-        onConfirm={handleGroupCropConfirm}
-        title="חתוך את תמונת הקבוצה"
-      />
+      {Platform.OS === 'ios' ? null : (
+        <CircleImageCropModal
+          visible={groupCropVisible}
+          imageUri={groupCropUri}
+          onCancel={handleGroupCropCancel}
+          onConfirm={handleGroupCropConfirm}
+          title="חתוך את תמונת הקבוצה"
+        />
+      )}
     </View>
   );
 };
@@ -2802,13 +2847,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  ncChipRemoveX: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    lineHeight: 18,
-    fontFamily: 'Rubik-Regular',
-    marginTop: -2,
   },
   ncChipName: {
     color: '#FFFFFF',

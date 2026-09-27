@@ -1302,6 +1302,8 @@ const AdsForm = ({
   const [bnbLogoCropVisible, setBnbLogoCropVisible] = useState(false);
   const [partnerPhotoCropUri, setPartnerPhotoCropUri] = useState(null);
   const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
+  const [adImageCrop, setAdImageCrop] = useState(null);
+  const adImageSourceRef = useRef({main: null, extra: {}});
   const [partnerPhotoSourceUri, setPartnerPhotoSourceUri] = useState(null);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
@@ -1640,7 +1642,9 @@ const AdsForm = ({
           openPartnerPhotoCropper(result.assets[0].uri);
           return;
         }
-        setMainImage(fileFromPickerAsset(result.assets[0], 'image'));
+        const picked = fileFromPickerAsset(result.assets[0], 'image');
+        adImageSourceRef.current.main = picked.uri;
+        setMainImage(picked);
       }
     } catch (error) {
       alert('שגיאה בבחירת תמונה: ' + error.message);
@@ -1654,6 +1658,7 @@ const AdsForm = ({
       if (isPartnerAd) {
         openPartnerPhotoCropper(uri);
       } else {
+        adImageSourceRef.current.main = uri;
         setMainImage({
           uri,
           type: file.type || 'image/jpeg',
@@ -1765,6 +1770,41 @@ const AdsForm = ({
     }
   };
 
+  const openAdImageEditor = slot => {
+    const currentUri =
+      slot === 'main' ? mainImage?.uri : additionalImages[slot]?.uri;
+    const source =
+      slot === 'main'
+        ? adImageSourceRef.current.main || currentUri
+        : adImageSourceRef.current.extra[slot] || currentUri;
+    if (!source) return;
+    setAdImageCrop({slot, uri: source});
+  };
+
+  const handleAdImageCropConfirm = result => {
+    const slot = adImageCrop?.slot;
+    setAdImageCrop(null);
+    if (result?.error) {
+      alert(result.error);
+      return;
+    }
+    if (!result?.uri || slot == null) return;
+    const file = {
+      uri: result.uri,
+      type: 'image/jpeg',
+      name: `ad-${Date.now()}.jpg`,
+    };
+    if (slot === 'main') {
+      setMainImage(file);
+      return;
+    }
+    setAdditionalImages(prev => {
+      const next = [...prev];
+      next[slot] = file;
+      return next;
+    });
+  };
+
   const handleAdditionalImageUpload = async index => {
     if (Platform.OS === 'web' && additionalImageInputRefs.current[index]) {
       additionalImageInputRefs.current[index].click();
@@ -1778,8 +1818,10 @@ const AdsForm = ({
         });
 
         if (!result.canceled && result.assets[0]) {
+          const picked = fileFromPickerAsset(result.assets[0], 'image');
+          adImageSourceRef.current.extra[index] = picked.uri;
           const newImages = [...additionalImages];
-          newImages[index] = fileFromPickerAsset(result.assets[0], 'image');
+          newImages[index] = picked;
           setAdditionalImages(newImages);
         }
       } catch (error) {
@@ -1792,8 +1834,10 @@ const AdsForm = ({
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       const newImages = [...additionalImages];
+      const uri = URL.createObjectURL(file);
+      adImageSourceRef.current.extra[index] = uri;
       newImages[index] = {
-        uri: URL.createObjectURL(file),
+        uri,
         type: file.type || 'image/jpeg',
         name: file.name || `photo-${Date.now()}.jpg`,
       };
@@ -2343,7 +2387,8 @@ const AdsForm = ({
               landBlock: landBlock.trim() || undefined,
               phone: phone.trim(),
               description: description.trim(),
-              displayOption: displayOption || null,
+              displayOption:
+                totalSelectedImages >= 2 ? displayOption || null : null,
               mainImageUrl: uploadedMainImageUrl,
               additionalImageUrls: uploadedAdditionalImageUrls.filter(
                 url => url !== null && url !== undefined && url !== '',
@@ -2767,6 +2812,8 @@ const AdsForm = ({
                     handleAdditionalImageUpload={handleAdditionalImageUpload}
                     handleAdditionalImageChange={handleAdditionalImageChange}
                     additionalImageInputRefs={additionalImageInputRefs}
+                    onEditMainImage={() => openAdImageEditor('main')}
+                    onEditAdditionalImage={openAdImageEditor}
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
                     videoFile={videoFile}
@@ -2788,10 +2835,8 @@ const AdsForm = ({
                   />
                 );
               case 'displayoptions':
-                // Show display mode choices only when there are 2+ images.
-                if (totalSelectedImages < 2) {
-                  return null;
-                }
+                // Always offer collage / slideshow. A single photo ignores the
+                // choice and is shown as a normal image (see publish payload).
                 return (
                   <DisplayOptions
                     key="displayoptions"
@@ -3149,6 +3194,15 @@ const AdsForm = ({
         onCancel={handlePartnerPhotoCropCancel}
         onConfirm={handlePartnerPhotoCropConfirm}
         title="חתוך את התמונה"
+        shape="square"
+        fit="contain"
+      />
+      <CircleImageCropModal
+        visible={adImageCrop != null}
+        imageUri={adImageCrop?.uri || null}
+        onCancel={() => setAdImageCrop(null)}
+        onConfirm={handleAdImageCropConfirm}
+        title="עריכת תמונה"
         shape="square"
         fit="contain"
       />

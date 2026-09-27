@@ -136,6 +136,24 @@ import {
   hebrewTextAlign,
 } from '../utils/rtlLayout';
 
+/** iOS keeps RTL paging under direction:ltr. Index 0 sits at the far offset. */
+function iosPagingOffset(index, count, pageSize) {
+  const n = Math.max(1, Number(count) || 1);
+  const size = Math.max(1, Number(pageSize) || 1);
+  const i = Math.max(0, Math.min(n - 1, Number(index) || 0));
+  if (Platform.OS !== 'ios' || n <= 1) return i * size;
+  return (n - 1 - i) * size;
+}
+
+function iosPagingIndex(scrollX, count, pageSize) {
+  const n = Math.max(1, Number(count) || 1);
+  const size = Math.max(1, Number(pageSize) || 1);
+  const raw = Math.round((Number(scrollX) || 0) / size);
+  const clamped = Math.max(0, Math.min(n - 1, raw));
+  if (Platform.OS !== 'ios' || n <= 1) return clamped;
+  return n - 1 - clamped;
+}
+
 import {
   formatCompanyApartmentsLabel,
   formatCompanyBuildingsLabel,
@@ -1838,7 +1856,10 @@ const ImageSwiper = ({
     fadeLayerB.setValue(0);
     fadeTransitionLock.current = false;
     if (scrollViewRef.current && displayOption === 'slideshow') {
-      scrollViewRef.current.scrollTo({x: 0, animated: false});
+      scrollViewRef.current.scrollTo({
+        x: iosPagingOffset(0, images.length, pageWidth),
+        animated: false,
+      });
     }
   }, [images, displayOption, pageWidth, fadeLayerA, fadeLayerB]);
 
@@ -1906,16 +1927,15 @@ const ImageSwiper = ({
       return;
     }
     scrollViewRef.current.scrollTo({
-      x: currentImageIndex * pageWidth,
+      x: iosPagingOffset(currentImageIndex, images.length, pageWidth),
       animated: true,
     });
-  }, [autoSlideshow, currentImageIndex, displayOption, pageWidth]);
+  }, [autoSlideshow, currentImageIndex, displayOption, images.length, pageWidth]);
 
   const handleScroll = event => {
     if (displayOption === 'slideshow') {
       const contentOffsetX = event.nativeEvent.contentOffset.x;
-      const w = pageWidth;
-      const newIndex = Math.round(contentOffsetX / w);
+      const newIndex = iosPagingIndex(contentOffsetX, images.length, pageWidth);
       if (newIndex !== currentImageIndex) {
         setCurrentImageIndex(newIndex);
       }
@@ -2035,7 +2055,10 @@ const ImageSwiper = ({
                     width: layout.width,
                     height: layout.height,
                     top: layout.top,
-                    left: layout.left,
+                    left:
+                      Platform.OS === 'ios'
+                        ? pageWidth - layout.left - layout.width
+                        : layout.left,
                     overflow: 'hidden',
                     backgroundColor: '#000',
                   },
@@ -7823,11 +7846,19 @@ const TikTokFeedScreen = ({
         }
       }
       if (video.images && video.images.length > 0) {
-        const rawOpt = String(video.displayOption || 'slideshow').toLowerCase();
+        const photoCount = video.images.filter(img => {
+          const uri =
+            typeof img === 'string' ? img : img?.uri || img?.url || '';
+          return uri && !/^text-post-placeholder$/i.test(String(uri).trim());
+        }).length;
+        const rawOpt = String(video.displayOption || '').toLowerCase();
+        // One photo: ignore collage and slideshow and show a normal image.
         const displayMode =
-          rawOpt === 'collage' && video.images.length > 1
-            ? 'collage'
-            : 'slideshow';
+          photoCount < 2
+            ? 'plain'
+            : rawOpt === 'collage'
+              ? 'collage'
+              : 'slideshow';
         return (
           <>
             <ImageSwiper
@@ -9448,14 +9479,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   userSearchMetaStarGroup: {
-    flexDirection: 'row',
+    // Android RTL + row: digit on the left, star on the right.
+    // iOS row would put the star first, so the iPhone group is reversed.
+    flexDirection: Platform.OS === 'ios' ? 'row-reverse' : 'row',
+    ...(Platform.OS === 'ios' ? {direction: 'ltr'} : null),
     alignItems: 'center',
     gap: 4,
   },
   // Figma node 943:117842 — the 5★ variant uses a slightly wider gap (6px)
   // between the burst icon and the rating number than the 1–4★ variant (4px).
   userSearchMetaStarGroupFive: {
-    gap: 6,
+    gap: Platform.OS === 'ios' ? 12 : 6,
   },
   userSearchMetaText: {
     color: 'rgba(255,255,255,0.8)',
@@ -9475,6 +9509,7 @@ const styles = StyleSheet.create({
   userSearchMetaCountFive: {
     color: '#FFD275',
     fontFamily: 'Rubik-Medium',
+    ...(Platform.OS === 'ios' ? {transform: [{translateX: -6}]} : null),
   },
   userSearchDismissBtn: {
     width: 24,
@@ -11207,7 +11242,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    flexDirection: 'row-reverse',
+    flexDirection: Platform.OS === 'ios' ? 'row' : 'row-reverse',
+    ...(Platform.OS === 'ios' ? {direction: 'ltr'} : null),
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 15,

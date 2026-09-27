@@ -580,6 +580,8 @@ const DraggableTextBlock = React.memo(
     const gestureActive = useRef(false);
     const hasAligned = useRef(false);
     const blockSizeRef = useRef({w: 0, h: 0});
+    /** iOS: last wrapper size seen by handleLayout (drag frames relayout). */
+    const lastLayoutSizeRef = useRef({w: 0, h: 0});
     /** Rendered text content bounds inside the wide drag box ({x offset, width}). */
     const textLayoutRef = useRef({x: 0, w: 0});
 
@@ -718,6 +720,16 @@ const DraggableTextBlock = React.memo(
       if (isBeingEdited || gestureActive.current) return;
 
       const blockH = e.nativeEvent.layout.height;
+      if (Platform.OS === 'ios') {
+        // iOS moves the block with left/top, so every drag frame is a layout
+        // pass. Only a size change needs re-alignment; a pure move would
+        // snap the block back to the stale block.x/y.
+        const sameSize =
+          Math.abs(lastLayoutSizeRef.current.h - blockH) < 1 &&
+          lastLayoutSizeRef.current.w === boxWidth;
+        if (hasAligned.current && sameSize) return;
+        lastLayoutSizeRef.current = {w: boxWidth, h: blockH};
+      }
       blockSizeRef.current = {w: boxWidth, h: blockH};
 
       const hasText = String(block.text ?? '').trim().length > 0;
@@ -783,15 +795,24 @@ const DraggableTextBlock = React.memo(
           {
             zIndex,
             elevation: Platform.OS === 'android' ? Math.max(12, zIndex + 12) : 0,
-            left: 0,
-            top: 0,
             width: boxWidth,
             maxWidth: boxWidth,
             opacity: isBeingEdited ? 0 : 1,
             padding: TEXT_BLOCK_TOUCH_PAD,
-            transform: position.getTranslateTransform(),
+            // iOS keeps painting the text at its layout origin while a
+            // translate transform moves the layer, so the drag shows two
+            // copies. Moving the frame itself (left/top) leaves nothing
+            // behind. Android keeps the transform.
+            ...(Platform.OS === 'ios'
+              ? {left: position.x, top: position.y}
+              : {
+                  left: 0,
+                  top: 0,
+                  transform: position.getTranslateTransform(),
+                }),
           },
         ]}>
+        {isBeingEdited ? null : (
         <View
           ref={contentRef}
           onLayout={handleContentLayout}
@@ -800,6 +821,8 @@ const DraggableTextBlock = React.memo(
           style={{
             alignSelf: alignToFlexSelf(block.align ?? 'center'),
             maxWidth: '100%',
+            // Keeps the glyphs in the moving layer on both platforms.
+            opacity: 0.99,
           }}>
           <View
             style={
@@ -832,6 +855,7 @@ const DraggableTextBlock = React.memo(
         </Text>
           </View>
         </View>
+        )}
       </Animated.View>
     );
   },
@@ -1016,6 +1040,8 @@ const PostEditorScreen = ({
   const androidKeyboardLift = androidKeyboardComposer.bottomOffset;
   const androidKeyboardPull = androidKeyboardComposer.marginBottom;
   const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
+  /** iOS: camera must open only after this sheet has finished dismissing. */
+  const pendingCameraActionRef = useRef(null);
   const [showProfessionalTargetSheet, setShowProfessionalTargetSheet] =
     useState(false);
   const [showOpenHouseDetailsModal, setShowOpenHouseDetailsModal] =
@@ -1188,10 +1214,14 @@ const PostEditorScreen = ({
     // Color-background text post (no photo/video). A stale gradient index of 0
     // must never hide a real uploaded image.
     const isColorTextPost = shouldUseLiveColorPostBackground(initialListing);
-    if (
-      isColorTextPost ||
-      (restoreInfo.textBaked && !restoreInfo.sourceImageUrl && !mainImageUrl)
-    ) {
+    // Sales image (story) on a gradient: the only stored image is the capture
+    // with the text burned in. Rebuild from the gradient index so the live
+    // text layers do not sit on top of their own baked copy.
+    const bakedGradientOnly =
+      restoreInfo.textBaked &&
+      !restoreInfo.sourceImageUrl &&
+      (!mainImageUrl || restoreInfo.bgGradientIndex != null);
+    if (isColorTextPost || bakedGradientOnly) {
       originalMainImageUrlRef.current = null;
       setBackgroundImageUri(null);
       setBackgroundVideoAsset(null);
@@ -1252,7 +1282,16 @@ const PostEditorScreen = ({
     nextStackOrderRef.current = blocks.length + 1;
     setTextBlocks(blocks);
     const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
-    const hasMediaBackground = Boolean(videoUrl) || Boolean(mainImageUrl);
+    const restore = parsePostEditorRestoreInfo(initialListing);
+    // Same rule as the media hydration above: a baked gradient capture is not
+    // a media background, the editor rebuilt the gradient instead.
+    const rebuiltFromGradient =
+      shouldUseLiveColorPostBackground(initialListing) ||
+      (restore.textBaked &&
+        !restore.sourceImageUrl &&
+        (!mainImageUrl || restore.bgGradientIndex != null));
+    const hasMediaBackground =
+      Boolean(videoUrl) || (Boolean(mainImageUrl) && !rebuiltFromGradient);
     const nextTab = hasMediaBackground ? TAB_CAMERA : TAB_TEXT;
     activeTabRef.current = nextTab;
     setActiveTab(nextTab);
@@ -1999,9 +2038,8 @@ const PostEditorScreen = ({
   }, [selectedFormat, editingTextBlockId, isCapturing]);
 
   /**
-   * Fixed edit slot: sit just above the format toolbar + keyboard so the
-   * soft keyboard never covers the text being typed.
-   * iOS path is intentionally unchanged — Android uses adjustResize-aware lift.
+   * Web edit slot, inside the stage. iOS and Android float the field in
+   * editorRoot (iosEditingInputBottom / androidEditingInputBottom).
    */
   const editingInputBottom = useMemo(() => {
     if (!editingTextBlockId || isCapturing) {
@@ -2011,16 +2049,11 @@ const PostEditorScreen = ({
     if (Platform.OS === 'web') {
       return Math.max(toolbarH, webToolbarInputMarginBottom) + 12;
     }
-    if (Platform.OS === 'ios') {
-      return toolbarH + Math.max(keyboardInset, 0) + 12;
-    }
-    // Android input is anchored in editorRoot (see androidEditingInputBottom).
     return 12;
   }, [
     editingTextBlockId,
     isCapturing,
     formatToolbarHeight,
-    keyboardInset,
     webToolbarInputMarginBottom,
   ]);
 
@@ -2032,6 +2065,16 @@ const PostEditorScreen = ({
     Platform.OS === 'android' ? androidKeyboardLift : keyboardInset;
   const formatToolbarKeyboardMarginBottom =
     Platform.OS === 'android' ? androidKeyboardPull : 0;
+
+  /** iOS: same slot as Android — above the format bar, not inside the locked stage. */
+  const iosEditingInputBottom = useMemo(() => {
+    if (!editingTextBlockId || isCapturing || Platform.OS !== 'ios') {
+      return 12;
+    }
+    const gap = 8;
+    const toolbarH = Math.max(formatToolbarHeight, 72);
+    return toolbarH + Math.max(keyboardInset, 0) + gap;
+  }, [editingTextBlockId, isCapturing, formatToolbarHeight, keyboardInset]);
 
   /** Android: same coordinate space as keyboardControls — sits flush above format bar. */
   const androidEditingInputBottom = useMemo(() => {
@@ -2218,6 +2261,7 @@ const PostEditorScreen = ({
               align: textAlignMode,
               x: nextPos.x,
               y: nextPos.y,
+              editGen: (b.editGen ?? 0) + 1,
             }
           : b,
       );
@@ -2499,28 +2543,37 @@ const PostEditorScreen = ({
     runNativeCameraTabMediaAction(action);
   };
 
+  const launchNativeCameraTabAction = action => {
+    void (async () => {
+      try {
+        if (action === 'photo') {
+          await takePhotoWithCamera();
+        } else if (action === 'video') {
+          await takeVideoWithCamera();
+        } else if (action === 'library') {
+          await pickExistingMediaForCameraTab();
+        }
+      } catch (e) {
+        Alert.alert('שגיאה', 'לא ניתן לפתוח את המצלמה או הגלריה. נסה שוב.');
+      }
+    })();
+  };
+
   const runNativeCameraTabMediaAction = action => {
     setShowMediaSourceSheet(false);
-    const launch = () => {
-      void (async () => {
-        try {
-          if (action === 'photo') {
-            await takePhotoWithCamera();
-          } else if (action === 'video') {
-            await takeVideoWithCamera();
-          } else if (action === 'library') {
-            await pickExistingMediaForCameraTab();
-          }
-        } catch (e) {
-          Alert.alert('שגיאה', 'לא ניתן לפתוח את המצלמה או הגלריה. נסה שוב.');
-        }
-      })();
-    };
-    if (Platform.OS === 'android') {
-      InteractionManager.runAfterInteractions(launch);
-    } else {
-      launch();
+    if (Platform.OS === 'ios') {
+      // The sheet's dismiss also dismisses a camera presented in the same turn,
+      // so video (and photo) recording flashes open and closes immediately.
+      pendingCameraActionRef.current = action;
+      return;
     }
+    if (Platform.OS === 'android') {
+      InteractionManager.runAfterInteractions(() =>
+        launchNativeCameraTabAction(action),
+      );
+      return;
+    }
+    launchNativeCameraTabAction(action);
   };
 
   const openCameraTabMediaPicker = () => {
@@ -2876,7 +2929,13 @@ const PostEditorScreen = ({
               ))}
             {textBlocks.map((block, idx) => (
                 <DraggableTextBlock
-                  key={block.id}
+                  // iOS: remount after every edit so no stale native text
+                  // view from the edit session is left behind on the stage.
+                  key={
+                    Platform.OS === 'ios'
+                      ? `${block.id}:${block.editGen ?? 0}`
+                      : block.id
+                  }
                   block={block}
                   stageWidth={stageLayout.width}
                       stageHeight={effectiveStageHeight}
@@ -2956,7 +3015,7 @@ const PostEditorScreen = ({
                                 syncEditingToBlock({fontSize: nextSize})
                               }
                             />
-                            {Platform.OS !== 'android' ? (
+                            {Platform.OS === 'web' ? (
                           <View
                                 onLayout={e => {
                                   editingFieldLayoutRef.current =
@@ -2982,7 +3041,9 @@ const PostEditorScreen = ({
               </View>
             </View>
 
-            {editingTextBlockId && !isCapturing && Platform.OS === 'android' && (
+            {editingTextBlockId &&
+              !isCapturing &&
+              (Platform.OS === 'android' || Platform.OS === 'ios') && (
               (() => {
                 const visual = getTextVisualStyle(
                   editingBlock?.color ?? selectedColor,
@@ -2997,8 +3058,15 @@ const PostEditorScreen = ({
                     }}
                         style={[
                       styles.editingInputFloating,
+                      Platform.OS === 'ios' ? {zIndex: 50} : null,
+                      Platform.OS === 'android'
+                        ? {left: 22, right: 78}
+                        : null,
                       {
-                        bottom: androidEditingInputBottom,
+                        bottom:
+                          Platform.OS === 'ios'
+                            ? iosEditingInputBottom
+                            : androidEditingInputBottom,
                         justifyContent: alignToFlexSelf(textAlignMode),
                           },
                         ]}>
@@ -3019,6 +3087,9 @@ const PostEditorScreen = ({
                               backgroundColor: visual.backgroundColor,
                           textAlign: physicalTextAlign(textAlignMode),
                               writingDirection: 'rtl',
+                              ...(Platform.OS === 'ios'
+                                ? {direction: 'rtl'}
+                                : null),
                               fontSize: editingFontSize,
                               lineHeight: Math.round(editingFontSize * 1.15),
                             },
@@ -3076,7 +3147,17 @@ const PostEditorScreen = ({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={[styles.textStylesScroll, forceLtrStyle]}
+                    style={[
+                      styles.textStylesScroll,
+                      forceLtrStyle,
+                      // iOS lays this strip out right-to-left despite direction
+                      // ltr. Mirror the scroller so סטייל 1 starts on the left;
+                      // each pill is mirrored back so the label stays readable.
+                      Platform.OS === 'ios' ? styles.iosLtrFlip : null,
+                      // Android forceRTL also starts the row on the right.
+                      // Same unwrap as the last update's left-to-right order.
+                      Platform.OS === 'android' ? styles.androidLtrFlip : null,
+                    ]}
                     contentContainerStyle={[styles.textStylesRow, forceLtrStyle]}
                     keyboardShouldPersistTaps="always">
                   {TEXT_STYLES.map((styleItem, index) => (
@@ -3084,6 +3165,8 @@ const PostEditorScreen = ({
                       key={styleItem.label}
                       style={[
                         styles.textStylePill,
+                        Platform.OS === 'ios' ? styles.iosLtrFlip : null,
+                        Platform.OS === 'android' ? styles.androidLtrFlip : null,
                         selectedTextStyleIndex === index &&
                           styles.textStylePillActive,
                       ]}
@@ -3362,7 +3445,13 @@ const PostEditorScreen = ({
         animationType="slide"
         statusBarTranslucent={Platform.OS === 'android'}
         presentationStyle="overFullScreen"
-        onRequestClose={() => setShowMediaSourceSheet(false)}>
+        onRequestClose={() => setShowMediaSourceSheet(false)}
+        onDismiss={() => {
+          const action = pendingCameraActionRef.current;
+          if (!action) return;
+          pendingCameraActionRef.current = null;
+          launchNativeCameraTabAction(action);
+        }}>
         <Pressable
           style={styles.mediaSheetBackdrop}
           onPress={() => setShowMediaSourceSheet(false)}>
@@ -3761,7 +3850,9 @@ const styles = StyleSheet.create({
   },
   polygonSliderContainer: {
     position: 'absolute',
-    left: 0,
+    // Android swaps left/right under forceRTL, so `right` is the physical left
+    // (where this bar sat in the last update). iOS keeps `left`.
+    ...(Platform.OS === 'android' ? {right: 0} : {left: 0}),
     top: 4,
     width: 56,
     height: POLYGON_TRACK_HEIGHT + 16,
@@ -3790,7 +3881,7 @@ const styles = StyleSheet.create({
     zIndex: 1000001,
     elevation: Platform.OS === 'android' ? 30 : 0,
   },
-  /** Android: anchored in editorRoot above keyboardControls (not the locked stage). */
+  /** iOS and Android: anchored in editorRoot above keyboardControls. */
   editingInputFloating: {
     position: 'absolute',
     left: 78,
@@ -3886,6 +3977,12 @@ const styles = StyleSheet.create({
   textStylesScroll: {
     marginBottom: 15,
     maxHeight: 38,
+  },
+  iosLtrFlip: {
+    transform: [{scaleX: -1}],
+  },
+  androidLtrFlip: {
+    transform: [{scaleX: -1}],
   },
   textStylesRow: {
     paddingHorizontal: 22,

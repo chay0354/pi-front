@@ -409,6 +409,23 @@ export function isRegularSubscriptionType(subscriptionType) {
 }
 
 /**
+ * New-chat "+" picker.
+ * Open group (קבוצה, any member type, no «מתווכים» header): company, regular,
+ * professional, and project marketer.
+ * A broker gets customer group + broker group instead.
+ */
+export function usesOpenChatGroupFlow(subscriptionType) {
+  const t = resolveSubscriptionType(subscriptionType);
+  if (t === subscriptionTypes.broker) return false;
+  return (
+    isRegularSubscriptionType(t) ||
+    t === subscriptionTypes.professional ||
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.projectMarketer
+  );
+}
+
+/**
  * Developer-company accounts use "פרויקט" in upload flows; all other types use "נכס".
  * Project marketers follow broker UX (נכס), not company project wording.
  */
@@ -506,8 +523,10 @@ export function getListingSheetCopy(selectedCategory, subscriptionType) {
     const isCompany =
       resolveSubscriptionType(subscriptionType) === subscriptionTypes.company;
     return {
-      title: isCompany ? 'פרסמו פרויקט' : 'משרד',
-      subtitle: 'פרסם משרד למכירה או השכרה',
+      title: isCompany ? 'משרדים' : 'משרד',
+      subtitle: isCompany
+        ? 'פרסמו פרויקט'
+        : 'פרסם משרד למכירה או השכרה',
     };
   }
   return {title: 'משרד', subtitle: 'פרסם משרד למכירה או השכרה'};
