@@ -30,11 +30,11 @@ import {
   Pressable,
   I18nManager,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import {Video, ResizeMode, Audio} from 'expo-av';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {captureRef} from 'react-native-view-shot';
+import { Video, ResizeMode, Audio } from 'expo-av';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { captureRef } from 'react-native-view-shot';
 import {
   capturePostPreviewToDataUrl,
   resolvePostPreviewDomNode,
@@ -48,8 +48,8 @@ import {
   deleteActiveStoriesByFeedListingId,
   resolveSubscriptionId,
 } from '../utils/api';
-import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
-import {forceLtrStyle} from '../utils/rtlLayout';
+import { resolvePublisherIdentityForSave } from '../utils/listingPublisherIdentity';
+import { forceLtrStyle } from '../utils/rtlLayout';
 import {
   DEFAULT_POST_DESCRIPTION,
   isReservedPostDescription,
@@ -72,8 +72,8 @@ import {
   POST_BACKGROUND_GRADIENTS,
   shouldUseLiveColorPostBackground,
 } from '../utils/postTextOverlay';
-import {useKeyboardInset} from '../utils/formKeyboardScroll';
-import {useAndroidKeyboardComposer} from '../utils/androidKeyboardComposer';
+import { useKeyboardInset } from '../utils/formKeyboardScroll';
+import { useAndroidKeyboardComposer } from '../utils/androidKeyboardComposer';
 import {
   PROFILE_RING_COLORS,
   PROFILE_RING_LOCATIONS,
@@ -120,7 +120,7 @@ const sliderPageYToFontSize = (pageY, trackPageY) => {
  * Uses pageY (not locationY) and refuses gesture termination so parent
  * re-renders from live fontSize updates cannot steal the drag.
  */
-const FontSizeSlider = React.memo(({value, onChange}) => {
+const FontSizeSlider = React.memo(({ value, onChange }) => {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const trackRef = useRef(null);
@@ -201,7 +201,7 @@ const FontSizeSlider = React.memo(({value, onChange}) => {
           pointerEvents="none"
           style={[
             styles.polygonKnob,
-            {top: fontSizeToSliderOffset(displaySize)},
+            { top: fontSizeToSliderOffset(displaySize) },
           ]}
         />
       </View>
@@ -211,12 +211,12 @@ const FontSizeSlider = React.memo(({value, onChange}) => {
 
 /** Figma 35:293454 — exact post text style fonts (סטייל 1–6). */
 const TEXT_STYLES = [
-  {label: 'סטייל 1', textStyle: {fontFamily: 'SecularOne-Regular'}},
-  {label: 'סטייל 2', textStyle: {fontFamily: 'IBMPlexSansHebrew-Bold'}},
-  {label: 'סטייל 3', textStyle: {fontFamily: 'Rubik-ExtraBold'}},
-  {label: 'סטייל 4', textStyle: {fontFamily: 'Rubik-Regular'}},
-  {label: 'סטייל 5', textStyle: {fontFamily: 'Alef-Regular'}},
-  {label: 'סטייל 6', textStyle: {fontFamily: 'NotoSans-Regular'}},
+  { label: 'סטייל 1', textStyle: { fontFamily: 'SecularOne-Regular' } },
+  { label: 'סטייל 2', textStyle: { fontFamily: 'IBMPlexSansHebrew-Bold' } },
+  { label: 'סטייל 3', textStyle: { fontFamily: 'Rubik-ExtraBold' } },
+  { label: 'סטייל 4', textStyle: { fontFamily: 'Rubik-Regular' } },
+  { label: 'סטייל 5', textStyle: { fontFamily: 'Alef-Regular' } },
+  { label: 'סטייל 6', textStyle: { fontFamily: 'NotoSans-Regular' } },
 ];
 
 const DEFAULT_TEXT_COLOR = '#FFFFFF';
@@ -328,12 +328,12 @@ const lightenColor = (hex, amount = 0.8) => {
 const getTextVisualStyle = (baseColor, bgMode = 0) => {
   const color = baseColor || '#FFFFFF';
   if (bgMode === 1) {
-    return {textColor: '#FFFFFF', backgroundColor: color};
+    return { textColor: '#FFFFFF', backgroundColor: color };
   }
   if (bgMode === 2) {
-    return {textColor: color, backgroundColor: lightenColor(color, 0.8)};
+    return { textColor: color, backgroundColor: lightenColor(color, 0.8) };
   }
-  return {textColor: color, backgroundColor: 'transparent'};
+  return { textColor: color, backgroundColor: 'transparent' };
 };
 
 /**
@@ -346,7 +346,7 @@ const getTextVisualStyle = (baseColor, bgMode = 0) => {
  *   we never lose what the user actually typed when Done is pressed.
  */
 const EditingTextBox = forwardRef(
-  ({initialText, onTextChange, onEndEditing, ...inputProps}, ref) => {
+  ({ initialText, onTextChange, onEndEditing, ...inputProps }, ref) => {
     const initial = String(initialText ?? '');
     const textRef = useRef(initial);
     const [text, setText] = useState(initial);
@@ -450,8 +450,8 @@ const getTextBlockBoxWidth = stageWidth =>
   Math.max(
     80,
     Math.max(1, Number(stageWidth) || 300) -
-      STAGE_TEXT_PAD_LEFT -
-      STAGE_TEXT_PAD_RIGHT,
+    STAGE_TEXT_PAD_LEFT -
+    STAGE_TEXT_PAD_RIGHT,
   );
 
 const clampTextBlockPosition = (x, y, blockW, blockH, stageW, stageH) => {
@@ -544,7 +544,7 @@ const measureNodeInWindow = node =>
         resolve(null);
         return;
       }
-      resolve({x, y, w, h});
+      resolve({ x, y, w, h });
     });
   });
 
@@ -575,15 +575,15 @@ const DraggableTextBlock = React.memo(
     /** Visible glyph box (not the padded drag hit target). */
     const contentRef = useRef(null);
 
-    const touchStartRef = useRef({pageX: 0, pageY: 0, x: 0, y: 0});
+    const touchStartRef = useRef({ pageX: 0, pageY: 0, x: 0, y: 0 });
     const hasMoved = useRef(false);
     const gestureActive = useRef(false);
     const hasAligned = useRef(false);
-    const blockSizeRef = useRef({w: 0, h: 0});
+    const blockSizeRef = useRef({ w: 0, h: 0 });
     /** iOS: last wrapper size seen by handleLayout (drag frames relayout). */
-    const lastLayoutSizeRef = useRef({w: 0, h: 0});
+    const lastLayoutSizeRef = useRef({ w: 0, h: 0 });
     /** Rendered text content bounds inside the wide drag box ({x offset, width}). */
-    const textLayoutRef = useRef({x: 0, w: 0});
+    const textLayoutRef = useRef({ x: 0, w: 0 });
 
     const stageW = stageWidth > 0 ? stageWidth : 300;
     const stageH = stageHeight > 0 ? stageHeight : 300;
@@ -603,7 +603,7 @@ const DraggableTextBlock = React.memo(
       );
       const t = textLayoutRef.current;
       if (!(t.w > 0)) {
-        return {x: Number(x) || 0, y: clampedY};
+        return { x: Number(x) || 0, y: clampedY };
       }
       const minX = STAGE_TEXT_PAD_LEFT - t.x;
       const maxX = stageW - STAGE_TEXT_PAD_RIGHT - (t.x + t.w);
@@ -621,7 +621,7 @@ const DraggableTextBlock = React.memo(
     );
 
     const position = useRef(
-      new Animated.ValueXY({x: initialPos.x, y: initialPos.y}),
+      new Animated.ValueXY({ x: initialPos.x, y: initialPos.y }),
     ).current;
 
     useEffect(() => {
@@ -631,7 +631,7 @@ const DraggableTextBlock = React.memo(
         block.x ?? STAGE_TEXT_PAD_LEFT,
         block.y ?? getDefaultTextBlockY(stageH, blockSizeRef.current.h || 40),
       );
-      position.setValue({x: nextPos.x, y: nextPos.y});
+      position.setValue({ x: nextPos.x, y: nextPos.y });
     }, [
       block.id,
       block.x,
@@ -645,7 +645,7 @@ const DraggableTextBlock = React.memo(
       stageH,
     ]);
 
-    const endGestureAsTapOrDragRef = useRef(() => {});
+    const endGestureAsTapOrDragRef = useRef(() => { });
     endGestureAsTapOrDragRef.current = () => {
       if (isBeingEditedRef.current) {
         gestureActive.current = false;
@@ -654,7 +654,7 @@ const DraggableTextBlock = React.memo(
       const id = blockIdRef.current;
       const moved = hasMoved.current;
       gestureActive.current = false;
-          hasMoved.current = false;
+      hasMoved.current = false;
       if (!moved) {
         onBringToFrontRef.current?.(id);
         onPressRef.current?.();
@@ -662,10 +662,10 @@ const DraggableTextBlock = React.memo(
       }
       onBringToFrontRef.current?.(id);
       const clamped = clampFreePositionRef.current(
-              position.x._value,
-              position.y._value,
-            );
-      position.setValue({x: clamped.x, y: clamped.y});
+        position.x._value,
+        position.y._value,
+      );
+      position.setValue({ x: clamped.x, y: clamped.y });
       onUpdatePositionRef.current?.(id, clamped.x, clamped.y);
     };
 
@@ -694,7 +694,7 @@ const DraggableTextBlock = React.memo(
         touchStartRef.current.x + g.dx,
         touchStartRef.current.y + g.dy,
       );
-      position.setValue({x: next.x, y: next.y});
+      position.setValue({ x: next.x, y: next.y });
     };
 
     const handleResponderRelease = () => {
@@ -728,9 +728,9 @@ const DraggableTextBlock = React.memo(
           Math.abs(lastLayoutSizeRef.current.h - blockH) < 1 &&
           lastLayoutSizeRef.current.w === boxWidth;
         if (hasAligned.current && sameSize) return;
-        lastLayoutSizeRef.current = {w: boxWidth, h: blockH};
+        lastLayoutSizeRef.current = { w: boxWidth, h: blockH };
       }
-      blockSizeRef.current = {w: boxWidth, h: blockH};
+      blockSizeRef.current = { w: boxWidth, h: blockH };
 
       const hasText = String(block.text ?? '').trim().length > 0;
       if (hasText && blockH < 8) return;
@@ -751,7 +751,7 @@ const DraggableTextBlock = React.memo(
       }
 
       hasAligned.current = true;
-      position.setValue({x: clamped.x, y: clamped.y});
+      position.setValue({ x: clamped.x, y: clamped.y });
       onUpdatePositionRef.current(block.id, clamped.x, clamped.y);
     };
 
@@ -759,12 +759,12 @@ const DraggableTextBlock = React.memo(
       if (gestureActive.current) return;
       const l = e?.nativeEvent?.layout;
       if (!l || !(l.width > 0)) return;
-      textLayoutRef.current = {x: l.x, w: l.width};
+      textLayoutRef.current = { x: l.x, w: l.width };
       blockSizeRef.current = {
         w: boxWidth,
         h: l.height || blockSizeRef.current.h,
       };
-      const cur = {x: position.x._value, y: position.y._value};
+      const cur = { x: position.x._value, y: position.y._value };
       const next = clampFreePositionRef.current(cur.x, cur.y);
       if (Math.abs(next.x - cur.x) > 1 || Math.abs(next.y - cur.y) > 1) {
         position.setValue(next);
@@ -804,57 +804,57 @@ const DraggableTextBlock = React.memo(
             // copies. Moving the frame itself (left/top) leaves nothing
             // behind. Android keeps the transform.
             ...(Platform.OS === 'ios'
-              ? {left: position.x, top: position.y}
+              ? { left: position.x, top: position.y }
               : {
-                  left: 0,
-                  top: 0,
-                  transform: position.getTranslateTransform(),
-                }),
+                left: 0,
+                top: 0,
+                transform: position.getTranslateTransform(),
+              }),
           },
         ]}>
         {isBeingEdited ? null : (
-        <View
-          ref={contentRef}
-          onLayout={handleContentLayout}
-          pointerEvents="none"
-          collapsable={false}
-          style={{
-            alignSelf: alignToFlexSelf(block.align ?? 'center'),
-            maxWidth: '100%',
-            // Keeps the glyphs in the moving layer on both platforms.
-            opacity: 0.99,
-          }}>
           <View
-            style={
-              visual.backgroundColor !== 'transparent'
-                ? {
-            backgroundColor: visual.backgroundColor,
+            ref={contentRef}
+            onLayout={handleContentLayout}
+            pointerEvents="none"
+            collapsable={false}
+            style={{
+              alignSelf: alignToFlexSelf(block.align ?? 'center'),
+              maxWidth: '100%',
+              // Keeps the glyphs in the moving layer on both platforms.
+              opacity: 0.99,
+            }}>
+            <View
+              style={
+                visual.backgroundColor !== 'transparent'
+                  ? {
+                    backgroundColor: visual.backgroundColor,
                     paddingHorizontal: 10,
                     paddingVertical: 4,
                     borderRadius: 8,
                     overflow: 'hidden',
                   }
-                : undefined
-            }>
-        <Text
-              pointerEvents="none"
-          style={[
-            styles.centerText,
-            TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
-            {
-              color: visual.textColor,
-                  textAlign: physicalTextAlign(block.align ?? 'center'),
-              writingDirection: 'rtl',
-              fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
-              lineHeight: Math.round(
-                (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
-              ),
-            },
-          ]}>
-          {block.text}
-        </Text>
+                  : undefined
+              }>
+              <Text
+                pointerEvents="none"
+                style={[
+                  styles.centerText,
+                  TEXT_STYLES[block.textStyleIndex ?? 0]?.textStyle,
+                  {
+                    color: visual.textColor,
+                    textAlign: physicalTextAlign(block.align ?? 'center'),
+                    writingDirection: 'rtl',
+                    fontSize: block.fontSize ?? DEFAULT_FONT_SIZE,
+                    lineHeight: Math.round(
+                      (block.fontSize ?? DEFAULT_FONT_SIZE) * 1.15,
+                    ),
+                  },
+                ]}>
+                {block.text}
+              </Text>
+            </View>
           </View>
-        </View>
         )}
       </Animated.View>
     );
@@ -862,7 +862,7 @@ const DraggableTextBlock = React.memo(
 );
 
 const DraggableImage = React.memo(
-  ({id, uri, stageWidth, stageHeight, zIndex, onBringToFront}) => {
+  ({ id, uri, stageWidth, stageHeight, zIndex, onBringToFront }) => {
     const imageSize = Math.min(stageWidth, stageHeight) * 0.45;
     const TOUCH_PAD = 40;
 
@@ -875,8 +875,8 @@ const DraggableImage = React.memo(
     const animScale = useRef(new Animated.Value(1)).current;
 
     const touchMap = useRef({});
-    const dragStart = useRef({x: 0, y: 0});
-    const dragOrigin = useRef({x: 0, y: 0});
+    const dragStart = useRef({ x: 0, y: 0 });
+    const dragOrigin = useRef({ x: 0, y: 0 });
     const pinchBaseDist = useRef(0);
     const pinchBaseScale = useRef(1);
     const isPinching = useRef(false);
@@ -892,13 +892,13 @@ const DraggableImage = React.memo(
       touchMap.current = {};
       if (t.touches && t.touches.length > 0) {
         t.touches.forEach(tc => {
-          touchMap.current[tc.identifier] = {pageX: tc.pageX, pageY: tc.pageY};
+          touchMap.current[tc.identifier] = { pageX: tc.pageX, pageY: tc.pageY };
         });
       } else {
-        touchMap.current[t.identifier ?? 0] = {pageX: t.pageX, pageY: t.pageY};
+        touchMap.current[t.identifier ?? 0] = { pageX: t.pageX, pageY: t.pageY };
       }
-      dragStart.current = {x: t.pageX, y: t.pageY};
-      dragOrigin.current = {x: posX.current, y: posY.current};
+      dragStart.current = { x: t.pageX, y: t.pageY };
+      dragOrigin.current = { x: posX.current, y: posY.current };
       pinchBaseDist.current = 0;
       isPinching.current = false;
     };
@@ -907,10 +907,10 @@ const DraggableImage = React.memo(
       const t = e.nativeEvent;
       if (t.touches && t.touches.length > 0) {
         t.touches.forEach(tc => {
-          touchMap.current[tc.identifier] = {pageX: tc.pageX, pageY: tc.pageY};
+          touchMap.current[tc.identifier] = { pageX: tc.pageX, pageY: tc.pageY };
         });
       } else {
-        touchMap.current[t.identifier ?? 0] = {pageX: t.pageX, pageY: t.pageY};
+        touchMap.current[t.identifier ?? 0] = { pageX: t.pageX, pageY: t.pageY };
       }
 
       const all = allTouches();
@@ -944,7 +944,7 @@ const DraggableImage = React.memo(
       if (t.touches && t.touches.length > 0) {
         touchMap.current = {};
         t.touches.forEach(tc => {
-          touchMap.current[tc.identifier] = {pageX: tc.pageX, pageY: tc.pageY};
+          touchMap.current[tc.identifier] = { pageX: tc.pageX, pageY: tc.pageY };
         });
       } else {
         delete touchMap.current[t.identifier ?? 0];
@@ -954,8 +954,8 @@ const DraggableImage = React.memo(
         pinchBaseDist.current = 0;
         isPinching.current = false;
         if (all.length === 1) {
-          dragStart.current = {x: all[0].pageX, y: all[0].pageY};
-          dragOrigin.current = {x: posX.current, y: posY.current};
+          dragStart.current = { x: all[0].pageX, y: all[0].pageY };
+          dragOrigin.current = { x: posX.current, y: posY.current };
         }
       }
     };
@@ -973,15 +973,15 @@ const DraggableImage = React.memo(
           position: 'absolute',
           zIndex,
           transform: [
-            {translateX: animX},
-            {translateY: animY},
-            {scale: animScale},
+            { translateX: animX },
+            { translateY: animY },
+            { scale: animScale },
           ],
           padding: TOUCH_PAD,
         }}>
         <Image
-          source={{uri}}
-          style={{width: imageSize, height: imageSize}}
+          source={{ uri }}
+          style={{ width: imageSize, height: imageSize }}
           resizeMode="contain"
         />
       </Animated.View>
@@ -1046,14 +1046,14 @@ const PostEditorScreen = ({
     useState(false);
   const [showOpenHouseDetailsModal, setShowOpenHouseDetailsModal] =
     useState(false);
-  const [openHouseDraft, setOpenHouseDraft] = useState({place: '', date: ''});
-  const openHouseDetailsRef = useRef({place: '', date: ''});
+  const [openHouseDraft, setOpenHouseDraft] = useState({ place: '', date: '' });
+  const openHouseDetailsRef = useRef({ place: '', date: '' });
   const notifyProfessionalTypesRef = useRef([]);
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
   const [hashtagInput, setHashtagInput] = useState('');
   const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
-  const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
+  const [stageLayout, setStageLayout] = useState({ width: 0, height: 0 });
   const postPreviewRef = useRef(null);
   const backgroundMediaRef = useRef(null);
   const stageRef = useRef(null);
@@ -1062,11 +1062,11 @@ const PostEditorScreen = ({
   const editingTextDraftRef = useRef('');
   // Where the block sat before edit mode — restored on finish so the
   // temporary "above keyboard" edit slot never becomes the saved position.
-  const editingOriginRef = useRef({x: null, y: null});
+  const editingOriginRef = useRef({ x: null, y: null });
   const isFinishingEditRef = useRef(false);
   const editingTextBlockIdRef = useRef(null);
   const suppressBlurFinishRef = useRef(false);
-  const stageLayoutRef = useRef({width: 0, height: 0});
+  const stageLayoutRef = useRef({ width: 0, height: 0 });
   /** blockId → () => Promise<{x,y,w,h}|null> for WYSIWYG overlay measure. */
   const textBlockMeasureRefs = useRef(new Map());
   const textBlocksRef = useRef(textBlocks);
@@ -1125,7 +1125,7 @@ const PostEditorScreen = ({
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
     editingFieldLayoutRef.current = null;
-    editingOriginRef.current = {x: null, y: null};
+    editingOriginRef.current = { x: null, y: null };
     isFinishingEditRef.current = false;
     setBackgroundImageUri(null);
     setBackgroundVideoAsset(null);
@@ -1139,7 +1139,7 @@ const PostEditorScreen = ({
         openHouseDetailsRef.current = details;
       }
     } else if (!isOpenHousePost) {
-      openHouseDetailsRef.current = {place: '', date: ''};
+      openHouseDetailsRef.current = { place: '', date: '' };
     }
   }, [editorSessionKey, isOpenHousePost, initialListing]);
 
@@ -1148,11 +1148,11 @@ const PostEditorScreen = ({
 
   const stylePresets = useMemo(
     () => [
-      {fontWeight: '400', letterSpacing: 0},
-      {fontWeight: '500', letterSpacing: 0.5},
-      {fontWeight: '600', letterSpacing: 0.5},
-      {fontWeight: '700', letterSpacing: 1},
-      {fontWeight: '800', letterSpacing: 1.2},
+      { fontWeight: '400', letterSpacing: 0 },
+      { fontWeight: '500', letterSpacing: 0.5 },
+      { fontWeight: '600', letterSpacing: 0.5 },
+      { fontWeight: '700', letterSpacing: 1 },
+      { fontWeight: '800', letterSpacing: 1.2 },
     ],
     [],
   );
@@ -1189,7 +1189,7 @@ const PostEditorScreen = ({
   useEffect(() => {
     if (!initialListing || didHydrateListingRef.current) return;
     didHydrateListingRef.current = true;
-    const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
+    const { videoUrl, mainImageUrl } = extractPostListingMediaUrls(initialListing);
     const restoreInfo = parsePostEditorRestoreInfo(initialListing);
     originalVideoUrlRef.current = videoUrl;
     originalMainImageUrlRef.current = mainImageUrl;
@@ -1254,8 +1254,8 @@ const PostEditorScreen = ({
     didHydrateOverlaysRef.current = true;
     let blocks = payload?.overlays?.length
       ? hydratePostEditorBlocksFromOverlays(payload, stageLayout).filter(b =>
-          String(b?.text || '').trim(),
-        )
+        String(b?.text || '').trim(),
+      )
       : [];
     // Older posts / sales images may only have description + baked pixels.
     // Still create a live text layer so tap-to-edit works.
@@ -1281,7 +1281,7 @@ const PostEditorScreen = ({
     if (!blocks.length) return;
     nextStackOrderRef.current = blocks.length + 1;
     setTextBlocks(blocks);
-    const {videoUrl, mainImageUrl} = extractPostListingMediaUrls(initialListing);
+    const { videoUrl, mainImageUrl } = extractPostListingMediaUrls(initialListing);
     const restore = parsePostEditorRestoreInfo(initialListing);
     // Same rule as the media hydration above: a baked gradient capture is not
     // a media background, the editor rebuilt the gradient instead.
@@ -1346,7 +1346,7 @@ const PostEditorScreen = ({
           duration: 260,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
-        }).start(({finished}) => {
+        }).start(({ finished }) => {
           if (finished) resolve();
         });
       }),
@@ -1480,12 +1480,12 @@ const PostEditorScreen = ({
           return capturePostPreviewToDataUrl(
             el,
             publishTarget === 'story'
-              ? {minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4}
-              : {minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4},
+              ? { minShortSidePx: 1440, jpegQuality: 0.96, maxScale: 4 }
+              : { minShortSidePx: 1080, jpegQuality: 0.94, maxScale: 4 },
           );
         }
         return captureRef(postPreviewRef.current, {
-            format: 'jpg',
+          format: 'jpg',
           quality: publishTarget === 'story' ? 0.88 : 0.75,
           result: 'tmpfile',
           // Never force window width/height — mismatched aspect ratios stretch the JPEG.
@@ -1513,8 +1513,8 @@ const PostEditorScreen = ({
         const uploadResult = await uploadFile(
           {
             uri,
-          type: 'image/jpeg',
-          name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
+            type: 'image/jpeg',
+            name: `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}.jpg`,
           },
           folderPrefix === 'story' ? 'stories/images' : 'listings/images',
         );
@@ -1546,7 +1546,7 @@ const PostEditorScreen = ({
                 `${publishTarget === 'story' ? 'story' : 'post'}_${Date.now()}${inferVideoExtension(backgroundVideoAsset)}`,
             },
             publishTarget === 'story' ? 'stories/videos' : 'listings/videos',
-            {timeoutMs: 300000},
+            { timeoutMs: 300000 },
           );
           videoUrl = videoUpload?.url;
           if (!videoUrl) {
@@ -1619,7 +1619,7 @@ const PostEditorScreen = ({
       const publisher = resolvePublisherIdentityForSave(
         initialListing,
         currentUser,
-        {editing: isEditMode},
+        { editing: isEditMode },
       );
       const subId = publisher.subscriptionId;
       const subType = publisher.subscriptionType;
@@ -1645,12 +1645,12 @@ const PostEditorScreen = ({
         }),
         ...(defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION
           ? {
-              post_kind: OPEN_HOUSE_POST_KIND,
-              [OPEN_HOUSE_PLACE_KEY]:
-                openHouseDetailsRef.current?.place?.trim() || '',
-              [OPEN_HOUSE_DATE_KEY]:
-                openHouseDetailsRef.current?.date?.trim() || '',
-            }
+            post_kind: OPEN_HOUSE_POST_KIND,
+            [OPEN_HOUSE_PLACE_KEY]:
+              openHouseDetailsRef.current?.place?.trim() || '',
+            [OPEN_HOUSE_DATE_KEY]:
+              openHouseDetailsRef.current?.date?.trim() || '',
+          }
           : {}),
       };
 
@@ -1674,35 +1674,35 @@ const PostEditorScreen = ({
       } else if (isEditMode) {
         const updatePayload = videoUrl
           ? {
-              category: resolvedPublishCategory,
-              status: 'published',
-              subscriptionId: subId,
-              subscriptionType: subType,
-              videoUrl,
-              hasVideo: true,
-              feedDisplayPriority: 'video',
-              description: listingDescription,
-              feedPost: true,
-              feed_post: true,
-              propertyType: 'post',
-              price: 0,
-              hashtags,
-              generalDetails: overlayGeneralDetails,
-            }
+            category: resolvedPublishCategory,
+            status: 'published',
+            subscriptionId: subId,
+            subscriptionType: subType,
+            videoUrl,
+            hasVideo: true,
+            feedDisplayPriority: 'video',
+            description: listingDescription,
+            feedPost: true,
+            feed_post: true,
+            propertyType: 'post',
+            price: 0,
+            hashtags,
+            generalDetails: overlayGeneralDetails,
+          }
           : {
-              category: resolvedPublishCategory,
-              status: 'published',
-              subscriptionId: subId,
-              subscriptionType: subType,
-              mainImageUrl,
-              description: listingDescription,
-              feedPost: true,
-              feed_post: true,
-              propertyType: 'post',
-              price: 0,
-              hashtags,
-              generalDetails: overlayGeneralDetails,
-            };
+            category: resolvedPublishCategory,
+            status: 'published',
+            subscriptionId: subId,
+            subscriptionType: subType,
+            mainImageUrl,
+            description: listingDescription,
+            feedPost: true,
+            feed_post: true,
+            propertyType: 'post',
+            price: 0,
+            hashtags,
+            generalDetails: overlayGeneralDetails,
+          };
         updatedListing = await updateListing(editingListingId, updatePayload);
       } else if (videoUrl) {
         createdListing = await createListing({
@@ -1811,12 +1811,12 @@ const PostEditorScreen = ({
           const openHouseStoryDetails =
             defaultPostDescription === OPEN_HOUSE_POST_DESCRIPTION
               ? {
-                  post_kind: OPEN_HOUSE_POST_KIND,
-                  [OPEN_HOUSE_PLACE_KEY]:
-                    openHouseDetailsRef.current?.place?.trim() || '',
-                  [OPEN_HOUSE_DATE_KEY]:
-                    openHouseDetailsRef.current?.date?.trim() || '',
-                }
+                post_kind: OPEN_HOUSE_POST_KIND,
+                [OPEN_HOUSE_PLACE_KEY]:
+                  openHouseDetailsRef.current?.place?.trim() || '',
+                [OPEN_HOUSE_DATE_KEY]:
+                  openHouseDetailsRef.current?.date?.trim() || '',
+              }
               : null;
 
           if (storyUsesLiveText) {
@@ -1948,7 +1948,7 @@ const PostEditorScreen = ({
       return;
     }
     if (isOpenHousePost) {
-      setOpenHouseDraft({...openHouseDetailsRef.current});
+      setOpenHouseDraft({ ...openHouseDetailsRef.current });
       setShowOpenHouseDetailsModal(true);
       return;
     }
@@ -1960,7 +1960,7 @@ const PostEditorScreen = ({
     setShowOpenHouseDetailsModal(false);
   };
 
-  const handleOpenHouseDetailsConfirm = ({place, date}) => {
+  const handleOpenHouseDetailsConfirm = ({ place, date }) => {
     if (!String(place || '').trim() || !String(date || '').trim()) {
       Alert.alert('חסר מידע', 'יש למלא מיקום ותאריך לבית הפתוח.');
       return;
@@ -2109,7 +2109,7 @@ const PostEditorScreen = ({
       // Don't clear format tools mid-edit — video/audio focus can hide the
       // keyboard briefly without the user intending to leave edit mode.
       if (!editingTextBlockIdRef.current) {
-      setSelectedFormat(null);
+        setSelectedFormat(null);
       }
     };
 
@@ -2141,7 +2141,7 @@ const PostEditorScreen = ({
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -2165,7 +2165,7 @@ const PostEditorScreen = ({
   const syncEditingToBlock = partial => {
     if (!editingTextBlockId) return;
     setTextBlocks(prev =>
-      prev.map(b => (b.id === editingTextBlockId ? {...b, ...partial} : b)),
+      prev.map(b => (b.id === editingTextBlockId ? { ...b, ...partial } : b)),
     );
   };
 
@@ -2223,7 +2223,7 @@ const PostEditorScreen = ({
     const boxW = getTextBlockBoxWidth(stageW);
     const fieldLayout = editingFieldLayoutRef.current;
     const inputH = fieldLayout?.height ?? 90;
-    const origin = editingOriginRef.current || {x: null, y: null};
+    const origin = editingOriginRef.current || { x: null, y: null };
     const restoreX =
       origin.x != null && origin.x !== undefined
         ? origin.x
@@ -2254,21 +2254,21 @@ const PostEditorScreen = ({
       return prev.map(b =>
         b.id === blockId
           ? {
-              ...b,
-              text,
-              color: selectedColor || DEFAULT_TEXT_COLOR,
-              textStyleIndex: selectedTextStyleIndex,
-              align: textAlignMode,
-              x: nextPos.x,
-              y: nextPos.y,
-              editGen: (b.editGen ?? 0) + 1,
-            }
+            ...b,
+            text,
+            color: selectedColor || DEFAULT_TEXT_COLOR,
+            textStyleIndex: selectedTextStyleIndex,
+            align: textAlignMode,
+            x: nextPos.x,
+            y: nextPos.y,
+            editGen: (b.editGen ?? 0) + 1,
+          }
           : b,
       );
     });
 
     editingFieldLayoutRef.current = null;
-    editingOriginRef.current = {x: null, y: null};
+    editingOriginRef.current = { x: null, y: null };
     editingTextDraftRef.current = '';
     // Dismiss keyboard first; keep preview locked via isKeyboardVisible until
     // keyboardDidHide so letterboxed media does not jump on the same frame.
@@ -2294,11 +2294,11 @@ const PostEditorScreen = ({
     setEditingTextBlockId(id);
     // Focus after the editing input mounts (single rAF is often too early).
     InteractionManager.runAfterInteractions(() => {
-    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
         setTimeout(() => {
           editingInputRef.current?.focus?.();
         }, 32);
-    });
+      });
     });
   }, []);
 
@@ -2320,7 +2320,7 @@ const PostEditorScreen = ({
       sh,
     );
     setTextBlocks(prev =>
-      prev.map(b => (b.id === id ? {...b, x: clamped.x, y: clamped.y} : b)),
+      prev.map(b => (b.id === id ? { ...b, x: clamped.x, y: clamped.y } : b)),
     );
   };
 
@@ -2329,7 +2329,7 @@ const PostEditorScreen = ({
     setMediaImages(prev => {
       const nextOrder = nextStackOrderRef.current++;
       return prev.map(img =>
-        img.id === id ? {...img, stackOrder: nextOrder} : img,
+        img.id === id ? { ...img, stackOrder: nextOrder } : img,
       );
     });
   };
@@ -2339,7 +2339,7 @@ const PostEditorScreen = ({
     setTextBlocks(prev => {
       const nextOrder = nextStackOrderRef.current++;
       return prev.map(block =>
-        block.id === id ? {...block, stackOrder: nextOrder} : block,
+        block.id === id ? { ...block, stackOrder: nextOrder } : block,
       );
     });
   };
@@ -2362,7 +2362,7 @@ const PostEditorScreen = ({
     setTextBlocks(prev => [...prev, newBlock]);
     editingTextDraftRef.current = '';
     // New text has no saved spot yet — finishEditing will place it at stage center.
-    editingOriginRef.current = {x: null, y: null};
+    editingOriginRef.current = { x: null, y: null };
     setEditingTextBlockId(id);
     setSelectedFormat('aa');
     requestAnimationFrame(() => {
@@ -2511,22 +2511,22 @@ const PostEditorScreen = ({
       const pickerPromise =
         action === 'photo'
           ? ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: false,
-              quality: 0.8,
-            })
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          })
           : action === 'video'
             ? ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                allowsEditing: false,
-                quality: 1,
-                videoMaxDuration: 60,
-              })
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              allowsEditing: false,
+              quality: 1,
+              videoMaxDuration: 60,
+            })
             : ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.All,
-                allowsEditing: false,
-                quality: 0.8,
-              });
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              allowsEditing: false,
+              quality: 0.8,
+            });
       setShowMediaSourceSheet(false);
 
       pickerPromise
@@ -2589,7 +2589,7 @@ const PostEditorScreen = ({
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
     editingFieldLayoutRef.current = null;
-    editingOriginRef.current = {x: null, y: null};
+    editingOriginRef.current = { x: null, y: null };
     isFinishingEditRef.current = false;
     setSelectedFormat(null);
     setSelectedColor(DEFAULT_TEXT_COLOR);
@@ -2633,19 +2633,19 @@ const PostEditorScreen = ({
       }
       // Gallery button: replace the stage background (not an overlay sticker).
       applyBackgroundImage(asset.uri);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   return (
     <View style={styles.container}>
       <View
-        style={[styles.topNav, {paddingTop: top}]}
+        style={[styles.topNav, { paddingTop: top }]}
         onLayout={e => setTopNavWidth(e.nativeEvent.layout.width)}>
         <TouchableOpacity
           onPress={onClose}
           disabled={publishing}
           style={[styles.backBtn, publishing && styles.backBtnDisabled]}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}>
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
         <View style={styles.tabs}>
@@ -2695,11 +2695,11 @@ const PostEditorScreen = ({
               <Text style={styles.finishBtnText}>סיום</Text>
             </View>
           ) : (
-          <Image
+            <Image
               source={require('../assets/post-button.png')}
-            style={styles.publishBtnImage}
-            resizeMode="contain"
-          />
+              style={styles.publishBtnImage}
+              resizeMode="contain"
+            />
           )}
         </TouchableOpacity>
         {showPostUploadProgress ? (
@@ -2708,13 +2708,13 @@ const PostEditorScreen = ({
               <Animated.View
                 style={[
                   styles.uploadProgressFillOuter,
-                  {width: uploadProgressWidth},
+                  { width: uploadProgressWidth },
                 ]}>
                 <LinearGradient
                   colors={PROFILE_RING_COLORS}
                   locations={PROFILE_RING_LOCATIONS}
-                  start={{x: 0, y: 0.5}}
-                  end={{x: 1, y: 0.5}}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
                   style={StyleSheet.absoluteFillObject}
                 />
               </Animated.View>
@@ -2750,48 +2750,48 @@ const PostEditorScreen = ({
           style={[
             styles.backgroundMediaLayer,
             !isFullFrameCapture &&
-            lockPreviewLayout &&
-            lockedPreviewHeight > 0
+              lockPreviewLayout &&
+              lockedPreviewHeight > 0
               ? styles.backgroundMediaLocked
               : null,
             !isFullFrameCapture &&
-            lockPreviewLayout &&
-            lockedPreviewHeight > 0
-              ? {height: lockedPreviewHeight}
+              lockPreviewLayout &&
+              lockedPreviewHeight > 0
+              ? { height: lockedPreviewHeight }
               : null,
           ]}>
           {backgroundVideoAsset?.uri ? (
-          <Video
-            source={{uri: backgroundVideoAsset.uri}}
-            style={styles.backgroundVideo}
+            <Video
+              source={{ uri: backgroundVideoAsset.uri }}
+              style={styles.backgroundVideo}
               // Letterbox like the feed/ads (fit full frame; black bars if needed).
               resizeMode={ResizeMode.CONTAIN}
               // Pause while editing text so the video surface / audio focus
               // cannot steal touches or dismiss the keyboard mid-type.
               shouldPlay={!editingTextBlockId}
-            isLooping
+              isLooping
               isMuted={Boolean(editingTextBlockId)}
               volume={editingTextBlockId ? 0 : 1.0}
               useNativeControls={false}
               pointerEvents="none"
             />
           ) : backgroundImageUri ? (
-          <Image
-            source={{uri: backgroundImageUri}}
-            style={styles.backgroundImage}
+            <Image
+              source={{ uri: backgroundImageUri }}
+              style={styles.backgroundImage}
               // Match video: letterbox on black — never crop the upload.
               resizeMode="contain"
               pointerEvents="none"
-          />
-        ) : (
-          <LinearGradient
-            colors={selectedBackgroundGradient}
-            start={{x: 0, y: 0.5}}
-            end={{x: 1, y: 0.5}}
-            style={styles.backgroundGradient}
+            />
+          ) : (
+            <LinearGradient
+              colors={selectedBackgroundGradient}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.backgroundGradient}
               pointerEvents="none"
-          />
-        )}
+            />
+          )}
         </View>
         <KeyboardAvoidingView
           style={styles.editorKeyboardAvoid}
@@ -2808,34 +2808,34 @@ const PostEditorScreen = ({
               // every text block — up over a background image that stays put.
               <View style={styles.headerContainer} pointerEvents="none" />
             ) : (
-            <View style={styles.headerContainer}>
-              <TouchableOpacity
-                onPress={() => {
-                  clearAllEditorState();
-                  setActiveTab(TAB_TEXT);
-                }}
-                style={styles.closeIconContainer}>
-                <Image
-                  source={require('../assets/editors/close.png')}
-                  style={styles.closeIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-              <View style={styles.previewContainer}>
+              <View style={styles.headerContainer}>
                 <TouchableOpacity
-                  style={styles.closeIconContainer}
-                  onPress={pickBackgroundImageFromGallery}>
+                  onPress={() => {
+                    clearAllEditorState();
+                    setActiveTab(TAB_TEXT);
+                  }}
+                  style={styles.closeIconContainer}>
                   <Image
-                    source={require('../assets/editors/gallery.png')}
-                    style={styles.galleryIcon}
+                    source={require('../assets/editors/close.png')}
+                    style={styles.closeIcon}
                     resizeMode="contain"
                   />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.closeIconContainer}
-                  onPress={addTextBlock}>
-                  <Text style={styles.AaStyleBtnText}>Aa</Text>
-                </TouchableOpacity>
+                <View style={styles.previewContainer}>
+                  <TouchableOpacity
+                    style={styles.closeIconContainer}
+                    onPress={pickBackgroundImageFromGallery}>
+                    <Image
+                      source={require('../assets/editors/gallery.png')}
+                      style={styles.galleryIcon}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.closeIconContainer}
+                    onPress={addTextBlock}>
+                    <Text style={styles.AaStyleBtnText}>Aa</Text>
+                  </TouchableOpacity>
                   {!isSalesImageEditor ? (
                     <TouchableOpacity
                       style={styles.hashtagBtn}
@@ -2852,117 +2852,117 @@ const PostEditorScreen = ({
                       )}
                     </TouchableOpacity>
                   ) : null}
-                {editingTextBlockId && (
-                  <TouchableOpacity
-                    style={styles.doneBtn}
-                    onPress={finishEditing}>
+                  {editingTextBlockId && (
+                    <TouchableOpacity
+                      style={styles.doneBtn}
+                      onPress={finishEditing}>
                       <Text style={styles.doneBtnText}>בוצע</Text>
-                  </TouchableOpacity>
-                )}
+                    </TouchableOpacity>
+                  )}
                   {(activeTab !== TAB_CAMERA ||
                     backgroundImageUri ||
                     backgroundVideoAsset?.uri) && (
-                  <TouchableOpacity
-                    style={styles.colorToggleButton}
-                    onPress={() => {
-                        // If a photo/video is the stage background, restore the color gradient.
-                        if (backgroundImageUri || backgroundVideoAsset?.uri) {
-                          setBackgroundImageUri(null);
-                          setBackgroundVideoAsset(null);
-                          return;
-                        }
-                      setSelectedBackgroundGradientIndex(prev => {
-                        const next = (prev + 1) % BACKGROUND_GRADIENTS.length;
-                        return Number.isFinite(next) ? next : 0;
-                      });
-                    }}>
-                    <LinearGradient
-                      colors={selectedBackgroundGradient}
-                      start={{x: 0, y: 0.5}}
-                      end={{x: 1, y: 0.5}}
-                      style={styles.colorPreview}
-                    />
-                  </TouchableOpacity>
-                )}
+                      <TouchableOpacity
+                        style={styles.colorToggleButton}
+                        onPress={() => {
+                          // If a photo/video is the stage background, restore the color gradient.
+                          if (backgroundImageUri || backgroundVideoAsset?.uri) {
+                            setBackgroundImageUri(null);
+                            setBackgroundVideoAsset(null);
+                            return;
+                          }
+                          setSelectedBackgroundGradientIndex(prev => {
+                            const next = (prev + 1) % BACKGROUND_GRADIENTS.length;
+                            return Number.isFinite(next) ? next : 0;
+                          });
+                        }}>
+                        <LinearGradient
+                          colors={selectedBackgroundGradient}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={styles.colorPreview}
+                        />
+                      </TouchableOpacity>
+                    )}
+                </View>
               </View>
-            </View>
-          )}
-          <View style={styles.stageColumn}>
-          <View
+            )}
+            <View style={styles.stageColumn}>
+              <View
                 ref={stageRef}
                 style={[
                   styles.stage,
                   pinStageHeight && effectiveStageHeight > 0
                     ? {
-                        flexGrow: 0,
-                        flexShrink: 0,
-                        height: effectiveStageHeight,
-                      }
+                      flexGrow: 0,
+                      flexShrink: 0,
+                      height: effectiveStageHeight,
+                    }
                     : null,
                 ]}
-            onLayout={e => {
-              const layout = e.nativeEvent.layout;
-              stageLayoutRef.current = layout;
+                onLayout={e => {
+                  const layout = e.nativeEvent.layout;
+                  stageLayoutRef.current = layout;
                   if (
                     !editingTextBlockIdRef.current &&
                     !isKeyboardVisibleRef.current &&
                     layout.height > maxStageHeightRef.current
                   ) {
-                maxStageHeightRef.current = layout.height;
+                    maxStageHeightRef.current = layout.height;
                     setLockedStageHeight(layout.height);
-              }
-              setStageLayout(layout);
-            }}>
-            <View style={styles.stageLtr} pointerEvents="box-none">
-            {stageLayout.width > 0 &&
-                    effectiveStageHeight > 0 &&
-              mediaImages.map((img, idx) => (
-                <DraggableImage
-                  key={img.id}
-                  id={img.id}
-                  uri={img.uri}
-                  stageWidth={stageLayout.width}
-                        stageHeight={effectiveStageHeight}
-                  zIndex={img.stackOrder ?? idx + 1}
-                  onBringToFront={bringMediaImageToFront}
-                />
-              ))}
-            {textBlocks.map((block, idx) => (
-                <DraggableTextBlock
-                  // iOS: remount after every edit so no stale native text
-                  // view from the edit session is left behind on the stage.
-                  key={
-                    Platform.OS === 'ios'
-                      ? `${block.id}:${block.editGen ?? 0}`
-                      : block.id
                   }
-                  block={block}
-                  stageWidth={stageLayout.width}
+                  setStageLayout(layout);
+                }}>
+                <View style={styles.stageLtr} pointerEvents="box-none">
+                  {stageLayout.width > 0 &&
+                    effectiveStageHeight > 0 &&
+                    mediaImages.map((img, idx) => (
+                      <DraggableImage
+                        key={img.id}
+                        id={img.id}
+                        uri={img.uri}
+                        stageWidth={stageLayout.width}
+                        stageHeight={effectiveStageHeight}
+                        zIndex={img.stackOrder ?? idx + 1}
+                        onBringToFront={bringMediaImageToFront}
+                      />
+                    ))}
+                  {textBlocks.map((block, idx) => (
+                    <DraggableTextBlock
+                      // iOS: remount after every edit so no stale native text
+                      // view from the edit session is left behind on the stage.
+                      key={
+                        Platform.OS === 'ios'
+                          ? `${block.id}:${block.editGen ?? 0}`
+                          : block.id
+                      }
+                      block={block}
+                      stageWidth={stageLayout.width}
                       stageHeight={effectiveStageHeight}
-                  selectedColor={selectedColor}
-                  zIndex={block.stackOrder ?? idx + 1}
-                  isBeingEdited={block.id === editingTextBlockId}
-                  onPress={() => beginEditTextBlock(block.id)}
-                  onUpdatePosition={updateBlockPosition}
-                  onBringToFront={bringTextBlockToFront}
+                      selectedColor={selectedColor}
+                      zIndex={block.stackOrder ?? idx + 1}
+                      isBeingEdited={block.id === editingTextBlockId}
+                      onPress={() => beginEditTextBlock(block.id)}
+                      onUpdatePosition={updateBlockPosition}
+                      onBringToFront={bringTextBlockToFront}
                       onRegisterMeasure={registerTextBlockMeasure}
-                />
-              ))}
+                    />
+                  ))}
 
-            {editingTextBlockId && !isCapturing && (
-              <View
+                  {editingTextBlockId && !isCapturing && (
+                    <View
                       style={[
                         styles.editingOverlay,
                         styles.stageLtrDirection,
                       ]}
-                pointerEvents="box-none">
-                {(() => {
-                  const visual = getTextVisualStyle(
-                    editingBlock?.color ?? selectedColor,
-                    editingBlock?.bgMode ?? 0,
-                  );
-                  const editingFontSize =
-                    editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
+                      pointerEvents="box-none">
+                      {(() => {
+                        const visual = getTextVisualStyle(
+                          editingBlock?.color ?? selectedColor,
+                          editingBlock?.bgMode ?? 0,
+                        );
+                        const editingFontSize =
+                          editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
                         const editingTextField = (
                           <EditingTextBox
                             key={editingTextBlockId}
@@ -3007,35 +3007,35 @@ const PostEditorScreen = ({
                             }}
                           />
                         );
-                  return (
-                    <>
+                        return (
+                          <>
                             <FontSizeSlider
                               value={editingFontSize}
                               onChange={nextSize =>
-                                syncEditingToBlock({fontSize: nextSize})
+                                syncEditingToBlock({ fontSize: nextSize })
                               }
                             />
                             {Platform.OS === 'web' ? (
-                          <View
+                              <View
                                 onLayout={e => {
                                   editingFieldLayoutRef.current =
                                     e.nativeEvent.layout;
                                 }}
-                            style={[
+                                style={[
                                   styles.editingInputRow,
-                              {
+                                  {
                                     bottom: editingInputBottom,
                                     justifyContent:
                                       alignToFlexSelf(textAlignMode),
-                              },
+                                  },
                                 ]}>
                                 {editingTextField}
-                        </View>
+                              </View>
                             ) : null}
                           </>
                         );
                       })()}
-                      </View>
+                    </View>
                   )}
                 </View>
               </View>
@@ -3044,196 +3044,189 @@ const PostEditorScreen = ({
             {editingTextBlockId &&
               !isCapturing &&
               (Platform.OS === 'android' || Platform.OS === 'ios') && (
-              (() => {
-                const visual = getTextVisualStyle(
-                  editingBlock?.color ?? selectedColor,
-                  editingBlock?.bgMode ?? 0,
-                );
-                const editingFontSize =
-                  editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
-                return (
-                      <View
-                    onLayout={e => {
-                      editingFieldLayoutRef.current = e.nativeEvent.layout;
-                    }}
-                        style={[
-                      styles.editingInputFloating,
-                      Platform.OS === 'ios' ? {zIndex: 50} : null,
-                      Platform.OS === 'android'
-                        ? {left: 22, right: 78}
-                        : null,
-                      {
-                        bottom:
-                          Platform.OS === 'ios'
-                            ? iosEditingInputBottom
-                            : androidEditingInputBottom,
-                        justifyContent: alignToFlexSelf(textAlignMode),
-                          },
-                        ]}>
-                        <EditingTextBox
-                          key={editingTextBlockId}
-                          ref={editingInputRef}
-                          nativeID="post-editor-text-input"
-                          initialText={editingBlock?.text ?? ''}
-                          onTextChange={syncEditingDraft}
-                          placeholder="הקלד משהו..."
-                          placeholderTextColor="rgba(255,255,255,0.55)"
-                          selectionColor={visual.textColor}
-                          style={[
-                            styles.editingTextInput,
-                            TEXT_STYLES[selectedTextStyleIndex]?.textStyle,
-                            {
-                              color: visual.textColor,
-                              backgroundColor: visual.backgroundColor,
-                          textAlign: physicalTextAlign(textAlignMode),
-                              writingDirection: 'rtl',
-                              ...(Platform.OS === 'ios'
-                                ? {direction: 'rtl'}
-                                : null),
-                              fontSize: editingFontSize,
-                              lineHeight: Math.round(editingFontSize * 1.15),
-                            },
-                          ]}
-                          multiline
-                          textAlignVertical="center"
-                          autoCorrect
-                          autoCapitalize="sentences"
-                          returnKeyType="done"
-                      blurOnSubmit
-                      submitBehavior="blurAndSubmit"
-                      onSubmitEditing={() => {
-                        syncEditingDraftFromInput();
-                        finishEditing();
-                      }}
-                      onEndEditing={() => {
-                        syncEditingDraftFromInput();
-                      }}
-                        />
-                      </View>
+                (() => {
+                  const visual = getTextVisualStyle(
+                    editingBlock?.color ?? selectedColor,
+                    editingBlock?.bgMode ?? 0,
                   );
-              })()
-            )}
+                  const editingFontSize =
+                    editingBlock?.fontSize ?? DEFAULT_FONT_SIZE;
+                  return (
+                    <View
+                      onLayout={e => {
+                        editingFieldLayoutRef.current = e.nativeEvent.layout;
+                      }}
+                      style={[
+                        styles.editingInputFloating,
+                        Platform.OS === 'ios' ? { zIndex: 50 } : null,
+                        Platform.OS === 'android'
+                          ? { left: 22, right: 78 }
+                          : null,
+                        {
+                          bottom:
+                            Platform.OS === 'ios'
+                              ? iosEditingInputBottom
+                              : androidEditingInputBottom,
+                          justifyContent: alignToFlexSelf(textAlignMode),
+                        },
+                      ]}>
+                      <EditingTextBox
+                        key={editingTextBlockId}
+                        ref={editingInputRef}
+                        nativeID="post-editor-text-input"
+                        initialText={editingBlock?.text ?? ''}
+                        onTextChange={syncEditingDraft}
+                        placeholder="הקלד משהו..."
+                        placeholderTextColor="rgba(255,255,255,0.55)"
+                        selectionColor={visual.textColor}
+                        style={[
+                          styles.editingTextInput,
+                          TEXT_STYLES[selectedTextStyleIndex]?.textStyle,
+                          {
+                            color: visual.textColor,
+                            backgroundColor: visual.backgroundColor,
+                            textAlign: physicalTextAlign(textAlignMode),
+                            writingDirection: 'rtl',
+                            ...(Platform.OS === 'ios'
+                              ? { direction: 'rtl' }
+                              : null),
+                            fontSize: editingFontSize,
+                            lineHeight: Math.round(editingFontSize * 1.15),
+                          },
+                        ]}
+                        multiline
+                        textAlignVertical="center"
+                        autoCorrect
+                        autoCapitalize="sentences"
+                        returnKeyType="done"
+                        blurOnSubmit
+                        submitBehavior="blurAndSubmit"
+                        onSubmitEditing={() => {
+                          syncEditingDraftFromInput();
+                          finishEditing();
+                        }}
+                        onEndEditing={() => {
+                          syncEditingDraftFromInput();
+                        }}
+                      />
+                    </View>
+                  );
+                })()
+              )}
 
-          {showTextFormatToolbar && (
-            <View
-              onLayout={e => {
-                const h = e.nativeEvent.layout.height;
-                if (h > 0 && Math.abs(h - formatToolbarHeight) > 1) {
-                  setFormatToolbarHeight(h);
-                }
-              }}
-              style={[
-                styles.keyboardControls,
+            {showTextFormatToolbar && (
+              <View
+                onLayout={e => {
+                  const h = e.nativeEvent.layout.height;
+                  if (h > 0 && Math.abs(h - formatToolbarHeight) > 1) {
+                    setFormatToolbarHeight(h);
+                  }
+                }}
+                style={[
+                  styles.keyboardControls,
                   formatToolbarKeyboardBottom > 0
-                    ? {bottom: formatToolbarKeyboardBottom}
+                    ? { bottom: formatToolbarKeyboardBottom }
                     : null,
                   formatToolbarKeyboardMarginBottom !== 0
-                    ? {marginBottom: formatToolbarKeyboardMarginBottom}
+                    ? { marginBottom: formatToolbarKeyboardMarginBottom }
                     : null,
                   {
                     paddingTop: 10,
                     // When the keyboard is open it covers the home indicator —
                     // don't add safe-area padding on top of keyboardInset (iOS gap).
-                  paddingBottom:
-                    Platform.OS === 'web'
+                    paddingBottom:
+                      Platform.OS === 'web'
                         ? Math.max(bottom, keyboardInset > 0 ? 8 : 10)
                         : formatToolbarKeyboardBottom > 0 ||
-                            androidKeyboardComposer.isOpen
+                          androidKeyboardComposer.isOpen
                           ? 0
                           : formatToolbarSafeBottom,
-                },
-              ]}>
-              {selectedFormat === 'aa' && (
+                  },
+                ]}>
+                {selectedFormat === 'aa' && (
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     style={[
                       styles.textStylesScroll,
                       forceLtrStyle,
-                      // iOS lays this strip out right-to-left despite direction
-                      // ltr. Mirror the scroller so סטייל 1 starts on the left;
-                      // each pill is mirrored back so the label stays readable.
-                      Platform.OS === 'ios' ? styles.iosLtrFlip : null,
-                      // Android forceRTL also starts the row on the right.
-                      // Same unwrap as the last update's left-to-right order.
                       Platform.OS === 'android' ? styles.androidLtrFlip : null,
                     ]}
                     contentContainerStyle={[styles.textStylesRow, forceLtrStyle]}
                     keyboardShouldPersistTaps="always">
-                  {TEXT_STYLES.map((styleItem, index) => (
-                    <TouchableOpacity
-                      key={styleItem.label}
-                      style={[
-                        styles.textStylePill,
-                        Platform.OS === 'ios' ? styles.iosLtrFlip : null,
-                        Platform.OS === 'android' ? styles.androidLtrFlip : null,
-                        selectedTextStyleIndex === index &&
+                    {TEXT_STYLES.map((styleItem, index) => (
+                      <TouchableOpacity
+                        key={styleItem.label}
+                        style={[
+                          styles.textStylePill,
+                          Platform.OS === 'android' ? styles.androidLtrFlip : null,
+                          selectedTextStyleIndex === index &&
                           styles.textStylePillActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedTextStyleIndex(index);
-                        syncEditingToBlock({textStyleIndex: index});
-                      }}>
-                      <Text
+                        ]}
+                        onPress={() => {
+                          setSelectedTextStyleIndex(index);
+                          syncEditingToBlock({ textStyleIndex: index });
+                        }}>
+                        <Text
                           numberOfLines={1}
                           adjustsFontSizeToFit
                           minimumFontScale={0.85}
-                        style={[
-                          styles.textStylePillText,
-                          styleItem.textStyle,
-                          selectedTextStyleIndex === index &&
+                          style={[
+                            styles.textStylePillText,
+                            styleItem.textStyle,
+                            selectedTextStyleIndex === index &&
                             styles.textStylePillTextActive,
-                        ]}>
-                        {styleItem.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                          ]}>
+                          {styleItem.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
-              )}
+                )}
 
-              {selectedFormat === 'color' && (
-                <View
-                  style={styles.colorsRow}
-                  onLayout={e =>
-                    setColorsPagerWidth(e.nativeEvent.layout.width - 48)
-                  }>
-                  <TouchableOpacity
-                    style={styles.eyedropperBtn}
-                    onPress={() => {}}>
-                    <Image
-                      source={require('../assets/editors/penIcon.png')}
-                      style={styles.eyedropperInner}
-                    />
-                  </TouchableOpacity>
-                  <ScrollView
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    onMomentumScrollEnd={e => {
-                      const page =
-                        Math.round(
-                          e.nativeEvent.contentOffset.x /
-                              Math.max(
-                                e.nativeEvent.layoutMeasurement.width,
-                                1,
-                              ),
-                        ) || 0;
-                      const clampedPage = Math.min(
-                        Math.max(page, 0),
-                        COLOR_PAGES.length - 1,
-                      );
-                      setColorPageIndex(clampedPage);
-                    }}
-                    style={styles.colorsPager}
-                    contentContainerStyle={{flexGrow: 1}}>
-                    {COLOR_PAGES.map((pageColors, pageIndex) => (
-                      <View
-                        key={pageIndex}
-                        style={[
-                          styles.colorsListPage,
-                          colorsPagerWidth > 0 && {width: colorsPagerWidth},
-                        ]}>
+                {selectedFormat === 'color' && (
+                  <View
+                    style={styles.colorsRow}
+                    onLayout={e =>
+                      setColorsPagerWidth(e.nativeEvent.layout.width - 48)
+                    }>
+                    <TouchableOpacity
+                      style={styles.eyedropperBtn}
+                      onPress={() => { }}>
+                      <Image
+                        source={require('../assets/editors/penIcon.png')}
+                        style={styles.eyedropperInner}
+                      />
+                    </TouchableOpacity>
+                    <ScrollView
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      onMomentumScrollEnd={e => {
+                        const page =
+                          Math.round(
+                            e.nativeEvent.contentOffset.x /
+                            Math.max(
+                              e.nativeEvent.layoutMeasurement.width,
+                              1,
+                            ),
+                          ) || 0;
+                        const clampedPage = Math.min(
+                          Math.max(page, 0),
+                          COLOR_PAGES.length - 1,
+                        );
+                        setColorPageIndex(clampedPage);
+                      }}
+                      style={styles.colorsPager}
+                      contentContainerStyle={{ flexGrow: 1 }}>
+                      {COLOR_PAGES.map((pageColors, pageIndex) => (
+                        <View
+                          key={pageIndex}
+                          style={[
+                            styles.colorsListPage,
+                            colorsPagerWidth > 0 && { width: colorsPagerWidth },
+                          ]}>
                           {pageColors.map(color => {
                             const isSelected =
                               String(selectedColor || DEFAULT_TEXT_COLOR)
@@ -3243,82 +3236,82 @@ const PostEditorScreen = ({
                               String(color).toUpperCase() === '#DBDBDB' ||
                               String(color).toUpperCase() === '#C7C7C7';
                             return (
-                          <TouchableOpacity
-                            key={color}
-                            style={[
-                              styles.colorSwatchOuter,
-                              {
-                                backgroundColor: color,
+                              <TouchableOpacity
+                                key={color}
+                                style={[
+                                  styles.colorSwatchOuter,
+                                  {
+                                    backgroundColor: color,
                                     borderWidth: isSelected ? 2 : 1,
                                     borderColor: isSelected
                                       ? '#FEE787'
                                       : isLightSwatch
                                         ? '#9A9A9A'
                                         : '#FFFFFF',
-                              },
-                            ]}
-                            onPress={() => {
-                              setSelectedColor(color);
-                              syncEditingToBlock({color});
-                            }}
-                          />
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSelectedColor(color);
+                                  syncEditingToBlock({ color });
+                                }}
+                              />
                             );
                           })}
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
 
-              {selectedFormat === 'color' && (
-                <View style={styles.paginationDotsRow}>
-                  {COLOR_PAGES.map((_, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.paginationDot,
+                {selectedFormat === 'color' && (
+                  <View style={styles.paginationDotsRow}>
+                    {COLOR_PAGES.map((_, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.paginationDot,
                           colorPageIndex === index &&
-                            styles.paginationDotActive,
-                      ]}
-                    />
-                  ))}
-                </View>
-              )}
+                          styles.paginationDotActive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
 
-              <View style={styles.bottomBar}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSelectedFormat(prev => (prev === 'aa' ? null : 'aa'));
-                  }}
-                  style={[styles.bottomBarItem]}>
-                  {selectedFormat === 'aa' ? (
-                    <LinearGradient
-                      colors={FORMAT_SELECTED_GRADIENT}
-                      start={{x: 0.5, y: 0}}
-                      end={{x: 0.5, y: 1}}
-                      style={styles.bottomBarItemGradientInner}>
+                <View style={styles.bottomBar}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedFormat(prev => (prev === 'aa' ? null : 'aa'));
+                    }}
+                    style={[styles.bottomBarItem]}>
+                    {selectedFormat === 'aa' ? (
+                      <LinearGradient
+                        colors={FORMAT_SELECTED_GRADIENT}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={styles.bottomBarItemGradientInner}>
+                        <Text
+                          style={[
+                            styles.AaStyleBtnText,
+                            TEXT_STYLES[selectedTextStyleIndex].textStyle,
+                            { color: '#1E1D27' },
+                          ]}>
+                          Aa
+                        </Text>
+                      </LinearGradient>
+                    ) : (
                       <Text
                         style={[
                           styles.AaStyleBtnText,
                           TEXT_STYLES[selectedTextStyleIndex].textStyle,
-                          {color: '#1E1D27'},
                         ]}>
                         Aa
                       </Text>
-                    </LinearGradient>
-                  ) : (
-                    <Text
-                      style={[
-                        styles.AaStyleBtnText,
-                        TEXT_STYLES[selectedTextStyleIndex].textStyle,
-                      ]}>
-                      Aa
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => {
+                  <TouchableOpacity
+                    onPress={() => {
                       setSelectedFormat(prev => {
                         const next = prev === 'color' ? null : 'color';
                         if (next === 'color') {
@@ -3328,113 +3321,113 @@ const PostEditorScreen = ({
                         }
                         return next;
                       });
-                  }}
-                  style={styles.bottomBarItem}>
-                  {selectedFormat === 'color' ? (
-                    <LinearGradient
-                      colors={FORMAT_SELECTED_GRADIENT}
-                      start={{x: 0.5, y: 0}}
-                      end={{x: 0.5, y: 1}}
-                      style={styles.bottomBarItemGradientInner}>
+                    }}
+                    style={styles.bottomBarItem}>
+                    {selectedFormat === 'color' ? (
+                      <LinearGradient
+                        colors={FORMAT_SELECTED_GRADIENT}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={styles.bottomBarItemGradientInner}>
+                        <Image
+                          source={require('../assets/editors/Action-icons-selected.png')}
+                          style={styles.formatBtnIcon}
+                          resizeMode="contain"
+                        />
+                      </LinearGradient>
+                    ) : (
                       <Image
-                        source={require('../assets/editors/Action-icons-selected.png')}
+                        source={require('../assets/editors/Action-icons.png')}
                         style={styles.formatBtnIcon}
                         resizeMode="contain"
                       />
-                    </LinearGradient>
-                  ) : (
-                    <Image
-                      source={require('../assets/editors/Action-icons.png')}
-                      style={styles.formatBtnIcon}
-                      resizeMode="contain"
-                    />
-                  )}
-                </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    const next =
-                      textAlignMode === 'left'
-                        ? 'center'
-                        : textAlignMode === 'center'
-                          ? 'right'
-                          : 'left';
-                    setTextAlignMode(next);
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next =
+                        textAlignMode === 'left'
+                          ? 'center'
+                          : textAlignMode === 'center'
+                            ? 'right'
+                            : 'left';
+                      setTextAlignMode(next);
                       // Snap the block box back to the stage span so the
                       // content lands at the true stage left/center/right
                       // (alignSelf places it physically), keeping the same y.
-                      syncEditingToBlock({align: next, x: STAGE_TEXT_PAD_LEFT});
+                      syncEditingToBlock({ align: next, x: STAGE_TEXT_PAD_LEFT });
                       editingOriginRef.current = {
                         ...(editingOriginRef.current || {}),
                         x: STAGE_TEXT_PAD_LEFT,
                       };
-                  }}
-                  style={styles.alignBtn}>
-                  <View
-                    style={[
-                      styles.alignIcon,
-                      textAlignMode === 'left' && styles.alignIconLeft,
-                      textAlignMode === 'center' && styles.alignIconCenter,
-                      textAlignMode === 'right' && styles.alignIconRight,
-                    ]}>
-                    <View style={[styles.alignLine, styles.alignLineLong]} />
+                    }}
+                    style={styles.alignBtn}>
+                    <View
+                      style={[
+                        styles.alignIcon,
+                        textAlignMode === 'left' && styles.alignIconLeft,
+                        textAlignMode === 'center' && styles.alignIconCenter,
+                        textAlignMode === 'right' && styles.alignIconRight,
+                      ]}>
+                      <View style={[styles.alignLine, styles.alignLineLong]} />
                       <View
                         style={[styles.alignLine, styles.alignLineMedium]}
                       />
-                    <View style={[styles.alignLine, styles.alignLineShort]} />
-                  </View>
-                </TouchableOpacity>
+                      <View style={[styles.alignLine, styles.alignLineShort]} />
+                    </View>
+                  </TouchableOpacity>
 
-                <View
-                  style={[
-                    styles.backgroundBtnContainer,
-                    {
-                      backgroundColor:
-                        (editingBlock?.bgMode ?? 0) === 0
-                          ? 'transparent'
-                          : '#ffffff',
-                    },
-                  ]}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (!editingTextBlockId) return;
-                      setTextBlocks(prev =>
-                        prev.map(b => {
-                          if (b.id !== editingTextBlockId) return b;
-                          const currentMode = b.bgMode ?? 0;
-                          const nextMode = (currentMode + 1) % 3; // 0 -> 1 -> 2 -> 0
-                          return {...b, bgMode: nextMode};
-                        }),
-                      );
-                    }}
+                  <View
                     style={[
-                      styles.backgroundBtn,
+                      styles.backgroundBtnContainer,
                       {
-                        borderColor:
+                        backgroundColor:
                           (editingBlock?.bgMode ?? 0) === 0
-                            ? '#ffffff'
-                            : '#000000',
+                            ? 'transparent'
+                            : '#ffffff',
                       },
                     ]}>
-                    <Text
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!editingTextBlockId) return;
+                        setTextBlocks(prev =>
+                          prev.map(b => {
+                            if (b.id !== editingTextBlockId) return b;
+                            const currentMode = b.bgMode ?? 0;
+                            const nextMode = (currentMode + 1) % 3; // 0 -> 1 -> 2 -> 0
+                            return { ...b, bgMode: nextMode };
+                          }),
+                        );
+                      }}
                       style={[
-                        styles.backgroundBtnText,
-                        (() => {
-                          return {
-                            color:
-                              (editingBlock?.bgMode ?? 0) === 0
-                                ? '#ffffff'
-                                : '#000000',
-                          };
-                        })(),
+                        styles.backgroundBtn,
+                        {
+                          borderColor:
+                            (editingBlock?.bgMode ?? 0) === 0
+                              ? '#ffffff'
+                              : '#000000',
+                        },
                       ]}>
-                      A
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        style={[
+                          styles.backgroundBtnText,
+                          (() => {
+                            return {
+                              color:
+                                (editingBlock?.bgMode ?? 0) === 0
+                                  ? '#ffffff'
+                                  : '#000000',
+                            };
+                          })(),
+                        ]}>
+                        A
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -3458,7 +3451,7 @@ const PostEditorScreen = ({
           <View
             style={[
               styles.mediaSheetCard,
-              {paddingBottom: Math.max(bottom, 28)},
+              { paddingBottom: Math.max(bottom, 28) },
             ]}
             onStartShouldSetResponder={() => true}>
             <View style={styles.mediaSheetHandle} />
@@ -3511,7 +3504,7 @@ const PostEditorScreen = ({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={[
               styles.hashtagAvoid,
-              keyboardInset > 0 ? {paddingBottom: keyboardInset} : null,
+              keyboardInset > 0 ? { paddingBottom: keyboardInset } : null,
             ]}>
             <View
               style={styles.hashtagCard}
@@ -3637,7 +3630,7 @@ const styles = StyleSheet.create({
     shadowColor: '#FEE787',
     shadowOpacity: 0.55,
     shadowRadius: 6,
-    shadowOffset: {width: 0, height: 0},
+    shadowOffset: { width: 0, height: 0 },
     elevation: 4,
   },
   uploadProgressLabel: {
@@ -3713,7 +3706,7 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     justifyContent: 'center',
-    ...(Platform.OS === 'web' ? {cursor: 'pointer'} : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   publishBtn: {
     paddingVertical: 4,
@@ -3722,7 +3715,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    ...(Platform.OS === 'web' ? {cursor: 'pointer'} : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   publishBtnMuted: {
     opacity: 0.45,
@@ -3850,9 +3843,9 @@ const styles = StyleSheet.create({
   },
   polygonSliderContainer: {
     position: 'absolute',
-    // Android swaps left/right under forceRTL, so `right` is the physical left
-    // (where this bar sat in the last update). iOS keeps `left`.
-    ...(Platform.OS === 'android' ? {right: 0} : {left: 0}),
+    // Android swaps left/right under forceRTL, so `right` is the physical left.
+    // iOS and web keep `left`.
+    ...(Platform.OS === 'android' ? { right: 0 } : { left: 0 }),
     top: 4,
     width: 56,
     height: POLYGON_TRACK_HEIGHT + 16,
@@ -3911,7 +3904,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000000',
     shadowOpacity: 0.2,
     shadowRadius: 3,
-    shadowOffset: {width: 0, height: 1},
+    shadowOffset: { width: 0, height: 1 },
     elevation: 3,
   },
   editingTextInput: {
@@ -3979,10 +3972,10 @@ const styles = StyleSheet.create({
     maxHeight: 38,
   },
   iosLtrFlip: {
-    transform: [{scaleX: -1}],
+    transform: [{ scaleX: -1 }],
   },
   androidLtrFlip: {
-    transform: [{scaleX: -1}],
+    transform: [{ scaleX: -1 }],
   },
   textStylesRow: {
     paddingHorizontal: 22,
@@ -4087,7 +4080,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  AaStyleBtnText: {color: '#fff', fontSize: 18, fontFamily: 'Rubik-Regular'},
+  AaStyleBtnText: { color: '#fff', fontSize: 18, fontFamily: 'Rubik-Regular' },
   formatBtnIcon: {
     width: 23,
     height: 23,
