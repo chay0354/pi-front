@@ -46,6 +46,10 @@ import {
   getProfileBusinessNameFieldKey,
 } from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {
+  directoryCardMediaFrame,
+  parseDirectoryVideoCrop,
+} from '../utils/directoryCoverFrame';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const BG = '#27262F';
@@ -69,6 +73,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   /** Company + משווק: logo only — no separate profile photo or video. */
   const logoOnlyProfile = usesOrgLogoAsAvatar(subTypeLower);
   const canEditProfilePhoto = !logoOnlyProfile;
+  const canEditHorizontalCover =
+    subTypeLower === subscriptionTypes.broker ||
+    subTypeLower === subscriptionTypes.professional;
   const canEditProfileVideo =
     isB2BSubscriptionType(subTypeLower) && !logoOnlyProfile;
   const canEditCompanyLogo = canEditSeparateCompanyLogo(
@@ -91,6 +98,16 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       getUserCompanyLogoUrl(currentUser),
   );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoSourceUri, setPhotoSourceUri] = useState(null);
+  const [directoryCoverUrl, setDirectoryCoverUrl] = useState(() =>
+    currentUser?.directory_cover_url &&
+    String(currentUser.directory_cover_url).trim()
+      ? String(currentUser.directory_cover_url).trim()
+      : null,
+  );
+  const [directoryVideoCrop, setDirectoryVideoCrop] = useState(() =>
+    parseDirectoryVideoCrop(currentUser?.directory_video_crop),
+  );
   const [profileVideoUrl, setProfileVideoUrl] = useState(() =>
     currentUser?.video_url && String(currentUser.video_url).trim()
       ? String(currentUser.video_url).trim()
@@ -169,6 +186,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       input.onchange = e => {
         const file = e.target.files?.[0];
         if (file) {
+          setDirectoryVideoCrop(null);
           setPendingProfileVideo({
             uri: URL.createObjectURL(file),
             type: file.type,
@@ -187,6 +205,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         AD_VIDEO_PICKER_OPTIONS,
       );
       if (!result.canceled && result.assets?.[0]) {
+        setDirectoryVideoCrop(null);
         setPendingProfileVideo(buildPickedVideoFile(result.assets[0]));
       }
     } catch (err) {
@@ -198,6 +217,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     if (uploadingVideo || saving) return;
     setPendingProfileVideo(null);
     setProfileVideoUrl(null);
+    setDirectoryVideoCrop(null);
   };
 
   const uploadPicked = async picked => {
@@ -207,6 +227,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       const uploaded = await uploadProfilePicture(picked);
       if (uploaded?.url) {
         setPhotoUrl(uploaded.url);
+      } else {
+        throw new Error('לא התקבלה כתובת תמונה');
+      }
+    } catch (err) {
+      Alert.alert('שגיאה', err?.message || 'העלאת התמונה נכשלה, נסה/י שוב.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const uploadCoverPicked = async picked => {
+    if (!picked) return;
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadProfilePicture(picked);
+      if (uploaded?.url) {
+        setDirectoryCoverUrl(uploaded.url);
       } else {
         throw new Error('לא התקבלה כתובת תמונה');
       }
@@ -236,6 +273,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const openPhotoCropper = (uri, target = 'profile') => {
     if (!uri) return;
+    if (target === 'profile' || (target === 'cover' && !photoSourceUri)) {
+      setPhotoSourceUri(uri);
+    }
     cropTargetRef.current = target;
     setCropTarget(target);
     setCropUri(uri);
@@ -246,6 +286,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     const target = cropTargetRef.current;
     setCropVisible(false);
     setCropUri(null);
+    if (target === 'video') {
+      if (result?.crop) setDirectoryVideoCrop(result.crop);
+      else if (result?.error) Alert.alert('שגיאה', result.error);
+      return;
+    }
     if (!result?.uri) {
       if (result?.error) {
         Alert.alert('שגיאה', result.error);
@@ -259,6 +304,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     };
     if (target === 'logo') {
       await uploadLogoPicked(picked);
+      return;
+    }
+    if (target === 'cover') {
+      await uploadCoverPicked(picked);
       return;
     }
     await uploadPicked(picked);
@@ -330,6 +379,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     });
     if (canEditProfilePhoto) {
       Object.assign(payload, buildProfilePhotoSavePayload(photoUrl));
+    }
+    if (canEditHorizontalCover) {
+      payload.directory_cover_url = directoryCoverUrl || null;
+      payload.directory_video_crop = directoryVideoCrop || null;
     }
     if (canEditCompanyLogo && logoUrl) {
       payload.company_logo_url = logoUrl;
@@ -471,6 +524,20 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                     {photoUrl ? 'שינוי תמונה' : 'העלאת תמונה'}
                   </Text>
                 </TouchableOpacity>
+                {canEditHorizontalCover ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const source = photoSourceUri || photoUrl;
+                      if (!source) {
+                        handlePickImage('cover');
+                        return;
+                      }
+                      openPhotoCropper(source, 'cover');
+                    }}
+                    activeOpacity={0.7}>
+                    <Text style={styles.changePhotoText}>עריכת תצוגה אופקית</Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
             ) : (
               <View style={styles.avatarWrap}>
@@ -527,6 +594,21 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                     {profileVideoPreviewUri ? 'החלפת סרטון' : 'בחירת סרטון'}
                   </Text>
                 </TouchableOpacity>
+                {profileVideoPreviewUri ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      cropTargetRef.current = 'video';
+                      setCropTarget('video');
+                      setCropUri(profileVideoPreviewUri);
+                      setCropVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                    disabled={uploadingVideo || saving}>
+                    <Text style={styles.changeVideoLinkText}>
+                      עריכת תצוגה אופקית
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 {profileVideoPreviewUri ? (
                   <TouchableOpacity
                     onPress={handleRemoveProfileVideo}
@@ -771,7 +853,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         title={
           cropTarget === 'logo'
             ? 'חתוך את לוגו החברה'
-            : 'חתוך את תמונת הפרופיל'
+            : cropTarget === 'cover' || cropTarget === 'video'
+              ? 'עריכת תצוגה אופקית'
+              : 'חתוך את תמונת הפרופיל'
+        }
+        media={cropTarget === 'video' ? 'video' : 'image'}
+        shape={
+          cropTarget === 'cover' || cropTarget === 'video' ? 'rect' : 'circle'
+        }
+        frameWidth={
+          cropTarget === 'cover' || cropTarget === 'video'
+            ? directoryCardMediaFrame().width
+            : undefined
+        }
+        frameHeight={
+          cropTarget === 'cover' || cropTarget === 'video'
+            ? directoryCardMediaFrame().height
+            : undefined
         }
       />
     </View>
@@ -926,6 +1024,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 20,
     marginTop: 2,
   },

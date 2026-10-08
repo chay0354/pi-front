@@ -103,6 +103,7 @@ import {
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
 import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import FreeImageCropModal from '../components/FreeImageCropModal';
 import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
@@ -1304,6 +1305,7 @@ const AdsForm = ({
   const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
   const [adImageCrop, setAdImageCrop] = useState(null);
   const adImageSourceRef = useRef({main: null, extra: {}});
+  const adImageCropRectRef = useRef({main: null, extra: {}});
   const [partnerPhotoSourceUri, setPartnerPhotoSourceUri] = useState(null);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
@@ -1644,6 +1646,7 @@ const AdsForm = ({
         }
         const picked = fileFromPickerAsset(result.assets[0], 'image');
         adImageSourceRef.current.main = picked.uri;
+        adImageCropRectRef.current.main = null;
         setMainImage(picked);
       }
     } catch (error) {
@@ -1659,6 +1662,7 @@ const AdsForm = ({
         openPartnerPhotoCropper(uri);
       } else {
         adImageSourceRef.current.main = uri;
+        adImageCropRectRef.current.main = null;
         setMainImage({
           uri,
           type: file.type || 'image/jpeg',
@@ -1778,7 +1782,11 @@ const AdsForm = ({
         ? adImageSourceRef.current.main || currentUri
         : adImageSourceRef.current.extra[slot] || currentUri;
     if (!source) return;
-    setAdImageCrop({slot, uri: source});
+    const savedCrop =
+      slot === 'main'
+        ? adImageCropRectRef.current.main
+        : adImageCropRectRef.current.extra[slot] || null;
+    setAdImageCrop({slot, uri: source, crop: savedCrop});
   };
 
   const handleAdImageCropConfirm = result => {
@@ -1789,6 +1797,8 @@ const AdsForm = ({
       return;
     }
     if (!result?.uri || slot == null) return;
+    if (slot === 'main') adImageCropRectRef.current.main = result.crop || null;
+    else adImageCropRectRef.current.extra[slot] = result.crop || null;
     const file = {
       uri: result.uri,
       type: 'image/jpeg',
@@ -1820,6 +1830,7 @@ const AdsForm = ({
         if (!result.canceled && result.assets[0]) {
           const picked = fileFromPickerAsset(result.assets[0], 'image');
           adImageSourceRef.current.extra[index] = picked.uri;
+          adImageCropRectRef.current.extra[index] = null;
           const newImages = [...additionalImages];
           newImages[index] = picked;
           setAdditionalImages(newImages);
@@ -1836,6 +1847,7 @@ const AdsForm = ({
       const newImages = [...additionalImages];
       const uri = URL.createObjectURL(file);
       adImageSourceRef.current.extra[index] = uri;
+      adImageCropRectRef.current.extra[index] = null;
       newImages[index] = {
         uri,
         type: file.type || 'image/jpeg',
@@ -2814,6 +2826,11 @@ const AdsForm = ({
                     additionalImageInputRefs={additionalImageInputRefs}
                     onEditMainImage={() => openAdImageEditor('main')}
                     onEditAdditionalImage={openAdImageEditor}
+                    allowMoreImages={
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.broker ||
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.company ||
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.projectMarketer
+                    }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
                     videoFile={videoFile}
@@ -3197,14 +3214,13 @@ const AdsForm = ({
         shape="square"
         fit="contain"
       />
-      <CircleImageCropModal
+      <FreeImageCropModal
         visible={adImageCrop != null}
         imageUri={adImageCrop?.uri || null}
+        initialCrop={adImageCrop?.crop || null}
         onCancel={() => setAdImageCrop(null)}
         onConfirm={handleAdImageCropConfirm}
         title="עריכת תמונה"
-        shape="square"
-        fit="contain"
       />
     </View>
   );

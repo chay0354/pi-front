@@ -23,9 +23,12 @@ export const ProfilePictureUpload = ({
   /** 'free' (default), 'circle', or 'square' framed preview. */
   previewShape = 'free',
   onEditExistingImage,
+  onEditHorizontalDisplay,
 }) => {
   const hasImage = Boolean(mainImage?.uri);
   const showEdit = hasImage && typeof onEditExistingImage === 'function';
+  const showHorizontal =
+    hasImage && typeof onEditHorizontalDisplay === 'function';
   const isFramed = previewShape === 'circle' || previewShape === 'square';
 
   const frameStyle = !hasImage
@@ -70,16 +73,37 @@ export const ProfilePictureUpload = ({
             </View>
           ) : null}
         </TouchableOpacity>
-        {showEdit ? (
-          <TouchableOpacity
-            style={styles.editChip}
-            onPress={onEditExistingImage}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="עריכת תמונה">
-            <MaterialCommunityIcons name="crop" size={16} color="#FFFFFF" />
-            <Text style={styles.editChipText}>עריכה</Text>
-          </TouchableOpacity>
+        {showEdit || showHorizontal ? (
+          <View style={styles.editRow}>
+            {showEdit ? (
+              <TouchableOpacity
+                style={styles.editChip}
+                onPress={onEditExistingImage}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="עריכת תמונת פרופיל">
+                <MaterialCommunityIcons name="crop" size={16} color="#FFFFFF" />
+                <Text style={styles.editChipText}>
+                  {showHorizontal ? 'עריכת תמונת פרופיל' : 'עריכה'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {showHorizontal ? (
+              <TouchableOpacity
+                style={styles.editChip}
+                onPress={onEditHorizontalDisplay}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="עריכת תצוגה אופקית">
+                <MaterialCommunityIcons
+                  name="crop-landscape"
+                  size={16}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.editChipText}>עריכת תצוגה אופקית</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
         {Platform.OS === 'web' && (
           <input
@@ -110,7 +134,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2B2A39',
     paddingVertical: 16,
     paddingHorizontal: 12,
-    overflow: 'hidden',
+    overflow: 'visible',
     gap: 12,
   },
   rectHit: {
@@ -178,12 +202,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  editRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
   editChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#4D4966',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     height: 36,
     borderRadius: 18,
   },

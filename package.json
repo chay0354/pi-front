@@ -27,8 +27,18 @@
     "build:bundle": "node scripts/clean-dist-for-eas.js && cd android && gradlew.bat bundleRelease",
     "download:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-apk.ps1",
     "test:user-types": "node --test ../qa/tests/user-types.test.js",
+    "test:user:company": "node --test ../qa/tests/user-company.js",
+    "test:user:broker": "node --test ../qa/tests/user-broker.js",
+    "test:user:marketer": "node --test ../qa/tests/user-marketer.js",
+    "test:user:regular": "node --test ../qa/tests/user-regular.js",
+    "test:user:professional": "node --test ../qa/tests/user-professional.js",
     "test:open-account:phone": "node ../qa/tests/open-account-on-phone.js",
-    "test:steps:phone": "node ../qa/tests/show-steps-on-phone.js"
+    "test:steps:phone": "node ../qa/tests/show-steps-on-phone.js",
+    "test:phone:company": "node ../qa/tests/user-company.js --phone",
+    "test:phone:broker": "node ../qa/tests/user-broker.js --phone",
+    "test:phone:marketer": "node ../qa/tests/user-marketer.js --phone",
+    "test:phone:regular": "node ../qa/tests/user-regular.js --phone",
+    "test:phone:professional": "node ../qa/tests/user-professional.js --phone"
   },
   "dependencies": {
     "@expo-google-fonts/alef": "^0.4.1",

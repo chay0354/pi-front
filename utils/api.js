@@ -623,6 +623,28 @@ export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
     }
   }
 
+  const coverUri = outFiles.directoryCover?.uri;
+  if (coverUri && !data.directory_cover_url) {
+    if (String(coverUri).startsWith('http')) {
+      data.directory_cover_url = coverUri;
+      delete outFiles.directoryCover;
+    } else {
+      try {
+        const uploaded = await uploadProfilePicture(outFiles.directoryCover);
+        if (uploaded?.url) {
+          data.directory_cover_url = uploaded.url;
+        }
+        delete outFiles.directoryCover;
+      } catch (err) {
+        console.warn(
+          '[prepareSubscriptionSubmitPayload] cover pre-upload failed:',
+          err?.message || err,
+        );
+        delete outFiles.directoryCover;
+      }
+    }
+  }
+
   const logoUri = outFiles.companyLogo?.uri;
   if (logoUri && !data.company_logo_url) {
     if (String(logoUri).startsWith('http')) {
@@ -762,9 +784,11 @@ export const submitSubscription = async (formData, files = {}) => {
     const forceJson = !subscriptionSubmitHasFileAttachments(attach, payload);
 
     if (forceJson) {
-      return await postSubscriptionSubmit(
+      const created = await postSubscriptionSubmit(
         toSubscriptionSubmitJsonBody(payload),
       );
+      await persistDirectoryMediaColumns(created?.subscriptionId, payload);
+      return created;
     }
 
     const formDataToSend = new FormData();
@@ -816,7 +840,9 @@ export const submitSubscription = async (formData, files = {}) => {
       }
     }
 
-    return await postSubscriptionSubmit(formDataToSend, {});
+    const created = await postSubscriptionSubmit(formDataToSend, {});
+    await persistDirectoryMediaColumns(created?.subscriptionId, payload);
+    return created;
   } catch (error) {
     console.error('Error submitting subscription:', error);
     throw error;
@@ -1150,6 +1176,7 @@ export const updateSubscriptionProfile = async (subscriptionId, fields = {}) => 
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Failed to update profile');
+  await persistDirectoryMediaColumns(id, fields);
   return data;
 };
 
@@ -1677,6 +1704,38 @@ function supabaseRestConfig() {
       '',
   ).trim();
   return {url, key};
+}
+
+/** Live directory API omits these columns; write them on the subscription row. */
+async function persistDirectoryMediaColumns(subscriptionId, fields) {
+  const id = String(subscriptionId || '').trim();
+  if (!id || !fields || typeof fields !== 'object') return;
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(fields, 'directory_cover_url')) {
+    const raw = fields.directory_cover_url;
+    patch.directory_cover_url =
+      raw != null && String(raw).trim() ? String(raw).trim() : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, 'directory_video_crop')) {
+    patch.directory_video_crop = fields.directory_video_crop || null;
+  }
+  if (!Object.keys(patch).length) return;
+  const {url, key} = supabaseRestConfig();
+  if (!url || !key) return;
+  try {
+    await fetch(`${url}/rest/v1/subscriptions?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(patch),
+    });
+  } catch (err) {
+    console.warn('[directory media] save failed', err?.message || err);
+  }
 }
 
 async function supabaseRestGet(pathWithQuery) {
@@ -3259,7 +3318,32 @@ export const getProfessionalsDirectory = async () => {
   if (!response.ok) {
     throw new Error(data.error || 'Failed to load professionals');
   }
-  return data;
+  const list = Array.isArray(data.professionals) ? data.professionals : [];
+  const ids = list.map(row => String(row?.id || '').trim()).filter(Boolean);
+  if (!ids.length) return data;
+  const mediaRows = await supabaseRestGet(
+    `subscriptions?id=in.(${ids.join(',')})&select=id,directory_cover_url,directory_video_crop`,
+  );
+  if (!Array.isArray(mediaRows) || !mediaRows.length) return data;
+  const byId = new Map(mediaRows.map(row => [String(row.id), row]));
+  return {
+    ...data,
+    professionals: list.map(row => {
+      const extra = byId.get(String(row.id));
+      if (!extra) return row;
+      const cover =
+        extra.directory_cover_url != null &&
+        String(extra.directory_cover_url).trim()
+          ? String(extra.directory_cover_url).trim()
+          : null;
+      return {
+        ...row,
+        directory_cover_url: cover || row.directory_cover_url || null,
+        directory_video_crop:
+          extra.directory_video_crop || row.directory_video_crop || null,
+      };
+    }),
+  };
 };
 
 /**

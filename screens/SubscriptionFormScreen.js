@@ -37,6 +37,7 @@ import {
 import {flexEnd, flexStart} from '../utils/rtlLayout';
 import {checkEmailAvailable} from '../utils/api';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {directoryCardMediaFrame} from '../utils/directoryCoverFrame';
 import {ProfilePictureUpload} from '../components/FormsElement/ProfilePictureUpload';
 
 /**
@@ -57,6 +58,10 @@ const SubscriptionFormScreen = ({
     subscriptionType === subscriptionTypes.projectMarketer;
   const isCompanyFlow =
     subscriptionType === subscriptionTypes.company || isProjectMarketerFlow;
+  /** Same horizontal directory crop as edit profile — brokers and professionals only. */
+  const canEditHorizontalDisplay =
+    subscriptionType === subscriptionTypes.broker ||
+    subscriptionType === subscriptionTypes.professional;
   const orgNameLabel = isProjectMarketerFlow ? 'שם המשווק' : 'שם החברה';
   const orgLogoLabel = isProjectMarketerFlow ? 'משווק' : 'חברה';
   const companyLogoLabel = `לוגו ${orgLogoLabel}`;
@@ -104,6 +109,11 @@ const SubscriptionFormScreen = ({
   /** 'profile' | 'logo' — which field the circle crop writes into */
   const [circleCropTarget, setCircleCropTarget] = useState('logo');
   const [profilePictureSourceUri, setProfilePictureSourceUri] = useState(null);
+  const [horizontalCropUri, setHorizontalCropUri] = useState(null);
+  const [horizontalCropVisible, setHorizontalCropVisible] = useState(false);
+  const [directoryCover, setDirectoryCover] = useState(null);
+  const [directoryVideoCrop, setDirectoryVideoCrop] = useState(null);
+  const [horizontalMedia, setHorizontalMedia] = useState('image');
   const profilePictureInputRef = useRef(null);
   const profileVideoPreviewRef = useRef(null);
 
@@ -264,6 +274,62 @@ const SubscriptionFormScreen = ({
     openCircleCropper(source, 'profile');
   };
 
+  const openHorizontalCropper = uri => {
+    const source = uri || profilePictureSourceUri || profilePicture?.uri;
+    if (!source) return;
+    setHorizontalMedia('image');
+    setHorizontalCropUri(source);
+    setHorizontalCropVisible(true);
+  };
+
+  const openVideoHorizontalCropper = () => {
+    if (!video?.uri) return;
+    setHorizontalMedia('video');
+    setHorizontalCropUri(video.uri);
+    setHorizontalCropVisible(true);
+  };
+
+  const pickImageForHorizontalCover = async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = event => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const uri = URL.createObjectURL(file);
+        setProfilePictureSourceUri(uri);
+        openHorizontalCropper(uri);
+      };
+      input.click();
+      return;
+    }
+    try {
+      const permitted = await ensureMediaLibraryPermission();
+      if (!permitted) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+      const uri = result.assets?.[0]?.uri;
+      if (result.canceled || !uri) return;
+      setProfilePictureSourceUri(uri);
+      openHorizontalCropper(uri);
+    } catch (error) {
+      Alert.alert('שגיאה', `לא ניתן לבחור תמונה: ${error.message}`);
+    }
+  };
+
+  const handleHorizontalImagePress = () => {
+    const source = profilePictureSourceUri || profilePicture?.uri;
+    if (!source) {
+      pickImageForHorizontalCover();
+      return;
+    }
+    openHorizontalCropper(source);
+  };
+
   // Same in-app circle crop as company logo — not the system square editor.
   const handleProfilePictureUpload = async () => {
     if (Platform.OS === 'web' && profilePictureInputRef.current) {
@@ -329,6 +395,7 @@ const SubscriptionFormScreen = ({
       input.onchange = e => {
         const file = e.target.files?.[0];
         if (file) {
+          setDirectoryVideoCrop(null);
           setVideo({
             uri: URL.createObjectURL(file),
             type: file.type,
@@ -349,6 +416,7 @@ const SubscriptionFormScreen = ({
       );
 
       if (!result.canceled && result.assets?.[0]) {
+        setDirectoryVideoCrop(null);
         setVideo(buildPickedVideoFile(result.assets[0]));
       }
     } catch (error) {
@@ -501,6 +569,14 @@ const SubscriptionFormScreen = ({
         }
 
         if (video) files.video = video;
+
+        if (directoryCover?.uri) {
+          files.directoryCover = directoryCover;
+        }
+
+        if (video && directoryVideoCrop) {
+          formData.directory_video_crop = directoryVideoCrop;
+        }
       }
 
       const userEmail = isCompanyFlow ? companyEmail : email;
@@ -700,6 +776,9 @@ const SubscriptionFormScreen = ({
                   profilePictureSourceUri || profilePicture?.uri,
                 )
               }
+              onEditHorizontalDisplay={
+                canEditHorizontalDisplay ? handleHorizontalImagePress : undefined
+              }
             />
           ) : (
             <>
@@ -729,7 +808,10 @@ const SubscriptionFormScreen = ({
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.videoRemoveButton}
-                    onPress={() => setVideo(null)}
+                    onPress={() => {
+                      setVideo(null);
+                      setDirectoryVideoCrop(null);
+                    }}
                     accessibilityLabel="הסר סרטון"
                     hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
                     <MaterialCommunityIcons
@@ -737,6 +819,21 @@ const SubscriptionFormScreen = ({
                       size={20}
                       color={Colors.white100}
                     />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.horizontalEditChip}
+                    onPress={openVideoHorizontalCropper}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="עריכת תצוגה אופקית">
+                    <MaterialCommunityIcons
+                      name="crop-landscape"
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.horizontalEditChipText}>
+                      עריכת תצוגה אופקית
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -1311,6 +1408,44 @@ const SubscriptionFormScreen = ({
       </KeyboardAvoidingView>
     </ImageBackground>
     <CircleImageCropModal
+      visible={horizontalCropVisible}
+      imageUri={horizontalCropUri}
+      title="עריכת תצוגה אופקית"
+      shape="rect"
+      fit="cover"
+      media={horizontalMedia}
+      frameWidth={directoryCardMediaFrame().width}
+      frameHeight={directoryCardMediaFrame().height}
+      onCancel={() => {
+        setHorizontalCropVisible(false);
+        setHorizontalCropUri(null);
+      }}
+      onConfirm={result => {
+        setHorizontalCropVisible(false);
+        setHorizontalCropUri(null);
+        if (result?.error) {
+          Alert.alert(
+            'שגיאה',
+            horizontalMedia === 'video'
+              ? 'לא הצלחנו לערוך את הסרטון. נסו שוב.'
+              : 'לא הצלחנו לחתוך את התמונה. נסו שוב.',
+          );
+          return;
+        }
+        if (horizontalMedia === 'video') {
+          if (result?.crop) setDirectoryVideoCrop(result.crop);
+          return;
+        }
+        if (result?.uri) {
+          setDirectoryCover({
+            uri: result.uri,
+            type: 'image/jpeg',
+            name: `directory-cover-${Date.now()}.jpg`,
+          });
+        }
+      }}
+    />
+    <CircleImageCropModal
       visible={circleCropVisible}
       imageUri={circleCropUri}
       onCancel={handleCircleCropCancel}
@@ -1532,6 +1667,23 @@ const styles = StyleSheet.create({
   videoPreviewContainer: {
     width: '100%',
     position: 'relative',
+    alignItems: 'center',
+    gap: 12,
+  },
+  horizontalEditChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#4D4966',
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 18,
+    marginTop: 12,
+  },
+  horizontalEditChipText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   videoPreviewFrame: {
     width: '100%',

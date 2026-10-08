@@ -31,6 +31,8 @@ import {
   I18nManager,
 } from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
+import {MaterialCommunityIcons} from '@expo/vector-icons';
+import FreeImageCropModal from '../components/FreeImageCropModal';
 import * as ImagePicker from 'expo-image-picker';
 import {Video, ResizeMode, Audio} from 'expo-av';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -1102,6 +1104,9 @@ const PostEditorScreen = ({
   const originalVideoUrlRef = useRef(null);
   const originalMainImageUrlRef = useRef(null);
   const originalStoryMediaUrlRef = useRef(null);
+  const postImageSourceRef = useRef(null);
+  const postImageCropRef = useRef(null);
+  const [postImageCropOpen, setPostImageCropOpen] = useState(null);
   const didHydrateListingRef = useRef(false);
   const didHydrateOverlaysRef = useRef(false);
 
@@ -1121,6 +1126,8 @@ const PostEditorScreen = ({
     originalVideoUrlRef.current = null;
     originalMainImageUrlRef.current = null;
     originalStoryMediaUrlRef.current = null;
+    postImageSourceRef.current = null;
+    postImageCropRef.current = null;
     setTextBlocks([]);
     setEditingTextBlockId(null);
     editingTextDraftRef.current = '';
@@ -1207,6 +1214,8 @@ const PostEditorScreen = ({
       });
       setBackgroundImageUri(null);
       setMediaImages([]);
+      postImageSourceRef.current = null;
+      postImageCropRef.current = null;
       activeTabRef.current = TAB_CAMERA;
       setActiveTab(TAB_CAMERA);
       return;
@@ -1225,6 +1234,8 @@ const PostEditorScreen = ({
       originalMainImageUrlRef.current = null;
       setBackgroundImageUri(null);
       setBackgroundVideoAsset(null);
+      postImageSourceRef.current = null;
+      postImageCropRef.current = null;
       if (restoreInfo.bgGradientIndex != null) {
         setSelectedBackgroundGradientIndex(restoreInfo.bgGradientIndex);
       }
@@ -1233,6 +1244,8 @@ const PostEditorScreen = ({
       return;
     }
     if (mainImageUrl) {
+      postImageSourceRef.current = mainImageUrl;
+      postImageCropRef.current = null;
       setBackgroundImageUri(mainImageUrl);
       setBackgroundVideoAsset(null);
       activeTabRef.current = TAB_CAMERA;
@@ -2391,12 +2404,33 @@ const PostEditorScreen = ({
   const applyBackgroundImage = uri => {
     if (!uri) return;
     setBackgroundVideoAsset(null);
+    postImageSourceRef.current = uri;
+    postImageCropRef.current = null;
     setBackgroundImageUri(uri);
+  };
+
+  const openPostImageCrop = () => {
+    const source = postImageSourceRef.current || backgroundImageUri;
+    if (!source) return;
+    if (!postImageSourceRef.current) postImageSourceRef.current = source;
+    setPostImageCropOpen({uri: source, crop: postImageCropRef.current});
+  };
+
+  const handlePostImageCropConfirm = result => {
+    setPostImageCropOpen(null);
+    if (result?.error) {
+      Alert.alert('', result.error);
+      return;
+    }
+    if (result?.crop) postImageCropRef.current = result.crop;
+    if (result?.uri) setBackgroundImageUri(result.uri);
   };
 
   const applyBackgroundVideo = asset => {
     if (!asset?.uri) return;
     setBackgroundImageUri(null);
+    postImageSourceRef.current = null;
+    postImageCropRef.current = null;
     setMediaImages([]);
     setBackgroundVideoAsset({
       uri: asset.uri,
@@ -2584,6 +2618,8 @@ const PostEditorScreen = ({
   const clearAllEditorState = () => {
     setBackgroundImageUri(null);
     setBackgroundVideoAsset(null);
+    postImageSourceRef.current = null;
+    postImageCropRef.current = null;
     setMediaImages([]);
     setTextBlocks([]);
     setEditingTextBlockId(null);
@@ -2822,6 +2858,17 @@ const PostEditorScreen = ({
                 />
               </TouchableOpacity>
               <View style={styles.previewContainer}>
+                {backgroundImageUri && !backgroundVideoAsset?.uri ? (
+                  <TouchableOpacity
+                    style={styles.imageCropChip}
+                    onPress={openPostImageCrop}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="עריכה">
+                    <MaterialCommunityIcons name="crop" size={16} color="#FFFFFF" />
+                    <Text style={styles.imageCropChipText}>עריכה</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   style={styles.closeIconContainer}
                   onPress={pickBackgroundImageFromGallery}>
@@ -2869,6 +2916,8 @@ const PostEditorScreen = ({
                         if (backgroundImageUri || backgroundVideoAsset?.uri) {
                           setBackgroundImageUri(null);
                           setBackgroundVideoAsset(null);
+                          postImageSourceRef.current = null;
+                          postImageCropRef.current = null;
                           return;
                         }
                       setSelectedBackgroundGradientIndex(prev => {
@@ -3591,6 +3640,14 @@ const PostEditorScreen = ({
         onSkip={handleProfessionalTargetSkip}
         onConfirm={handleProfessionalTargetConfirm}
       />
+      <FreeImageCropModal
+        visible={postImageCropOpen != null}
+        imageUri={postImageCropOpen?.uri || null}
+        initialCrop={postImageCropOpen?.crop || null}
+        onCancel={() => setPostImageCropOpen(null)}
+        onConfirm={handlePostImageCropConfirm}
+        title="עריכת תמונה"
+      />
     </View>
   );
 };
@@ -3789,6 +3846,20 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     resizeMode: 'contain',
+  },
+  imageCropChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#00000066',
+  },
+  imageCropChipText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
   },
   tabTextActive: {
     color: '#fff',

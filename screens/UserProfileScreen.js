@@ -920,7 +920,7 @@ const UserProfileScreen = ({
       return;
     }
     if (isBnbCommentsOnly && !String(reviewComment || '').trim()) {
-      showAlert('הוסף תגובה', 'נא לכתוב תגובה לפני השליחה.');
+      showAlert('הוסף ביקורת', 'נא לכתוב ביקורת לפני השליחה.');
       return;
     }
     if (!creatorId) {
@@ -934,7 +934,7 @@ const UserProfileScreen = ({
           if (
             window.confirm(
               isBnbCommentsOnly
-                ? 'כדי להוסיף תגובה יש לפתוח חשבון או להתחבר. לעבור לדף הפתיחה?'
+                ? 'כדי להוסיף ביקורת יש לפתוח חשבון או להתחבר. לעבור לדף הפתיחה?'
                 : 'כדי לדרג ולהוסיף ביקורת יש לפתוח חשבון או להתחבר. לעבור לדף הפתיחה?',
             )
           ) {
@@ -944,7 +944,7 @@ const UserProfileScreen = ({
           Alert.alert(
             'נדרשת התחברות',
             isBnbCommentsOnly
-              ? 'כדי להוסיף תגובה יש לפתוח חשבון או להתחבר.'
+              ? 'כדי להוסיף ביקורת יש לפתוח חשבון או להתחבר.'
               : 'כדי לדרג ולהוסיף ביקורת יש לפתוח חשבון או להתחבר.',
             [
               {text: 'ביטול', style: 'cancel'},
@@ -956,7 +956,7 @@ const UserProfileScreen = ({
         showAlert(
           'נדרשת התחברות',
           isBnbCommentsOnly
-            ? 'כדי להוסיף תגובה יש לפתוח חשבון או להתחבר.'
+            ? 'כדי להוסיף ביקורת יש לפתוח חשבון או להתחבר.'
             : 'כדי לדרג ולהוסיף ביקורת יש לפתוח חשבון או להתחבר.',
         );
       }
@@ -999,7 +999,7 @@ const UserProfileScreen = ({
           setReviews(refetch.reviews);
         showAlert(
           'נשלח',
-          isBnbCommentsOnly ? 'התגובה נשלחה בהצלחה.' : 'הדירוג נשלח בהצלחה.',
+          isBnbCommentsOnly ? 'הביקורת נשלחה בהצלחה.' : 'הדירוג נשלח בהצלחה.',
         );
       } else {
         showAlert('שגיאה', result.error || 'לא ניתן לשלוח דירוג. נסה שוב.');
@@ -3834,9 +3834,7 @@ const UserProfileScreen = ({
                   </View>
                   {renderPiRating()}
                 </View>
-                {(isProfessional ||
-                  isProjectMarketer ||
-                  (isBroker && !isBrokerAccount)) &&
+                {(isProfessional || isProjectMarketer || isBrokerAccount) &&
                   renderProfessionalTypeTags(profileTypeLabelsUnderName)}
                 {brokerAddress && !isOwnProfile && !isBrokerAccount ? (
                   <View style={styles.brokerCardBottomLocationRow}>
@@ -4226,14 +4224,14 @@ const UserProfileScreen = ({
             ) : null}
 
             <Text style={styles.reviewsListTitle}>
-              {isBnbCommentsOnly ? 'תגובות' : 'ביקורות'}
+              ביקורות
             </Text>
             {!isOwnProfile ? (
               <TextInput
                 style={styles.reviewsInput}
                 value={reviewComment}
                 onChangeText={setReviewComment}
-                placeholder={isBnbCommentsOnly ? 'הוסף תגובה' : 'הוסף ביקורת'}
+                placeholder="הוסף ביקורת"
                 placeholderTextColor="rgba(255,255,255,0.4)"
                 onFocus={scrollReviewsIntoView}
               />
@@ -4262,11 +4260,11 @@ const UserProfileScreen = ({
             ) : null}
             {reviewsLoading ? (
               <Text style={styles.reviewsPlaceholder}>
-                {isBnbCommentsOnly ? 'טוען תגובות...' : 'טוען ביקורות...'}
+                טוען ביקורות...
               </Text>
             ) : listingReviews.length === 0 ? (
               <Text style={styles.reviewsPlaceholder}>
-                {isBnbCommentsOnly ? 'אין עדיין תגובות' : 'אין עדיין ביקורות'}
+                אין עדיין ביקורות
               </Text>
             ) : (
               visibleReviews.map(r => (
@@ -4320,7 +4318,7 @@ const UserProfileScreen = ({
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    isBnbCommentsOnly ? 'כל התגובות' : 'כל הביקורות'
+                    'כל הביקורות'
                   }>
                   <Text style={styles.readMoreText}>קרא עוד</Text>
                 </Pressable>

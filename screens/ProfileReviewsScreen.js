@@ -86,7 +86,7 @@ const ProfileReviewsScreen = ({
   const insets = useSafeAreaInsets();
   const count = Array.isArray(reviews) ? reviews.length : 0;
   const commentsOnly = variant === 'comments';
-  const title = commentsOnly ? `תגובות (${count})` : `ביקורות (${count})`;
+  const title = `ביקורות (${count})`;
 
   return (
     <View style={[styles.root, {paddingTop: insets.top}]}>
@@ -114,7 +114,7 @@ const ProfileReviewsScreen = ({
         showsVerticalScrollIndicator={false}>
         {count === 0 ? (
           <Text style={styles.empty}>
-            {commentsOnly ? 'אין תגובות' : 'אין ביקורות'}
+            אין ביקורות
           </Text>
         ) : (
           reviews.map((r, i) => (

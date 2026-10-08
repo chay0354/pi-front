@@ -26,6 +26,11 @@ import {
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {flexEnd, flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
+import {
+  DIRECTORY_CARD_MEDIA_HEIGHT,
+  parseDirectoryVideoCrop,
+  placedMediaStyle,
+} from '../utils/directoryCoverFrame';
 
 /** Pi badge layout is always LTR (number then star) — isolate from RTL card rows. */
 const piBadgeLtrDirection =
@@ -197,9 +202,13 @@ const ProfessionalCard = ({
   const regionTags = collectRegionTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
+  const coverUrl = professional?.directory_cover_url || null;
+  const videoCrop = parseDirectoryVideoCrop(professional?.directory_video_crop);
+  const [mediaBox, setMediaBox] = useState({width: 0, height: 0});
   const videoUri = resolveProfessionalVideoUri(professional);
   const posterUri =
     (videoUri && muxThumbnailUri(videoUri, {width: 480, time: 0})) ||
+    coverUrl ||
     mediaUrl ||
     null;
   const title = String(
@@ -226,19 +235,36 @@ const ProfessionalCard = ({
   );
 
   const stillUri = posterUri || mediaUrl || null;
+  const framedStyle =
+    videoCrop && mediaBox.width > 0
+      ? placedMediaStyle(videoCrop, mediaBox.width, mediaBox.height)
+      : null;
 
   return (
     <TouchableOpacity
       style={styles.cardShell}
       onPress={onPress}
       activeOpacity={0.9}>
-      <View style={styles.cardMedia}>
+      <View
+        style={styles.cardMedia}
+        onLayout={event => {
+          const {width, height} = event.nativeEvent.layout;
+          setMediaBox(prev =>
+            prev.width === width && prev.height === height
+              ? prev
+              : {width, height},
+          );
+        }}>
         {videoUri && isVideoActive ? (
           Platform.OS === 'web' ? (
             <video
               ref={webVideoRef}
               src={videoUri}
-              style={styles.cardMediaWebVideo}
+              style={
+                framedStyle
+                  ? {...framedStyle, objectFit: 'contain'}
+                  : styles.cardMediaWebVideo
+              }
               autoPlay
               muted={muted}
               loop
@@ -249,17 +275,23 @@ const ProfessionalCard = ({
             <Video
               key={videoUri}
               source={{uri: videoUri}}
-              style={styles.cardMediaImage}
-              resizeMode={ResizeMode.COVER}
+              style={framedStyle || styles.cardMediaImage}
+              resizeMode={framedStyle ? ResizeMode.CONTAIN : ResizeMode.COVER}
               shouldPlay
               isMuted={muted}
               isLooping
               useNativeControls={false}
             />
           )
-        ) : stillUri ? (
+        ) : framedStyle && stillUri ? (
           <Image
             source={{uri: stillUri}}
+            style={framedStyle}
+            resizeMode="contain"
+          />
+        ) : coverUrl || stillUri ? (
+          <Image
+            source={{uri: coverUrl || stillUri}}
             style={styles.cardMediaImage}
             resizeMode="cover"
           />
@@ -1299,9 +1331,10 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   cardMedia: {
-    height: 212,
+    height: DIRECTORY_CARD_MEDIA_HEIGHT,
     position: 'relative',
     backgroundColor: '#E0DEF7',
+    overflow: 'hidden',
   },
   cardMediaImage: {
     width: '100%',
