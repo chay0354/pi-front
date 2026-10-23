@@ -75,6 +75,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
   const sizedRef = useRef(false);
   const naturalSizeRef = useRef(null);
   const lastProgressRef = useRef(0);
+  const durationMsRef = useRef(0);
   const lastCompleteAtRef = useRef(0);
   const onPlaybackCompleteRef = useRef(onPlaybackComplete);
   onPlaybackCompleteRef.current = onPlaybackComplete;
@@ -105,7 +106,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
         emitPlaybackComplete();
       }
       lastProgressRef.current = p;
-      onProgressChange?.(p);
+      onProgressChange?.(p, durationMsRef.current);
     },
     [emitPlaybackComplete, onProgressChange],
   );
@@ -129,8 +130,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     naturalSizeRef.current = null;
     setVideoLayout(null);
     lastProgressRef.current = 0;
+    durationMsRef.current = 0;
     lastCompleteAtRef.current = 0;
-    onProgressChange?.(0);
+    onProgressChange?.(0, 0);
   }, [uri, onProgressChange]);
 
   useEffect(() => {
@@ -324,7 +326,10 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     const el = webVideoRef.current;
     if (!el || !uri) return;
     const onTimeUpdate = () => {
-      if (el.duration > 0) noteProgress(el.currentTime / el.duration);
+      if (el.duration > 0 && Number.isFinite(el.duration)) {
+        durationMsRef.current = el.duration * 1000;
+        noteProgress(el.currentTime / el.duration);
+      }
     };
     const onEnded = () => emitPlaybackComplete();
     el.addEventListener('timeupdate', onTimeUpdate);
@@ -335,6 +340,29 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
     };
   }, [uri, noteProgress, emitPlaybackComplete]);
 
+  /** Jump to a fraction (0..1) of the clip — used by the feed progress bar scrubber. */
+  const seekTo = useCallback(async fraction => {
+    const f = Math.max(0, Math.min(1, Number(fraction) || 0));
+    // A backward seek must not look like a loop wrap to noteProgress.
+    lastProgressRef.current = f;
+    try {
+      if (Platform.OS === 'web') {
+        const el = webVideoRef.current;
+        if (el && el.duration > 0 && Number.isFinite(el.duration)) {
+          el.currentTime = f * el.duration;
+        }
+        return;
+      }
+      const player = videoRef.current;
+      const duration = durationMsRef.current;
+      if (!player || !(duration > 0)) return;
+      await player.setPositionAsync(Math.round(f * duration), {
+        toleranceMillisBefore: 100,
+        toleranceMillisAfter: 100,
+      });
+    } catch (_) {}
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -342,8 +370,9 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
       pause: pauseNow,
       stop: stopNow,
       togglePause: toggleUserPause,
+      seekTo,
     }),
-    [playNow, pauseNow, stopNow, toggleUserPause],
+    [playNow, pauseNow, stopNow, toggleUserPause, seekTo],
   );
 
   useEffect(() => {
@@ -533,6 +562,7 @@ const FeedVideoPlayerInner = React.forwardRef(function FeedVideoPlayerInner(
         onPlaybackStatusUpdate={status => {
           if (!status?.isLoaded) return;
           if (status.durationMillis > 0) {
+            durationMsRef.current = status.durationMillis;
             noteProgress(status.positionMillis / status.durationMillis);
           }
           if (status.didJustFinish) {

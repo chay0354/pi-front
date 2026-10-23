@@ -1,6 +1,15 @@
 // Single source of truth for Expo (static app.json removed — avoid drift).
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
+const fs = require('fs');
+const path = require('path');
 const {withMainApplication} = require('@expo/config-plugins');
+
+/** FCM config for Android push — download from Firebase console (project settings → Android app com.pi.frontend). */
+const androidGoogleServicesFile = fs.existsSync(
+  path.join(__dirname, 'google-services.json'),
+)
+  ? './google-services.json'
+  : undefined;
 
 /** Dev client loads /index.bundle — avoids Metro rewrite of .expo/.virtual-metro-entry if RN CLI drops it. */
 function withAndroidIndexDevEntry(config) {
@@ -133,7 +142,11 @@ module.exports = {
         'RECORD_AUDIO',
         'ACCESS_FINE_LOCATION',
         'ACCESS_COARSE_LOCATION',
+        'POST_NOTIFICATIONS',
       ],
+      ...(androidGoogleServicesFile
+        ? {googleServicesFile: androidGoogleServicesFile}
+        : {}),
       ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY
         ? {
             config: {
@@ -154,6 +167,7 @@ module.exports = {
       'expo-secure-store',
       'expo-document-picker',
       'expo-apple-authentication',
+      ['expo-notifications', {color: '#F7C63A'}],
       [
         'expo-location',
         {

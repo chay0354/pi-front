@@ -17,7 +17,8 @@ export const flexStart = 'flex-start';
 /** Section titles / field labels in Hebrew ad forms. */
 export const formHeadingStyle = {
   alignSelf: 'flex-start',
-  textAlign: 'right',
+  textAlign: hebrewTextAlign,
+  writingDirection: 'rtl',
   width: '100%',
 };
 

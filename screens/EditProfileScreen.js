@@ -46,6 +46,7 @@ import {
   getProfileBusinessNameFieldKey,
 } from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {
   directoryCardMediaFrame,
   parseDirectoryVideoCrop,
@@ -274,6 +275,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   const openPhotoCropper = (uri, target = 'profile') => {
     if (!uri) return;
     if (target === 'profile' || (target === 'cover' && !photoSourceUri)) {
+      if (target === 'profile' && uri !== photoSourceUri && uri !== photoUrl) {
+        setDirectoryCoverUrl(null);
+      }
       setPhotoSourceUri(uri);
     }
     cropTargetRef.current = target;
@@ -362,8 +366,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       Alert.alert('שגיאה', 'לא ניתן לזהות את המשתמש.');
       return;
     }
+    const missing = fields.filter(
+      f => f.required && !String(form[f.key] ?? '').trim(),
+    );
+    if (missing.length > 0) {
+      Alert.alert(
+        'שדות חובה',
+        `אנא מלא/י: ${missing.map(f => f.label).join(', ')}`,
+      );
+      return;
+    }
     const payload = {};
     fields.forEach(f => {
+      if (f.readOnly) return;
+      if (f.type === 'toggle') {
+        payload[f.key] = form[f.key] === true;
+        return;
+      }
       if (
         f.type === 'chips' ||
         f.key === 'activity_regions' ||
@@ -524,7 +543,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                     {photoUrl ? 'שינוי תמונה' : 'העלאת תמונה'}
                   </Text>
                 </TouchableOpacity>
-                {canEditHorizontalCover ? (
+                {canEditHorizontalCover && (photoSourceUri || photoUrl) ? (
                   <TouchableOpacity
                     onPress={() => {
                       const source = photoSourceUri || photoUrl;
@@ -604,7 +623,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                     }}
                     activeOpacity={0.7}
                     disabled={uploadingVideo || saving}>
-                    <Text style={styles.changeVideoLinkText}>
+                    <Text style={styles.horizontalEditLinkText}>
                       עריכת תצוגה אופקית
                     </Text>
                   </TouchableOpacity>
@@ -638,8 +657,39 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           {fields.map(f => (
             <View key={f.key}>
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>{f.label}</Text>
-              {f.type === 'chips' ? (
+              {f.type === 'toggle' ? null : (
+                <Text style={styles.fieldLabel}>
+                  {f.label}
+                  {f.required ? (
+                    <Text style={styles.requiredMark}> *</Text>
+                  ) : null}
+                </Text>
+              )}
+              {f.type === 'toggle' ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={saving}
+                  onPress={() => setField(f.key, form[f.key] !== true)}
+                  style={styles.toggleRow}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{checked: form[f.key] === true}}>
+                  <FigmaCheckbox checked={form[f.key] === true} />
+                  <View style={styles.toggleTextWrap}>
+                    <Text style={styles.toggleLabel}>{f.label}</Text>
+                    {f.hint ? (
+                      <Text style={styles.toggleHint}>{f.hint}</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              ) : f.readOnly ? (
+                <View style={[styles.input, styles.inputReadonly]}>
+                  <Text
+                    style={[styles.readonlyText, styles.inputLtrValue]}
+                    numberOfLines={1}>
+                    {form[f.key] || '—'}
+                  </Text>
+                </View>
+              ) : f.type === 'chips' ? (
                 (() => {
                   const chipOptions =
                     f.optionsFrom === 'professionalTypes'
@@ -846,6 +896,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         </ScrollView>
       </KeyboardAvoidingView>
       <CircleImageCropModal
+        key={`${cropTarget}-${cropUri || 'closed'}`}
         visible={cropVisible}
         imageUri={cropUri}
         onCancel={handlePhotoCropCancel}
@@ -962,6 +1013,13 @@ const styles = StyleSheet.create({
   },
   changeVideoLinkText: {
     color: '#E8B34D',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  horizontalEditLinkText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Rubik-Medium',
     fontWeight: '500',
@@ -1115,6 +1173,33 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     fontSize: 15,
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  requiredMark: {
+    color: '#F7C63A',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Rubik-Medium',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  toggleHint: {
+    color: TEXT_SECONDARY,
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+    marginTop: 2,
     textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
   },

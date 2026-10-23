@@ -17,6 +17,7 @@ import {Colors} from '../constants/styles';
 
 const MIN_CROP = 72;
 const HANDLE = 44;
+const MAX_ZOOM = 5;
 
 function cropImageWeb(imageUri, cropRect) {
   const {originX, originY, width, height} = cropRect;
@@ -95,6 +96,57 @@ function moveCrop(start, dx, dy, bounds) {
   return {x, y, w: start.w, h: start.h};
 }
 
+function touchDistance(touches) {
+  if (!touches || touches.length < 2) return 0;
+  const dx = touches[0].pageX - touches[1].pageX;
+  const dy = touches[0].pageY - touches[1].pageY;
+  return Math.hypot(dx, dy);
+}
+
+function touchMidpoint(touches) {
+  return {
+    x: (touches[0].pageX + touches[1].pageX) / 2,
+    y: (touches[0].pageY + touches[1].pageY) / 2,
+  };
+}
+
+/** Smallest zoom at which the image still fills the crop window. */
+function minZoomFor(crop, base) {
+  if (!crop || !base?.width || !base?.height) return 1;
+  return Math.max(1, crop.w / base.width, crop.h / base.height);
+}
+
+/** Keep the zoomed image covering the crop window so it never shows empty edges. */
+function clampView(view, crop, base) {
+  const zoom = Math.min(MAX_ZOOM, Math.max(minZoomFor(crop, base), view.zoom));
+  const width = base.width * zoom;
+  const height = base.height * zoom;
+  const left = Math.min(crop.x, Math.max(view.left, crop.x + crop.w - width));
+  const top = Math.min(crop.y, Math.max(view.top, crop.y + crop.h - height));
+  return {zoom, left, top};
+}
+
+/**
+ * Pinch scales the photo around the crop centre; the window itself stays put.
+ * forceRTL mirrors gesture dx against `left`, same as moveCrop.
+ */
+function zoomView(start, factor, pan, crop, base) {
+  const zoom = Math.min(MAX_ZOOM, Math.max(minZoomFor(crop, base), start.zoom * factor));
+  const cx = crop.x + crop.w / 2;
+  const cy = crop.y + crop.h / 2;
+  const fx = (cx - start.left) / (base.width * start.zoom);
+  const fy = (cy - start.top) / (base.height * start.zoom);
+  return clampView(
+    {
+      zoom,
+      left: cx - fx * base.width * zoom - pan.x,
+      top: cy - fy * base.height * zoom + pan.y,
+    },
+    crop,
+    base,
+  );
+}
+
 function normalizeCropFractions(value) {
   if (!value) return null;
   const left = Number(value.left);
@@ -159,9 +211,14 @@ const FreeImageCropModal = ({
   const cropState = useRef(null);
   const initialCropRef = useRef(null);
   const seededRef = useRef(false);
+  const boundsRef = useRef(null);
+  const baseBoxRef = useRef(null);
+  const viewRef = useRef(null);
+  const pinchRef = useRef({active: false, startDist: 0, startView: null, startMid: null});
   const [imgSize, setImgSize] = useState({width: 1, height: 1});
   const [stage, setStage] = useState({width: 0, height: 0});
   const [crop, setCrop] = useState(null);
+  const [view, setView] = useState(null);
   const [sourceReady, setSourceReady] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -173,6 +230,8 @@ const FreeImageCropModal = ({
     seededRef.current = false;
     initialCropRef.current = normalizeCropFractions(initialCrop);
     setCrop(null);
+    viewRef.current = null;
+    setView(null);
     setSourceReady(false);
     if (!visible || !imageUri) return undefined;
     let cancelled = false;
@@ -196,7 +255,8 @@ const FreeImageCropModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, imageUri]);
 
-  const imageBox = useMemo(() => {
+  /** Image fitted to the stage at zoom 1 — the reference for crop fractions. */
+  const baseBox = useMemo(() => {
     if (!stage.width || !stage.height || imgSize.width < 2) return null;
     const scale = Math.min(stage.width / imgSize.width, stage.height / imgSize.height);
     const width = imgSize.width * scale;
@@ -208,27 +268,49 @@ const FreeImageCropModal = ({
       height,
     };
   }, [stage, imgSize]);
+  baseBoxRef.current = baseBox;
 
   useEffect(() => {
-    if (!visible || !sourceReady || !imageBox || seededRef.current) return;
+    if (!visible || !sourceReady || !baseBox || seededRef.current) return;
     seededRef.current = true;
+    const nextView = {zoom: 1, left: baseBox.left, top: baseBox.top};
+    viewRef.current = nextView;
+    setView(nextView);
     setCrop(
-      cropFromFractions(imageBox, initialCropRef.current) || defaultCrop(imageBox),
+      cropFromFractions(baseBox, initialCropRef.current) || defaultCrop(baseBox),
     );
-  }, [visible, sourceReady, imageBox]);
+  }, [visible, sourceReady, baseBox]);
 
-  const bounds = useMemo(
-    () =>
-      imageBox
-        ? {
-            x: imageBox.left,
-            y: imageBox.top,
-            width: imageBox.width,
-            height: imageBox.height,
-          }
-        : null,
-    [imageBox],
-  );
+  /** Where the (possibly zoomed) image is drawn on the stage right now. */
+  const imageBox = useMemo(() => {
+    if (!baseBox || !view) return null;
+    return {
+      left: view.left,
+      top: view.top,
+      width: baseBox.width * view.zoom,
+      height: baseBox.height * view.zoom,
+    };
+  }, [baseBox, view]);
+
+  const bounds = useMemo(() => {
+    if (!imageBox || !stage.width || !stage.height) return null;
+    const x = Math.max(0, imageBox.left);
+    const y = Math.max(0, imageBox.top);
+    const right = Math.min(stage.width, imageBox.left + imageBox.width);
+    const bottom = Math.min(stage.height, imageBox.top + imageBox.height);
+    return {x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y)};
+  }, [imageBox, stage]);
+  boundsRef.current = bounds;
+
+  const updateView = useCallback(next => {
+    viewRef.current = next;
+    setView(next);
+  }, []);
+
+  const updateCrop = useCallback(next => {
+    cropState.current = next;
+    setCrop(next);
+  }, []);
 
   const makeCornerResponder = useCallback(
     corner =>
@@ -242,7 +324,7 @@ const FreeImageCropModal = ({
         onPanResponderMove: (_, gesture) => {
           const start = cropState.grant;
           if (!start || !bounds) return;
-          setCrop(resizeCrop(start, gesture.dx, gesture.dy, corner, bounds));
+          updateCrop(resizeCrop(start, gesture.dx, gesture.dy, corner, bounds));
         },
         onPanResponderRelease: () => {
           cropState.grant = null;
@@ -251,7 +333,7 @@ const FreeImageCropModal = ({
           cropState.grant = null;
         },
       }),
-    [bounds],
+    [bounds, updateCrop],
   );
 
   const cornerResponders = useMemo(
@@ -264,28 +346,83 @@ const FreeImageCropModal = ({
     [makeCornerResponder],
   );
 
-  const moveResponder = useMemo(
+  const stageResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => {
-          cropState.grant = cropState.current;
+        onPanResponderGrant: evt => {
+          const current = cropState.current;
+          cropState.grant = current;
+          pinchRef.current = {active: false, startDist: 0, startView: null, startMid: null};
+          const touch = evt.nativeEvent;
+          const x = touch.locationX ?? 0;
+          const y = touch.locationY ?? 0;
+          cropState.drag =
+            current &&
+            x >= current.x &&
+            x <= current.x + current.w &&
+            y >= current.y &&
+            y <= current.y + current.h;
         },
-        onPanResponderMove: (_, gesture) => {
+        onPanResponderMove: (evt, gesture) => {
+          const box = boundsRef.current;
           const start = cropState.grant || cropState.current;
-          if (!start || !bounds) return;
-          setCrop(moveCrop(start, gesture.dx, gesture.dy, bounds));
+          if (!start || !box) return;
+          const touches = evt.nativeEvent.touches || [];
+          if (touches.length >= 2) {
+            const base = baseBoxRef.current;
+            const currentView = viewRef.current;
+            const currentCrop = cropState.current;
+            if (!base || !currentView || !currentCrop) return;
+            const dist = touchDistance(touches);
+            const mid = touchMidpoint(touches);
+            if (!pinchRef.current.active || pinchRef.current.startDist <= 0) {
+              pinchRef.current = {
+                active: true,
+                startDist: dist || 1,
+                startView: currentView,
+                startMid: mid,
+              };
+              return;
+            }
+            const factor = (dist || 1) / pinchRef.current.startDist;
+            const pan = {
+              x: mid.x - pinchRef.current.startMid.x,
+              y: mid.y - pinchRef.current.startMid.y,
+            };
+            updateView(
+              zoomView(pinchRef.current.startView, factor, pan, currentCrop, base),
+            );
+            return;
+          }
+          if (pinchRef.current.active) {
+            pinchRef.current = {
+              active: false,
+              startDist: 0,
+              startView: null,
+              startMid: null,
+            };
+            cropState.grant = cropState.current;
+            cropState.drag = false;
+            return;
+          }
+          if (!cropState.drag) return;
+          updateCrop(moveCrop(start, gesture.dx, gesture.dy, box));
         },
         onPanResponderRelease: () => {
           cropState.grant = null;
+          cropState.drag = false;
+          pinchRef.current.active = false;
         },
         onPanResponderTerminate: () => {
           cropState.grant = null;
+          cropState.drag = false;
+          pinchRef.current.active = false;
         },
       }),
-    [bounds],
+    [updateCrop, updateView],
   );
 
   const sourceRect = useMemo(() => {
@@ -407,8 +544,7 @@ const FreeImageCropModal = ({
             <View
               ref={cropRef}
               collapsable={false}
-              style={[styles.cropWindow, {left: crop.x, top: crop.y, width: crop.w, height: crop.h}]}
-              {...moveResponder.panHandlers}>
+              style={[styles.cropWindow, {left: crop.x, top: crop.y, width: crop.w, height: crop.h}]}>
               <Image
                 source={{uri: imageUri}}
                 style={{
@@ -433,6 +569,8 @@ const FreeImageCropModal = ({
               <View style={[styles.gridH, {top: '66.66%'}]} />
             </View>
 
+            <View style={styles.gestureLayer} {...stageResponder.panHandlers} />
+
             {['nw', 'ne', 'sw', 'se'].map(corner => {
               const handleLeft =
                 corner === 'nw' || corner === 'sw' ? crop.x - HANDLE / 2 : crop.x + crop.w - HANDLE / 2;
@@ -453,7 +591,9 @@ const FreeImageCropModal = ({
         )}
       </View>
 
-      <Text style={styles.hintText}>גררו את המסגרת או את הפינות כדי לבחור מה ייחתך</Text>
+      <Text style={styles.hintText}>
+        גררו את המסגרת, צבטו כדי להגדיל או להקטין את התמונה, או משכו את הפינות
+      </Text>
 
       <TouchableOpacity
         style={styles.confirmBtn}
@@ -514,6 +654,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     backgroundColor: '#111014',
+    overflow: 'hidden',
   },
   dim: {
     position: 'absolute',
@@ -530,6 +671,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     borderRadius: 18,
     overflow: 'hidden',
+  },
+  gestureLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
   },
   gridV: {
     position: 'absolute',

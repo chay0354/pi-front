@@ -27,6 +27,7 @@ export const SalesImage = ({
   isEditing = false,
   /** Overlay meta from PostEditor (`generalDetails` with post_text_overlays). */
   salesImageEditorMeta = null,
+  onRemoveSalesImage,
 }) => {
   const uploading = !!(uploadProgress && uploadProgress.salesImage);
   const createOrEditLabel = isEditing
@@ -93,6 +94,18 @@ export const SalesImage = ({
             onChange={handleSalesImageChange}
           />
         )}
+        {salesImage && typeof onRemoveSalesImage === 'function' ? (
+          <TouchableOpacity
+            style={styles.removeChip}
+            onPress={onRemoveSalesImage}
+            disabled={uploading}
+            activeOpacity={0.85}
+            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+            accessibilityRole="button"
+            accessibilityLabel="הסר תמונה מכירתית">
+            <Text style={styles.removeChipText}>הסר</Text>
+          </TouchableOpacity>
+        ) : null}
       </TouchableOpacity>
       <Text style={[styles.subTitle, {textAlign: 'center'}]}>או</Text>
       <TouchableOpacity
@@ -183,5 +196,23 @@ const styles = StyleSheet.create({
     inset: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** Physical top-left. Native forceRTL maps authored `right` to the left edge. */
+  removeChip: {
+    position: 'absolute',
+    top: 8,
+    zIndex: 4,
+    elevation: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    ...(Platform.OS === 'web' ? {left: 8} : {right: 8}),
+  },
+  removeChipText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Medium',
   },
 });

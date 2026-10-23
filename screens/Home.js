@@ -30,6 +30,11 @@ import HomeStoryStrip from '../components/HomeStoryStrip';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
+import {
+  DEFAULT_STORY_RINGS,
+  isDefaultStoryRing,
+  withDefaultStoryRings,
+} from '../utils/defaultStories';
 import {firstVideoUrl} from '../utils/listingGridCardFigma';
 import {cappedMuxUri, muxThumbnailUri} from '../utils/videoPlayback';
 import {prefetchFeedVideoUri} from '../utils/feedVideoPreload';
@@ -226,7 +231,7 @@ const Home = ({
   useEffect(() => {
     setLogoTargetLayout(getHomeHeaderLogoRect(windowWidth, insets.top));
   }, [windowWidth, insets.top]);
-  const [storyRings, setStoryRings] = useState([]);
+  const [storyRings, setStoryRings] = useState(DEFAULT_STORY_RINGS);
   const [storiesLoading, setStoriesLoading] = useState(eagerLoad);
   const [viewerRing, setViewerRing] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -271,7 +276,7 @@ const Home = ({
       const res = await getStoriesFeed({limit: 80});
       if (requestId !== storiesRequestRef.current) return;
       if (res?.success === false || !Array.isArray(res?.rings)) return;
-      setStoryRings(res.rings);
+      setStoryRings(withDefaultStoryRings(res.rings));
     } catch (_) {
       /* keep the strip visible with the last good payload */
     } finally {
@@ -488,7 +493,7 @@ const Home = ({
 
   const handleOpenStoryProfile = useCallback(
     ring => {
-      if (!ring?.subscription_id) return;
+      if (!ring?.subscription_id || isDefaultStoryRing(ring)) return;
       setViewerVisible(false);
       setViewerRing(null);
       onOpenStoryProfile?.(ring);

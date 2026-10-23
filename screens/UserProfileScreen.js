@@ -57,6 +57,7 @@ import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import LocationMap from '../components/LocationMap';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {isAdsListingRecord} from '../utils/listingShape';
+import {directContactPhones} from '../utils/phoneLabels';
 import {pickTopViewedListingForProfile} from '../utils/pickTopViewedListingForProfile';
 import {
   formatCompanyApartmentsLabel,
@@ -89,7 +90,10 @@ import {
   HERO_NAV_HEART_XML,
   HERO_NAV_SHARE_XML,
 } from '../utils/heroNavFigmaIcons';
-import ProfileAvatar from '../components/ProfileAvatar';
+import ProfileAvatar, {
+  profileRingCheckColor,
+  profileUsesGoldRing,
+} from '../components/ProfileAvatar';
 import {PiRatingBadge} from '../components/PiRatingBadge';
 import {getPiReviewStarSource} from '../utils/piRatingBadgeAssets';
 import {FollowPlusBadge} from '../components/FollowPlusBadge';
@@ -699,6 +703,14 @@ const UserProfileScreen = ({
               : null,
           description: description || null,
           phones: phones.length > 0 ? phones : null,
+          phone: s.phone || null,
+          mobile_phone: s.mobile_phone || null,
+          office_phone: s.office_phone || null,
+          hide_private_phone: s.hide_private_phone === true,
+          virtual_phone:
+            s.virtual_phone && String(s.virtual_phone).trim()
+              ? String(s.virtual_phone).trim()
+              : null,
           subscription_type: (s.subscription_type || '').toLowerCase() || null,
           marketer_seat_limit:
             s.marketer_seat_limit != null
@@ -1126,6 +1138,10 @@ const UserProfileScreen = ({
       name: resolveProfileDisplayName(parentAgency, {fallback: ''}) || '',
       email: isPresentContactValue(email) ? email : '',
       phones,
+      directPhones: directContactPhones(parentAgency),
+      virtualPhone: isPresentContactValue(parentAgency.virtual_phone)
+        ? String(parentAgency.virtual_phone).trim()
+        : '',
       website: isPresentContactValue(website) ? website : '',
       address: isPresentContactValue(address) ? address : '',
       logo: isPresentContactValue(logo) ? logo : '',
@@ -1216,36 +1232,11 @@ const UserProfileScreen = ({
         : headerProfilePhoto || logoImage;
   const contactLogo =
     typeof contactLogoRaw === 'string' ? contactLogoRaw.trim() : '';
-  const contactPhones = (() => {
-    if (agencyContact?.phones?.length) return agencyContact.phones;
-    const subType = String(
-      resolvedCreator?.subscription_type ||
-        user?.subscription_type ||
-        user?.creator_subscription_type ||
-        '',
-    ).toLowerCase();
-    const brokerRegisterPhonesOnly = subType === subscriptionTypes.broker;
-    const raw =
-      resolvedCreator?.phones?.length > 0
-        ? resolvedCreator.phones
-        : brokerRegisterPhonesOnly
-          ? [
-              user?.phone,
-              user?.mobile_phone,
-              user?.contact_details?.phone,
-            ]
-          : [
-              user?.phone,
-              user?.mobile_phone,
-              user?.office_phone,
-              user?.contact_details?.phone,
-              ...(Array.isArray(user?.contact_details?.phones)
-                ? user.contact_details.phones
-                : []),
-            ];
-    const unique = uniqueContactPhones(raw);
-    return brokerRegisterPhonesOnly ? unique.slice(0, 1) : unique;
-  })();
+  /** מספר פרטי ישיר / מספר משרד ישיר — hidden until tapped. Never the virtual number. */
+  const contactDirectPhones = agencyContact
+    ? agencyContact.directPhones
+    : directContactPhones(resolvedCreator || user);
+  const contactPhones = contactDirectPhones.map(p => p.number);
   const contactEmail = agencyContact?.email
     ? agencyContact.email
     : isPresentContactValue(displayEmail)
@@ -1275,6 +1266,11 @@ const UserProfileScreen = ({
     (agencyContact?.name && String(agencyContact.name).trim()) || displayName;
   const primaryContactPhone =
     contactPhones.length > 0 ? String(contactPhones[0]).trim() : '';
+  const contactVirtualPhone = agencyContact
+    ? agencyContact.virtualPhone
+    : [resolvedCreator?.virtual_phone, user?.virtual_phone].find(
+        isPresentContactValue,
+      ) || '';
 
   const viewedSubscriptionId = toSubscriptionId(
     resolvedCreator?.id ||
@@ -1286,6 +1282,17 @@ const UserProfileScreen = ({
   const currentSubscriptionId = toSubscriptionId(
     currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id,
   );
+  const contactAccountType = String(
+    agencyContact
+      ? parentAgency?.subscription_type
+      : resolvedCreator?.subscription_type || user?.subscription_type || '',
+  ).toLowerCase();
+  const hasVirtualNumber =
+    !!contactAccountType && contactAccountType !== subscriptionTypes.user;
+  /** «חייג» dials the stored virtual number; a direct phone only when none is set. */
+  const dialContactPhone =
+    (hasVirtualNumber && String(contactVirtualPhone || '').trim()) ||
+    primaryContactPhone;
   const viewedProfileEmail = String(
     resolvedCreator?.email ||
       user?.creator_email ||
@@ -1339,7 +1346,7 @@ const UserProfileScreen = ({
   };
   const handleCallPress = () => {
     if (isOwnProfile) return;
-    if (typeof onCall === 'function') onCall(primaryContactPhone);
+    if (typeof onCall === 'function') onCall(dialContactPhone);
   };
   const handleReportPress = () => {
     // BnB ad profile: dedicated report drawer (Figma 5:413570) for any host type.
@@ -1889,6 +1896,7 @@ const UserProfileScreen = ({
   const adAddress = lastAd?.address || lastAd?.location || '';
   const [selectedRating, setSelectedRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [revealedContactPhones, setRevealedContactPhones] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [submitReviewLoading, setSubmitReviewLoading] = useState(false);
@@ -2294,6 +2302,17 @@ const UserProfileScreen = ({
         lastAd?.location,
         profile.address,
       );
+  /** Same address row as a professional: business address, then the directory address. */
+  const nameBlockAddress = isBrokerAccount
+    ? firstNonEmpty(
+        resolvedCreator?.business_address,
+        user?.creator_business_address,
+        user?.business_address,
+        profile?.business_address,
+        user?._fromProfessionalsDirectory ? user?.address : null,
+        isOwnProfile ? currentUser?.business_address : null,
+      )
+    : brokerAddress;
   const showProfileRatingFeatures = !isRegularUserAccount;
   const isRegularUserAdView =
     isRegularUserAccount && isListingFromFeed && !openedFromPost;
@@ -2975,7 +2994,7 @@ const UserProfileScreen = ({
             onPress={handleChatPress}
             activeOpacity={0.85}>
             <Image
-              source={require('../assets/menu/pichat.png')}
+              source={require('../assets/menu/pichat-send-message.png')}
               style={styles.profileCtaChatImageOnlyAsset}
               resizeMode="contain"
             />
@@ -2995,7 +3014,7 @@ const UserProfileScreen = ({
             style={styles.profileCtaPhoneText}
             numberOfLines={1}
             ellipsizeMode="tail">
-            פנייה בטלפון {primaryContactPhone}
+            חייג לטלפון
           </Text>
         </TouchableOpacity>
       </View>
@@ -3078,6 +3097,12 @@ const UserProfileScreen = ({
                 {shouldShowFollowPlus ? (
                   <FollowPlusBadge
                     onPress={handleSendFollowRequest}
+                    checkColor={profileRingCheckColor(
+                      profileUsesGoldRing(
+                        resolvedCreator || user,
+                        forceGoldRingForListing,
+                      ),
+                    )}
                     beforePress={() => {
                       if (!viewerLoggedIn) {
                         if (typeof onOpenUserRegistration === 'function') {
@@ -3836,7 +3861,8 @@ const UserProfileScreen = ({
                 </View>
                 {(isProfessional || isProjectMarketer || isBrokerAccount) &&
                   renderProfessionalTypeTags(profileTypeLabelsUnderName)}
-                {brokerAddress && !isOwnProfile && !isBrokerAccount ? (
+                {nameBlockAddress &&
+                (!isOwnProfile || isBrokerAccount || isProfessional) ? (
                   <View style={styles.brokerCardBottomLocationRow}>
                     <SimpleLineIcons
                       name="location-pin"
@@ -3844,7 +3870,7 @@ const UserProfileScreen = ({
                       color="#FFFFFF"
                     />
                     <Text style={styles.brokerCardBottomAddress}>
-                      {brokerAddress}
+                      {nameBlockAddress}
                     </Text>
                   </View>
                 ) : null}
@@ -4138,21 +4164,29 @@ const UserProfileScreen = ({
                     </Text>
                   </View>
                 ) : null}
-                {contactPhones.map((phone, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={styles.contactDetailsRow}
-                    onPress={() => {}}>
-                    <Image
-                      source={contactPhoneIconSource}
-                      style={styles.contactDetailsIconImage}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.contactDetailsLink}>
-                      {String(phone).trim()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {contactDirectPhones.map(({kind, number, label}) => {
+                  const phoneText = number;
+                  const revealed = revealedContactPhones.includes(phoneText);
+                  return (
+                    <TouchableOpacity
+                      key={kind}
+                      style={styles.contactDetailsRow}
+                      onPress={() =>
+                        setRevealedContactPhones(prev =>
+                          prev.includes(phoneText) ? prev : [...prev, phoneText],
+                        )
+                      }>
+                      <Image
+                        source={contactPhoneIconSource}
+                        style={styles.contactDetailsIconImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.contactDetailsLink}>
+                        {revealed ? phoneText : label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
                 {showContactEmail ? (
                   <TouchableOpacity
                     style={styles.contactDetailsRow}

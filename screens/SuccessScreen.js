@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   ScrollView,
@@ -14,10 +14,32 @@ import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
+  COMPANY_PLAN_LISTING_LIMIT,
   DEFAULT_MONTHLY_LISTING_QUOTA,
   getHeaderTitle,
   subscriptionTypes,
 } from '../utils/constant';
+import {getPlanListingUsage} from '../utils/api';
+
+const MARKETER_PLAN_PROJECT_LIMIT = {single: 5, team5: 10, team10: null};
+
+/** Plan cap known locally; `undefined` when the account has no plan cap. */
+function localPlanLimit(subscription, type) {
+  if (type === subscriptionTypes.company) {
+    const plan = String(subscription?.company_plan ?? subscription?.companyPlan ?? '').trim();
+    return Object.prototype.hasOwnProperty.call(COMPANY_PLAN_LISTING_LIMIT, plan)
+      ? COMPANY_PLAN_LISTING_LIMIT[plan]
+      : undefined;
+  }
+  if (type === subscriptionTypes.projectMarketer) {
+    if (subscription?.parent_subscription_id) return undefined;
+    const plan = String(subscription?.marketer_plan ?? subscription?.marketerPlan ?? '').trim();
+    return Object.prototype.hasOwnProperty.call(MARKETER_PLAN_PROJECT_LIMIT, plan)
+      ? MARKETER_PLAN_PROJECT_LIMIT[plan]
+      : undefined;
+  }
+  return undefined;
+}
 import {getUserProfileImageUrl} from '../utils/userProfileImage';
 import {flexEnd} from '../utils/rtlLayout';
 
@@ -64,6 +86,30 @@ const SuccessScreen = ({
       subscription?.max_published_listings ??
         subscription?.maxPublishedListings,
     ) || DEFAULT_MONTHLY_LISTING_QUOTA;
+
+  const hasProjectPlan =
+    resolvedType === subscriptionTypes.company ||
+    resolvedType === subscriptionTypes.projectMarketer;
+  const [planLimit, setPlanLimit] = useState(() =>
+    localPlanLimit(subscription, resolvedType),
+  );
+  useEffect(() => {
+    if (!hasProjectPlan || !subscription?.id) return undefined;
+    let cancelled = false;
+    // Joined marketers inherit the manager's plan, so read the server-side cap.
+    getPlanListingUsage(subscription).then(usage => {
+      if (!cancelled && usage) setPlanLimit(usage.limit);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasProjectPlan, subscription]);
+  const planQuotaText =
+    planLimit === undefined
+      ? null
+      : planLimit == null
+        ? 'ניתן לפרסם פרויקטים ללא הגבלה במערכת'
+        : `ניתן לפרסם עד ${planLimit} פרויקטים במערכת`;
 
   const renderStep = (label, active) => (
     <View
@@ -156,6 +202,8 @@ const SuccessScreen = ({
                 ניתן לפרסם עד {monthlyQuota} מודעות בכל הקטגוריות
                 {subscription?.promo_code ? ' (קופון הופעל)' : ''}
               </Text>
+            ) : hasProjectPlan && planQuotaText ? (
+              <Text style={styles.successSubtitle}>{planQuotaText}</Text>
             ) : null}
           </View>
 

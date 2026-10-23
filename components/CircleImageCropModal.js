@@ -172,31 +172,51 @@ const CircleImageCropModal = ({
   const zoomRef = useRef(1);
   const pinchRef = useRef({active: false, startDist: 0, startZoom: 1});
   const cropRef = useRef(null);
-
-  useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
-
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
-
-  useEffect(() => {
-    if (!visible || !imageUri) return;
-    setPan({x: 0, y: 0});
-    setZoom(1);
-    panStartRef.current = {x: 0, y: 0};
-    if (media === 'video') {
-      setMediaReady(false);
+  /**
+   * Circle, horizontal photo and horizontal video share this modal.
+   * A new open always starts centered — never on the previous media's pan.
+   */
+  const appliedOpenKey = useRef('');
+  const openKey =
+    visible && imageUri
+      ? `${media}|${shape}|${Math.round(frameW)}x${Math.round(frameH)}|${imageUri}`
+      : '';
+  if (openKey !== appliedOpenKey.current) {
+    appliedOpenKey.current = openKey;
+    if (openKey) {
+      panRef.current = {x: 0, y: 0};
+      zoomRef.current = 1;
+      panStartRef.current = {x: 0, y: 0};
+      pinchRef.current = {
+        active: false,
+        startDist: 0,
+        startZoom: 1,
+        gestureX: 0,
+        gestureY: 0,
+      };
+      setPan({x: 0, y: 0});
+      setZoom(1);
+      setSaving(false);
+      setMediaReady(media !== 'video');
       setImgSize({width: frameW, height: frameH});
-      return;
     }
-    setMediaReady(true);
+  }
+
+  useEffect(() => {
+    if (!visible || !imageUri || media === 'video') return undefined;
+    let cancelled = false;
     Image.getSize(
       imageUri,
-      (width, height) => setImgSize({width, height}),
-      () => setImgSize({width: 1, height: 1}),
+      (width, height) => {
+        if (!cancelled && width > 0 && height > 0) setImgSize({width, height});
+      },
+      () => {
+        if (!cancelled) setImgSize({width: frameW, height: frameH});
+      },
     );
+    return () => {
+      cancelled = true;
+    };
   }, [visible, imageUri, media, frameW, frameH]);
 
   const cropLayout = useMemo(
@@ -380,13 +400,24 @@ const CircleImageCropModal = ({
               {media === 'video' ? (
                 <Video
                   source={{uri: imageUri}}
-                  style={{
-                    width: cropLayout.displayW,
-                    height: cropLayout.displayH,
-                    position: 'absolute',
-                    left: cropLayout.imageLeft,
-                    top: cropLayout.imageTop,
-                  }}
+                  style={
+                    mediaReady
+                      ? {
+                          width: cropLayout.displayW,
+                          height: cropLayout.displayH,
+                          position: 'absolute',
+                          left: cropLayout.imageLeft,
+                          top: cropLayout.imageTop,
+                        }
+                      : {
+                          width: frameW,
+                          height: frameH,
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          opacity: 0,
+                        }
+                  }
                   resizeMode={ResizeMode.CONTAIN}
                   shouldPlay
                   isLooping

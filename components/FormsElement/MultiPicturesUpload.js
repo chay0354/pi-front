@@ -25,6 +25,7 @@ export const MultiPicturesUpload = ({
   onEditMainImage,
   onEditAdditionalImage,
   allowMoreImages = false,
+  coverTitle = 'תמונת נושא או הדמייה',
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
   const hasExtraImages = [4, 5, 6, 7, 8, 9].some(
@@ -89,7 +90,7 @@ export const MultiPicturesUpload = ({
 
   return (
     <>
-      <Title text={'תמונת נושא או הדמייה'} required />
+      <Title text={coverTitle} required />
       <View style={styles.imageUploadArea}>
         <TouchableOpacity
           style={styles.imageUploadHit}

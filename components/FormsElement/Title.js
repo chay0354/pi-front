@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Colors} from '../../constants/styles';
-import {formLabelRowStyle, textAlign} from '../../utils/rtlLayout';
+import {formLabelRowStyle, hebrewTextAlign} from '../../utils/rtlLayout';
 
 export const Title = ({
   text = '',
@@ -19,7 +19,11 @@ export const Title = ({
         marginBottom != null ? {marginBottom} : null,
       ]}>
       <Text
-        style={[styles.title, {textAlign}, titleTextStyle]}
+        style={[
+          styles.title,
+          {textAlign: hebrewTextAlign, writingDirection: 'rtl'},
+          titleTextStyle,
+        ]}
         numberOfLines={1}>
         {text}
       </Text>

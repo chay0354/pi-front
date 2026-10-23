@@ -35,8 +35,10 @@ import {
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
 import {flexEnd, flexStart} from '../utils/rtlLayout';
+import {suggestVirtualPhone} from '../utils/phoneLabels';
 import {checkEmailAvailable} from '../utils/api';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
 import {directoryCardMediaFrame} from '../utils/directoryCoverFrame';
 import {ProfilePictureUpload} from '../components/FormsElement/ProfilePictureUpload';
 
@@ -80,6 +82,10 @@ const SubscriptionFormScreen = ({
   const [companyId, setCompanyId] = useState('');
   const [officePhone, setOfficePhone] = useState('');
   const [mobilePhone, setMobilePhone] = useState('');
+  const [virtualPhone] = useState(() =>
+    suggestVirtualPhone(`signup-${Date.now()}-${Math.floor(Math.random() * 1e6)}`),
+  );
+  const [hidePrivatePhone, setHidePrivatePhone] = useState(false);
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [addDescription, setAddDescription] = useState(false);
@@ -270,6 +276,7 @@ const SubscriptionFormScreen = ({
     if (!source) return;
     if (uri && uri !== profilePictureSourceUri) {
       setProfilePictureSourceUri(uri);
+      setDirectoryCover(null);
     }
     openCircleCropper(source, 'profile');
   };
@@ -437,7 +444,7 @@ const SubscriptionFormScreen = ({
         if (!companyName) missingFields.push(orgNameLabel);
         if (!contactPersonName) missingFields.push('שם איש קשר');
         if (!companyEmail) missingFields.push('כתובת מייל');
-        if (!officePhone) missingFields.push('מספר טלפון משרד');
+        if (!officePhone) missingFields.push('מספר משרד ישיר');
         if (!businessAddress.trim()) missingFields.push('כתובת חברה');
       } else if (subscriptionType === subscriptionTypes.broker) {
         if (!profilePicture) missingFields.push('תמונת פרופיל');
@@ -445,15 +452,16 @@ const SubscriptionFormScreen = ({
         if (!brokerageLicenseNumber) missingFields.push('מספר רשיון תיווך');
         if (!brokerOfficeName) missingFields.push('שם משרד המתווך');
         if (!agentName) missingFields.push('שם הסוכן');
+        if (!businessAddress.trim()) missingFields.push('כתובת בית העסק');
         if (!email) missingFields.push('כתובת מייל');
-        if (!phone1) missingFields.push('מספר טלפון');
+        if (!phone1) missingFields.push('מספר פרטי ישיר');
       } else {
         if (!profilePicture) missingFields.push('תמונת פרופיל');
         if (!companyLogo) missingFields.push(companyLogoLabel);
         if (!businessName) missingFields.push('שם העסק');
         if (!businessAddress) missingFields.push('כתובת בית העסק');
         if (!email) missingFields.push('כתובת מייל');
-        if (!phone1) missingFields.push('מספר טלפון');
+        if (!phone2.trim()) missingFields.push('מספר משרד ישיר');
       }
 
       if (missingFields.length > 0) {
@@ -478,6 +486,8 @@ const SubscriptionFormScreen = ({
       // Prepare form data
       const formData = {
         subscriptionType,
+        virtualPhone: virtualPhone.trim(),
+        hidePrivatePhone,
         ...(isCompanyFlow
           ? {
               businessName: companyName,
@@ -503,6 +513,7 @@ const SubscriptionFormScreen = ({
                 brokerageLicenseNumber,
                 brokerOfficeName,
                 agentName,
+                businessAddress: businessAddress.trim(),
                 dealerNumber,
                 phone: phone1,
                 email,
@@ -518,6 +529,7 @@ const SubscriptionFormScreen = ({
                 dealerNumber,
                 phone: phone1,
                 phone2,
+                officePhone: phone2.trim() || undefined,
                 email,
                 description,
                 types: selectedTypes,
@@ -620,15 +632,43 @@ const SubscriptionFormScreen = ({
     brokerageLicenseNumber.trim() &&
     brokerOfficeName.trim() &&
     agentName.trim() &&
+    businessAddress.trim() &&
     phone1.trim() &&
     email.trim() &&
     profileMediaOk;
   const professionalCanProceed =
     businessName.trim() &&
     businessAddress.trim() &&
-    phone1.trim() &&
+    phone2.trim() &&
     email.trim() &&
     profileMediaOk;
+
+  const renderVirtualPhoneInput = () => (
+    <View style={styles.companyInputGroup}>
+      {renderCompanyLabel('מספר וירטואלי')}
+      <TextInput
+        style={[styles.input, styles.companyInput, styles.readonlyInput]}
+        value={virtualPhone}
+        editable={false}
+        selectTextOnFocus={false}
+        textAlign="right"
+      />
+    </View>
+  );
+
+  const renderHidePrivatePhoneToggle = () => (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => setHidePrivatePhone(v => !v)}
+      style={styles.hidePhoneRow}
+      accessibilityRole="checkbox"
+      accessibilityState={{checked: hidePrivatePhone}}>
+      <FigmaCheckbox checked={hidePrivatePhone} />
+      <Text style={styles.hidePhoneText}>
+        הסתרת מספר פרטי (לא יוצג בפרופיל ובמודעות)
+      </Text>
+    </TouchableOpacity>
+  );
 
   const renderCompanyLabel = (label, required = false) => (
     <View style={styles.companyLabelRow}>
@@ -1014,7 +1054,7 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר טלפון משרד', true)}
+                {renderCompanyLabel('מספר משרד ישיר', true)}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון"
@@ -1027,10 +1067,10 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר נייד')}
+                {renderCompanyLabel('מספר פרטי ישיר')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר נייד"
+                  placeholder="הזן מספר נייד (אופציונאלי)"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={mobilePhone}
                   onChangeText={setMobilePhone}
@@ -1038,6 +1078,9 @@ const SubscriptionFormScreen = ({
                   textAlign="right"
                 />
               </View>
+
+              {renderHidePrivatePhoneToggle()}
+              {renderVirtualPhoneInput()}
 
               <View style={styles.companyInputGroup}>
                 {renderCompanyLabel('כתובת מייל', true)}
@@ -1213,6 +1256,18 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('כתובת בית העסק', true)}
+                <TextInput
+                  style={[styles.input, styles.companyInput]}
+                  placeholder="הזן כתובת"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={businessAddress}
+                  onChangeText={setBusinessAddress}
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.companyInputGroup}>
                 {renderCompanyLabel('מספר- ח.פ/עוסק/פטור')}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
@@ -1225,7 +1280,7 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר טלפון', true)}
+                {renderCompanyLabel('מספר פרטי ישיר', true)}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
                   placeholder="הזן מספר טלפון"
@@ -1236,6 +1291,9 @@ const SubscriptionFormScreen = ({
                   textAlign="right"
                 />
               </View>
+
+              {renderHidePrivatePhoneToggle()}
+              {renderVirtualPhoneInput()}
 
               <View style={styles.companyInputGroup}>
                 {renderCompanyLabel('כתובת מייל', true)}
@@ -1309,10 +1367,23 @@ const SubscriptionFormScreen = ({
               </View>
 
               <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר טלפון 1', true)}
+                {renderCompanyLabel('מספר משרד ישיר', true)}
                 <TextInput
                   style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר טלפון"
+                  placeholder="הזן מספר טלפון משרד"
+                  placeholderTextColor="rgba(255,255,255,0.35)"
+                  value={phone2}
+                  onChangeText={setPhone2}
+                  keyboardType="phone-pad"
+                  textAlign="right"
+                />
+              </View>
+
+              <View style={styles.companyInputGroup}>
+                {renderCompanyLabel('מספר פרטי ישיר')}
+                <TextInput
+                  style={[styles.input, styles.companyInput]}
+                  placeholder="הזן מספר טלפון (אופציונאלי)"
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={phone1}
                   onChangeText={setPhone1}
@@ -1321,18 +1392,8 @@ const SubscriptionFormScreen = ({
                 />
               </View>
 
-              <View style={styles.companyInputGroup}>
-                {renderCompanyLabel('מספר טלפון 2')}
-                <TextInput
-                  style={[styles.input, styles.companyInput]}
-                  placeholder="הזן מספר טלפון (אופציונאלי)"
-                  placeholderTextColor="rgba(255,255,255,0.35)"
-                  value={phone2}
-                  onChangeText={setPhone2}
-                  keyboardType="phone-pad"
-                  textAlign="right"
-                />
-              </View>
+              {renderHidePrivatePhoneToggle()}
+              {renderVirtualPhoneInput()}
 
               <View style={styles.companyInputGroup}>
                 {renderCompanyLabel('כתובת מייל', true)}
@@ -1408,6 +1469,7 @@ const SubscriptionFormScreen = ({
       </KeyboardAvoidingView>
     </ImageBackground>
     <CircleImageCropModal
+      key={`${horizontalMedia}-${horizontalCropUri || 'closed'}`}
       visible={horizontalCropVisible}
       imageUri={horizontalCropUri}
       title="עריכת תצוגה אופקית"
@@ -1944,6 +2006,25 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-Regular',
     paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  readonlyInput: {
+    color: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(30,29,39,0.55)',
+  },
+  hidePhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: -4,
+    marginBottom: 16,
+  },
+  hidePhoneText: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   textArea: {
     width: '100%',

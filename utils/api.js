@@ -1752,6 +1752,78 @@ async function supabaseRestGet(pathWithQuery) {
   return response.json();
 }
 
+const MARKETER_PLAN_LISTING_LIMIT = {single: 5, team5: 10, team10: null};
+const COMPANY_PLAN_LISTING_LIMIT_BY_PLAN = {projects5: 5, projects10: 10, multi: null};
+
+/**
+ * Plan listing cap the server enforces on publish, with current usage.
+ * Company: own ads. Marketer: the whole office (manager + joined marketers).
+ * Feed posts never count. Returns null for accounts without a plan cap.
+ * @returns {Promise<{kind: 'company'|'marketer', plan: string, limit: number|null, used: number, isOfficeMember: boolean}|null>}
+ */
+export async function getPlanListingUsage(user) {
+  const id = String(user?.id || user?.subscription_id || '').trim();
+  if (!id) return null;
+  try {
+    const rows = await supabaseRestGet(
+      `subscriptions?id=eq.${encodeURIComponent(id)}&select=id,subscription_type,company_plan,marketer_plan,parent_subscription_id`,
+    );
+    const sub = Array.isArray(rows) ? rows[0] : null;
+    if (!sub) return null;
+    const type = String(sub.subscription_type || '').trim();
+
+    if (type === 'company') {
+      const plan = String(sub.company_plan || '').trim();
+      if (!Object.prototype.hasOwnProperty.call(COMPANY_PLAN_LISTING_LIMIT_BY_PLAN, plan)) {
+        return null;
+      }
+      const ads = await supabaseRestGet(
+        `ads?subscription_id=eq.${encodeURIComponent(id)}&feed_post=not.is.true&select=id`,
+      );
+      return {
+        kind: 'company',
+        plan,
+        limit: COMPANY_PLAN_LISTING_LIMIT_BY_PLAN[plan],
+        used: Array.isArray(ads) ? ads.length : 0,
+        isOfficeMember: false,
+      };
+    }
+
+    if (type === 'project_marketer') {
+      let officeId = sub.id;
+      let plan = String(sub.marketer_plan || '').trim();
+      const parentId = String(sub.parent_subscription_id || '').trim();
+      if (parentId) {
+        officeId = parentId;
+        const parentRows = await supabaseRestGet(
+          `subscriptions?id=eq.${encodeURIComponent(parentId)}&select=marketer_plan`,
+        );
+        plan = String(parentRows?.[0]?.marketer_plan || '').trim();
+      }
+      if (!Object.prototype.hasOwnProperty.call(MARKETER_PLAN_LISTING_LIMIT, plan)) {
+        return null;
+      }
+      const members = await supabaseRestGet(
+        `subscriptions?parent_subscription_id=eq.${encodeURIComponent(officeId)}&select=id`,
+      );
+      const ids = [officeId, ...(Array.isArray(members) ? members.map(m => m.id) : [])];
+      const ads = await supabaseRestGet(
+        `ads?subscription_id=in.(${ids.map(encodeURIComponent).join(',')})&feed_post=not.is.true&select=id`,
+      );
+      return {
+        kind: 'marketer',
+        plan,
+        limit: MARKETER_PLAN_LISTING_LIMIT[plan],
+        used: Array.isArray(ads) ? ads.length : 0,
+        isOfficeMember: Boolean(parentId),
+      };
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
 function mapSubscriptionToFollowHubRow(sub, extras = {}) {
   const name = resolveProfileDisplayName(sub, {fallback: 'משתמש'});
   const email = resolveProfileEmail(sub);
@@ -3496,3 +3568,33 @@ export const updateListing = async (listingId, listingData) => {
     throw error;
   }
 };
+
+/** Save this device's Expo push token for the logged-in chat email. */
+export async function registerPushToken({token, email, subscriptionId, platform}) {
+  const response = await apiFetch(`${apiBase()}/api/push/register`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      token,
+      email,
+      subscription_id: subscriptionId || null,
+      platform,
+    }),
+    timeoutMs: 15000,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.success) {
+    throw new Error(errorMessageFromApiBody(data, 'Push registration failed'));
+  }
+  return data;
+}
+
+export async function unregisterPushToken(token) {
+  const response = await apiFetch(`${apiBase()}/api/push/unregister`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token}),
+    timeoutMs: 15000,
+  });
+  return response.json().catch(() => ({}));
+}

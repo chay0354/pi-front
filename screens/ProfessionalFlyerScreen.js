@@ -18,6 +18,7 @@ import {displayPiRatingFromReviews} from '../utils/listingGridCardFigma';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import ProfileAvatar from '../components/ProfileAvatar';
 import {flexStart} from '../utils/rtlLayout';
+import {directContactPhones} from '../utils/phoneLabels';
 
 const imgBack =
   'https://www.figma.com/api/mcp/asset/a65e2691-fd86-48b9-9865-87c80bdc1758';
@@ -46,19 +47,6 @@ const imgRatingFive =
 const imgRatingOne =
   'https://www.figma.com/api/mcp/asset/c17ace7a-d891-430d-9a02-cd97ff0196cc';
 const fallbackExpertImage = require('../assets/image-7.png');
-
-const collectPhones = professional =>
-  [
-    professional?.phone,
-    professional?.phone_number,
-    professional?.contact_phone,
-    professional?.business_phone,
-    professional?.mobile_phone,
-  ]
-    .map(v => String(v || '').trim())
-    .filter(Boolean)
-    .filter((v, i, arr) => arr.indexOf(v) === i)
-    .slice(0, 2);
 
 const collectTags = professional =>
   [
@@ -163,7 +151,12 @@ const ProfessionalFlyerScreen = ({
     professional?.profile_image_url || professional?.profile_picture_url || '',
   ).trim();
   const email = String(professional?.email || '').trim();
-  const phones = useMemo(() => collectPhones(professional), [professional]);
+  const directPhones = useMemo(
+    () => directContactPhones(professional),
+    [professional],
+  );
+  const phones = directPhones.map(p => p.number);
+  const [revealedPhones, setRevealedPhones] = useState([]);
   const tags = useMemo(() => collectTags(professional), [professional]);
   const activityRegions = useMemo(
     () => collectRegions(professional),
@@ -368,12 +361,19 @@ const ProfessionalFlyerScreen = ({
           </View>
           <Text style={styles.contactName}>{title}</Text>
 
-          {phones.map(phone => (
+          {directPhones.map(({kind, number: phone, label}) => (
             <TouchableOpacity
-              key={phone}
+              key={kind}
               style={styles.contactRow}
-              activeOpacity={0.85}>
-              <Text style={styles.contactLink}>{phone}</Text>
+              activeOpacity={0.85}
+              onPress={() =>
+                setRevealedPhones(prev =>
+                  prev.includes(phone) ? prev : [...prev, phone],
+                )
+              }>
+              <Text style={styles.contactLink}>
+                {revealedPhones.includes(phone) ? phone : label}
+              </Text>
               <Image
                 source={{uri: imgPhone}}
                 style={styles.contactIcon}
@@ -419,7 +419,13 @@ const ProfessionalFlyerScreen = ({
               </LinearGradient>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => onCall?.(phones[0] || '')}
+              onPress={() =>
+                onCall?.(
+                  String(professional?.virtual_phone || '').trim() ||
+                    phones[0] ||
+                    '',
+                )
+              }
               activeOpacity={0.85}
               style={styles.ctaPhone}>
               <Image
@@ -428,7 +434,7 @@ const ProfessionalFlyerScreen = ({
                 resizeMode="contain"
               />
               <Text style={styles.ctaPhoneText}>
-                {`פנייה בטלפון ${phones[0] || ''}`}
+                חייג לטלפון
               </Text>
             </TouchableOpacity>
           </View>

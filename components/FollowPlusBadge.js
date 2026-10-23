@@ -23,6 +23,8 @@ export function FollowPlusBadge({
   onPressIn,
   onPressOut,
   onAnimationComplete,
+  /** Matches the avatar ring: orange/gold or turquoise. */
+  checkColor = FOLLOW_CHECK_COLOR,
 }) {
   const [showCheck, setShowCheck] = useState(false);
   const busyRef = useRef(false);
@@ -138,7 +140,7 @@ export function FollowPlusBadge({
           <MaterialCommunityIcons
             name="check-bold"
             size={iconSize}
-            color={FOLLOW_CHECK_COLOR}
+            color={checkColor}
           />
         </Animated.View>
       </Animated.View>

@@ -1673,13 +1673,34 @@ const AdsForm = ({
     }
   };
 
+  const isCompanyAccount =
+    resolveSubscriptionType(currentUser) === subscriptionTypes.company;
+
+  const handleRemoveSalesImage = () => {
+    setSalesImage(null);
+    setSalesImageUrl(null);
+    setSalesImageEditorMeta(null);
+    salesImageCompanionPendingRef.current = false;
+  };
+
+  const commitSalesImage = file => {
+    if (!file?.uri) return;
+    const alreadyMirrored = Boolean(
+      String(initialSalesImageUrlRef.current || '').trim(),
+    );
+    salesImageCompanionPendingRef.current = !alreadyMirrored;
+    salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
+    setSalesImageEditorMeta(null);
+    setSalesImage(file);
+  };
+
   const handleSalesImageUpload = async () => {
     if (Platform.OS === 'web' && salesImageInputRef.current) {
       salesImageInputRef.current.click();
       return;
     }
     try {
-      // Match PostEditor: no system crop — full image, letterboxed in preview.
+      // Company: pick, then the white-frame crop editor. Other types keep the full image.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -1687,13 +1708,14 @@ const AdsForm = ({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        const alreadyMirrored = Boolean(
-          String(initialSalesImageUrlRef.current || '').trim(),
-        );
-        salesImageCompanionPendingRef.current = !alreadyMirrored;
-        salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
-        setSalesImageEditorMeta(null);
-        setSalesImage({
+        if (isCompanyAccount) {
+          // Wait for the gallery to close, or Android drops the crop modal.
+          setTimeout(() => {
+            setAdImageCrop({slot: 'sales', uri: asset.uri, crop: null});
+          }, 400);
+          return;
+        }
+        commitSalesImage({
           uri: asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.filename || `sales-${Date.now()}.jpg`,
@@ -1708,18 +1730,18 @@ const AdsForm = ({
   const handleSalesImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const alreadyMirrored = Boolean(
-        String(initialSalesImageUrlRef.current || '').trim(),
-      );
-      salesImageCompanionPendingRef.current = !alreadyMirrored;
-      salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
-      setSalesImageEditorMeta(null);
-      setSalesImage({
-        uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file,
-      });
+      const uri = URL.createObjectURL(file);
+      if (isCompanyAccount) {
+        setAdImageCrop({slot: 'sales', uri, crop: null});
+      } else {
+        commitSalesImage({
+          uri,
+          type: file.type,
+          name: file.name,
+          file,
+        });
+      }
+      event.target.value = '';
     }
   };
 
@@ -1797,6 +1819,14 @@ const AdsForm = ({
       return;
     }
     if (!result?.uri || slot == null) return;
+    if (slot === 'sales') {
+      commitSalesImage({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `sales-${Date.now()}.jpg`,
+      });
+      return;
+    }
     if (slot === 'main') adImageCropRectRef.current.main = result.crop || null;
     else adImageCropRectRef.current.extra[slot] = result.crop || null;
     const file = {
@@ -2831,6 +2861,11 @@ const AdsForm = ({
                       resolveSubscriptionType(currentUser) === subscriptionTypes.company ||
                       resolveSubscriptionType(currentUser) === subscriptionTypes.projectMarketer
                     }
+                    coverTitle={
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.user
+                        ? 'תמונת נושא'
+                        : 'תמונת נושא או הדמייה'
+                    }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
                     videoFile={videoFile}
@@ -3067,6 +3102,7 @@ const AdsForm = ({
                     uploadProgress={uploadProgress}
                     isEditing={isEditingAd}
                     salesImageEditorMeta={salesImageEditorMeta}
+                    onRemoveSalesImage={handleRemoveSalesImage}
                     onPressCreateSalesImage={
                       onOpenPostEditor
                         ? () => {

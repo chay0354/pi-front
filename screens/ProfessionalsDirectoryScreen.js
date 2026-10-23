@@ -328,21 +328,17 @@ const ProfessionalCard = ({
       <View style={styles.cardContent}>
         <View style={styles.cardHeaderWrap}>
           <View style={styles.cardTitleAddressCol}>
-            <Text style={styles.cardTitle} numberOfLines={2}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
               {title}
             </Text>
-            {types.length > 0 ? (
-              <View style={[styles.typesRow, listRtlDirection]}>
-                {types.map(type => (
-                  <View key={type} style={styles.tagChip}>
-                    <Text style={styles.tagText} numberOfLines={1}>
-                      {type}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {!isBrokerDirectoryItem(professional) ? (
+            <View style={[styles.typesAddressRow, listRtlDirection]}>
+              {types.slice(0, 2).map(type => (
+                <View key={type} style={[styles.tagChip, styles.typeChip]}>
+                  <Text style={styles.tagText} numberOfLines={1}>
+                    {type}
+                  </Text>
+                </View>
+              ))}
               <View style={styles.addressRow}>
                 <View style={styles.pinIconWrap}>
                   <Image
@@ -355,7 +351,7 @@ const ProfessionalCard = ({
                   {address}
                 </Text>
               </View>
-            ) : null}
+            </View>
           </View>
           <ProfessionalPiRatingBadge
             rating={professional?.average_rating}
@@ -461,20 +457,18 @@ const ProfessionalListCard = ({professional, onPress}) => {
             />
           </View>
 
-          {!isBrokerDirectoryItem(professional) ? (
-            <View style={[styles.listAddressRow, listRtlDirection]}>
-              <View style={styles.listPinIconWrap}>
-                <Image
-                  source={imgLocationPro}
-                  style={styles.listPinIconLayer}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text style={styles.listAddressText} numberOfLines={1}>
-                {address}
-              </Text>
+          <View style={[styles.listAddressRow, listRtlDirection]}>
+            <View style={styles.listPinIconWrap}>
+              <Image
+                source={imgLocationPro}
+                style={styles.listPinIconLayer}
+                resizeMode="contain"
+              />
             </View>
-          ) : null}
+            <Text style={styles.listAddressText} numberOfLines={1}>
+              {address}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -1391,7 +1385,8 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingBottom: 16,
     gap: 16,
-    minHeight: 244,
+    /** Fixed so every card in the list is the same size, whatever its text. */
+    height: 262,
     justifyContent: 'space-between',
   },
   cardHeaderWrap: {
@@ -1446,19 +1441,28 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     alignSelf: 'stretch',
   },
-  typesRow: {
+  /** סוג chips and the מיקום on one line; the address truncates when space runs out. */
+  typesAddressRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
     justifyContent: flexStart,
-    gap: 6,
+    gap: 8,
+    height: 23,
     alignSelf: 'stretch',
+    overflow: 'hidden',
     ...forceRtlStyle,
+  },
+  typeChip: {
+    flexShrink: 0,
   },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
   },
   addressText: {
     color: '#FFFFFF',
@@ -1467,6 +1471,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
+    flexShrink: 1,
   },
   pinIconWrap: {
     width: 18,
@@ -1478,15 +1483,23 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
   },
-  /** Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. */
+  /**
+   * Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. Room for two
+   * rows is always kept so cards with fewer chips stay the same height.
+   */
   tagRowsGroup: {
     gap: 6,
+    height: 52,
+    overflow: 'hidden',
   },
+  /** A chip that doesn't fit wraps onto a hidden line instead of being cut in half. */
   tagsRow: {
     flexDirection: 'row',
     justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 6,
+    height: 23,
+    overflow: 'hidden',
   },
   tagChip: {
     height: 23,

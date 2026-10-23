@@ -45,6 +45,8 @@ import {
   TikTokHeartIcon,
   PostFeedLikeIcon,
   FollowPlusBadge,
+  profileRingCheckColor,
+  profileUsesGoldRing,
 } from '../components';
 import {
   FeedVideoPlayer,
@@ -6813,6 +6815,9 @@ const TikTokFeedScreen = ({
           <FollowPlusBadge
             style={styles.sidebarFollowBadge}
             iconSize={16}
+            checkColor={profileRingCheckColor(
+              profileUsesGoldRing(video, shouldForceGoldRingForListing(video)),
+            )}
             onPressIn={() => {
               sidebarBlockPanRef.current = true;
             }}
