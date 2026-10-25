@@ -28,6 +28,8 @@ const composite = width => ({
  * last committed offset, which sits the digit against the star.
  */
 const DIGIT_SHIFT_X = Platform.OS === 'ios' ? -6 : 3;
+/** Professionals directory badges: iPhone draws the digit ~6pt below the star's center. */
+const LG_DIGIT_LIFT_IOS = Platform.OS === 'ios' ? 6 : 0;
 
 const VARIANTS = {
   profile: {
@@ -77,7 +79,10 @@ const VARIANTS = {
       lineHeight: 26,
       letterSpacing: 0.16,
       top: 4,
-      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -3}],
+      transform: [
+        {translateX: DIGIT_SHIFT_X},
+        {translateY: -3 - LG_DIGIT_LIFT_IOS},
+      ],
     },
     ring: {width: 72, height: 72, marginLeft: -7, top: -20},
     composite: composite(48),
@@ -89,7 +94,10 @@ const VARIANTS = {
       lineHeight: 30,
       letterSpacing: 0.2,
       top: 4,
-      transform: [{translateX: DIGIT_SHIFT_X}, {translateY: -4}],
+      transform: [
+        {translateX: DIGIT_SHIFT_X},
+        {translateY: -4 - LG_DIGIT_LIFT_IOS},
+      ],
     },
     ring: {width: 72, height: 72, marginLeft: -7, top: -20},
     composite: composite(50),

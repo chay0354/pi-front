@@ -1093,8 +1093,6 @@ const TIKTOK_OVERLAY_ICONS = {
 };
 
 const COMMENT_REACTIONS = ['😂', '🙏', '😀', '👍', '😉', '👌'];
-/** Small cushion above the soft keyboard (iOS only — Android uses adjustResize). */
-const COMMENTS_COMPOSER_KEYBOARD_LIFT = Platform.OS === 'ios' ? 8 : 0;
 const COMMENTS_COMPOSER_SCROLL_PADDING = 210;
 
 /** Shared asset for sidebar rows with `id: 'new'` (חדשות / חדשים). */
@@ -4110,15 +4108,41 @@ const TikTokFeedScreen = ({
       return undefined;
     }
 
-    const onShow = event => {
-      setIosCommentsKeyboardHeight(event?.endCoordinates?.height ?? 0);
+    // Keyboard frames can be in a larger coordinate space than the app window
+    // (e.g. 874pt vs 852pt on scaled iPhones), so convert to window points.
+    let keyboardSpaceHeight = 0;
+    const applyFrame = (end, isShow) => {
+      const height = end?.height ?? 0;
+      const screenY = end?.screenY;
+      if (height <= 0 || typeof screenY !== 'number') {
+        setIosCommentsKeyboardHeight(height > 0 ? height : 0);
+        return;
+      }
+      if (isShow || !keyboardSpaceHeight) {
+        keyboardSpaceHeight = screenY + height;
+      }
+      const visible = keyboardSpaceHeight - screenY;
+      if (visible <= 0) {
+        setIosCommentsKeyboardHeight(0);
+        return;
+      }
+      const windowHeight = Dimensions.get('window').height;
+      setIosCommentsKeyboardHeight(
+        Math.round((visible * windowHeight) / keyboardSpaceHeight),
+      );
     };
     const onHide = () => setIosCommentsKeyboardHeight(0);
 
-    const showSub = Keyboard.addListener('keyboardWillShow', onShow);
+    const showSub = Keyboard.addListener('keyboardWillShow', e =>
+      applyFrame(e?.endCoordinates, true),
+    );
+    const frameSub = Keyboard.addListener('keyboardWillChangeFrame', e =>
+      applyFrame(e?.endCoordinates, false),
+    );
     const hideSub = Keyboard.addListener('keyboardWillHide', onHide);
     return () => {
       showSub.remove();
+      frameSub.remove();
       hideSub.remove();
     };
   }, [showCommentsSheet]);
@@ -4126,9 +4150,7 @@ const TikTokFeedScreen = ({
   const commentsComposerBottom =
     Platform.OS === 'android'
       ? androidCommentsComposer.bottomOffset
-      : iosCommentsKeyboardHeight > 0
-        ? iosCommentsKeyboardHeight + COMMENTS_COMPOSER_KEYBOARD_LIFT
-        : 0;
+      : iosCommentsKeyboardHeight;
   const commentsComposerMarginBottom =
     Platform.OS === 'android' ? androidCommentsComposer.marginBottom : 0;
   const commentsKeyboardOpen =
