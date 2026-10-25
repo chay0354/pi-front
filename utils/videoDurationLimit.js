@@ -1,11 +1,11 @@
 import {Alert, Platform} from 'react-native';
 
-/** Longest video a user may upload anywhere in the app (3.5 minutes). */
+/** Longest video a user may upload anywhere in the app (3:30). */
 export const MAX_VIDEO_DURATION_SEC = 210;
 
 const TOO_LONG_TITLE = 'הסרטון ארוך מדי';
 const TOO_LONG_MESSAGE =
-  'לא ניתן להעלות סרטון שאורכו מעל 3.5 דקות. בחרו סרטון קצר יותר.';
+  'לא ניתן להעלות סרטון שאורכו מעל 3:30 דקות. בחרו סרטון קצר יותר.';
 
 export function alertVideoTooLong() {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
