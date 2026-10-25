@@ -80,6 +80,11 @@ module.exports = {
     name: 'pi 2701',
     slug: 'pi-frontend',
     version: '1.0.11',
+    runtimeVersion: {policy: 'appVersion'},
+    updates: {
+      url: 'https://u.expo.dev/76dac87d-af46-4a44-96a6-88fa003f32b0',
+      fallbackToCacheTimeout: 0,
+    },
     scheme: 'pifrontend',
     orientation: 'portrait',
     icon: './assets/app-icon/icon.png',
@@ -126,7 +131,7 @@ module.exports = {
     },
     android: {
       package: 'com.pi.frontend',
-      versionCode: 46,
+      versionCode: 47,
       intentFilters: [
         {
           action: 'VIEW',

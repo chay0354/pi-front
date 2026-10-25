@@ -20,6 +20,7 @@ import {
   AD_VIDEO_PICKER_OPTIONS,
   ensureMediaLibraryPermission,
 } from '../utils/mediaLibraryPermission';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {Video, ResizeMode} from 'expo-av';
 import {LinearGradient} from 'expo-linear-gradient';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
@@ -399,9 +400,10 @@ const SubscriptionFormScreen = ({
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'video/*';
-      input.onchange = e => {
+      input.onchange = async e => {
         const file = e.target.files?.[0];
         if (file) {
+          if (!(await ensureVideoWithinLimit(file))) return;
           setDirectoryVideoCrop(null);
           setVideo({
             uri: URL.createObjectURL(file),
@@ -423,6 +425,7 @@ const SubscriptionFormScreen = ({
       );
 
       if (!result.canceled && result.assets?.[0]) {
+        if (!(await ensureVideoWithinLimit(result.assets[0]))) return;
         setDirectoryVideoCrop(null);
         setVideo(buildPickedVideoFile(result.assets[0]));
       }

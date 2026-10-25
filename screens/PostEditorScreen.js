@@ -52,6 +52,7 @@ import {
 } from '../utils/api';
 import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
 import {forceLtrStyle} from '../utils/rtlLayout';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {
   DEFAULT_POST_DESCRIPTION,
   isReservedPostDescription,
@@ -2428,6 +2429,12 @@ const PostEditorScreen = ({
 
   const applyBackgroundVideo = asset => {
     if (!asset?.uri) return;
+    void ensureVideoWithinLimit(asset).then(ok => {
+      if (ok) setBackgroundVideoFromAsset(asset);
+    });
+  };
+
+  const setBackgroundVideoFromAsset = asset => {
     setBackgroundImageUri(null);
     postImageSourceRef.current = null;
     postImageCropRef.current = null;

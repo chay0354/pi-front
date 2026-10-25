@@ -37,6 +37,7 @@ import {
 import {updateSubscriptionProfile, uploadProfilePicture, uploadFile} from '../utils/api';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 import {ensureMediaLibraryPermission, AD_VIDEO_PICKER_OPTIONS} from '../utils/mediaLibraryPermission';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {
   resolveProfileDisplayName,
   getProfileEditFields,
@@ -184,9 +185,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'video/*';
-      input.onchange = e => {
+      input.onchange = async e => {
         const file = e.target.files?.[0];
         if (file) {
+          if (!(await ensureVideoWithinLimit(file))) return;
           setDirectoryVideoCrop(null);
           setPendingProfileVideo({
             uri: URL.createObjectURL(file),
@@ -206,6 +208,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         AD_VIDEO_PICKER_OPTIONS,
       );
       if (!result.canceled && result.assets?.[0]) {
+        if (!(await ensureVideoWithinLimit(result.assets[0]))) return;
         setDirectoryVideoCrop(null);
         setPendingProfileVideo(buildPickedVideoFile(result.assets[0]));
       }

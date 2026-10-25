@@ -61,6 +61,10 @@ import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
 import ChatDocumentPickerModal from '../components/ChatDocumentPickerModal';
+import {
+  MAX_VIDEO_DURATION_SEC,
+  ensureVideoWithinLimit,
+} from '../utils/videoDurationLimit';
 import ChatVoiceMessageBubble from '../components/ChatVoiceMessageBubble';
 import ExclusiveOfferResponseCard, {
   formatPrice,
@@ -1879,6 +1883,7 @@ const ChatScreen = ({
       (a.mimeType != null &&
         String(a.mimeType).toLowerCase().startsWith('video/')) ||
       (a.duration != null && Number(a.duration) > 0 && a.type !== 'image');
+    if (pickedIsVideo && !(await ensureVideoWithinLimit(a))) return;
     const mediaType = pickedIsVideo ? 'video' : 'image';
     let mime =
       a.mimeType || (pickedIsVideo ? 'video/mp4' : 'image/jpeg');
@@ -1965,7 +1970,7 @@ const ChatScreen = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
-        videoMaxDuration: 120,
+        videoMaxDuration: MAX_VIDEO_DURATION_SEC,
         ...iosChatLibraryOptions,
       });
       await sendPickedChatImage(result);
