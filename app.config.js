@@ -2,7 +2,29 @@
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
 const fs = require('fs');
 const path = require('path');
-const {withMainApplication} = require('@expo/config-plugins');
+const {withMainApplication, withInfoPlist} = require('@expo/config-plugins');
+
+const GOOGLE_IOS_URL_SCHEME =
+  'com.googleusercontent.apps.965378472819-nfjkaacsv3df931eviblavrkcr5hqoga';
+
+/**
+ * google-signin v10's plugin only reads the scheme from GoogleService-Info.plist,
+ * which this app doesn't ship. Without the reversed client ID registered,
+ * GIDSignIn throws an NSException and the app closes on tap.
+ */
+function withGoogleIosUrlScheme(config) {
+  return withInfoPlist(config, c => {
+    const types = Array.isArray(c.modResults.CFBundleURLTypes)
+      ? c.modResults.CFBundleURLTypes
+      : [];
+    const has = types.some(t =>
+      (t.CFBundleURLSchemes || []).includes(GOOGLE_IOS_URL_SCHEME),
+    );
+    if (!has) types.push({CFBundleURLSchemes: [GOOGLE_IOS_URL_SCHEME]});
+    c.modResults.CFBundleURLTypes = types;
+    return c;
+  });
+}
 
 /** FCM config for Android push — download from Firebase console (project settings → Android app com.pi.frontend). */
 const androidGoogleServicesFile = fs.existsSync(
@@ -189,14 +211,8 @@ module.exports = {
           },
         },
       ],
-      [
-        '@react-native-google-signin/google-signin',
-        {
-          // Reversed iOS client ID (without .apps.googleusercontent.com)
-          iosUrlScheme:
-            'com.googleusercontent.apps.965378472819-nfjkaacsv3df931eviblavrkcr5hqoga',
-        },
-      ],
+      '@react-native-google-signin/google-signin',
+      withGoogleIosUrlScheme,
       withAndroidIndexDevEntry,
       withAndroidForceRtl,
       './plugins/withAndroidBootSplash',

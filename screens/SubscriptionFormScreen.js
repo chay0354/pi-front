@@ -34,7 +34,7 @@ import {
   PROFESSIONAL_SIGNUP_TYPES,
   getProfessionalSpecializationsForTypes,
 } from '../utils/constant';
-import {flexEnd, flexStart} from '../utils/rtlLayout';
+import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
 import {suggestVirtualPhone} from '../utils/phoneLabels';
 import {checkEmailAvailable} from '../utils/api';
 import CircleImageCropModal from '../components/CircleImageCropModal';
@@ -2023,7 +2023,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'right',
+    textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
   },
   textArea: {

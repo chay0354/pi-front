@@ -18,6 +18,8 @@ import {Colors} from '../constants/styles';
 const MIN_CROP = 72;
 const HANDLE = 44;
 const MAX_ZOOM = 5;
+/** Corner brackets overhang the frame; keep the frame this far inside the stage so they never clip. */
+const CROP_INSET = 18;
 
 function cropImageWeb(imageUri, cropRect) {
   const {originX, originY, width, height} = cropRect;
@@ -258,12 +260,14 @@ const FreeImageCropModal = ({
   /** Image fitted to the stage at zoom 1 — the reference for crop fractions. */
   const baseBox = useMemo(() => {
     if (!stage.width || !stage.height || imgSize.width < 2) return null;
-    const scale = Math.min(stage.width / imgSize.width, stage.height / imgSize.height);
+    const availW = Math.max(1, stage.width - CROP_INSET * 2);
+    const availH = Math.max(1, stage.height - CROP_INSET * 2);
+    const scale = Math.min(availW / imgSize.width, availH / imgSize.height);
     const width = imgSize.width * scale;
     const height = imgSize.height * scale;
     return {
-      left: (stage.width - width) / 2,
-      top: (stage.height - height) / 2,
+      left: CROP_INSET + (availW - width) / 2,
+      top: CROP_INSET + (availH - height) / 2,
       width,
       height,
     };
@@ -294,10 +298,10 @@ const FreeImageCropModal = ({
 
   const bounds = useMemo(() => {
     if (!imageBox || !stage.width || !stage.height) return null;
-    const x = Math.max(0, imageBox.left);
-    const y = Math.max(0, imageBox.top);
-    const right = Math.min(stage.width, imageBox.left + imageBox.width);
-    const bottom = Math.min(stage.height, imageBox.top + imageBox.height);
+    const x = Math.max(CROP_INSET, imageBox.left);
+    const y = Math.max(CROP_INSET, imageBox.top);
+    const right = Math.min(stage.width - CROP_INSET, imageBox.left + imageBox.width);
+    const bottom = Math.min(stage.height - CROP_INSET, imageBox.top + imageBox.height);
     return {x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y)};
   }, [imageBox, stage]);
   boundsRef.current = bounds;
@@ -651,7 +655,6 @@ const styles = StyleSheet.create({
   },
   stage: {
     flex: 1,
-    marginHorizontal: 16,
     marginTop: 8,
     backgroundColor: '#111014',
     overflow: 'hidden',

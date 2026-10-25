@@ -231,20 +231,38 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
   }
 
   if (isNativeMobile) {
-    const result = await FileSystem.uploadAsync(signedUrl, uri, {
-      httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      // iOS background uploads never finish for gallery files (the promise
-      // hangs or the body never arrives). Foreground matches a normal PUT.
-      ...(Platform.OS === 'ios'
-        ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
-        : {}),
-      headers: {
-        'Content-Type': mimeType,
-      },
-    });
-    if (result.status < 200 || result.status >= 300) {
-      throwForUploadStatus(result.status, String(result.body || '').slice(0, 200));
+    const uploadOnce = () =>
+      FileSystem.uploadAsync(signedUrl, uri, {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        // iOS background uploads never finish for gallery files (the promise
+        // hangs or the body never arrives). Foreground matches a normal PUT.
+        ...(Platform.OS === 'ios'
+          ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
+          : {}),
+        headers: {
+          'Content-Type': mimeType,
+        },
+      });
+    // iOS NSURLSession intermittently fails to parse Supabase's upload reply
+    // (NSURLErrorDomain -1017) even when the bytes arrived, so retry there.
+    const attempts = Platform.OS === 'ios' ? 3 : 1;
+    let result = null;
+    let lastError = null;
+    for (let i = 0; i < attempts && !result; i += 1) {
+      try {
+        result = await uploadOnce();
+      } catch (err) {
+        lastError = err;
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
+      }
+    }
+    if (!result) throw lastError || new Error('Upload failed');
+    const body = String(result.body || '');
+    const alreadyUploaded =
+      lastError != null && /duplicate|already exists/i.test(body);
+    if ((result.status < 200 || result.status >= 300) && !alreadyUploaded) {
+      throwForUploadStatus(result.status, body.slice(0, 200));
     }
     return;
   }
@@ -2128,6 +2146,9 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
       'Error uploading file:',
       errorMessageFromUnknown(error, 'Upload failed'),
     );
+    if (/NSURLErrorDomain|Unable to upload the file/i.test(String(error?.message || ''))) {
+      throw new Error('העלאת הקובץ נכשלה. בדקו את החיבור לאינטרנט ונסו שוב.');
+    }
     if (error instanceof Error) {
       throw error;
     }

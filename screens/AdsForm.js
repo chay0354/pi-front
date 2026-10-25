@@ -2699,13 +2699,17 @@ const AdsForm = ({
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
+        <View
+          pointerEvents="none"
+          style={[styles.headerTitleWrap, {top: insets.top + 12}]}>
+          <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
+        </View>
         <TouchableOpacity
           onPress={onClose}
           style={[Platform.OS === 'web' && {cursor: 'pointer'}]}
           activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
-        <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
       </View>
 
       <FormScrollProvider
@@ -3328,13 +3332,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 32,
   },
+  /** Centered on the full header width, not on the space left beside the back arrow. */
+  headerTitleWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 20,
+    justifyContent: 'center',
+  },
   headerTitle: {
     textAlign: 'center',
     flex: 1,
     marginBottom: 0,
-    alignSelf: 'center',
-    paddingRight: 22,
-    // textAlignVertical: 'center',
   },
   scrollView: {
     flex: 1,
