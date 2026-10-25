@@ -52,6 +52,9 @@ import {
   FeedVideoPlayer,
   FeedVideoPosterPlaceholder,
 } from '../components/FeedVideoPlayer';
+import FeedVideoProgressBar, {
+  FEED_PROGRESS_TRACK_OFFSET,
+} from '../components/FeedVideoProgressBar';
 import PostTextOverlays from '../components/PostTextOverlays';
 import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import {
@@ -5460,6 +5463,28 @@ const TikTokFeedScreen = ({
     }
   }, []);
 
+  /** One screen-level bar (drawn over FeedBottomBar) follows the active page's player. */
+  const feedProgressBarRef = useRef(null);
+  const feedProgressHandlers = useRef(new Map());
+  /** Stable per-index callback — FeedVideoPlayer is memoized and resets on identity change. */
+  const getFeedProgressHandler = useCallback(index => {
+    let handler = feedProgressHandlers.current.get(index);
+    if (!handler) {
+      handler = (p, durationMs) => {
+        if (index !== currentIndexRef.current) return;
+        feedProgressBarRef.current?.setProgress(p, durationMs);
+      };
+      feedProgressHandlers.current.set(index, handler);
+    }
+    return handler;
+  }, []);
+  const seekActiveFeedVideo = useCallback(fraction => {
+    feedVideoRefs.current.get(currentIndexRef.current)?.seekTo?.(fraction);
+  }, []);
+  useEffect(() => {
+    feedProgressBarRef.current?.reset?.();
+  }, [currentIndex]);
+
   // Define feed scroll handlers before any early return (hooks must run every render)
   const syncFeedIndexFromOffset = useCallback(
     y => {
@@ -7765,6 +7790,7 @@ const TikTokFeedScreen = ({
             isActive={feedVideoActive}
             prewarm={inPlayerWindow && !feedVideoActive}
             fitWidth={fitAdWidth}
+            onProgressChange={getFeedProgressHandler(index)}
             style={styles.feedVideoPlayer}>
             {renderPostTextOverlays(video)}
           </FeedVideoPlayer>
@@ -8750,6 +8776,23 @@ const TikTokFeedScreen = ({
           onPressPublish={handlePublishButtonPress}
         />
       )}
+      {!showUserSearchPanel &&
+      !showBottomSheet &&
+      !showCommentsSheet &&
+      selectedTopBarFilter !== 'list' &&
+      !feedIsEmpty &&
+      currentVideo?.isUploaded &&
+      currentVideo?.type === 'video' &&
+      resolveFeedVideoUri(currentVideo) ? (
+        <FeedVideoProgressBar
+          ref={feedProgressBarRef}
+          onSeek={seekActiveFeedVideo}
+          style={[
+            styles.feedVideoProgressBar,
+            {bottom: bottomBarHeight - FEED_PROGRESS_TRACK_OFFSET},
+          ]}
+        />
+      ) : null}
 
       {/* Bottom Sheet */}
       {showBottomSheet && (
@@ -9966,6 +10009,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   /** Tap-to-pause sits above the video but below sidebar/actions (z20). */
+  /** Above FeedBottomBar (zIndex 200) so the dot is never hidden behind it. */
+  feedVideoProgressBar: {
+    zIndex: 210,
+    elevation: 12,
+  },
   feedVideoPauseTap: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 15,

@@ -59,6 +59,7 @@ export const ProfileAvatar = ({
   subscriptionType,
   forceGoldRing = false,
   showRing = true,
+  ringGap,
   style,
   imageStyle,
   placeholderLabel,
@@ -76,7 +77,10 @@ export const ProfileAvatar = ({
   }, [uri, fallbackUri]);
 
   const ringWidth = Math.max(1, size * RING_RATIO);
-  const gap = Math.max(0, size * GAP_RATIO);
+  const gap = Math.max(
+    0,
+    Number.isFinite(ringGap) ? ringGap : size * GAP_RATIO,
+  );
   const inset = ringWidth + gap;
   const placeholderChar = (() => {
     if (placeholderLabel)
