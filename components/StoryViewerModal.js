@@ -149,7 +149,15 @@ function storyMediaLayout(naturalW, naturalH) {
   };
 }
 
-function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
+function StorySlideMedia({
+  slide,
+  isMuted,
+  isPaused,
+  onReady,
+  onMediaLayout,
+  onVideoProgress,
+  onVideoEnd,
+}) {
   const webVideoRef = useRef(null);
   const rawUri = resolveStorySlideUri(slide);
   const uri =
@@ -276,8 +284,15 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
             }}
             autoPlay={!isPaused}
             muted={isMuted}
-            loop
+            loop={!onVideoEnd}
             playsInline
+            onTimeUpdate={e => {
+              const el = e?.target;
+              if (el?.duration > 0) {
+                onVideoProgress?.(Math.min(1, el.currentTime / el.duration));
+              }
+            }}
+            onEnded={() => onVideoEnd?.()}
             preload="auto"
             poster={posterUri || undefined}
             onLoadedMetadata={e => {
@@ -314,7 +329,17 @@ function StorySlideMedia({slide, isMuted, isPaused, onReady, onMediaLayout}) {
           shouldPlay={!isPaused}
           isMuted={isMuted}
           useNativeControls={false}
-          isLooping
+          isLooping={!onVideoEnd}
+          progressUpdateIntervalMillis={100}
+          onPlaybackStatusUpdate={status => {
+            if (!status?.isLoaded) return;
+            if (status.durationMillis > 0) {
+              onVideoProgress?.(
+                Math.min(1, status.positionMillis / status.durationMillis),
+              );
+            }
+            if (status.didJustFinish) onVideoEnd?.();
+          }}
           posterSource={posterUri ? {uri: posterUri} : undefined}
           usePoster={Boolean(posterUri)}
           onLoad={status => {
@@ -378,6 +403,8 @@ function StoryRingSlidePanel({
   onReady,
   onMediaLayout,
   overlayBand,
+  onVideoProgress,
+  onVideoEnd,
 }) {
   const slides = ring?.slides || [];
   const slide = slides[slideIndex] || slides[0] || null;
@@ -516,6 +543,8 @@ function StoryRingSlidePanel({
         isPaused={isPaused || !isActive}
         onReady={handleMediaReady}
         onMediaLayout={handleMediaLayout}
+        onVideoProgress={isActive ? onVideoProgress : undefined}
+        onVideoEnd={isActive ? onVideoEnd : undefined}
       />
       {showLiveText ? (
         <View
@@ -982,6 +1011,8 @@ const StoryViewerModal = ({
                     isPaused={!isCurrent || isUserPanning || isUserSwitching}
                     isActive={isCurrent}
                     overlayBand={overlayBand}
+                    onVideoProgress={isCurrent ? setProgress : undefined}
+                    onVideoEnd={isCurrent ? goNext : undefined}
                   />
                 </View>
               );
@@ -1007,11 +1038,8 @@ const StoryViewerModal = ({
               if (i < slideIndex) {
                 fillWidth = '100%';
               } else if (i === slideIndex) {
-                fillWidth =
-                  s.media_type === 'video' ? '100%' : `${progress * 100}%`;
+                fillWidth = `${progress * 100}%`;
               }
-              const dimVideoCurrent =
-                s.media_type === 'video' && i === slideIndex;
               return (
                 <View key={s.id || i} style={styles.progressTrack}>
                   <LinearGradient
@@ -1025,7 +1053,6 @@ const StoryViewerModal = ({
                         width: fillWidth,
                         alignSelf: progressFillAlign,
                       },
-                      dimVideoCurrent && {opacity: 0.45},
                     ]}
                   />
                 </View>

@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import {captureRef} from 'react-native-view-shot';
+import {Video, ResizeMode} from 'expo-av';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
@@ -26,48 +27,48 @@ const MASK_THICKNESS = Math.ceil(CROP_SIZE / 2);
 /** Extra slack (px) past each image edge — you can keep panning a bit after the photo ends. */
 const PAN_OVERSCROLL = 80;
 
-function getBaseScale(imgSize, fit) {
-  const byWidth = CROP_SIZE / imgSize.width;
-  const byHeight = CROP_SIZE / imgSize.height;
+function getBaseScale(imgSize, fit, frameW, frameH) {
+  const byWidth = frameW / imgSize.width;
+  const byHeight = frameH / imgSize.height;
   return fit === 'contain'
     ? Math.min(byWidth, byHeight)
     : Math.max(byWidth, byHeight);
 }
 
-function getScaledLayout(imgSize, pan, zoom, fit = 'cover') {
-  const baseScale = getBaseScale(imgSize, fit);
+function getScaledLayout(imgSize, pan, zoom, fit = 'cover', frameW = CROP_SIZE, frameH = CROP_SIZE) {
+  const baseScale = getBaseScale(imgSize, fit, frameW, frameH);
   const totalScale = baseScale * zoom;
   const displayW = imgSize.width * totalScale;
   const displayH = imgSize.height * totalScale;
-  const imageLeft = CROP_SIZE / 2 - displayW / 2 + pan.x;
-  const imageTop = CROP_SIZE / 2 - displayH / 2 + pan.y;
+  const imageLeft = frameW / 2 - displayW / 2 + pan.x;
+  const imageTop = frameH / 2 - displayH / 2 + pan.y;
   return {baseScale, totalScale, displayW, displayH, imageLeft, imageTop};
 }
 
-function clampPan(pan, displayW, displayH) {
+function clampPan(pan, displayW, displayH, frameW = CROP_SIZE, frameH = CROP_SIZE) {
   // pan = {0,0} is the CENTERED image, so the valid range is symmetric:
   // ±(overhang/2) reaches each image edge exactly, plus overscroll slack.
-  // (The old asymmetric [CROP-display, 0] clamp let one side pan twice as
-  // far as needed while the opposite side got stuck before the edge.)
-  const halfX = Math.max(0, (displayW - CROP_SIZE) / 2) + PAN_OVERSCROLL;
-  const halfY = Math.max(0, (displayH - CROP_SIZE) / 2) + PAN_OVERSCROLL;
+  const halfX = Math.max(0, (displayW - frameW) / 2) + PAN_OVERSCROLL;
+  const halfY = Math.max(0, (displayH - frameH) / 2) + PAN_OVERSCROLL;
   return {
     x: Math.min(halfX, Math.max(-halfX, pan.x)),
     y: Math.min(halfY, Math.max(-halfY, pan.y)),
   };
 }
 
-function getCropRect(imgSize, pan, zoom, fit = 'cover') {
+function getCropRect(imgSize, pan, zoom, fit = 'cover', frameW = CROP_SIZE, frameH = CROP_SIZE) {
   const {totalScale, displayW, displayH, imageLeft, imageTop} = getScaledLayout(
     imgSize,
     pan,
     zoom,
     fit,
+    frameW,
+    frameH,
   );
   const originX = Math.max(0, -imageLeft / totalScale);
   const originY = Math.max(0, -imageTop / totalScale);
-  const cropW = Math.min(CROP_SIZE / totalScale, imgSize.width - originX);
-  const cropH = Math.min(CROP_SIZE / totalScale, imgSize.height - originY);
+  const cropW = Math.min(frameW / totalScale, imgSize.width - originX);
+  const cropH = Math.min(frameH / totalScale, imgSize.height - originY);
   return {
     originX: Math.round(originX),
     originY: Math.round(originY),
@@ -80,19 +81,26 @@ function getCropRect(imgSize, pan, zoom, fit = 'cover') {
   };
 }
 
-/** Zoomed-out frame: the photo sits inside the square with the editor background. */
-async function composeFramedImageWeb(imageUri, layout) {
+function touchDistance(touches) {
+  if (!touches || touches.length < 2) return 0;
+  const dx = touches[0].pageX - touches[1].pageX;
+  const dy = touches[0].pageY - touches[1].pageY;
+  return Math.hypot(dx, dy);
+}
+
+/** Zoomed-out frame: the photo sits inside the window with the editor background. */
+async function composeFramedImageWeb(imageUri, layout, frameW = CROP_SIZE, frameH = CROP_SIZE) {
   return new Promise((resolve, reject) => {
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = CROP_SIZE;
-        canvas.height = CROP_SIZE;
+        canvas.width = frameW;
+        canvas.height = frameH;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#1e1d27';
-        ctx.fillRect(0, 0, CROP_SIZE, CROP_SIZE);
+        ctx.fillRect(0, 0, frameW, frameH);
         ctx.drawImage(
           img,
           layout.imageLeft,
@@ -140,6 +148,11 @@ const CircleImageCropModal = ({
   title = 'חתוך את הלוגו',
   shape = 'circle',
   fit = 'cover',
+  /** Crop window. Defaults to the square used by the profile-picture circle. */
+  frameWidth = CROP_SIZE,
+  frameHeight = CROP_SIZE,
+  /** 'image' crops a photo. 'video' frames a profile video inside the same window. */
+  media = 'image',
   /**
    * Draw on top of an already-open modal instead of presenting a second one.
    * iOS cannot present two RN modals; the crop screen never appears.
@@ -147,44 +160,92 @@ const CircleImageCropModal = ({
   embedded = false,
 }) => {
   const insets = useSafeAreaInsets();
+  const frameW = Math.max(1, frameWidth);
+  const frameH = Math.max(1, frameHeight);
   const [imgSize, setImgSize] = useState({width: 1, height: 1});
   const [pan, setPan] = useState({x: 0, y: 0});
   const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [mediaReady, setMediaReady] = useState(media !== 'video');
   const panStartRef = useRef({x: 0, y: 0});
   const panRef = useRef({x: 0, y: 0});
+  const zoomRef = useRef(1);
+  const pinchRef = useRef({active: false, startDist: 0, startZoom: 1});
   const cropRef = useRef(null);
+  /**
+   * Circle, horizontal photo and horizontal video share this modal.
+   * A new open always starts centered — never on the previous media's pan.
+   */
+  const appliedOpenKey = useRef('');
+  const openKey =
+    visible && imageUri
+      ? `${media}|${shape}|${Math.round(frameW)}x${Math.round(frameH)}|${imageUri}`
+      : '';
+  if (openKey !== appliedOpenKey.current) {
+    appliedOpenKey.current = openKey;
+    if (openKey) {
+      panRef.current = {x: 0, y: 0};
+      zoomRef.current = 1;
+      panStartRef.current = {x: 0, y: 0};
+      pinchRef.current = {
+        active: false,
+        startDist: 0,
+        startZoom: 1,
+        gestureX: 0,
+        gestureY: 0,
+      };
+      setPan({x: 0, y: 0});
+      setZoom(1);
+      setSaving(false);
+      setMediaReady(media !== 'video');
+      setImgSize({width: frameW, height: frameH});
+    }
+  }
 
   useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
-
-  useEffect(() => {
-    if (!visible || !imageUri) return;
-    setPan({x: 0, y: 0});
-    setZoom(1);
-    panStartRef.current = {x: 0, y: 0};
+    if (!visible || !imageUri || media === 'video') return undefined;
+    let cancelled = false;
     Image.getSize(
       imageUri,
-      (width, height) => setImgSize({width, height}),
-      () => setImgSize({width: 1, height: 1}),
+      (width, height) => {
+        if (!cancelled && width > 0 && height > 0) setImgSize({width, height});
+      },
+      () => {
+        if (!cancelled) setImgSize({width: frameW, height: frameH});
+      },
     );
-  }, [visible, imageUri]);
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, imageUri, media, frameW, frameH]);
 
   const cropLayout = useMemo(
-    () => getCropRect(imgSize, pan, zoom, fit),
-    [imgSize, pan, zoom, fit],
+    () => getCropRect(imgSize, pan, zoom, fit, frameW, frameH),
+    [imgSize, pan, zoom, fit, frameW, frameH],
   );
 
   const applyPan = useCallback(
     nextPan => {
-      const {displayW, displayH} = getScaledLayout(imgSize, nextPan, zoom, fit);
-      const clamped = clampPan(nextPan, displayW, displayH);
+      const {displayW, displayH} = getScaledLayout(
+        imgSize,
+        nextPan,
+        zoomRef.current,
+        fit,
+        frameW,
+        frameH,
+      );
+      const clamped = clampPan(nextPan, displayW, displayH, frameW, frameH);
       setPan(clamped);
       panRef.current = clamped;
     },
-    [imgSize, zoom, fit],
+    [imgSize, fit, frameW, frameH],
   );
+
+  const setZoomClamped = useCallback(next => {
+    const value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+    zoomRef.current = value;
+    setZoom(value);
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
@@ -196,33 +257,90 @@ const CircleImageCropModal = ({
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           panStartRef.current = {...panRef.current};
+          pinchRef.current = {
+            active: false,
+            startDist: 0,
+            startZoom: zoomRef.current,
+            gestureX: 0,
+            gestureY: 0,
+          };
         },
-        onPanResponderMove: (_, gesture) => {
+        onPanResponderMove: (evt, gesture) => {
+          const touches = evt.nativeEvent.touches || [];
+          if (touches.length >= 2) {
+            const dist = touchDistance(touches);
+            if (!pinchRef.current.active || pinchRef.current.startDist <= 0) {
+              pinchRef.current.active = true;
+              pinchRef.current.startDist = dist || 1;
+              pinchRef.current.startZoom = zoomRef.current;
+              return;
+            }
+            const next =
+              pinchRef.current.startZoom * (dist / pinchRef.current.startDist);
+            setZoomClamped(next);
+            applyPan(panRef.current);
+            return;
+          }
+          if (pinchRef.current.active) {
+            pinchRef.current.active = false;
+            pinchRef.current.startDist = 0;
+            panStartRef.current = {...panRef.current};
+            pinchRef.current.gestureX = gesture.dx;
+            pinchRef.current.gestureY = gesture.dy;
+          }
           applyPan({
-            x: panStartRef.current.x - gesture.dx,
-            y: panStartRef.current.y + gesture.dy,
+            x:
+              panStartRef.current.x -
+              (gesture.dx - (pinchRef.current.gestureX || 0)),
+            y:
+              panStartRef.current.y +
+              (gesture.dy - (pinchRef.current.gestureY || 0)),
           });
         },
+        onPanResponderRelease: () => {
+          pinchRef.current.active = false;
+        },
+        onPanResponderTerminate: () => {
+          pinchRef.current.active = false;
+        },
       }),
-    [applyPan],
+    [applyPan, setZoomClamped],
   );
 
   const adjustZoom = delta => {
     setZoom(prev => {
       const stepped = Math.round((prev + delta) * 10) / 10;
-      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, stepped));
+      const value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, stepped));
+      zoomRef.current = value;
+      return value;
     });
   };
 
   const handleConfirm = useCallback(async () => {
     if (!imageUri || saving) return;
+    if (media === 'video') {
+      if (!mediaReady || imgSize.width <= 1 || imgSize.height <= 1) {
+        onConfirm?.({error: 'הסרטון עדיין נטען. נסו שוב.'});
+        return;
+      }
+      onConfirm?.({
+        crop: {
+          aspect: imgSize.width / imgSize.height,
+          frameLeft: cropLayout.imageLeft / frameW,
+          frameTop: cropLayout.imageTop / frameH,
+          frameWidth: cropLayout.displayW / frameW,
+          frameHeight: cropLayout.displayH / frameH,
+        },
+      });
+      return;
+    }
     setSaving(true);
     try {
       const shrunkInsideFrame =
-        cropLayout.displayW < CROP_SIZE - 1 ||
-        cropLayout.displayH < CROP_SIZE - 1;
+        cropLayout.displayW < frameW - 1 || cropLayout.displayH < frameH - 1;
       const keepsFullImage =
         !shrunkInsideFrame &&
         cropLayout.width >= imgSize.width - 2 &&
@@ -232,7 +350,7 @@ const CircleImageCropModal = ({
         uri = imageUri;
       } else if (Platform.OS === 'web') {
         uri = shrunkInsideFrame
-          ? await composeFramedImageWeb(imageUri, cropLayout)
+          ? await composeFramedImageWeb(imageUri, cropLayout, frameW, frameH)
           : await cropImageWeb(imageUri, cropLayout);
       } else {
         uri = await captureRef(cropRef, {
@@ -250,7 +368,7 @@ const CircleImageCropModal = ({
     } finally {
       setSaving(false);
     }
-  }, [imageUri, saving, cropLayout, imgSize, onConfirm]);
+  }, [imageUri, saving, cropLayout, imgSize, onConfirm, frameW, frameH, media, mediaReady]);
 
   const frame = !imageUri ? null : (
       <View
@@ -272,21 +390,64 @@ const CircleImageCropModal = ({
         </View>
 
         <View style={styles.cropArea}>
-          <View style={styles.cropStage} {...panResponder.panHandlers}>
+          <View
+            style={[styles.cropStage, {width: frameW, height: frameH}]}
+            {...panResponder.panHandlers}>
             <View
               ref={cropRef}
               collapsable={false}
-              style={styles.cropCapture}>
-              <Image
-                source={{uri: imageUri}}
-                style={{
-                  width: cropLayout.displayW,
-                  height: cropLayout.displayH,
-                  position: 'absolute',
-                  left: cropLayout.imageLeft,
-                  top: cropLayout.imageTop,
-                }}
-              />
+              style={[styles.cropCapture, {width: frameW, height: frameH}]}>
+              {media === 'video' ? (
+                <Video
+                  source={{uri: imageUri}}
+                  style={
+                    mediaReady
+                      ? {
+                          width: cropLayout.displayW,
+                          height: cropLayout.displayH,
+                          position: 'absolute',
+                          left: cropLayout.imageLeft,
+                          top: cropLayout.imageTop,
+                        }
+                      : {
+                          width: frameW,
+                          height: frameH,
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          opacity: 0,
+                        }
+                  }
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                  isLooping
+                  isMuted
+                  useNativeControls={false}
+                  pointerEvents="none"
+                  onReadyForDisplay={event => {
+                    const width = event?.naturalSize?.width;
+                    const height = event?.naturalSize?.height;
+                    if (width > 0 && height > 0) {
+                      setImgSize({width, height});
+                      setMediaReady(true);
+                    }
+                  }}
+                />
+              ) : (
+                <Image
+                  source={{uri: imageUri}}
+                  style={{
+                    width: cropLayout.displayW,
+                    height: cropLayout.displayH,
+                    position: 'absolute',
+                    left: cropLayout.imageLeft,
+                    top: cropLayout.imageTop,
+                  }}
+                />
+              )}
+              {media === 'video' && !mediaReady ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : null}
             </View>
             {shape === 'circle' ? (
               <View pointerEvents="none" style={styles.cropMaskRing} />
@@ -294,14 +455,14 @@ const CircleImageCropModal = ({
             <View
               pointerEvents="none"
               style={
-                shape === 'square' ? styles.cropGuideSquare : styles.cropGuideRing
+                shape === 'circle' ? styles.cropGuideRing : styles.cropGuideSquare
               }
             />
           </View>
           <Text style={styles.hintText}>
-            {shape === 'square'
-              ? 'התמונה המלאה בפנים · גרור או זום כדי לחתוך'
-              : 'גרור כדי למקם · השתמש בזום לדיוק'}
+            {shape === 'circle'
+              ? 'גרור כדי למקם · צבוט או השתמש בפלוס ומינוס לזום'
+              : 'גרור כדי לבחור את החלק · צבוט או השתמש בפלוס ומינוס לזום'}
           </Text>
         </View>
 

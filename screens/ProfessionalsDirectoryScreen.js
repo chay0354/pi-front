@@ -26,6 +26,11 @@ import {
 import {ProfileAvatar} from '../components';
 import FilterSaveButton from '../components/FilterSaveButton';
 import {flexEnd, flexStart, forceLtrStyle, forceRtlStyle} from '../utils/rtlLayout';
+import {
+  DIRECTORY_CARD_MEDIA_HEIGHT,
+  parseDirectoryVideoCrop,
+  placedMediaStyle,
+} from '../utils/directoryCoverFrame';
 
 /** Pi badge layout is always LTR (number then star) — isolate from RTL card rows. */
 const piBadgeLtrDirection =
@@ -197,9 +202,13 @@ const ProfessionalCard = ({
   const regionTags = collectRegionTags(professional);
   const types = collectTypes(professional);
   const mediaUrl = professional?.profile_image_url || null;
+  const coverUrl = professional?.directory_cover_url || null;
+  const videoCrop = parseDirectoryVideoCrop(professional?.directory_video_crop);
+  const [mediaBox, setMediaBox] = useState({width: 0, height: 0});
   const videoUri = resolveProfessionalVideoUri(professional);
   const posterUri =
     (videoUri && muxThumbnailUri(videoUri, {width: 480, time: 0})) ||
+    coverUrl ||
     mediaUrl ||
     null;
   const title = String(
@@ -226,19 +235,36 @@ const ProfessionalCard = ({
   );
 
   const stillUri = posterUri || mediaUrl || null;
+  const framedStyle =
+    videoCrop && mediaBox.width > 0
+      ? placedMediaStyle(videoCrop, mediaBox.width, mediaBox.height)
+      : null;
 
   return (
     <TouchableOpacity
       style={styles.cardShell}
       onPress={onPress}
       activeOpacity={0.9}>
-      <View style={styles.cardMedia}>
+      <View
+        style={styles.cardMedia}
+        onLayout={event => {
+          const {width, height} = event.nativeEvent.layout;
+          setMediaBox(prev =>
+            prev.width === width && prev.height === height
+              ? prev
+              : {width, height},
+          );
+        }}>
         {videoUri && isVideoActive ? (
           Platform.OS === 'web' ? (
             <video
               ref={webVideoRef}
               src={videoUri}
-              style={styles.cardMediaWebVideo}
+              style={
+                framedStyle
+                  ? {...framedStyle, objectFit: 'contain'}
+                  : styles.cardMediaWebVideo
+              }
               autoPlay
               muted={muted}
               loop
@@ -249,17 +275,23 @@ const ProfessionalCard = ({
             <Video
               key={videoUri}
               source={{uri: videoUri}}
-              style={styles.cardMediaImage}
-              resizeMode={ResizeMode.COVER}
+              style={framedStyle || styles.cardMediaImage}
+              resizeMode={framedStyle ? ResizeMode.CONTAIN : ResizeMode.COVER}
               shouldPlay
               isMuted={muted}
               isLooping
               useNativeControls={false}
             />
           )
-        ) : stillUri ? (
+        ) : framedStyle && stillUri ? (
           <Image
             source={{uri: stillUri}}
+            style={framedStyle}
+            resizeMode="contain"
+          />
+        ) : coverUrl || stillUri ? (
+          <Image
+            source={{uri: coverUrl || stillUri}}
             style={styles.cardMediaImage}
             resizeMode="cover"
           />
@@ -296,21 +328,17 @@ const ProfessionalCard = ({
       <View style={styles.cardContent}>
         <View style={styles.cardHeaderWrap}>
           <View style={styles.cardTitleAddressCol}>
-            <Text style={styles.cardTitle} numberOfLines={2}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
               {title}
             </Text>
-            {types.length > 0 ? (
-              <View style={[styles.typesRow, listRtlDirection]}>
-                {types.map(type => (
-                  <View key={type} style={styles.tagChip}>
-                    <Text style={styles.tagText} numberOfLines={1}>
-                      {type}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {!isBrokerDirectoryItem(professional) ? (
+            <View style={[styles.typesAddressRow, listRtlDirection]}>
+              {types.slice(0, 2).map(type => (
+                <View key={type} style={[styles.tagChip, styles.typeChip]}>
+                  <Text style={styles.tagText} numberOfLines={1}>
+                    {type}
+                  </Text>
+                </View>
+              ))}
               <View style={styles.addressRow}>
                 <View style={styles.pinIconWrap}>
                   <Image
@@ -323,7 +351,7 @@ const ProfessionalCard = ({
                   {address}
                 </Text>
               </View>
-            ) : null}
+            </View>
           </View>
           <ProfessionalPiRatingBadge
             rating={professional?.average_rating}
@@ -429,20 +457,18 @@ const ProfessionalListCard = ({professional, onPress}) => {
             />
           </View>
 
-          {!isBrokerDirectoryItem(professional) ? (
-            <View style={[styles.listAddressRow, listRtlDirection]}>
-              <View style={styles.listPinIconWrap}>
-                <Image
-                  source={imgLocationPro}
-                  style={styles.listPinIconLayer}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text style={styles.listAddressText} numberOfLines={1}>
-                {address}
-              </Text>
+          <View style={[styles.listAddressRow, listRtlDirection]}>
+            <View style={styles.listPinIconWrap}>
+              <Image
+                source={imgLocationPro}
+                style={styles.listPinIconLayer}
+                resizeMode="contain"
+              />
             </View>
-          ) : null}
+            <Text style={styles.listAddressText} numberOfLines={1}>
+              {address}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -1299,9 +1325,10 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   cardMedia: {
-    height: 212,
+    height: DIRECTORY_CARD_MEDIA_HEIGHT,
     position: 'relative',
     backgroundColor: '#E0DEF7',
+    overflow: 'hidden',
   },
   cardMediaImage: {
     width: '100%',
@@ -1358,7 +1385,8 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingBottom: 16,
     gap: 16,
-    minHeight: 244,
+    /** Fixed so every card in the list is the same size, whatever its text. */
+    height: 262,
     justifyContent: 'space-between',
   },
   cardHeaderWrap: {
@@ -1413,19 +1441,28 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     alignSelf: 'stretch',
   },
-  typesRow: {
+  /** סוג chips and the מיקום on one line; the address truncates when space runs out. */
+  typesAddressRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
     justifyContent: flexStart,
-    gap: 6,
+    gap: 8,
+    height: 23,
     alignSelf: 'stretch',
+    overflow: 'hidden',
     ...forceRtlStyle,
+  },
+  typeChip: {
+    flexShrink: 0,
   },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: flexStart,
     gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
   },
   addressText: {
     color: '#FFFFFF',
@@ -1434,6 +1471,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5447,
     fontFamily: 'Rubik-Regular',
     textAlign: 'left',
+    flexShrink: 1,
   },
   pinIconWrap: {
     width: 18,
@@ -1445,15 +1483,23 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
   },
-  /** Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. */
+  /**
+   * Brokers stack two chip rows: תחומי התמחות above אזורי פעילות. Room for two
+   * rows is always kept so cards with fewer chips stay the same height.
+   */
   tagRowsGroup: {
     gap: 6,
+    height: 52,
+    overflow: 'hidden',
   },
+  /** A chip that doesn't fit wraps onto a hidden line instead of being cut in half. */
   tagsRow: {
     flexDirection: 'row',
     justifyContent: flexStart,
     flexWrap: 'wrap',
     gap: 6,
+    height: 23,
+    overflow: 'hidden',
   },
   tagChip: {
     height: 23,

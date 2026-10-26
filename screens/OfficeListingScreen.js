@@ -19,6 +19,7 @@ import {
   AD_VIDEO_PICKER_OPTIONS,
   ensureMediaLibraryPermission,
 } from '../utils/mediaLibraryPermission';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {uploadFile, createListing} from '../utils/api';
@@ -392,6 +393,7 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
 
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
+        if (!(await ensureVideoWithinLimit(asset))) return;
         setVideoFile({
           uri: asset.uri,
           type: asset.type || asset.mimeType || 'video/mp4',
@@ -405,9 +407,14 @@ const OfficeListingScreen = ({onClose, onPublish, initialCategory = null}) => {
     }
   };
 
-  const handleVideoChange = event => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
+  const handleVideoChange = async event => {
+    const input = event.target;
+    if (input.files && input.files[0]) {
+      const file = input.files[0];
+      if (!(await ensureVideoWithinLimit(file))) {
+        input.value = '';
+        return;
+      }
       const fileObj = {
         uri: URL.createObjectURL(file),
         type: file.type,

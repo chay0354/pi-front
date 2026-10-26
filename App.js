@@ -127,6 +127,13 @@ import {normalizeBnbHostType} from './utils/bnbHostLock';
 import {getChatListingCategoryLabel} from './utils/chatListingCategory';
 import {normalizeConversationForOpen} from './utils/chatDefaults';
 import {
+  registerForChatPush,
+  setActiveChatMatcher,
+  subscribeToChatNotificationTaps,
+  subscribeToChatNotificationsReceived,
+  unregisterChatPush,
+} from './utils/pushNotifications';
+import {
   isAdsListingRecord,
   isFeedPostListingRecord,
 } from './utils/listingShape';
@@ -533,6 +540,75 @@ function App() {
   const [pendingBnbPublishSheet, setPendingBnbPublishSheet] = useState(false);
   // 'userProfile' | 'home' | 'settings' | 'tikTokFeed' | 'favorites' | null
   const [chatListRefreshKey, setChatListRefreshKey] = useState(0); // Bump when sending a message so chat list refetches
+  /** Chat push tapped before the session was restored — opened once currentUser exists. */
+  const [pendingPushChat, setPendingPushChat] = useState(null);
+  const pushEmailRef = useRef(null);
+
+  useEffect(() => {
+    const email =
+      String(currentUser?.email || '')
+        .trim()
+        .toLowerCase() || null;
+    const previous = pushEmailRef.current;
+    if (email === previous) return;
+    pushEmailRef.current = email;
+    (async () => {
+      if (previous) await unregisterChatPush();
+      if (email) await registerForChatPush(currentUser);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.email]);
+
+  useEffect(() => {
+    setActiveChatMatcher(data => {
+      if (currentScreen !== screenName.chat || !selectedConversation) {
+        return false;
+      }
+      const sel = selectedConversation;
+      if (
+        data.conversationId &&
+        String(sel.conversationId || '') === String(data.conversationId)
+      ) {
+        return true;
+      }
+      return (
+        !data.isGroup &&
+        !!data.otherUserEmail &&
+        String(sel.otherUserEmail || '').toLowerCase() === data.otherUserEmail
+      );
+    });
+  }, [currentScreen, selectedConversation]);
+
+  useEffect(() => subscribeToChatNotificationTaps(setPendingPushChat), []);
+
+  useEffect(
+    () =>
+      subscribeToChatNotificationsReceived(() =>
+        setChatListRefreshKey(k => k + 1),
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    if (!pendingPushChat || !currentUser?.email) return;
+    const data = pendingPushChat;
+    setPendingPushChat(null);
+    setSharedListingForChat(null);
+    setSelectedConversation(
+      normalizeConversationForOpen({
+        id: data.otherUserEmail || data.conversationId,
+        conversationId: data.conversationId,
+        otherUserEmail: data.otherUserEmail || null,
+        isGroup: data.isGroup === true,
+        name: data.name || 'משתמש',
+        profileImageUrl: data.profileImageUrl || null,
+        preview: '',
+        time: '',
+      }),
+    );
+    setChatReturnScreen(screenName.chatList);
+    setCurrentScreen(screenName.chat);
+  }, [pendingPushChat, currentUser?.email]);
   const [secretRecoveryEmail, setSecretRecoveryEmail] = useState(''); // Email shown on שכחתי סיסמה success screen
   const [secretRecoveryTargetEmail, setSecretRecoveryTargetEmail] =
     useState('');
@@ -1751,6 +1827,7 @@ function App() {
                         : subscriptionTypes.professional,
                     activity_regions: professional?.activity_regions || null,
                     specializations: professional?.specializations || null,
+                    business_address: professional?.address || null,
                   });
                   setCurrentScreen(screenName.userProfile);
                 }}
@@ -1908,9 +1985,14 @@ function App() {
                   setCurrentScreen(screenName.chat);
                 }}
                 onCall={phone => {
-                  if (typeof alert !== 'undefined') {
-                    alert(phone ? `פנייה בטלפון ${phone}` : 'אין מספר טלפון');
+                  const tel = String(phone || '').trim();
+                  if (!tel) {
+                    Alert.alert('', 'אין מספר טלפון');
+                    return;
                   }
+                  Linking.openURL(`tel:${tel.replace(/[^\d+]/g, '')}`).catch(
+                    () => Alert.alert('', `חייג ${tel}`),
+                  );
                 }}
               />
             )}
@@ -1994,7 +2076,7 @@ function App() {
                   }
                   const telUrl = `tel:${tel.replace(/[^\d+]/g, '')}`;
                   Linking.openURL(telUrl).catch(() => {
-                    Alert.alert('', `פנייה בטלפון ${tel}`);
+                    Alert.alert('', `חייג ${tel}`);
                   });
                 }}
                 onMessage={() => {

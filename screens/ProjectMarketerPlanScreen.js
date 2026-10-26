@@ -25,20 +25,20 @@ const CONTENT_MAX = 366;
 const PLAN_OPTIONS = [
   {
     id: MARKETER_PLANS.single,
-    title: 'משווק יחיד',
-    subtitle: 'מנוי אישי למשווק פרויקטים אחד',
+    title: 'משווק אחד',
+    subtitle: 'עד 5 פרויקטים',
     icon: 'account-outline',
   },
   {
     id: MARKETER_PLANS.team5,
-    title: 'מנוי לצוות עד 5 משתמשים',
-    subtitle: 'מיועד לצוות שיווק',
+    title: 'חמש משווקים',
+    subtitle: 'עד 10 פרויקטים',
     icon: 'account-group-outline',
   },
   {
     id: MARKETER_PLANS.team10,
-    title: 'מנוי לצוות עד 10 משתמשים',
-    subtitle: 'מיועד לצוות שיווק ומשרדים',
+    title: 'עשר משווקים',
+    subtitle: 'משרד — ללא הגבלה על פרויקטים',
     icon: 'office-building-outline',
   },
 ];

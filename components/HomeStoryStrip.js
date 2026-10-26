@@ -15,6 +15,8 @@ import ProfileAvatar, {
 
 const OUTER = 76;
 const ITEM_SPACING = 15;
+/** Clear space between the photo and the orange ring. Default avatar gap is ~2px. */
+const STORY_RING_GAP = 3.5;
 
 /**
  * App is forceRTL, so a horizontal FlatList naturally starts on the right and
@@ -40,6 +42,7 @@ const StoryRingItem = memo(function StoryRingItem({ring, onRingPress}) {
         uri={ring.profile_image_url}
         name={ring.display_name}
         size={OUTER}
+        ringGap={STORY_RING_GAP}
         subscriptionType={ring}
       />
       <Text style={styles.label} numberOfLines={1}>

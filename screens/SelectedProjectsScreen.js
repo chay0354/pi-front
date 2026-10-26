@@ -59,18 +59,39 @@ const isPostListingRecord = item => {
   return false;
 };
 
-/** Count published company projects (exclude feed posts), keyed by subscription id. */
-const buildPublishedProjectCounts = listings => {
-  const counts = {};
+/** Lowercase, drop Hebrew/Latin quote marks and dashes so «ג'בל» / «ג׳בל» and «מ"ד» / «מ״ד» match. */
+const normalizeSearchText = value =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/["'`׳״’“”]/g, '')
+    .replace(/[-–—_,.()/\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Published company projects (feed posts excluded), grouped by subscription id. */
+const buildPublishedProjectsBySubscription = listings => {
+  const bySub = {};
   (listings || []).forEach(listing => {
     if (!listing || isPostListingRecord(listing)) return;
     const sid = listing.subscription_id || listing.subscriptionId;
     if (!sid) return;
     const key = String(sid);
-    counts[key] = (counts[key] || 0) + 1;
+    const name = String(listing.project_name || '').trim();
+    const address = String(
+      listing.address || listing.search_address || listing.city || '',
+    ).trim();
+    if (!bySub[key]) bySub[key] = [];
+    bySub[key].push({
+      name,
+      nameKey: normalizeSearchText(name),
+      addressKey: normalizeSearchText(address),
+    });
   });
-  return counts;
+  return bySub;
 };
+
+const tokensMatch = (haystack, tokens) =>
+  tokens.every(t => haystack.includes(t));
 
 const topSectionElevation = Platform.select({
   web: {
@@ -111,20 +132,24 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
         : [];
       const listingsOk =
         listingsRes?.success && Array.isArray(listingsRes.listings);
-      const publishedCounts = listingsOk
-        ? buildPublishedProjectCounts(listingsRes.listings)
+      const projectsBySub = listingsOk
+        ? buildPublishedProjectsBySubscription(listingsRes.listings)
         : null;
       // Prefer live published-project counts so posts / drafts are not included.
       setCompanies(
         companiesList.map(c => {
           const key = c?.id != null ? String(c.id) : '';
+          const projects = projectsBySub?.[key] || [];
           const projectCount =
-            publishedCounts != null
-              ? publishedCounts[key] || 0
+            projectsBySub != null
+              ? projects.length
               : Number(c.project_count) || 0;
           return {
             ...c,
             project_count: projectCount,
+            searchProjects: projects,
+            searchNameKey: normalizeSearchText(c.name),
+            searchAddressKey: normalizeSearchText(c.address_hint),
           };
         }),
       );
@@ -140,14 +165,31 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
     load();
   }, [load]);
 
+  /**
+   * Project name first, then company name, then project location; the office
+   * address only counts when nothing better matched. Every query word must match.
+   */
   const filtered = useMemo(() => {
-    const q = query.trim();
+    const q = normalizeSearchText(query);
     if (!q) return companies;
-    return companies.filter(c => {
-      const name = (c.name || '').toString();
-      const addr = (c.address_hint || '').toString();
-      return name.includes(q) || addr.includes(q);
+    const tokens = q.split(' ');
+    const ranked = [];
+    companies.forEach((c, index) => {
+      const projects = c.searchProjects || [];
+      const byProjectName = projects.filter(p => tokensMatch(p.nameKey, tokens));
+      const byProjectPlace = projects.filter(
+        p => tokensMatch(`${p.nameKey} ${p.addressKey}`, tokens),
+      );
+      let rank = -1;
+      if (byProjectName.length) rank = 0;
+      else if (tokensMatch(c.searchNameKey, tokens)) rank = 1;
+      else if (byProjectPlace.length) rank = 2;
+      else if (tokensMatch(c.searchAddressKey, tokens)) rank = 3;
+      if (rank < 0) return;
+      ranked.push({rank, index, company: c});
     });
+    ranked.sort((a, b) => a.rank - b.rank || a.index - b.index);
+    return ranked.map(r => r.company);
   }, [companies, query]);
 
   const rows = useMemo(() => {
@@ -184,7 +226,7 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
         <View style={styles.searchWrap}>
           <TextInput
             style={styles.searchInput}
-            placeholder="חפש לפי עיר / חברה"
+            placeholder="חפש לפי שם פרויקט / חברה / עיר"
             placeholderTextColor={Colors.grey200}
             value={query}
             onChangeText={setQuery}
@@ -217,7 +259,9 @@ const SelectedProjectsScreen = ({onClose, onOpenCompany}) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           {filtered.length === 0 ? (
-            <Text style={styles.empty}>לא נמצאו חברות</Text>
+            <Text style={styles.empty}>
+              {query.trim() ? 'לא נמצאו פרויקטים או חברות' : 'לא נמצאו חברות'}
+            </Text>
           ) : (
             rows.map((row, ri) => (
               <View key={`row-${ri}`} style={styles.row}>

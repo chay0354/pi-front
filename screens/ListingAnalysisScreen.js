@@ -23,7 +23,7 @@ import {
   resolveSubscriptionType,
   subscriptionTypes,
 } from '../utils/constant';
-import {getListings} from '../utils/api';
+import {getListings, getPlanListingUsage} from '../utils/api';
 import {isPostListingRecord} from '../utils/pickTopViewedListingForProfile';
 import {flexStart} from '../utils/rtlLayout';
 const inverseTextAlign = 'right';
@@ -51,6 +51,19 @@ const getPublishedCountLabel = subscriptionType =>
   subscriptionType === subscriptionTypes.company
     ? 'מספר פרויקטים מפורסמים'
     : 'מספר נכסים מפורסמים';
+
+const PLAN_USAGE_COPY = {
+  company: {
+    projects5: 'מנוי ל-5 פרויקטים',
+    projects10: 'מנוי ל-10 פרויקטים',
+    multi: 'מנוי ללא הגבלה · פאי מולטי',
+  },
+  marketer: {
+    single: 'משווק אחד · עד 5 פרויקטים',
+    team5: 'חמש משווקים · עד 10 פרויקטים',
+    team10: 'עשר משווקים · ללא הגבלה על פרויקטים',
+  },
+};
 
 const categoryMeta = listingCategoryId =>
   userCategories.find(c => c.id === listingCategoryId) ||
@@ -111,6 +124,10 @@ const ListingAnalysisScreen = ({
   const isAgencyMemberAnalysis = listingOwnerUser != null;
   const subscriptionType = resolveSubscriptionType(subjectUser);
   const isBrokerUser = isBrokerLikeSubscriptionType(subscriptionType);
+  const hasPlanCap =
+    subscriptionType === subscriptionTypes.company ||
+    subscriptionType === subscriptionTypes.projectMarketer;
+  const [planUsage, setPlanUsage] = useState(null);
   const isRegularUser = subscriptionType === subscriptionTypes.user;
   const canAccessAnalysis = canAccessListingAnalysis(
     resolveSubscriptionType(currentUser),
@@ -177,6 +194,21 @@ const ListingAnalysisScreen = ({
     };
   }, [subjectUser?.id]);
 
+  useEffect(() => {
+    if (!hasPlanCap || isAgencyMemberAnalysis) {
+      setPlanUsage(null);
+      return undefined;
+    }
+    let cancelled = false;
+    getPlanListingUsage(subjectUser).then(usage => {
+      if (!cancelled) setPlanUsage(usage);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPlanCap, isAgencyMemberAnalysis, subjectUser?.id]);
+
   const {countsByCategory, activeTotal} = useMemo(() => {
     const byCat = {};
     analysisRows.forEach(r => {
@@ -230,7 +262,68 @@ const ListingAnalysisScreen = ({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {isBrokerUser && !isAgencyMemberAnalysis ? (
+          {planUsage ? (
+            <View style={styles.summaryCard}>
+              <Text style={styles.planName}>
+                {PLAN_USAGE_COPY[planUsage.kind]?.[planUsage.plan] || ''}
+              </Text>
+              <View style={styles.summaryTopRow}>
+                <Text style={styles.summaryLabel}>
+                  {planUsage.kind === 'marketer' &&
+                  (planUsage.isOfficeMember || planUsage.plan !== 'single')
+                    ? 'פרויקטים במשרד'
+                    : 'פרויקטים במנוי'}
+                </Text>
+                <Text style={styles.summaryCountWrap}>
+                  <Text style={styles.summaryCountCurrent}>
+                    {planUsage.used}
+                  </Text>
+                  <Text style={styles.summaryCountSlash}>/</Text>
+                  <Text style={styles.summaryCountQuota}>
+                    {planUsage.limit == null ? '∞' : planUsage.limit}
+                  </Text>
+                </Text>
+              </View>
+              {planUsage.limit != null ? (
+                <View style={styles.progressTrack}>
+                  <LinearGradient
+                    colors={GOLD_GRADIENT}
+                    locations={GOLD_GRADIENT_LOCATIONS}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${
+                          Math.min(
+                            1,
+                            planUsage.limit > 0
+                              ? planUsage.used / planUsage.limit
+                              : 1,
+                          ) * 100
+                        }%`,
+                      },
+                    ]}
+                  />
+                </View>
+              ) : null}
+              <Text style={styles.summaryFooter}>
+                {planUsage.limit == null
+                  ? 'אין הגבלה על מספר הפרויקטים'
+                  : planUsage.used >= planUsage.limit
+                    ? 'הגעת למכסה — מחקו פרויקט קיים או שדרגו את המנוי'
+                    : `ניתן לפרסם עוד ${planUsage.limit - planUsage.used} פרויקטים`}
+              </Text>
+              <Text style={styles.planNote}>
+                {planUsage.kind === 'marketer' &&
+                (planUsage.isOfficeMember || planUsage.plan !== 'single')
+                  ? 'כולל פרויקטים של כל המשווקים במשרד · פוסטים לא נספרים'
+                  : 'פוסטים לא נספרים'}
+              </Text>
+            </View>
+          ) : null}
+
+          {isBrokerUser && !hasPlanCap && !isAgencyMemberAnalysis ? (
             <View style={styles.summaryCard}>
               <View style={styles.summaryTopRow}>
                 <Text style={styles.summaryLabel}>מודעות פעילות</Text>
@@ -362,6 +455,24 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 24,
     marginBottom: 20,
+  },
+  planName: {
+    color: GOLD_ACCENT,
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'left',
+    marginBottom: 12,
+  },
+  planNote: {
+    color: TEXT_SECONDARY,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Rubik-Regular',
+    fontWeight: '400',
+    textAlign: 'center',
+    marginTop: 8,
   },
   summaryTopRow: {
     flexDirection: 'row',

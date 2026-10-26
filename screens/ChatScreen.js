@@ -61,6 +61,10 @@ import {ProfileAvatar} from '../components';
 import ChatPeerContactDetailsModal from '../components/ChatPeerContactDetailsModal';
 import ChatGroupManageModal from '../components/ChatGroupManageModal';
 import ChatDocumentPickerModal from '../components/ChatDocumentPickerModal';
+import {
+  MAX_VIDEO_DURATION_SEC,
+  ensureVideoWithinLimit,
+} from '../utils/videoDurationLimit';
 import ChatVoiceMessageBubble from '../components/ChatVoiceMessageBubble';
 import ExclusiveOfferResponseCard, {
   formatPrice,
@@ -280,7 +284,7 @@ const sharedCardDisplayName = cachedListing =>
 
 /** Substring used in broker exclusive-offer messages and to detect them in history. */
 const EXCLUSIVE_OFFER_BODY_MARKER = 'להציע בלעדיות על הנכס';
-/** Broker→broker / company↔broker collaboration offer — same flow, different copy. */
+/** Broker→broker collaboration offer — same flow, different copy. */
 const COLLAB_OFFER_BODY_MARKER = 'להציע שיתוף פעולה על הנכס';
 
 const isBrokerOfferBody = body => {
@@ -535,17 +539,6 @@ const ChatScreen = ({
         : '';
     return t1 === 'broker' || t2 === 'broker';
   }, [currentUser?.subscription_type, currentUser?.type]);
-  const isCompanyUser = useMemo(() => {
-    const t1 =
-      currentUser?.subscription_type != null
-        ? String(currentUser.subscription_type).trim().toLowerCase()
-        : '';
-    const t2 =
-      currentUser?.type != null
-        ? String(currentUser.type).trim().toLowerCase()
-        : '';
-    return t1 === 'company' || t2 === 'company';
-  }, [currentUser?.subscription_type, currentUser?.type]);
   const myEmail = useMemo(() => {
     const raw =
       currentUser?.email ||
@@ -603,13 +596,8 @@ const ChatScreen = ({
   ]);
   const isPeerRegularUser = peerSubscriptionType === 'user';
   const isPeerBroker = peerSubscriptionType === 'broker';
-  const isPeerCompany = peerSubscriptionType === 'company';
-  /** שת״פ: broker→broker or broker→company only (company cannot offer to broker).
-   * משווקים do not send exclusive-offer CTAs (broker-only). */
-  const isCollabOfferMode =
-    isTrueBrokerUser && (isPeerBroker || isPeerCompany);
-  /** Broker→company uses project-focused copy; other שת״פ uses broker↔broker style. */
-  const isCollabToCompany = isCollabOfferMode && isPeerCompany;
+  /** שת״פ: broker→broker only. Companies are outside exclusivity and collab offers. */
+  const isCollabOfferMode = isTrueBrokerUser && isPeerBroker;
   /**
    * Offer CTA only for the person who opened chat from a real ad (sharedListing),
    * not from a feed post, and not for the listing owner who received that inquiry.
@@ -1895,6 +1883,7 @@ const ChatScreen = ({
       (a.mimeType != null &&
         String(a.mimeType).toLowerCase().startsWith('video/')) ||
       (a.duration != null && Number(a.duration) > 0 && a.type !== 'image');
+    if (pickedIsVideo && !(await ensureVideoWithinLimit(a))) return;
     const mediaType = pickedIsVideo ? 'video' : 'image';
     let mime =
       a.mimeType || (pickedIsVideo ? 'video/mp4' : 'image/jpeg');
@@ -1981,7 +1970,7 @@ const ChatScreen = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
-        videoMaxDuration: 120,
+        videoMaxDuration: MAX_VIDEO_DURATION_SEC,
         ...iosChatLibraryOptions,
       });
       await sendPickedChatImage(result);
@@ -3599,18 +3588,10 @@ const ChatScreen = ({
       const monthsPhrase =
         safeMonths === 1 ? 'חודש' : `${safeMonths} חודשים`;
       if (isCollabOfferMode) {
-        // Broker → company: project-focused שת״פ — always buyers (never renters).
-        if (isCollabToCompany) {
-          return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. נתקלתי בפרויקט שלכם ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. יש לי קונים פוטנציאליים שמתאימים לפרויקט ואשמח שנעבוד יחד — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
-        }
-        // Company → broker (and broker → broker): same structure; destination is the broker.
-        const senderRole = isCompanyUser
-          ? 'נציג חברה יזמית'
-          : 'מתווך נדל״ן';
         if (offerIsRent) {
-          return `היי, שמי ${exclusiveSenderName} ואני ${senderRole}. יש לי שוכר שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא שוכר בתוך ${monthsPhrase}, אשמח לשוחח.`;
+          return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי שוכר שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא שוכר בתוך ${monthsPhrase}, אשמח לשוחח.`;
         }
-        return `היי, שמי ${exclusiveSenderName} ואני ${senderRole}. יש לי קונה שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
+        return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן. יש לי קונה שמתאים למודעה שלך ב${offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס. אשמח שנעבוד יחד על העסקה — אני מתחייב להביא קונה בתוך ${monthsPhrase}, אשמח לשוחח.`;
       }
       if (offerIsRent) {
         return `היי, שמי ${exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי במודעה שלך עבור הדירה ב${offerLocationText} ואני מעוניין להציע בלעדיות על הנכס. אני מתחייב למצוא שוכר איכותי בתוך ${monthsPhrase}, אשמח לשוחח.`;
@@ -3621,8 +3602,6 @@ const ChatScreen = ({
       exclusiveSenderName,
       offerLocationText,
       isCollabOfferMode,
-      isCollabToCompany,
-      isCompanyUser,
       offerIsRent,
     ],
   );
@@ -4357,11 +4336,9 @@ const ChatScreen = ({
               </Text>
               <Text style={styles.offerCardSubtitle}>
                 {isCollabOfferMode
-                  ? isCollabToCompany
-                    ? 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
-                    : offerIsRent
-                      ? 'תוך כמה חודשים אתם מתחייבים להביא שוכר?'
-                      : 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
+                  ? offerIsRent
+                    ? 'תוך כמה חודשים אתם מתחייבים להביא שוכר?'
+                    : 'תוך כמה חודשים אתם מתחייבים להביא קונה?'
                   : offerIsRent
                     ? 'תוך כמה חודשים אתם מתחייבים למצוא שוכר?'
                     : 'תוך כמה חודשים אתם מתחייבים למצוא קונה?'}
@@ -4390,11 +4367,7 @@ const ChatScreen = ({
             </View>
 
             <Text style={styles.offerSectionTitle}>
-              {isCollabOfferMode
-                ? isCollabToCompany
-                  ? 'הודעה לחברה'
-                  : 'הודעה למתווך'
-                : 'הודעה לבעל הנכס'}
+              {isCollabOfferMode ? 'הודעה למתווך' : 'הודעה לבעל הנכס'}
             </Text>
             <View
               style={styles.offerMessageInput}
@@ -4402,24 +4375,8 @@ const ChatScreen = ({
                 ? {nativeID: 'pi-chat-offer-message-textarea'}
                 : {})}>
               {isCollabOfferMode ? (
-                isCollabToCompany ? (
                   <Text style={styles.offerMessageText}>
-                    היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן. נתקלתי בפרויקט
-                    שלכם ב{offerLocationText} ואני מעוניין להציע שיתוף פעולה על
-                    הנכס. יש לי קונים פוטנציאליים שמתאימים לפרויקט ואשמח שנעבוד
-                    יחד — אני מתחייב להביא קונה{' '}
-                    <Text style={styles.offerMessageHighlightGold}>
-                      בתוך{' '}
-                      {exclusiveMonths === 1
-                        ? 'חודש'
-                        : `${exclusiveMonths} חודשים`}
-                    </Text>
-                    , אשמח לשוחח.
-                  </Text>
-                ) : (
-                  <Text style={styles.offerMessageText}>
-                    היי, שמי {exclusiveSenderName} ואני{' '}
-                    {isCompanyUser ? 'נציג חברה יזמית' : 'מתווך נדל״ן'}. יש לי{' '}
+                    היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן. יש לי{' '}
                     {offerIsRent ? 'שוכר' : 'קונה'} שמתאים למודעה שלך ב
                     {offerLocationText} ואני מעוניין להציע שיתוף פעולה על הנכס.
                     אשמח שנעבוד יחד על העסקה — אני מתחייב להביא{' '}
@@ -4432,7 +4389,6 @@ const ChatScreen = ({
                     </Text>
                     , אשמח לשוחח.
                   </Text>
-                )
               ) : (
                 <Text style={styles.offerMessageText}>
                   היי, שמי {exclusiveSenderName} ואני מתווך נדל״ן מנוסה. נתקלתי
@@ -4454,9 +4410,7 @@ const ChatScreen = ({
               <Text style={styles.offerHowTitle}>איך זה עובד?</Text>
               <Text style={styles.offerHowText}>
                 {isCollabOfferMode
-                  ? isCollabToCompany
-                    ? 'ההצעה שלכם תישלח לחברה בעלת הפרויקט והם יוכלו לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתם שיחה על השת״פ.'
-                    : 'ההצעה שלכם תישלח למתווך בעל המודעה והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה על השת״פ.'
+                  ? 'ההצעה שלכם תישלח למתווך בעל המודעה והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה על השת״פ.'
                   : 'ההצעה שלכם תישלח לבעל הנכס והוא יוכל לאשר או לדחות אותה. רק לאחר אישור תוכלו להתחיל לנהל איתו שיחה.'}
               </Text>
             </View>

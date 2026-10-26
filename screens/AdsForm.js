@@ -28,6 +28,7 @@ import {
   AD_VIDEO_PICKER_OPTIONS,
   ensureMediaLibraryPermission,
 } from '../utils/mediaLibraryPermission';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Colors} from '../constants/styles';
 import {
@@ -103,6 +104,7 @@ import {
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
 import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import FreeImageCropModal from '../components/FreeImageCropModal';
 import {resolvePublisherIdentityForSave} from '../utils/listingPublisherIdentity';
 
 /** Company office upload (category 2) — same strings as `companyCategoryForm[2]` in constant.js */
@@ -1304,6 +1306,7 @@ const AdsForm = ({
   const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
   const [adImageCrop, setAdImageCrop] = useState(null);
   const adImageSourceRef = useRef({main: null, extra: {}});
+  const adImageCropRectRef = useRef({main: null, extra: {}});
   const [partnerPhotoSourceUri, setPartnerPhotoSourceUri] = useState(null);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
@@ -1644,6 +1647,7 @@ const AdsForm = ({
         }
         const picked = fileFromPickerAsset(result.assets[0], 'image');
         adImageSourceRef.current.main = picked.uri;
+        adImageCropRectRef.current.main = null;
         setMainImage(picked);
       }
     } catch (error) {
@@ -1659,6 +1663,7 @@ const AdsForm = ({
         openPartnerPhotoCropper(uri);
       } else {
         adImageSourceRef.current.main = uri;
+        adImageCropRectRef.current.main = null;
         setMainImage({
           uri,
           type: file.type || 'image/jpeg',
@@ -1669,13 +1674,34 @@ const AdsForm = ({
     }
   };
 
+  const isCompanyAccount =
+    resolveSubscriptionType(currentUser) === subscriptionTypes.company;
+
+  const handleRemoveSalesImage = () => {
+    setSalesImage(null);
+    setSalesImageUrl(null);
+    setSalesImageEditorMeta(null);
+    salesImageCompanionPendingRef.current = false;
+  };
+
+  const commitSalesImage = file => {
+    if (!file?.uri) return;
+    const alreadyMirrored = Boolean(
+      String(initialSalesImageUrlRef.current || '').trim(),
+    );
+    salesImageCompanionPendingRef.current = !alreadyMirrored;
+    salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
+    setSalesImageEditorMeta(null);
+    setSalesImage(file);
+  };
+
   const handleSalesImageUpload = async () => {
     if (Platform.OS === 'web' && salesImageInputRef.current) {
       salesImageInputRef.current.click();
       return;
     }
     try {
-      // Match PostEditor: no system crop — full image, letterboxed in preview.
+      // Company: pick, then the white-frame crop editor. Other types keep the full image.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -1683,13 +1709,14 @@ const AdsForm = ({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        const alreadyMirrored = Boolean(
-          String(initialSalesImageUrlRef.current || '').trim(),
-        );
-        salesImageCompanionPendingRef.current = !alreadyMirrored;
-        salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
-        setSalesImageEditorMeta(null);
-        setSalesImage({
+        if (isCompanyAccount) {
+          // Wait for the gallery to close, or Android drops the crop modal.
+          setTimeout(() => {
+            setAdImageCrop({slot: 'sales', uri: asset.uri, crop: null});
+          }, 400);
+          return;
+        }
+        commitSalesImage({
           uri: asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.filename || `sales-${Date.now()}.jpg`,
@@ -1704,18 +1731,18 @@ const AdsForm = ({
   const handleSalesImageChange = event => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const alreadyMirrored = Boolean(
-        String(initialSalesImageUrlRef.current || '').trim(),
-      );
-      salesImageCompanionPendingRef.current = !alreadyMirrored;
-      salesImageStoryAlreadyCreatedRef.current = alreadyMirrored;
-      setSalesImageEditorMeta(null);
-      setSalesImage({
-        uri: URL.createObjectURL(file),
-        type: file.type,
-        name: file.name,
-        file,
-      });
+      const uri = URL.createObjectURL(file);
+      if (isCompanyAccount) {
+        setAdImageCrop({slot: 'sales', uri, crop: null});
+      } else {
+        commitSalesImage({
+          uri,
+          type: file.type,
+          name: file.name,
+          file,
+        });
+      }
+      event.target.value = '';
     }
   };
 
@@ -1778,7 +1805,11 @@ const AdsForm = ({
         ? adImageSourceRef.current.main || currentUri
         : adImageSourceRef.current.extra[slot] || currentUri;
     if (!source) return;
-    setAdImageCrop({slot, uri: source});
+    const savedCrop =
+      slot === 'main'
+        ? adImageCropRectRef.current.main
+        : adImageCropRectRef.current.extra[slot] || null;
+    setAdImageCrop({slot, uri: source, crop: savedCrop});
   };
 
   const handleAdImageCropConfirm = result => {
@@ -1789,6 +1820,16 @@ const AdsForm = ({
       return;
     }
     if (!result?.uri || slot == null) return;
+    if (slot === 'sales') {
+      commitSalesImage({
+        uri: result.uri,
+        type: 'image/jpeg',
+        name: `sales-${Date.now()}.jpg`,
+      });
+      return;
+    }
+    if (slot === 'main') adImageCropRectRef.current.main = result.crop || null;
+    else adImageCropRectRef.current.extra[slot] = result.crop || null;
     const file = {
       uri: result.uri,
       type: 'image/jpeg',
@@ -1820,6 +1861,7 @@ const AdsForm = ({
         if (!result.canceled && result.assets[0]) {
           const picked = fileFromPickerAsset(result.assets[0], 'image');
           adImageSourceRef.current.extra[index] = picked.uri;
+          adImageCropRectRef.current.extra[index] = null;
           const newImages = [...additionalImages];
           newImages[index] = picked;
           setAdditionalImages(newImages);
@@ -1836,6 +1878,7 @@ const AdsForm = ({
       const newImages = [...additionalImages];
       const uri = URL.createObjectURL(file);
       adImageSourceRef.current.extra[index] = uri;
+      adImageCropRectRef.current.extra[index] = null;
       newImages[index] = {
         uri,
         type: file.type || 'image/jpeg',
@@ -1857,6 +1900,7 @@ const AdsForm = ({
         AD_VIDEO_PICKER_OPTIONS,
       );
       if (!result.canceled && result.assets?.[0]) {
+        if (!(await ensureVideoWithinLimit(result.assets[0]))) return;
         setVideoFile(fileFromPickerAsset(result.assets[0], 'video'));
         setHasVideo(true);
       }
@@ -1868,9 +1912,14 @@ const AdsForm = ({
     }
   };
 
-  const handleVideoChange = event => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
+  const handleVideoChange = async event => {
+    const input = event.target;
+    if (input.files && input.files[0]) {
+      const file = input.files[0];
+      if (!(await ensureVideoWithinLimit(file))) {
+        input.value = '';
+        return;
+      }
       setVideoFile({
         uri: URL.createObjectURL(file),
         type: file.type || 'video/mp4',
@@ -2657,13 +2706,17 @@ const AdsForm = ({
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
+        <View
+          pointerEvents="none"
+          style={[styles.headerTitleWrap, {top: insets.top + 12}]}>
+          <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
+        </View>
         <TouchableOpacity
           onPress={onClose}
           style={[Platform.OS === 'web' && {cursor: 'pointer'}]}
           activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
-        <Title text={'יצירת מודעה'} textStyle={styles.headerTitle} />
       </View>
 
       <FormScrollProvider
@@ -2814,6 +2867,16 @@ const AdsForm = ({
                     additionalImageInputRefs={additionalImageInputRefs}
                     onEditMainImage={() => openAdImageEditor('main')}
                     onEditAdditionalImage={openAdImageEditor}
+                    allowMoreImages={
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.broker ||
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.company ||
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.projectMarketer
+                    }
+                    coverTitle={
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.user
+                        ? 'תמונת נושא'
+                        : 'תמונת נושא או הדמייה'
+                    }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
                     videoFile={videoFile}
@@ -3050,6 +3113,7 @@ const AdsForm = ({
                     uploadProgress={uploadProgress}
                     isEditing={isEditingAd}
                     salesImageEditorMeta={salesImageEditorMeta}
+                    onRemoveSalesImage={handleRemoveSalesImage}
                     onPressCreateSalesImage={
                       onOpenPostEditor
                         ? () => {
@@ -3197,14 +3261,13 @@ const AdsForm = ({
         shape="square"
         fit="contain"
       />
-      <CircleImageCropModal
+      <FreeImageCropModal
         visible={adImageCrop != null}
         imageUri={adImageCrop?.uri || null}
+        initialCrop={adImageCrop?.crop || null}
         onCancel={() => setAdImageCrop(null)}
         onConfirm={handleAdImageCropConfirm}
         title="עריכת תמונה"
-        shape="square"
-        fit="contain"
       />
     </View>
   );
@@ -3276,13 +3339,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 32,
   },
+  /** Centered on the full header width, not on the space left beside the back arrow. */
+  headerTitleWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 20,
+    justifyContent: 'center',
+  },
   headerTitle: {
     textAlign: 'center',
     flex: 1,
     marginBottom: 0,
-    alignSelf: 'center',
-    paddingRight: 22,
-    // textAlignVertical: 'center',
   },
   scrollView: {
     flex: 1,

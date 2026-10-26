@@ -231,20 +231,38 @@ async function putLocalFileToSignedUrl(file, signedUrl, mimeType) {
   }
 
   if (isNativeMobile) {
-    const result = await FileSystem.uploadAsync(signedUrl, uri, {
-      httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      // iOS background uploads never finish for gallery files (the promise
-      // hangs or the body never arrives). Foreground matches a normal PUT.
-      ...(Platform.OS === 'ios'
-        ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
-        : {}),
-      headers: {
-        'Content-Type': mimeType,
-      },
-    });
-    if (result.status < 200 || result.status >= 300) {
-      throwForUploadStatus(result.status, String(result.body || '').slice(0, 200));
+    const uploadOnce = () =>
+      FileSystem.uploadAsync(signedUrl, uri, {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        // iOS background uploads never finish for gallery files (the promise
+        // hangs or the body never arrives). Foreground matches a normal PUT.
+        ...(Platform.OS === 'ios'
+          ? {sessionType: FileSystem.FileSystemSessionType.FOREGROUND}
+          : {}),
+        headers: {
+          'Content-Type': mimeType,
+        },
+      });
+    // iOS NSURLSession intermittently fails to parse Supabase's upload reply
+    // (NSURLErrorDomain -1017) even when the bytes arrived, so retry there.
+    const attempts = Platform.OS === 'ios' ? 3 : 1;
+    let result = null;
+    let lastError = null;
+    for (let i = 0; i < attempts && !result; i += 1) {
+      try {
+        result = await uploadOnce();
+      } catch (err) {
+        lastError = err;
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
+      }
+    }
+    if (!result) throw lastError || new Error('Upload failed');
+    const body = String(result.body || '');
+    const alreadyUploaded =
+      lastError != null && /duplicate|already exists/i.test(body);
+    if ((result.status < 200 || result.status >= 300) && !alreadyUploaded) {
+      throwForUploadStatus(result.status, body.slice(0, 200));
     }
     return;
   }
@@ -623,6 +641,28 @@ export async function prepareSubscriptionSubmitPayload(formData, files = {}) {
     }
   }
 
+  const coverUri = outFiles.directoryCover?.uri;
+  if (coverUri && !data.directory_cover_url) {
+    if (String(coverUri).startsWith('http')) {
+      data.directory_cover_url = coverUri;
+      delete outFiles.directoryCover;
+    } else {
+      try {
+        const uploaded = await uploadProfilePicture(outFiles.directoryCover);
+        if (uploaded?.url) {
+          data.directory_cover_url = uploaded.url;
+        }
+        delete outFiles.directoryCover;
+      } catch (err) {
+        console.warn(
+          '[prepareSubscriptionSubmitPayload] cover pre-upload failed:',
+          err?.message || err,
+        );
+        delete outFiles.directoryCover;
+      }
+    }
+  }
+
   const logoUri = outFiles.companyLogo?.uri;
   if (logoUri && !data.company_logo_url) {
     if (String(logoUri).startsWith('http')) {
@@ -762,9 +802,11 @@ export const submitSubscription = async (formData, files = {}) => {
     const forceJson = !subscriptionSubmitHasFileAttachments(attach, payload);
 
     if (forceJson) {
-      return await postSubscriptionSubmit(
+      const created = await postSubscriptionSubmit(
         toSubscriptionSubmitJsonBody(payload),
       );
+      await persistDirectoryMediaColumns(created?.subscriptionId, payload);
+      return created;
     }
 
     const formDataToSend = new FormData();
@@ -816,7 +858,9 @@ export const submitSubscription = async (formData, files = {}) => {
       }
     }
 
-    return await postSubscriptionSubmit(formDataToSend, {});
+    const created = await postSubscriptionSubmit(formDataToSend, {});
+    await persistDirectoryMediaColumns(created?.subscriptionId, payload);
+    return created;
   } catch (error) {
     console.error('Error submitting subscription:', error);
     throw error;
@@ -1150,6 +1194,7 @@ export const updateSubscriptionProfile = async (subscriptionId, fields = {}) => 
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Failed to update profile');
+  await persistDirectoryMediaColumns(id, fields);
   return data;
 };
 
@@ -1679,6 +1724,38 @@ function supabaseRestConfig() {
   return {url, key};
 }
 
+/** Live directory API omits these columns; write them on the subscription row. */
+async function persistDirectoryMediaColumns(subscriptionId, fields) {
+  const id = String(subscriptionId || '').trim();
+  if (!id || !fields || typeof fields !== 'object') return;
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(fields, 'directory_cover_url')) {
+    const raw = fields.directory_cover_url;
+    patch.directory_cover_url =
+      raw != null && String(raw).trim() ? String(raw).trim() : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(fields, 'directory_video_crop')) {
+    patch.directory_video_crop = fields.directory_video_crop || null;
+  }
+  if (!Object.keys(patch).length) return;
+  const {url, key} = supabaseRestConfig();
+  if (!url || !key) return;
+  try {
+    await fetch(`${url}/rest/v1/subscriptions?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(patch),
+    });
+  } catch (err) {
+    console.warn('[directory media] save failed', err?.message || err);
+  }
+}
+
 async function supabaseRestGet(pathWithQuery) {
   const {url, key} = supabaseRestConfig();
   if (!url || !key) return null;
@@ -1691,6 +1768,78 @@ async function supabaseRestGet(pathWithQuery) {
   });
   if (!response.ok) return null;
   return response.json();
+}
+
+const MARKETER_PLAN_LISTING_LIMIT = {single: 5, team5: 10, team10: null};
+const COMPANY_PLAN_LISTING_LIMIT_BY_PLAN = {projects5: 5, projects10: 10, multi: null};
+
+/**
+ * Plan listing cap the server enforces on publish, with current usage.
+ * Company: own ads. Marketer: the whole office (manager + joined marketers).
+ * Feed posts never count. Returns null for accounts without a plan cap.
+ * @returns {Promise<{kind: 'company'|'marketer', plan: string, limit: number|null, used: number, isOfficeMember: boolean}|null>}
+ */
+export async function getPlanListingUsage(user) {
+  const id = String(user?.id || user?.subscription_id || '').trim();
+  if (!id) return null;
+  try {
+    const rows = await supabaseRestGet(
+      `subscriptions?id=eq.${encodeURIComponent(id)}&select=id,subscription_type,company_plan,marketer_plan,parent_subscription_id`,
+    );
+    const sub = Array.isArray(rows) ? rows[0] : null;
+    if (!sub) return null;
+    const type = String(sub.subscription_type || '').trim();
+
+    if (type === 'company') {
+      const plan = String(sub.company_plan || '').trim();
+      if (!Object.prototype.hasOwnProperty.call(COMPANY_PLAN_LISTING_LIMIT_BY_PLAN, plan)) {
+        return null;
+      }
+      const ads = await supabaseRestGet(
+        `ads?subscription_id=eq.${encodeURIComponent(id)}&feed_post=not.is.true&select=id`,
+      );
+      return {
+        kind: 'company',
+        plan,
+        limit: COMPANY_PLAN_LISTING_LIMIT_BY_PLAN[plan],
+        used: Array.isArray(ads) ? ads.length : 0,
+        isOfficeMember: false,
+      };
+    }
+
+    if (type === 'project_marketer') {
+      let officeId = sub.id;
+      let plan = String(sub.marketer_plan || '').trim();
+      const parentId = String(sub.parent_subscription_id || '').trim();
+      if (parentId) {
+        officeId = parentId;
+        const parentRows = await supabaseRestGet(
+          `subscriptions?id=eq.${encodeURIComponent(parentId)}&select=marketer_plan`,
+        );
+        plan = String(parentRows?.[0]?.marketer_plan || '').trim();
+      }
+      if (!Object.prototype.hasOwnProperty.call(MARKETER_PLAN_LISTING_LIMIT, plan)) {
+        return null;
+      }
+      const members = await supabaseRestGet(
+        `subscriptions?parent_subscription_id=eq.${encodeURIComponent(officeId)}&select=id`,
+      );
+      const ids = [officeId, ...(Array.isArray(members) ? members.map(m => m.id) : [])];
+      const ads = await supabaseRestGet(
+        `ads?subscription_id=in.(${ids.map(encodeURIComponent).join(',')})&feed_post=not.is.true&select=id`,
+      );
+      return {
+        kind: 'marketer',
+        plan,
+        limit: MARKETER_PLAN_LISTING_LIMIT[plan],
+        used: Array.isArray(ads) ? ads.length : 0,
+        isOfficeMember: Boolean(parentId),
+      };
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
 }
 
 function mapSubscriptionToFollowHubRow(sub, extras = {}) {
@@ -1997,6 +2146,9 @@ export const uploadFile = async (file, folder = 'general', options = {}) => {
       'Error uploading file:',
       errorMessageFromUnknown(error, 'Upload failed'),
     );
+    if (/NSURLErrorDomain|Unable to upload the file/i.test(String(error?.message || ''))) {
+      throw new Error('העלאת הקובץ נכשלה. בדקו את החיבור לאינטרנט ונסו שוב.');
+    }
     if (error instanceof Error) {
       throw error;
     }
@@ -3259,7 +3411,32 @@ export const getProfessionalsDirectory = async () => {
   if (!response.ok) {
     throw new Error(data.error || 'Failed to load professionals');
   }
-  return data;
+  const list = Array.isArray(data.professionals) ? data.professionals : [];
+  const ids = list.map(row => String(row?.id || '').trim()).filter(Boolean);
+  if (!ids.length) return data;
+  const mediaRows = await supabaseRestGet(
+    `subscriptions?id=in.(${ids.join(',')})&select=id,directory_cover_url,directory_video_crop`,
+  );
+  if (!Array.isArray(mediaRows) || !mediaRows.length) return data;
+  const byId = new Map(mediaRows.map(row => [String(row.id), row]));
+  return {
+    ...data,
+    professionals: list.map(row => {
+      const extra = byId.get(String(row.id));
+      if (!extra) return row;
+      const cover =
+        extra.directory_cover_url != null &&
+        String(extra.directory_cover_url).trim()
+          ? String(extra.directory_cover_url).trim()
+          : null;
+      return {
+        ...row,
+        directory_cover_url: cover || row.directory_cover_url || null,
+        directory_video_crop:
+          extra.directory_video_crop || row.directory_video_crop || null,
+      };
+    }),
+  };
 };
 
 /**
@@ -3412,3 +3589,33 @@ export const updateListing = async (listingId, listingData) => {
     throw error;
   }
 };
+
+/** Save this device's Expo push token for the logged-in chat email. */
+export async function registerPushToken({token, email, subscriptionId, platform}) {
+  const response = await apiFetch(`${apiBase()}/api/push/register`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      token,
+      email,
+      subscription_id: subscriptionId || null,
+      platform,
+    }),
+    timeoutMs: 15000,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.success) {
+    throw new Error(errorMessageFromApiBody(data, 'Push registration failed'));
+  }
+  return data;
+}
+
+export async function unregisterPushToken(token) {
+  const response = await apiFetch(`${apiBase()}/api/push/unregister`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token}),
+    timeoutMs: 15000,
+  });
+  return response.json().catch(() => ({}));
+}

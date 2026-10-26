@@ -34,6 +34,8 @@ export const MultiImageWithVideo = ({
   profilePictureInputRef,
   onEditMainImage,
   onEditAdditionalImage,
+  allowMoreImages = false,
+  coverTitle,
 }) => {
   const resolvedAdditionalImageChange =
     handleAdditionalImageChange || onAdditionalImageWebChange;
@@ -72,6 +74,8 @@ export const MultiImageWithVideo = ({
         additionalImageInputRefs={resolvedAdditionalImageInputRefs}
         onEditMainImage={onEditMainImage}
         onEditAdditionalImage={onEditAdditionalImage}
+        allowMoreImages={allowMoreImages}
+        coverTitle={coverTitle}
       />
       <Divider style={styles.divider} />
       <VideoUpload

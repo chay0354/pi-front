@@ -31,6 +31,17 @@ export const PROFILE_RING_LOCATIONS = GOLD_GRADIENT_LOCATIONS;
 /** Regular users — matches Edit Profile camera badge teal (`#5EEAD4`). */
 export const PROFILE_USER_RING_COLORS = ['#99F6E4', '#5EEAD4', '#0D9488'];
 export const PROFILE_USER_RING_LOCATIONS = PROFILE_RING_LOCATIONS;
+
+export function profileUsesGoldRing(subscriptionType, forceGoldRing = false) {
+  if (forceGoldRing === true) return true;
+  const resolvedType = resolveSubscriptionType(subscriptionType);
+  return resolvedType !== '' && shouldShowProfileGoldRing(resolvedType);
+}
+
+/** Follow ✓ contrasts with the avatar ring: turquoise on gold/orange, orange on turquoise. */
+export function profileRingCheckColor(useGoldRing) {
+  return useGoldRing ? PROFILE_USER_RING_COLORS[1] : PROFILE_RING_COLORS[1];
+}
 const DEFAULT_RING_COLORS = PROFILE_RING_COLORS;
 const DEFAULT_RING_LOCATIONS = PROFILE_RING_LOCATIONS;
 
@@ -48,6 +59,7 @@ export const ProfileAvatar = ({
   subscriptionType,
   forceGoldRing = false,
   showRing = true,
+  ringGap,
   style,
   imageStyle,
   placeholderLabel,
@@ -65,7 +77,10 @@ export const ProfileAvatar = ({
   }, [uri, fallbackUri]);
 
   const ringWidth = Math.max(1, size * RING_RATIO);
-  const gap = Math.max(0, size * GAP_RATIO);
+  const gap = Math.max(
+    0,
+    Number.isFinite(ringGap) ? ringGap : size * GAP_RATIO,
+  );
   const inset = ringWidth + gap;
   const placeholderChar = (() => {
     if (placeholderLabel)
@@ -79,10 +94,7 @@ export const ProfileAvatar = ({
   const showFallback = !showPrimary && Boolean(fallbackUri) && !fallbackFailed;
   const displayUri = showPrimary ? uri : showFallback ? fallbackUri : null;
   const displayResizeMode = showPrimary ? 'cover' : fallbackResizeMode;
-  const resolvedType = resolveSubscriptionType(subscriptionType);
-  const useGoldRing =
-    forceGoldRing === true ||
-    (resolvedType !== '' && shouldShowProfileGoldRing(resolvedType));
+  const useGoldRing = profileUsesGoldRing(subscriptionType, forceGoldRing);
   const effectiveShowRing = showRing !== false;
   const effectiveRingColors = useGoldRing ? ringColors : PROFILE_USER_RING_COLORS;
   const effectiveRingLocations = useGoldRing

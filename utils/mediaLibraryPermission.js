@@ -1,5 +1,6 @@
 import {Platform, Alert} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {MAX_VIDEO_DURATION_SEC} from './videoDurationLimit';
 
 export async function ensureMediaLibraryPermission() {
   if (Platform.OS === 'web') return true;
@@ -20,5 +21,5 @@ export const AD_VIDEO_PICKER_OPTIONS = {
   mediaTypes: ImagePicker.MediaTypeOptions.Videos,
   allowsEditing: false,
   quality: 1,
-  videoMaxDuration: 120,
+  videoMaxDuration: MAX_VIDEO_DURATION_SEC,
 };

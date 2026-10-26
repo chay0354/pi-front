@@ -45,11 +45,16 @@ import {
   TikTokHeartIcon,
   PostFeedLikeIcon,
   FollowPlusBadge,
+  profileRingCheckColor,
+  profileUsesGoldRing,
 } from '../components';
 import {
   FeedVideoPlayer,
   FeedVideoPosterPlaceholder,
 } from '../components/FeedVideoPlayer';
+import FeedVideoProgressBar, {
+  FEED_PROGRESS_TRACK_OFFSET,
+} from '../components/FeedVideoProgressBar';
 import PostTextOverlays from '../components/PostTextOverlays';
 import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import {
@@ -1088,8 +1093,6 @@ const TIKTOK_OVERLAY_ICONS = {
 };
 
 const COMMENT_REACTIONS = ['😂', '🙏', '😀', '👍', '😉', '👌'];
-/** Small cushion above the soft keyboard (iOS only — Android uses adjustResize). */
-const COMMENTS_COMPOSER_KEYBOARD_LIFT = Platform.OS === 'ios' ? 8 : 0;
 const COMMENTS_COMPOSER_SCROLL_PADDING = 210;
 
 /** Shared asset for sidebar rows with `id: 'new'` (חדשות / חדשים). */
@@ -4105,15 +4108,41 @@ const TikTokFeedScreen = ({
       return undefined;
     }
 
-    const onShow = event => {
-      setIosCommentsKeyboardHeight(event?.endCoordinates?.height ?? 0);
+    // Keyboard frames can be in a larger coordinate space than the app window
+    // (e.g. 874pt vs 852pt on scaled iPhones), so convert to window points.
+    let keyboardSpaceHeight = 0;
+    const applyFrame = (end, isShow) => {
+      const height = end?.height ?? 0;
+      const screenY = end?.screenY;
+      if (height <= 0 || typeof screenY !== 'number') {
+        setIosCommentsKeyboardHeight(height > 0 ? height : 0);
+        return;
+      }
+      if (isShow || !keyboardSpaceHeight) {
+        keyboardSpaceHeight = screenY + height;
+      }
+      const visible = keyboardSpaceHeight - screenY;
+      if (visible <= 0) {
+        setIosCommentsKeyboardHeight(0);
+        return;
+      }
+      const windowHeight = Dimensions.get('window').height;
+      setIosCommentsKeyboardHeight(
+        Math.round((visible * windowHeight) / keyboardSpaceHeight),
+      );
     };
     const onHide = () => setIosCommentsKeyboardHeight(0);
 
-    const showSub = Keyboard.addListener('keyboardWillShow', onShow);
+    const showSub = Keyboard.addListener('keyboardWillShow', e =>
+      applyFrame(e?.endCoordinates, true),
+    );
+    const frameSub = Keyboard.addListener('keyboardWillChangeFrame', e =>
+      applyFrame(e?.endCoordinates, false),
+    );
     const hideSub = Keyboard.addListener('keyboardWillHide', onHide);
     return () => {
       showSub.remove();
+      frameSub.remove();
       hideSub.remove();
     };
   }, [showCommentsSheet]);
@@ -4121,9 +4150,7 @@ const TikTokFeedScreen = ({
   const commentsComposerBottom =
     Platform.OS === 'android'
       ? androidCommentsComposer.bottomOffset
-      : iosCommentsKeyboardHeight > 0
-        ? iosCommentsKeyboardHeight + COMMENTS_COMPOSER_KEYBOARD_LIFT
-        : 0;
+      : iosCommentsKeyboardHeight;
   const commentsComposerMarginBottom =
     Platform.OS === 'android' ? androidCommentsComposer.marginBottom : 0;
   const commentsKeyboardOpen =
@@ -5457,6 +5484,28 @@ const TikTokFeedScreen = ({
       feedVideoRefs.current.delete(index);
     }
   }, []);
+
+  /** One screen-level bar (drawn over FeedBottomBar) follows the active page's player. */
+  const feedProgressBarRef = useRef(null);
+  const feedProgressHandlers = useRef(new Map());
+  /** Stable per-index callback — FeedVideoPlayer is memoized and resets on identity change. */
+  const getFeedProgressHandler = useCallback(index => {
+    let handler = feedProgressHandlers.current.get(index);
+    if (!handler) {
+      handler = (p, durationMs) => {
+        if (index !== currentIndexRef.current) return;
+        feedProgressBarRef.current?.setProgress(p, durationMs);
+      };
+      feedProgressHandlers.current.set(index, handler);
+    }
+    return handler;
+  }, []);
+  const seekActiveFeedVideo = useCallback(fraction => {
+    feedVideoRefs.current.get(currentIndexRef.current)?.seekTo?.(fraction);
+  }, []);
+  useEffect(() => {
+    feedProgressBarRef.current?.reset?.();
+  }, [currentIndex]);
 
   // Define feed scroll handlers before any early return (hooks must run every render)
   const syncFeedIndexFromOffset = useCallback(
@@ -6813,6 +6862,9 @@ const TikTokFeedScreen = ({
           <FollowPlusBadge
             style={styles.sidebarFollowBadge}
             iconSize={16}
+            checkColor={profileRingCheckColor(
+              profileUsesGoldRing(video, shouldForceGoldRingForListing(video)),
+            )}
             onPressIn={() => {
               sidebarBlockPanRef.current = true;
             }}
@@ -7760,6 +7812,7 @@ const TikTokFeedScreen = ({
             isActive={feedVideoActive}
             prewarm={inPlayerWindow && !feedVideoActive}
             fitWidth={fitAdWidth}
+            onProgressChange={getFeedProgressHandler(index)}
             style={styles.feedVideoPlayer}>
             {renderPostTextOverlays(video)}
           </FeedVideoPlayer>
@@ -8745,6 +8798,23 @@ const TikTokFeedScreen = ({
           onPressPublish={handlePublishButtonPress}
         />
       )}
+      {!showUserSearchPanel &&
+      !showBottomSheet &&
+      !showCommentsSheet &&
+      selectedTopBarFilter !== 'list' &&
+      !feedIsEmpty &&
+      currentVideo?.isUploaded &&
+      currentVideo?.type === 'video' &&
+      resolveFeedVideoUri(currentVideo) ? (
+        <FeedVideoProgressBar
+          ref={feedProgressBarRef}
+          onSeek={seekActiveFeedVideo}
+          style={[
+            styles.feedVideoProgressBar,
+            {bottom: bottomBarHeight - FEED_PROGRESS_TRACK_OFFSET},
+          ]}
+        />
+      ) : null}
 
       {/* Bottom Sheet */}
       {showBottomSheet && (
@@ -9961,6 +10031,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   /** Tap-to-pause sits above the video but below sidebar/actions (z20). */
+  /** Above FeedBottomBar (zIndex 200) so the dot is never hidden behind it. */
+  feedVideoProgressBar: {
+    zIndex: 210,
+    elevation: 12,
+  },
   feedVideoPauseTap: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 15,

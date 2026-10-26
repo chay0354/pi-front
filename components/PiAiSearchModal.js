@@ -814,7 +814,10 @@ const PiAiSearchModal = ({
               <TouchableOpacity
                 onPress={runSearch}
                 disabled={loading}
-                style={styles.searchFieldSearchBtn}
+                style={[
+                  styles.searchFieldSearchBtn,
+                  query.trim() && !loading ? styles.searchFieldSendBtn : null,
+                ]}
                 hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
                 accessibilityLabel="חיפוש"
                 accessibilityRole="button">
@@ -824,7 +827,9 @@ const PiAiSearchModal = ({
                   <MaterialCommunityIcons
                     name="magnify"
                     size={22}
-                    color="rgba(255,255,255,0.55)"
+                    color={
+                      query.trim() ? '#1E1D27' : 'rgba(255,255,255,0.55)'
+                    }
                   />
                 )}
               </TouchableOpacity>
@@ -1083,6 +1088,15 @@ const styles = StyleSheet.create({
   searchFieldSearchBtn: {
     alignSelf: 'center',
     marginTop: 2,
+  },
+  searchFieldSendBtn: {
+    width: 36,
+    height: 36,
+    marginTop: 0,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F7C63A',
   },
   searchFieldInput: {
     minHeight: 32,

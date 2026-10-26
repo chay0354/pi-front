@@ -1168,7 +1168,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'office', title: 'משרד'},
           {name: 'whole_floor', title: 'קומה שלמה'},
@@ -1244,7 +1244,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'penthouse', title: 'פנטהאוז'},
@@ -1317,7 +1317,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'garden_apartment', title: 'דירת גן'},
@@ -1444,7 +1444,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'store', title: 'חנות'},
           {name: 'shopping_center', title: 'קומה שלמה'},
@@ -1512,7 +1512,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'studio_apartment', title: 'דירת סטודיו'},
@@ -1580,7 +1580,7 @@ export const userCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'private_house', title: 'בית פרטי'},
@@ -1891,7 +1891,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'office', title: 'משרד'},
           {name: 'whole_floor', title: 'קומה שלמה'},
@@ -1969,7 +1969,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'penthouse', title: 'פנטהאוז'},
@@ -2043,7 +2043,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'private_house', title: 'בית פרטי'},
@@ -2168,7 +2168,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'store', title: 'חנות'},
           {name: 'shopping_center', title: 'קומה שלמה'},
@@ -2237,7 +2237,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'studio_apartment', title: 'דירת סטודיו'},
@@ -2306,7 +2306,7 @@ export const brokerCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'private_house', title: 'בית פרטי'},
@@ -3242,7 +3242,7 @@ export const companyCategoryForm = {
       {key: 'displayoptions'},
       {
         key: 'propertytype',
-        title: 'סןג הנכס',
+        title: 'סוג הנכס',
         data: [
           {name: 'apartment', title: 'דירה'},
           {name: 'studio_apartment', title: 'דירת סטודיו'},

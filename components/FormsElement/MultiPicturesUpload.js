@@ -24,8 +24,14 @@ export const MultiPicturesUpload = ({
   additionalImageInputRefs,
   onEditMainImage,
   onEditAdditionalImage,
+  allowMoreImages = false,
+  coverTitle = 'תמונת נושא או הדמייה',
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
+  const hasExtraImages = [4, 5, 6, 7, 8, 9].some(
+    index => additionalImages?.[index]?.uri,
+  );
+  const extraVisible = (allowMoreImages && showAdditionalImages) || hasExtraImages;
 
   const MoreImagesRender = array => {
     return (
@@ -84,7 +90,7 @@ export const MultiPicturesUpload = ({
 
   return (
     <>
-      <Title text={'תמונת נושא או הדמייה'} required />
+      <Title text={coverTitle} required />
       <View style={styles.imageUploadArea}>
         <TouchableOpacity
           style={styles.imageUploadHit}
@@ -133,7 +139,7 @@ export const MultiPicturesUpload = ({
       <Title text={'תמונות נוספות'} textStyle={styles.sectionTitle} />
       {MoreImagesRender([0, 1])}
       {MoreImagesRender([2, 3])}
-      {!showAdditionalImages && (
+      {allowMoreImages && !extraVisible ? (
         <TouchableOpacity
           style={{
             justifyContent: 'center',
@@ -151,10 +157,10 @@ export const MultiPicturesUpload = ({
             הוסף עוד תמונות
           </Text>
         </TouchableOpacity>
-      )}
-      {showAdditionalImages && MoreImagesRender([4, 5])}
-      {showAdditionalImages && MoreImagesRender([6, 7])}
-      {showAdditionalImages && MoreImagesRender([8, 9])}
+      ) : null}
+      {extraVisible ? MoreImagesRender([4, 5]) : null}
+      {extraVisible ? MoreImagesRender([6, 7]) : null}
+      {extraVisible ? MoreImagesRender([8, 9]) : null}
     </>
   );
 };

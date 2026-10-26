@@ -4,6 +4,8 @@ export {
   PROFILE_RING_LOCATIONS,
   PROFILE_USER_RING_COLORS,
   PROFILE_USER_RING_LOCATIONS,
+  profileRingCheckColor,
+  profileUsesGoldRing,
 } from './ProfileAvatar';
 export {TikTokHeartIcon} from './TikTokHeartIcon';
 export {PostFeedLikeIcon} from './PostFeedLikeIcon';

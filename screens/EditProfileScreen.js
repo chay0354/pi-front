@@ -37,6 +37,7 @@ import {
 import {updateSubscriptionProfile, uploadProfilePicture, uploadFile} from '../utils/api';
 import {hebrewTextAlign} from '../utils/rtlLayout';
 import {ensureMediaLibraryPermission, AD_VIDEO_PICKER_OPTIONS} from '../utils/mediaLibraryPermission';
+import {ensureVideoWithinLimit} from '../utils/videoDurationLimit';
 import {
   resolveProfileDisplayName,
   getProfileEditFields,
@@ -46,6 +47,11 @@ import {
   getProfileBusinessNameFieldKey,
 } from '../utils/profileFields';
 import CircleImageCropModal from '../components/CircleImageCropModal';
+import {FigmaCheckbox} from '../components/FigmaCheckbox';
+import {
+  directoryCardMediaFrame,
+  parseDirectoryVideoCrop,
+} from '../utils/directoryCoverFrame';
 import {useKeyboardInset} from '../utils/formKeyboardScroll';
 
 const BG = '#27262F';
@@ -69,6 +75,9 @@ const EditProfileScreen = ({onClose, onSaved}) => {
   /** Company + משווק: logo only — no separate profile photo or video. */
   const logoOnlyProfile = usesOrgLogoAsAvatar(subTypeLower);
   const canEditProfilePhoto = !logoOnlyProfile;
+  const canEditHorizontalCover =
+    subTypeLower === subscriptionTypes.broker ||
+    subTypeLower === subscriptionTypes.professional;
   const canEditProfileVideo =
     isB2BSubscriptionType(subTypeLower) && !logoOnlyProfile;
   const canEditCompanyLogo = canEditSeparateCompanyLogo(
@@ -91,6 +100,16 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       getUserCompanyLogoUrl(currentUser),
   );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoSourceUri, setPhotoSourceUri] = useState(null);
+  const [directoryCoverUrl, setDirectoryCoverUrl] = useState(() =>
+    currentUser?.directory_cover_url &&
+    String(currentUser.directory_cover_url).trim()
+      ? String(currentUser.directory_cover_url).trim()
+      : null,
+  );
+  const [directoryVideoCrop, setDirectoryVideoCrop] = useState(() =>
+    parseDirectoryVideoCrop(currentUser?.directory_video_crop),
+  );
   const [profileVideoUrl, setProfileVideoUrl] = useState(() =>
     currentUser?.video_url && String(currentUser.video_url).trim()
       ? String(currentUser.video_url).trim()
@@ -166,9 +185,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'video/*';
-      input.onchange = e => {
+      input.onchange = async e => {
         const file = e.target.files?.[0];
         if (file) {
+          if (!(await ensureVideoWithinLimit(file))) return;
+          setDirectoryVideoCrop(null);
           setPendingProfileVideo({
             uri: URL.createObjectURL(file),
             type: file.type,
@@ -187,6 +208,8 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         AD_VIDEO_PICKER_OPTIONS,
       );
       if (!result.canceled && result.assets?.[0]) {
+        if (!(await ensureVideoWithinLimit(result.assets[0]))) return;
+        setDirectoryVideoCrop(null);
         setPendingProfileVideo(buildPickedVideoFile(result.assets[0]));
       }
     } catch (err) {
@@ -198,6 +221,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     if (uploadingVideo || saving) return;
     setPendingProfileVideo(null);
     setProfileVideoUrl(null);
+    setDirectoryVideoCrop(null);
   };
 
   const uploadPicked = async picked => {
@@ -207,6 +231,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       const uploaded = await uploadProfilePicture(picked);
       if (uploaded?.url) {
         setPhotoUrl(uploaded.url);
+      } else {
+        throw new Error('לא התקבלה כתובת תמונה');
+      }
+    } catch (err) {
+      Alert.alert('שגיאה', err?.message || 'העלאת התמונה נכשלה, נסה/י שוב.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const uploadCoverPicked = async picked => {
+    if (!picked) return;
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadProfilePicture(picked);
+      if (uploaded?.url) {
+        setDirectoryCoverUrl(uploaded.url);
       } else {
         throw new Error('לא התקבלה כתובת תמונה');
       }
@@ -236,6 +277,12 @@ const EditProfileScreen = ({onClose, onSaved}) => {
 
   const openPhotoCropper = (uri, target = 'profile') => {
     if (!uri) return;
+    if (target === 'profile' || (target === 'cover' && !photoSourceUri)) {
+      if (target === 'profile' && uri !== photoSourceUri && uri !== photoUrl) {
+        setDirectoryCoverUrl(null);
+      }
+      setPhotoSourceUri(uri);
+    }
     cropTargetRef.current = target;
     setCropTarget(target);
     setCropUri(uri);
@@ -246,6 +293,11 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     const target = cropTargetRef.current;
     setCropVisible(false);
     setCropUri(null);
+    if (target === 'video') {
+      if (result?.crop) setDirectoryVideoCrop(result.crop);
+      else if (result?.error) Alert.alert('שגיאה', result.error);
+      return;
+    }
     if (!result?.uri) {
       if (result?.error) {
         Alert.alert('שגיאה', result.error);
@@ -259,6 +311,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     };
     if (target === 'logo') {
       await uploadLogoPicked(picked);
+      return;
+    }
+    if (target === 'cover') {
+      await uploadCoverPicked(picked);
       return;
     }
     await uploadPicked(picked);
@@ -313,8 +369,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
       Alert.alert('שגיאה', 'לא ניתן לזהות את המשתמש.');
       return;
     }
+    const missing = fields.filter(
+      f => f.required && !String(form[f.key] ?? '').trim(),
+    );
+    if (missing.length > 0) {
+      Alert.alert(
+        'שדות חובה',
+        `אנא מלא/י: ${missing.map(f => f.label).join(', ')}`,
+      );
+      return;
+    }
     const payload = {};
     fields.forEach(f => {
+      if (f.readOnly) return;
+      if (f.type === 'toggle') {
+        payload[f.key] = form[f.key] === true;
+        return;
+      }
       if (
         f.type === 'chips' ||
         f.key === 'activity_regions' ||
@@ -330,6 +401,10 @@ const EditProfileScreen = ({onClose, onSaved}) => {
     });
     if (canEditProfilePhoto) {
       Object.assign(payload, buildProfilePhotoSavePayload(photoUrl));
+    }
+    if (canEditHorizontalCover) {
+      payload.directory_cover_url = directoryCoverUrl || null;
+      payload.directory_video_crop = directoryVideoCrop || null;
     }
     if (canEditCompanyLogo && logoUrl) {
       payload.company_logo_url = logoUrl;
@@ -471,6 +546,20 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                     {photoUrl ? 'שינוי תמונה' : 'העלאת תמונה'}
                   </Text>
                 </TouchableOpacity>
+                {canEditHorizontalCover && (photoSourceUri || photoUrl) ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const source = photoSourceUri || photoUrl;
+                      if (!source) {
+                        handlePickImage('cover');
+                        return;
+                      }
+                      openPhotoCropper(source, 'cover');
+                    }}
+                    activeOpacity={0.7}>
+                    <Text style={styles.changePhotoText}>עריכת תצוגה אופקית</Text>
+                  </TouchableOpacity>
+                ) : null}
               </>
             ) : (
               <View style={styles.avatarWrap}>
@@ -529,6 +618,21 @@ const EditProfileScreen = ({onClose, onSaved}) => {
                 </TouchableOpacity>
                 {profileVideoPreviewUri ? (
                   <TouchableOpacity
+                    onPress={() => {
+                      cropTargetRef.current = 'video';
+                      setCropTarget('video');
+                      setCropUri(profileVideoPreviewUri);
+                      setCropVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                    disabled={uploadingVideo || saving}>
+                    <Text style={styles.horizontalEditLinkText}>
+                      עריכת תצוגה אופקית
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {profileVideoPreviewUri ? (
+                  <TouchableOpacity
                     onPress={handleRemoveProfileVideo}
                     activeOpacity={0.7}
                     disabled={uploadingVideo || saving}
@@ -556,8 +660,39 @@ const EditProfileScreen = ({onClose, onSaved}) => {
           {fields.map(f => (
             <View key={f.key}>
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>{f.label}</Text>
-              {f.type === 'chips' ? (
+              {f.type === 'toggle' ? null : (
+                <Text style={styles.fieldLabel}>
+                  {f.label}
+                  {f.required ? (
+                    <Text style={styles.requiredMark}> *</Text>
+                  ) : null}
+                </Text>
+              )}
+              {f.type === 'toggle' ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={saving}
+                  onPress={() => setField(f.key, form[f.key] !== true)}
+                  style={styles.toggleRow}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{checked: form[f.key] === true}}>
+                  <FigmaCheckbox checked={form[f.key] === true} />
+                  <View style={styles.toggleTextWrap}>
+                    <Text style={styles.toggleLabel}>{f.label}</Text>
+                    {f.hint ? (
+                      <Text style={styles.toggleHint}>{f.hint}</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              ) : f.readOnly ? (
+                <View style={[styles.input, styles.inputReadonly]}>
+                  <Text
+                    style={[styles.readonlyText, styles.inputLtrValue]}
+                    numberOfLines={1}>
+                    {form[f.key] || '—'}
+                  </Text>
+                </View>
+              ) : f.type === 'chips' ? (
                 (() => {
                   const chipOptions =
                     f.optionsFrom === 'professionalTypes'
@@ -764,6 +899,7 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         </ScrollView>
       </KeyboardAvoidingView>
       <CircleImageCropModal
+        key={`${cropTarget}-${cropUri || 'closed'}`}
         visible={cropVisible}
         imageUri={cropUri}
         onCancel={handlePhotoCropCancel}
@@ -771,7 +907,23 @@ const EditProfileScreen = ({onClose, onSaved}) => {
         title={
           cropTarget === 'logo'
             ? 'חתוך את לוגו החברה'
-            : 'חתוך את תמונת הפרופיל'
+            : cropTarget === 'cover' || cropTarget === 'video'
+              ? 'עריכת תצוגה אופקית'
+              : 'חתוך את תמונת הפרופיל'
+        }
+        media={cropTarget === 'video' ? 'video' : 'image'}
+        shape={
+          cropTarget === 'cover' || cropTarget === 'video' ? 'rect' : 'circle'
+        }
+        frameWidth={
+          cropTarget === 'cover' || cropTarget === 'video'
+            ? directoryCardMediaFrame().width
+            : undefined
+        }
+        frameHeight={
+          cropTarget === 'cover' || cropTarget === 'video'
+            ? directoryCardMediaFrame().height
+            : undefined
         }
       />
     </View>
@@ -869,6 +1021,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
+  horizontalEditLinkText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Rubik-Medium',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   videoSection: {
     alignItems: 'stretch',
     marginBottom: 20,
@@ -926,6 +1085,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 20,
     marginTop: 2,
   },
@@ -1016,6 +1176,33 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     fontSize: 15,
     fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  requiredMark: {
+    color: '#F7C63A',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Rubik-Medium',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+  },
+  toggleHint: {
+    color: TEXT_SECONDARY,
+    fontSize: 12,
+    fontFamily: 'Rubik-Regular',
+    marginTop: 2,
     textAlign: hebrewTextAlign,
     writingDirection: 'rtl',
   },

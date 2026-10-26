@@ -2030,23 +2030,6 @@ const ChatListScreen = ({
                     </Pressable>
                   ) : null}
 
-                  {isCompanyUser ? (
-                    <Pressable
-                      style={styles.ncToggleRow}
-                      onPress={toggleBlockCollabOffers}
-                      android_ripple={{color: 'rgba(255,255,255,0.06)'}}>
-                      <View style={styles.ncToggleOuter}>
-                        {blockCollabOffers ? (
-                          <MaterialCommunityIcons
-                            name="check"
-                            size={15}
-                            color={NC_TOGGLE_AMBER}
-                          />
-                        ) : null}
-                      </View>
-                      <Text style={styles.ncToggleLabel}>חסום הצעות לשת"פ</Text>
-                    </Pressable>
-                  ) : null}
                 </>
               ) : (
                 <>
