@@ -24,3 +24,7 @@ web-build/
 
 # Local tarball caches — huge; never commit or upload in builds
 react-native-*.tgz
+
+# IDE configs
+.idea/
+*.iml
