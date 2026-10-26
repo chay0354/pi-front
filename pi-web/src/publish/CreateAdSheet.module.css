@@ -1,0 +1,117 @@
+/* Figma file 7 — node 2:238701 (מגירת צור מודעה); mobile dp × 1.3. */
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: default;
+  animation: fadeIn 0.18s ease-out;
+}
+
+.sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 21px 0 36px;
+  border-radius: 16px 16px 0 0;
+  background: #2b2a39;
+  overflow: hidden;
+  animation: slideUp 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.handleWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.handle {
+  width: 52px;
+  height: 6px;
+  border-radius: 4px;
+  background: #464646;
+}
+
+/* row-reverse: chevron on the left, icon on the right, text between them. */
+.option {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 26px 21px;
+  text-align: right;
+  transition: background 0.15s;
+}
+
+.option:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.contentGroup {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 21px;
+  flex: 1;
+  min-width: 0;
+}
+
+.textColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  color: #fff;
+  font-size: 23px;
+  line-height: 29px;
+}
+
+.subtitle {
+  color: #d2d0dc;
+  font-size: 18px;
+  line-height: 21px;
+  letter-spacing: 0.7px;
+}
+
+.icon {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.divider {
+  align-self: center;
+  width: 100%;
+  max-width: 476px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}

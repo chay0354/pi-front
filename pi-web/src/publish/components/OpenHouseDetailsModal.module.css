@@ -1,0 +1,128 @@
+/* Mobile OpenHouseDetailsModal dp × 1.3. RN row-reverse = CSS row-reverse (first child left). */
+
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 36px 21px 21px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.65);
+  cursor: default;
+  animation: fadeIn 0.18s ease-out;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 26px 26px 21px;
+  border: 1px solid rgba(255, 196, 10, 0.35);
+  border-radius: 21px;
+  background: #2b2a39;
+  animation: fadeIn 0.18s ease-out;
+}
+
+.title {
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 34px;
+  text-align: start;
+}
+
+.subtitle {
+  margin: 0 0 23px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 18px;
+  line-height: 26px;
+  text-align: start;
+}
+
+.label {
+  display: block;
+  margin: 5px 0 8px;
+  color: #ffc40a;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 23px;
+  text-align: start;
+}
+
+.input {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px 18px;
+  border: 1px solid #8c85b3;
+  border-radius: 13px;
+  background: #1e1d27;
+  color: #fff;
+  font-family: inherit;
+  font-size: 21px;
+  text-align: start;
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.actions {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 21px;
+}
+
+.cancelBtn {
+  padding: 16px 10px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.cancelBtn:disabled {
+  cursor: default;
+}
+
+.confirmBtn {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 3px;
+  padding: 16px 23px;
+  border: 0;
+  border-radius: 1000px;
+  background: #ffc40a;
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.confirmBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}

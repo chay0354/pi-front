@@ -1,0 +1,282 @@
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1e1d27;
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 104px;
+  padding: 0 26px;
+  background: #1e1d27;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.titleBlock {
+  min-width: 0;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 26px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px 12px;
+}
+
+.tab,
+.tabOn {
+  flex: 1;
+  padding: 10px 4px 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.tabOn {
+  border-bottom-color: #ffc40a;
+  color: #fff;
+  font-weight: 500;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  margin: 8px 28px 16px;
+  padding: 0 18px;
+  border: 1px solid #8c85b3;
+  border-radius: 999px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 18px;
+  text-align: right;
+  outline: none;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 20px 40px;
+}
+
+.row,
+.rowGold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 84px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #2b2a39;
+}
+
+.rowGold {
+  background: linear-gradient(180deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.rowMain:disabled {
+  cursor: default;
+}
+
+.avatar,
+.avatarRing,
+.avatarGold {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #1e1d27;
+}
+
+.avatarRing {
+  box-shadow: 0 0 0 2px #ffc40a;
+}
+
+.avatarGold {
+  box-shadow: 0 0 0 2px #1e1d27;
+}
+
+.name,
+.nameGold {
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameGold {
+  color: #1e1d27;
+}
+
+.actionCluster {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.actionBtn,
+.goldBtn {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.actionGhost {
+  background: transparent;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.actionFollowing {
+  background: #4d4966;
+  color: #fff;
+}
+
+.actionDisabled {
+  background: #373548;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: default;
+}
+
+.actionWide {
+  max-width: 180px;
+}
+
+.goldBtn {
+  background: linear-gradient(180deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+  color: #1e1d27;
+}
+
+.actionPlaceholder {
+  width: 64px;
+}
+
+.empty {
+  margin: 48px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 20px;
+  text-align: center;
+}
+
+.confirmOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.confirmCard {
+  width: min(480px, calc(100% - 48px));
+  padding: 28px;
+  border-radius: 20px;
+  background: #2b2a39;
+  text-align: center;
+}
+
+.confirmCard h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.confirmCard p {
+  margin: 0 0 22px;
+  color: #d2d0dc;
+  font-size: 18px;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.confirmActions button {
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #4d4966;
+  color: #fff;
+  font-family: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.confirmDanger {
+  background: #ffc40a !important;
+  color: #1e1d27 !important;
+}

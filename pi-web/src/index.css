@@ -1,0 +1,111 @@
+@font-face {
+  font-family: 'Rubik';
+  src: url('./assets/fonts/Rubik-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./assets/fonts/Rubik-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./assets/fonts/Rubik-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Rubik';
+  src: url('./assets/fonts/Rubik-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Secular One';
+  src: url('./assets/fonts/SecularOne-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Hebrew';
+  src: url('./assets/fonts/IBMPlexSansHebrew-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Alef';
+  src: url('./assets/fonts/Alef-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans';
+  src: url('./assets/fonts/NotoSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --blue-100: #1e1d27;
+  --blue-500: #262531;
+  --blue-600: #2b2a39;
+  --white-100: #ffffff;
+  --white-300: #f7f3e6;
+  --white-80: rgba(255, 255, 255, 0.8);
+  --text-clue: rgba(255, 255, 255, 0.35);
+  --grey-100: #8c85b3;
+  --yellow-icons: #ffc40a;
+  --cta: #f4ad39;
+  --shadow-1: 0 4px 70px 0 rgba(0, 0, 0, 0.35);
+  --radius-full: 1000px;
+
+  /* Desktop design is authored at 1920 — the shell scales down to fit narrower windows. */
+  --design-width: 1920;
+
+  font-family: 'Rubik', system-ui, sans-serif;
+  color: var(--white-100);
+  background: var(--blue-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--yellow-icons);
+  outline-offset: 2px;
+}
+
+img {
+  display: block;
+}
+
+p {
+  margin: 0;
+}

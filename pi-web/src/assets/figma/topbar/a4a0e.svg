@@ -1,0 +1,21 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="2.82219" height="21.4074" viewBox="0 0 2.82219 21.4074" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Vector" filter="url(#filter0_i_0_7788)">
+<path d="M0.14139 2.8795C0.373991 2.25968 -0.0967623 0.707737 0.0379015 0.0333394L0.131016 0C0.504652 0.111426 0.477392 0.886399 0.71823 1.10308C0.728061 1.11194 0.740301 1.11764 0.75136 1.12492C0.858399 1.55468 0.949418 1.99611 0.962116 2.44094C1.10615 3.82358 0.864226 5.23822 1.06133 6.61901C1.0768 6.73491 1.09636 6.85009 1.11999 6.96456C1.14366 7.079 1.17136 7.19242 1.20309 7.30482C1.23486 7.41722 1.27055 7.5283 1.31018 7.63808C1.34983 7.74785 1.39334 7.85601 1.4407 7.96257C1.81538 8.80909 2.31326 9.49369 2.38689 10.4558C2.46358 11.4576 2.07857 12.4171 2.05568 13.4114C2.0387 14.1766 2.07661 14.914 2.21209 15.6677C2.42389 16.8459 3.11246 18.2743 2.68494 19.4638C2.48661 19.9847 2.21414 20.3771 1.84209 20.7854C1.59602 21.0288 1.31009 21.2168 1.02451 21.4074C1.34886 20.8793 1.6034 20.3832 1.56995 19.7406C1.50368 18.4679 0.550433 17.2006 0.391103 15.7871C0.271913 14.7299 0.529864 13.6318 0.485628 12.5644C0.441939 11.5111 0.0592921 10.5177 0.0121439 9.46847C-0.0227167 8.69243 0.0261613 7.91073 0.050054 7.13473C0.0938345 5.71314 0.14849 4.30276 0.14139 2.8795Z" fill="url(#paint0_linear_0_7788)"/>
+</g>
+<defs>
+<filter id="filter0_i_0_7788" x="0" y="-0.410328" width="3.3351" height="21.8177" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dx="0.51291" dy="-0.410328"/>
+<feGaussianBlur stdDeviation="0.446232"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.611765 0 0 0 0 0.396078 0 0 0 0 0.133333 0 0 0 0.5 0"/>
+<feBlend mode="normal" in2="shape" result="effect1_innerShadow_0_7788"/>
+</filter>
+<linearGradient id="paint0_linear_0_7788" x1="3.04121" y1="-1.62472" x2="-0.489066" y2="-1.56901" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEE787"/>
+<stop offset="1" stop-color="#BD9947"/>
+</linearGradient>
+</defs>
+</svg>

@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icons">
+<path id="Rectangle 34625067" d="M2 5C2 3.89543 2.89543 3 4 3H15C16.1046 3 17 3.89543 17 5V23C17 24.1046 16.1046 25 15 25H4C2.89543 25 2 24.1046 2 23V5Z" stroke="#FFC40A" stroke-width="1.5"/>
+<path id="Union" d="M21 10.0597C21.0001 9.55473 21.5983 9.28829 21.9736 9.6261L26.3516 13.5665C26.609 13.7983 26.609 14.202 26.3516 14.4337L21.9736 18.3741C21.5983 18.7117 21.0003 18.4453 21 17.9405V16.3331H14.5C13.3954 16.3331 12.5 15.4377 12.5 14.3331V13.6671C12.5 12.5625 13.3954 11.6671 14.5 11.6671H21V10.0597Z" fill="#2B2A39" stroke="url(#paint0_linear_0_401)" stroke-width="1.5"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_401" x1="12.9682" y1="8.72711" x2="26.7768" y2="14.0665" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+</defs>
+</svg>

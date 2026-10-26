@@ -1,0 +1,297 @@
+/* Figma 436:37344 — 400×380 card: 225px image + blue-600 content. */
+
+.card {
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  width: 400px;
+  height: 380px;
+  overflow: clip;
+  border-radius: 14.293px;
+  background: var(--blue-600);
+}
+
+.clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.clickable:hover {
+  transform: translateY(-3px);
+}
+
+.clickable:focus-visible {
+  outline: 2px solid var(--yellow-icons);
+  outline-offset: 2px;
+}
+
+.media {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  height: 225.12px;
+  overflow: clip;
+  box-shadow: 0 3.424px 59.914px rgba(0, 0, 0, 0.15);
+  background: var(--blue-500, #33324a);
+}
+
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.noPhoto {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--white-80);
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.3));
+  pointer-events: none;
+}
+
+.avatar {
+  position: absolute;
+  top: 8.933px;
+  right: 8.933px;
+  width: 53.6px;
+  height: 53.6px;
+}
+
+.avatarRing {
+  position: absolute;
+  top: 0.893px;
+  left: 0.893px;
+}
+
+.avatarImage {
+  position: absolute;
+  inset: 8.33%;
+  width: 83.34%;
+  height: 83.34%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--white-100);
+}
+
+.pager {
+  position: absolute;
+  bottom: 8.08px;
+  left: 50%;
+  display: flex;
+  gap: 7.147px;
+  translate: -50% 0;
+}
+
+.dot {
+  width: 7.147px;
+  height: 7.147px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.dotActive {
+  background: linear-gradient(140deg, #ffe073, #ffba30);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14.293px;
+  flex: 1 0 0;
+  min-height: 0;
+  padding: 16px;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 30.373px;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  width: 47.29px;
+  height: 26.696px;
+}
+
+.rating > * {
+  scale: 0.78;
+  transform-origin: left center;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 3.573px;
+}
+
+.heart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42.88px;
+  opacity: 0.9;
+}
+
+.tag {
+  display: flex;
+  align-items: center;
+  height: 19.653px;
+  padding: 0 5.36px;
+  border-radius: var(--radius-full);
+  background: var(--white-100);
+  font-size: 12.51px;
+  font-weight: 500;
+  line-height: 14.293px;
+  letter-spacing: 0.5447px;
+  color: var(--blue-100);
+  white-space: nowrap;
+}
+
+.openHouse {
+  position: relative;
+  display: block;
+  width: 83.08px;
+  height: 30.373px;
+}
+
+.openHouseShape {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 0.08px);
+  translate: -50% -50%;
+}
+
+.openHouseIcon {
+  position: absolute;
+  top: calc(50% - 0.8px);
+  left: calc(50% + 26.49px);
+  translate: -50% -50%;
+}
+
+.openHouseText {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 36.18px);
+  translate: 0 -50%;
+  font-size: 12.51px;
+  font-weight: 500;
+  line-height: 14.293px;
+  letter-spacing: 0.5447px;
+  color: var(--blue-100);
+  white-space: nowrap;
+}
+
+.title {
+  width: 100%;
+  /* Room for glyphs outside the trimmed cap box, which overflow would otherwise cut. */
+  margin-block: -8px;
+  padding-block: 8px;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 31px;
+  color: var(--white-300);
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.addressText,
+.specText {
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.5447px;
+  color: var(--white-200);
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.addressText {
+  margin-block: -4px;
+  padding-block: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.specs {
+  direction: rtl;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8.933px 12px;
+  width: 100%;
+}
+
+.spec {
+  direction: ltr;
+  display: flex;
+  align-items: center;
+  gap: 3.573px;
+}
+
+.specIcon {
+  flex-shrink: 0;
+}
+
+.flipped {
+  rotate: 180deg;
+  scale: 1 -1;
+}
+
+.sqmIcon {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  overflow: clip;
+}
+
+.sqmIcon::before,
+.sqmIcon::after {
+  content: '';
+  position: absolute;
+}
+
+.sqmIcon::before {
+  top: 1.93px;
+  left: 1.93px;
+  width: 14.143px;
+  height: 14.143px;
+  border: 0.643px solid var(--yellow-icons);
+  border-radius: 3px;
+}
+
+.sqmIcon::after {
+  top: 5.14px;
+  left: 5.14px;
+  width: 7.714px;
+  height: 7.714px;
+  border: 0.643px dashed #34f3e0;
+}

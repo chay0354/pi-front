@@ -1,0 +1,44 @@
+.row {
+  display: flex;
+  gap: 18px;
+  width: 1760px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px 24px 8px;
+  scrollbar-width: none;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}
+
+.item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 92px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.name {
+  max-width: 92px;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placeholder {
+  flex: 0 0 auto;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: #2b2a39;
+}

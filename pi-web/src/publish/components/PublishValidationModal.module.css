@@ -1,0 +1,112 @@
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 31px;
+  background: rgba(0, 0, 0, 0.72);
+  animation: fadeIn 0.18s ease-out;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 520px;
+  padding: 29px 29px 26px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 21px;
+  background: #2b2a39;
+  box-shadow: 0 10px 21px rgba(0, 0, 0, 0.35);
+}
+
+.iconCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 83px;
+  height: 83px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: rgba(255, 196, 10, 0.12);
+}
+
+.title {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.subtitle {
+  margin: 0 0 18px;
+  color: rgba(210, 208, 220, 0.88);
+  font-size: 18px;
+  line-height: 26px;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  max-height: min(42vh, 416px);
+  margin-bottom: 23px;
+  padding: 5px 0;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 13px;
+  padding: 3px 0;
+}
+
+.bullet {
+  margin-top: 1px;
+  color: #ffc40a;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 29px;
+}
+
+.itemText {
+  flex: 1;
+  color: #fff;
+  font-size: 20px;
+  line-height: 29px;
+  text-align: start;
+}
+
+.btn {
+  align-self: stretch;
+  padding: 18px 0;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+  color: #1a1820;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.btn:hover {
+  filter: brightness(1.05);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="51.8133" height="51.8133" viewBox="0 0 51.8133 51.8133" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="25.9067" cy="25.9067" r="25.0133" stroke="url(#gridRingUser)" stroke-width="1.78667"/>
+<defs>
+<linearGradient id="gridRingUser" x1="0" y1="0" x2="51.8133" y2="51.8133" gradientUnits="userSpaceOnUse">
+<stop offset="0.0456" stop-color="#99F6E4"/>
+<stop offset="0.5076" stop-color="#5EEAD4"/>
+<stop offset="0.8831" stop-color="#0D9488"/>
+</linearGradient>
+</defs>
+</svg>

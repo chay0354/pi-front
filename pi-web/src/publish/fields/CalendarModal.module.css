@@ -1,0 +1,110 @@
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.5);
+  animation: fadeIn 180ms ease-out;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 640px;
+  padding: 0 13px 39px;
+  border-radius: 31px 31px 0 0;
+  overflow: hidden;
+  background: #fff;
+  animation: slideUp 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 0 13px;
+}
+
+.arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px;
+  border-radius: 50%;
+}
+
+.arrow:hover {
+  background: rgba(0, 173, 245, 0.08);
+}
+
+.monthTitle {
+  margin: 13px 0;
+  color: #2d4150;
+  font-size: 21px;
+  font-weight: 400;
+}
+
+.weekRow {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  margin: 0 0 9px;
+}
+
+.dayName {
+  width: 42px;
+  margin-top: 3px;
+  color: #b6c1cd;
+  font-size: 17px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.dayCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: #2d4150;
+  font-size: 21px;
+  font-weight: 300;
+}
+
+.day:hover {
+  background: rgba(0, 173, 245, 0.12);
+}
+
+.day:active {
+  background: #00adf5;
+  color: #fff;
+}
+
+.today {
+  color: #00adf5;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+}

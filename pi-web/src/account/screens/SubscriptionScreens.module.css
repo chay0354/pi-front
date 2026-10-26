@@ -1,0 +1,432 @@
+/* Plan pickers, subscription opener, rating intro, success — mobile tokens at ~1.15x. */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.goldText {
+  color: #ffbf3e;
+}
+
+/* ── Plan screens ──────────────────────────────────── */
+.planLead {
+  margin: 0 0 6px;
+  font-size: 23px;
+  line-height: 1.3;
+  font-weight: 500;
+  color: var(--white-300);
+}
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.planCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(254, 231, 135, 0.35);
+  border-radius: 16px;
+  background: #2b2a39;
+  text-align: right;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+
+.planCard:hover {
+  border-color: rgba(254, 231, 135, 0.8);
+  background: #302f40;
+  transform: translateY(-1px);
+}
+
+.planCardMuted {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.planIcon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 191, 62, 0.12);
+}
+
+.planTexts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.planTitle {
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.planSubtitle {
+  font-size: 15px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.planDivider {
+  height: 1px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Subscription opener ───────────────────────────── */
+.profileRing {
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 126px;
+  height: 126px;
+  border: 3px solid #f4ad39;
+  border-radius: 50%;
+  background: #2b2a39;
+  overflow: hidden;
+}
+
+.profileFrame {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+}
+
+.profileFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.heroHeadline {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.12;
+  font-weight: 600;
+  color: var(--white-300);
+  text-align: center;
+}
+
+.heroSubline {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 500;
+  color: var(--white-300);
+  text-align: center;
+}
+
+.featuresCard {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px;
+  border: 1px solid #fee787;
+  border-radius: 24px;
+  background: #2b2a39;
+  box-shadow: 0 4px 15px rgba(89, 81, 50, 0.4);
+}
+
+.featuresTitle {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 400;
+  color: #d2d0dc;
+}
+
+.featuresList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.featureRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.agreement {
+  gap: 10px;
+}
+
+.agreementTexts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agreementMain {
+  font-size: 20px;
+}
+
+.disclaimer {
+  max-width: 380px;
+  font-size: 14px;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  color: #d2d0dc;
+}
+
+/* ── Rating intro ──────────────────────────────────── */
+.ratingScreen {
+  background: #050611;
+}
+
+.ratingScreen header {
+  background: linear-gradient(180deg, #050611 65%, rgba(5, 6, 17, 0));
+}
+
+.ratingPopup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  padding: 32px 24px;
+  border-radius: 14px;
+  background: #2b2a39;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+}
+
+.ratingTop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  width: 100%;
+}
+
+.ratingTitle {
+  margin: 0;
+  max-width: 380px;
+  font-size: 32px;
+  line-height: 1.12;
+  font-weight: 600;
+  color: var(--white-300);
+  text-align: center;
+}
+
+.ratingCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 386px;
+  padding: 24px 0;
+  border-radius: 14px;
+  background: #343246;
+}
+
+.ratingCardCompany {
+  gap: 12px;
+  padding-bottom: 20px;
+}
+
+.numberedStars {
+  display: flex;
+  direction: ltr;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.numberedStar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+}
+
+.numberedStar span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue-100);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.companyStarBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -6px;
+}
+
+.companyCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: -12px;
+}
+
+.pistar {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+.starWithGold {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -28px;
+}
+
+.ratingLead {
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 500;
+  text-align: center;
+}
+
+.ratingGold {
+  font-size: 20px;
+  font-weight: 500;
+  color: #ffbf3e;
+}
+
+.ratingGoldOverlap {
+  position: relative;
+  margin-top: -18px;
+}
+
+.ratingInfo {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.ratingCta {
+  width: 100%;
+  height: 60px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(180deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
+  color: var(--blue-100);
+  font-size: 22px;
+  font-weight: 500;
+  transition: filter 0.15s;
+}
+
+.ratingCta:hover {
+  filter: brightness(1.08);
+}
+
+/* ── Success ───────────────────────────────────────── */
+.successProfile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.successAvatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  border: 2px solid var(--yellow-icons);
+  border-radius: 50%;
+}
+
+.successAvatar img {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.successBadge {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  border: 1.5px solid #15e3ff;
+  border-radius: 50%;
+  background: var(--blue-100);
+}
+
+.successName {
+  font-size: 17px;
+}
+
+.successEmail {
+  margin-top: -4px;
+  font-size: 17px;
+  color: #d2d0dc;
+}
+
+.successTitleBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.successSubtitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.subscriberCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid #fee787;
+  border-radius: 14px;
+  background: #2b2a39;
+  box-shadow: 0 4px 15px rgba(89, 81, 50, 0.4);
+}
+
+.subscriberLabel {
+  font-size: 22px;
+}
+
+.subscriberNumber {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}

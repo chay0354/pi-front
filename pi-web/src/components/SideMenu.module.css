@@ -1,0 +1,382 @@
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+}
+
+/* Figma Rectangle 1 (244:26503): #27262F @ 60% over a 200px background blur. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(39, 38, 47, 0.6);
+  backdrop-filter: blur(200px);
+  -webkit-backdrop-filter: blur(200px);
+  cursor: default;
+  animation: fadeIn 200ms ease-out;
+}
+
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 370px;
+  height: 100%;
+  padding: 18px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  background-color: var(--blue-100);
+  animation: slideIn 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panel::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.header {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  height: 106px;
+  padding: 0 24px;
+}
+
+.closeButton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.logoSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.chatBar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 44px;
+  padding: 10px 24px 8px 8px;
+  border-radius: 846px;
+  background-image: linear-gradient(182.33deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
+}
+
+.chatBarText {
+  padding-bottom: 4px;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  color: var(--blue-100);
+}
+
+.piChat {
+  position: relative;
+  flex-shrink: 0;
+  width: 77px;
+  height: 34.424px;
+  direction: ltr;
+  filter: drop-shadow(0 3.624px 6.341px rgba(0, 0, 0, 0.5));
+}
+
+.piChatBubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.piChatPlane {
+  position: absolute;
+  top: 3.625px;
+  left: 41.67px;
+}
+
+.piChatPi {
+  position: absolute;
+  top: 5.52px;
+  left: 10.09px;
+}
+
+.piChatText {
+  position: absolute;
+  top: 14.2px;
+  right: 13.74px;
+  font-size: 11.78px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--blue-100);
+}
+
+.chatBadge {
+  position: absolute;
+  top: -6px;
+  right: 3px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background-color: #5eead4;
+  box-shadow: 0 0 5px rgba(94, 234, 212, 0.5);
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a1a2e;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 18px 24px;
+  border-radius: 12px;
+  background-color: var(--blue-600);
+}
+
+/* Figma trims this label to its cap height; a 13px line box keeps the 20px gap visually exact. */
+.cardTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 13px;
+  color: #d2d0dc;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.divider {
+  flex-shrink: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 28px;
+  text-align: inherit;
+}
+
+.item:hover .itemText {
+  color: var(--yellow-icons);
+}
+
+.itemLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.itemText {
+  font-size: 18px;
+  line-height: 32px;
+  white-space: nowrap;
+  color: var(--white-100);
+  transition: color 120ms ease;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+}
+
+/* Figma group sits at (3, 1) in the 28px slot; the stroke bleeds 0.75px past it. */
+.iconBroker {
+  position: relative;
+}
+
+.iconBroker img {
+  position: absolute;
+  top: 0.25px;
+  left: 2.25px;
+}
+
+.iconDual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 50px;
+  height: 28px;
+  direction: ltr;
+}
+
+.chevron {
+  flex-shrink: 0;
+}
+
+.profileCard {
+  flex-shrink: 0;
+  min-height: 113px;
+  padding: 18px;
+  border: 1px solid #fee787;
+  border-radius: 16px;
+  background-color: var(--blue-600);
+  box-shadow: 0 4px 30px rgba(89, 81, 50, 0.4);
+}
+
+.profileRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.profileAvatarButton {
+  flex-shrink: 0;
+}
+
+.profileInfo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  align-self: center;
+}
+
+.profileName,
+.profileEmail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.profileName {
+  font-size: 18px;
+  color: #d2d0dc;
+}
+
+.profileEmail {
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.5447px;
+  color: rgba(210, 208, 220, 0.5);
+}
+
+.editIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin-top: 2px;
+  border-radius: 20px;
+}
+
+.profileEditIcon {
+  filter: brightness(0) invert(1);
+}
+
+.profileDivider {
+  height: 1px;
+  margin: 10px 0;
+  background-color: #3a394a;
+}
+
+.profileBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.5447px;
+  color: var(--white-100);
+}
+
+.followingPreview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 100%;
+  margin: 2px 0;
+  text-align: inherit;
+}
+
+.followingTitle {
+  font-size: 16px;
+  line-height: 20px;
+  color: var(--yellow-icons);
+}
+
+.followingAvatars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.followingAvatar {
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border: 1.5px solid #fee787;
+  border-radius: 17px;
+  background-color: var(--blue-100);
+}
+
+.followingAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.followingHint {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--grey-100);
+}

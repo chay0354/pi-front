@@ -1,0 +1,173 @@
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1e1d27;
+  color: #fff;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0 28px 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 104px;
+  margin: 0 -28px;
+  padding: 0 8px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.lead {
+  margin: 0 0 20px;
+  color: #c9c7d6;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.card {
+  margin-bottom: 18px;
+  padding: 18px 18px 8px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  color: #c9c7d6;
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid #222132;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.card .row:last-child {
+  border-bottom: 0;
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 18px;
+}
+
+.rowHint {
+  color: #8c85b3;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepper button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: #4d4966;
+  color: #fee787;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stepper span {
+  min-width: 48px;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.reset {
+  display: block;
+  margin: 8px auto 20px;
+  padding: 12px 20px;
+  border: 0;
+  background: transparent;
+  color: #fee787;
+  font-family: inherit;
+  font-size: 18px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.footer {
+  padding: 12px 28px 24px;
+  border-top: 1px solid #2b2a39;
+}
+
+.save,
+.saveIdle {
+  display: block;
+  width: min(720px, 100%);
+  height: 56px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 14px;
+  background: #fee787;
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.saveIdle {
+  opacity: 0.72;
+}

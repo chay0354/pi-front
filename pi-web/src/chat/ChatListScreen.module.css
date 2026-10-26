@@ -1,0 +1,1065 @@
+/* Chat inbox — mobile ChatListScreen tokens × 1.3 for the 1920 stage.
+   RN left/right and marginLeft/Right are swapped; text-align left → right. */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #262532;
+  color: #fff;
+}
+
+@keyframes screenIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.topSection {
+  background: #262532;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 20px 0 0;
+  border-bottom: 1px solid #373548;
+  background: #262532;
+}
+
+.headerBtn,
+.headerBackBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+  height: 57px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.headerBtn {
+  margin-right: 13px;
+}
+
+button.headerBtn:hover,
+button.headerBackBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.logoWrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoImage {
+  width: 77px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 3.6px 6.3px rgba(0, 0, 0, 0.5));
+}
+
+.newChatBtn {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 0 20px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.newChatLabel {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.plusCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  height: 52px;
+  min-height: 52px;
+  margin: 0 20px 24px;
+  border: 1px solid #8c85b3;
+  border-radius: 1000px;
+  background: transparent;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 48px 10px 16px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 20px;
+  letter-spacing: 0.2px;
+  text-align: right;
+  direction: rtl;
+}
+
+.searchInput::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.searchInput::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.searchIcon {
+  position: absolute;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.loadingWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.spinner {
+  width: 29px;
+  height: 29px;
+  border: 3px solid rgba(247, 198, 58, 0.25);
+  border-top-color: #f7c63a;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.spinnerLg {
+  width: 36px;
+  height: 36px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loadingText {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 18px;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  background: #262532;
+  scrollbar-width: thin;
+  scrollbar-color: #4d4966 transparent;
+}
+
+.scrollContent {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+  padding-bottom: 42px;
+  background: #262532;
+}
+
+.topToListSpacer {
+  display: none;
+}
+
+.swipeRowWrap {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #c0392b;
+}
+
+.swipeDeleteAction {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 114px;
+}
+
+.swipeDeleteActionOpen {
+  z-index: 2;
+}
+
+.swipeDeleteBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+}
+
+.swipeDeleteBtn:disabled {
+  opacity: 0.7;
+}
+
+.swipeDeleteText {
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.swipeRowContent {
+  width: 100%;
+  background: #2b2a39;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+}
+
+.rowPressable {
+  display: block;
+  width: 100%;
+  text-align: inherit;
+}
+
+.rowPressable:hover .messageRow,
+.swipeRowContent:hover .messageRow {
+  background: #312f42;
+}
+
+.messageRowActive,
+.rowPressable:hover .messageRowActive,
+.swipeRowContent:hover .messageRowActive {
+  background: #373548;
+}
+
+.messageRow {
+  position: relative;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  width: 100%;
+  min-height: 110px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #373548;
+  background: #2b2a39;
+  flex-shrink: 0;
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+}
+
+.metaRow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-height: 29px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.metaTime {
+  min-width: 0;
+  color: #d2d0dc;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.54px;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatListCategoryPill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 29px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 1000px;
+  background: #ffc40a;
+  flex-shrink: 0;
+}
+
+.chatListCategoryPillFlexible {
+  min-width: 0;
+  max-width: 92%;
+  flex-shrink: 1;
+}
+
+.badgeYellowText {
+  color: #1e1d27;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 21px;
+  letter-spacing: 0.71px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badgeGrey {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 29px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.18);
+  flex-shrink: 0;
+}
+
+.badgeGreyText {
+  color: #fff;
+  font-size: 18px;
+  line-height: 21px;
+  letter-spacing: 0.71px;
+  white-space: nowrap;
+}
+
+.previewRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.messagePreview {
+  flex: 1;
+  color: #fff;
+  font-size: 18px;
+  line-height: 22px;
+  text-align: right;
+  direction: rtl;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chatUnreadBadge {
+  position: absolute;
+  top: 16px;
+  right: 21px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 31px;
+  min-height: 31px;
+  height: 31px;
+  padding: 0 9px;
+  border-radius: 16px;
+  background: #5eead4;
+}
+
+.chatUnreadBadgeText {
+  color: #1a1a2e;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.avatarCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.senderName {
+  width: 100%;
+  margin-top: 0;
+  color: #f7f3e6;
+  font-size: 16px;
+  line-height: 16px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ——— New Chat overlay ——— */
+
+.ncRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #1a1a24;
+}
+
+.ncTopSection {
+  padding: 0 0 16px;
+  background: #1e1d27;
+}
+
+.ncHeader {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  height: 104px;
+  padding: 0 21px 16px;
+  background: transparent;
+}
+
+.ncWizardColStart {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.ncWizardColEnd {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.ncTitle {
+  flex: 1;
+  margin: 0;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.ncTitleWizard {
+  flex: 2;
+  min-width: 0;
+  font-size: 21px;
+}
+
+.ncWizardPrimaryWrap,
+.ncWizardCancelWrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 3px;
+}
+
+.ncWizardPrimaryWrap:disabled {
+  opacity: 0.45;
+}
+
+.ncWizardPrimaryText {
+  color: #fff;
+  font-size: 21px;
+  line-height: 26px;
+}
+
+.ncWizardCancelText {
+  color: #fff;
+  font-size: 21px;
+  font-weight: 300;
+  line-height: 29px;
+}
+
+.ncBackBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+  height: 57px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+button.ncBackBtn:hover,
+button.ncWizardPrimaryWrap:hover,
+button.ncWizardCancelWrap:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ncHeaderSpacer {
+  width: 57px;
+  flex-shrink: 0;
+}
+
+.ncSearchFullBleed {
+  width: 100%;
+  padding: 0 21px;
+  align-self: stretch;
+}
+
+.ncGroupSearchOffset {
+  margin-top: 21px;
+}
+
+.ncSearchWrap {
+  position: relative;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  width: 100%;
+  min-height: 68px;
+  border: 1px solid #8c85b3;
+  border-radius: 1000px;
+  background: transparent;
+}
+
+.ncSearchWrapGold {
+  border-color: #f7c63a;
+}
+
+.ncSearchClearInside {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+}
+
+.ncSearchClearGlyph {
+  color: #fff;
+  font-size: 31px;
+  line-height: 31px;
+  text-align: center;
+}
+
+.ncSearchInput {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 13px 60px 13px 21px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 26px;
+  text-align: right;
+  direction: rtl;
+}
+
+.ncSearchInput::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.ncSearchInputPadClear {
+  padding-right: 68px;
+}
+
+.ncSearchInput::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ncSearchIcon {
+  position: absolute;
+  left: 18px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.ncBrokerSearchError {
+  width: 100%;
+  margin-top: 10px;
+  padding: 0 21px;
+  color: #e57373;
+  font-size: 17px;
+  text-align: right;
+}
+
+.ncScroll {
+  flex: 1;
+  overflow-y: auto;
+  background: #1a1a24;
+  scrollbar-width: thin;
+  scrollbar-color: #4d4966 transparent;
+}
+
+.ncScrollContent {
+  padding: 16px 21px 52px;
+  background: #1a1a24;
+}
+
+.ncGroupScrollPad {
+  padding-top: 10px;
+  padding-bottom: 36px;
+}
+
+.ncGroupStep2Body {
+  flex: 1;
+  background: #1a1a24;
+}
+
+.ncSectionLabel {
+  width: 100%;
+  margin: 0 0 13px;
+  color: #d2d0dc;
+  font-size: 23px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.ncSectionLabelSpaced {
+  margin-top: 10px;
+}
+
+.ncBrokerCard,
+.ncCard {
+  overflow: hidden;
+  margin-bottom: 21px;
+  border-radius: 16px;
+  background: #2c2c3a;
+}
+
+.ncCard {
+  margin-bottom: 13px;
+}
+
+.ncBrokerLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 0;
+}
+
+.ncBrokerEmpty {
+  width: 100%;
+  padding: 26px 21px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 18px;
+  text-align: right;
+}
+
+.ncBrokerRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 94px;
+  padding: 18px;
+}
+
+.ncBrokerRowBorder,
+.ncPickRow + .ncPickRow,
+.ncBrokerRow + .ncBrokerRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ncBrokerTextCol {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding-left: 13px;
+}
+
+.ncBrokerTitle {
+  margin-bottom: 5px;
+  color: #f7f3e6;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 27px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ncBrokerSubtitle {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 18px;
+  line-height: 21px;
+  letter-spacing: 0.18px;
+  text-align: right;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ncBrokerAvatarRing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  border: 4px solid #f7c63a;
+  border-radius: 39px;
+  background: #252436;
+  flex-shrink: 0;
+}
+
+.ncBrokerAvatarInner {
+  width: 65px;
+  height: 65px;
+  overflow: hidden;
+  border-radius: 33px;
+}
+
+.ncBrokerAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ncRow {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  width: 100%;
+  min-height: 134px;
+  padding: 26px 21px;
+  text-align: inherit;
+}
+
+.ncRow:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ncChevron {
+  margin-left: 13px;
+  flex-shrink: 0;
+}
+
+.ncRowTextWrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0 21px;
+}
+
+.ncRowTitle {
+  margin-bottom: 16px;
+  color: #fff;
+  font-size: 23px;
+  text-align: right;
+}
+
+.ncRowSubtitle {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 18px;
+  line-height: 21px;
+  letter-spacing: 0.71px;
+  text-align: right;
+}
+
+.ncRowDivider {
+  height: 1px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ncIconBubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 26px;
+  flex-shrink: 0;
+}
+
+.ncIconImage {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.ncGroupStep2Card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 23px;
+  min-height: 168px;
+  margin: 13px 21px 21px;
+  padding: 18px 21px;
+  border-radius: 16px;
+  background: #2c2c3a;
+}
+
+.ncGroupNameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0 5px;
+  border: 0;
+  border-bottom: 1px solid #8c85b3;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 26px;
+  letter-spacing: 0.26px;
+  text-align: right;
+  direction: rtl;
+}
+
+.ncGroupNameInput::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.ncGroupCameraBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 78px;
+  overflow: hidden;
+  border-radius: 39px;
+  background: #4d4966;
+  flex-shrink: 0;
+}
+
+.ncGroupCameraBtn:disabled {
+  opacity: 0.6;
+}
+
+.ncGroupCameraIcon {
+  width: 31px;
+  height: 31px;
+  object-fit: contain;
+}
+
+.ncGroupPickPreview {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 39px;
+}
+
+.ncChipsSection {
+  width: 100%;
+  padding: 23px 21px 5px;
+}
+
+.ncChipsLabel {
+  margin: 8px 0 10px;
+  color: #d2d0dc;
+  font-size: 22px;
+  line-height: 22px;
+  text-align: right;
+}
+
+.ncChipsCard {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 153px;
+  padding: 16px 21px;
+  border-radius: 16px;
+  background: #2c2c3a;
+}
+
+.ncChipsScroll {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 16px;
+  width: 100%;
+  min-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ncChipsScroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ncChipCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 94px;
+  flex-shrink: 0;
+}
+
+.ncChipAvatarWrap {
+  position: relative;
+  width: 94px;
+  height: 95px;
+  margin-bottom: 13px;
+}
+
+.ncChipRemove {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 15px;
+  background: #000;
+}
+
+.ncChipName {
+  width: 100%;
+  color: #fff;
+  font-size: 18px;
+  line-height: 21px;
+  letter-spacing: 0.71px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ncLetterSection {
+  width: 100%;
+  margin-bottom: 31px;
+}
+
+.ncSearchResultsSection {
+  margin-top: -8px;
+}
+
+.ncLetterHeading {
+  margin: 0 0 21px;
+  padding: 0 3px;
+  color: #d2d0dc;
+  font-size: 23px;
+  line-height: 23px;
+  text-align: right;
+}
+
+.ncSectionHeadingFigma {
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.ncPickRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 134px;
+  padding: 13px 21px;
+  width: 100%;
+  text-align: inherit;
+}
+
+.ncPickRow:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ncPickCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  margin-left: 23px;
+  flex-shrink: 0;
+}
+
+.ncPickCheckOuter,
+.ncToggleOuter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.ncPickCheckOuter {
+  width: 29px;
+  height: 29px;
+  border: 1px solid #d4a351;
+  border-radius: 15px;
+}
+
+.ncPickCheckOuterOn {
+  background: #000;
+}
+
+.ncToggleRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  padding: 8px 3px;
+  margin-top: -5px;
+  width: 100%;
+}
+
+.ncToggleLabel {
+  margin-right: 16px;
+  color: #fff;
+  font-size: 23px;
+  text-align: right;
+  flex-shrink: 1;
+}
+
+.ncToggleOuter {
+  width: 31px;
+  height: 31px;
+  border: 3px solid #d4a351;
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+
+.hiddenFile {
+  display: none;
+}

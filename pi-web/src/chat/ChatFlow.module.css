@@ -1,0 +1,64 @@
+.shell {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  background: #262531;
+  color: #fff;
+}
+
+.homeRail {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  width: 60px;
+  height: 100%;
+  padding: 10px;
+  border-left: 1px solid #373548;
+  background: #262531;
+}
+
+.homeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.homeIcon {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+
+.listSlot {
+  position: relative;
+  flex-shrink: 0;
+  width: 415px;
+  height: 100%;
+  background: #262532;
+}
+
+.thread {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: #262531;
+}
+
+.emptyThread {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: #262531;
+  background-image: url('../assets/mobile/pi-chat/background.png');
+  background-repeat: repeat;
+  background-size: 507px auto;
+}

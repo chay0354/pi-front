@@ -1,0 +1,358 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  color: var(--white-100);
+}
+
+.tagsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tagWhite,
+.tagHot {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tagWhite {
+  background: var(--white-100);
+  color: #1e1d27;
+}
+
+.tagHot {
+  background: #ffc40a;
+  color: #1e1d27;
+}
+
+.priceBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.priceRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.priceBig {
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: #f7f3e6;
+  white-space: nowrap;
+}
+
+.priceRule {
+  width: 1px;
+  height: 40px;
+  background: #d2d0dc;
+}
+
+.priceLabels {
+  display: flex;
+  flex-direction: column;
+  font-size: 16px;
+  line-height: 20px;
+  color: #d2d0dc;
+}
+
+.bnbCompanyTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.bnbPriceLoc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bnbTagsPi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.title {
+  margin: 14px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #f7f3e6;
+}
+
+.titleLg {
+  margin: 18px 0 0;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #f7f3e6;
+}
+
+.loc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.locText {
+  font-size: 19px;
+  line-height: 26px;
+  color: #d2d0dc;
+}
+
+.body,
+.bodyLand {
+  font-size: 20px;
+  line-height: 32px;
+  color: var(--white-100);
+  white-space: pre-line;
+}
+
+.bodyLand {
+  margin-top: 18px;
+}
+
+.bodyMuted {
+  margin-top: 4px;
+  font-size: 19px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.heading {
+  margin: 0 0 20px;
+  font-size: 21px;
+  font-weight: 400;
+  color: #d2d0dc;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.chipInactive {
+  opacity: 0.45;
+}
+
+.chipIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.chipText {
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  line-height: 24px;
+}
+
+.stayCard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.stayRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.stayIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.stayText {
+  font-size: 20px;
+  line-height: 32px;
+}
+
+.stayDates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.stayDivider {
+  height: 1px;
+  background: #373548;
+}
+
+.budgetCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.budgetLabel {
+  font-size: 20px;
+  color: #d2d0dc;
+}
+
+.budgetValue {
+  font-size: 34px;
+  font-weight: 600;
+  color: #f7f3e6;
+}
+
+.piPurposeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+}
+
+.postedBy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.postedByLabel {
+  font-size: 14px;
+  color: #d2d0dc;
+}
+
+.postedByRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.postedByAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.postedByAvatarPh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.postedByName {
+  font-size: 17px;
+}
+
+.offers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.offerCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.offerHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.offerIcon {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.offerTitle {
+  font-size: 20px;
+  font-weight: 500;
+  color: #f7f3e6;
+}
+
+.offerDetails {
+  font-size: 18px;
+  color: #d2d0dc;
+  white-space: pre;
+}
+
+.landGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.gushCard {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: #2b2a39;
+}
+
+.gushLabel {
+  font-size: 19px;
+  color: #d2d0dc;
+}
+
+.gushValue {
+  font-size: 32px;
+  font-weight: 500;
+  color: #f7f3e6;
+}

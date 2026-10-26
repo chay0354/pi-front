@@ -1,0 +1,97 @@
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: #1e1d27;
+}
+
+.header {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.title {
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 21px;
+  padding: 31px;
+}
+
+.hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+  line-height: 26px;
+  text-align: center;
+}
+
+.pickBtn {
+  padding: 18px 36px;
+  border: 0;
+  border-radius: 18px;
+  background: #2dd4bf;
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.busy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+  font-size: 18px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(45, 212, 191, 0.25);
+  border-top-color: #2dd4bf;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

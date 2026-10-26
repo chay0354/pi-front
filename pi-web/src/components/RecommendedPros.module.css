@@ -1,0 +1,295 @@
+/* Figma 882:104911 — physical (LTR) layout like FeedCard; texts set dir="rtl". */
+
+.card {
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+  width: 930px;
+  height: 702px;
+  flex-shrink: 0;
+  padding: 13px 12px;
+  overflow: clip;
+  border-radius: 24px;
+  background: var(--blue-600);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  flex-shrink: 0;
+}
+
+.headerTools {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0 12px 12px;
+}
+
+.divider {
+  display: block;
+}
+
+/* PiRating's star art bleeds right of its box; the margin keeps it off the card edge
+   at the Figma position, and the smaller gap keeps the title where Figma has it. */
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 31px;
+  color: var(--white-300);
+  white-space: pre;
+}
+
+.railWrap {
+  position: relative;
+  flex: 1 0 0;
+  min-height: 0;
+}
+
+.rail {
+  direction: rtl;
+  display: flex;
+  gap: 24px;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  padding: 10px;
+  translate: 0 -50%;
+  border-radius: var(--radius-full);
+  background: var(--blue-100);
+}
+
+.arrowNext {
+  left: 17px;
+}
+
+.arrowPrev {
+  right: 17px;
+}
+
+.arrowIconNext {
+  rotate: 180deg;
+}
+
+/* ---- professional card ---- */
+
+.proCard {
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  width: 366px;
+  height: 100%;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 16px;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+  scroll-snap-align: start;
+}
+
+.mediaHit {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.proNameLink {
+  display: block;
+}
+
+.proNameLink:hover {
+  text-decoration: underline;
+}
+
+.media {
+  position: relative;
+  height: 252px;
+  flex-shrink: 0;
+  overflow: clip;
+  background: #e0def7;
+  box-shadow: 0 3.832px 67.068px rgba(0, 0, 0, 0.15);
+}
+
+.mediaFill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mediaShade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(129, 129, 129, 0), rgba(0, 0, 0, 0.5) 99.795%);
+  pointer-events: none;
+}
+
+.mute {
+  position: absolute;
+  z-index: 1;
+  bottom: 20px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.mute:active {
+  opacity: 0.85;
+}
+
+.mute svg {
+  display: block;
+}
+
+.timeline {
+  position: absolute;
+  top: 248px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+}
+
+.timelineFill {
+  height: 100%;
+  border-radius: 20.456px;
+  background: linear-gradient(to right, #ffe073 11.129%, #ffba30 86.618%);
+}
+
+.content {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 0;
+  padding: 18px;
+  border: 1px solid var(--blue-600);
+  background: var(--blue-600);
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 24px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 18px;
+  width: 100%;
+}
+
+.proName {
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 31px;
+  color: var(--white-300);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.addressText {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.5447px;
+  color: var(--white-100);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One row only: tags that don't fit wrap onto a clipped second row. */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  height: 27.143px;
+  overflow: hidden;
+}
+
+.tag {
+  display: flex;
+  align-items: center;
+  height: 27.143px;
+  padding: 0 9.286px;
+  flex-shrink: 0;
+  border: 0.714px solid var(--white-100);
+  border-radius: 35.714px;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--white-100);
+  white-space: nowrap;
+}
+
+.bio {
+  display: -webkit-box;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 32px;
+  color: var(--white-100);
+  text-align: right;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.proCard .chat {
+  width: 100%;
+}

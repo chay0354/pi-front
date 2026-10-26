@@ -1,0 +1,806 @@
+/* Positions follow the 1920×1080 Figma frame (file g4OfSRrqz4VHqO2wc9B9bE, node 244:33110). */
+
+.screen {
+  position: relative;
+  width: 1920px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--blue-100);
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 1920px;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The skyline is the first layer. Everything after it stays above that photo. */
+.stage > :not(.backdrop) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Middle band fills whatever height is left between the top bar and the pros strip. */
+.canvas {
+  display: grid;
+  grid-template-columns: 422px minmax(0, 1fr) 423px;
+  column-gap: 73px;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-height: 0;
+  padding: 12px 0 8px;
+}
+
+/* Figma "3": the faded skyline sits behind the top bar and fades out by y 406. */
+.backdrop {
+  position: absolute;
+  top: -674px;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  pointer-events: none;
+}
+
+.backdropImage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.3;
+}
+
+.backdropImage img {
+  position: absolute;
+  top: -21.12%;
+  left: -3.92%;
+  width: 105.51%;
+  height: 282.93%;
+  max-width: none;
+}
+
+.backdropFade {
+  position: absolute;
+  inset: 0;
+  /* Clear behind the category row, solid before the project title and the Pi AI mark. */
+  background: linear-gradient(to bottom, rgba(30, 29, 39, 0) 62%, #1e1d27 76%);
+}
+
+/* ---- Section header ("פרויקטים נבחרים" / "בעלי מקצוע") ---- */
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  line-height: normal;
+  color: #d2d0dc;
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.sectionAction {
+  padding: 13px 18px 15px;
+  border: 1px solid #ffd275;
+  border-radius: 30px;
+  font-size: 20px;
+  line-height: normal;
+  color: var(--yellow-icons);
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.sectionAction:hover {
+  background: rgba(255, 210, 117, 0.08);
+}
+
+/* ---- Featured project (Figma 244:33126) ---- */
+
+.featured {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 16px wider than the column for the POPULAR fold; overflow to the right like the design. */
+.projectFrame {
+  position: relative;
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+}
+
+.projectCard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: clip;
+  border-radius: 24px;
+  background: #000;
+  box-shadow: 0 7.25px 126.87px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Mobile `fitWidth`: edge-to-edge width, natural-ratio height centered — letterboxes
+   top/bottom on black, taller media clips top/bottom. */
+.projectVideo {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: translateY(-50%);
+}
+
+.projectShade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(34, 31, 60, 0.5) 69.927%, rgba(34, 31, 60, 0) 100%);
+}
+
+.projectText {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  transform: translateY(-50%);
+}
+
+.projectName {
+  width: 100%;
+  height: 45.4px;
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 31px;
+  color: #fff;
+  text-align: center;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.projectLink {
+  padding: 24px;
+  border-radius: 38.697px;
+  font-size: 24px;
+  line-height: 64.317px;
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-thickness: 1.44px;
+  text-decoration-skip-ink: none;
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.projectLogo {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 45.004px;
+  height: 45.004px;
+}
+
+.projectLogoImage {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.projectMute {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  width: 24px;
+  height: 24px;
+}
+
+.projectTimeline {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  pointer-events: none;
+}
+
+.projectTimelineFill {
+  height: 100%;
+  margin-inline-start: auto;
+  border-radius: 20.456px;
+  background: linear-gradient(178.55deg, #ffe073 11.129%, #ffba30 86.618%);
+}
+
+.appSpot {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 28px 56px 36px;
+  background: #1e1d27;
+  text-align: center;
+}
+
+.appSpotMascot {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  filter: none;
+}
+
+.appSpotLine {
+  margin: 0;
+  max-width: 16em;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.appSpotCta {
+  height: 52px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, #efd577, #a06a26);
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.appSpotCta:hover {
+  filter: brightness(1.06);
+}
+
+.appSpotBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  width: 0;
+  background: linear-gradient(178.55deg, #ffe073 11.129%, #ffba30 86.618%);
+  animation: appSpotFill var(--spot-ms) linear forwards;
+}
+
+.appQrPop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(14, 13, 20, 0.72);
+}
+
+.appQrCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 28px 28px 22px;
+  border-radius: 24px;
+  background: #2b2a39;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.appQrClose {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.appQrClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.appQrMascot {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+@keyframes appSpotFill {
+  to {
+    width: 100%;
+  }
+}
+
+.popular {
+  position: absolute;
+  top: 5px;
+  right: -16px;
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  height: 48px;
+  pointer-events: none;
+}
+
+.popularPill {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 12px;
+  border-radius: 10px 10px 0 10px;
+  background: linear-gradient(186.23deg, #fee787 4.5575%, #bd9947 50.763%, #9c6522 88.314%);
+}
+
+.popularText {
+  display: flex;
+  align-items: center;
+  width: 71px;
+  height: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.5447px;
+  color: var(--blue-100);
+  white-space: nowrap;
+}
+
+.popularFold {
+  scale: -1 1;
+}
+
+/* ---- Side columns (Figma 782:36697 / 782:36634) ---- */
+
+.leftColumn,
+.rightColumn {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  align-self: stretch;
+  min-height: 0;
+  padding-top: 52px;
+}
+
+.leftColumn {
+  grid-column: 3;
+  align-items: flex-end;
+}
+
+.rightColumn {
+  grid-column: 1;
+  align-items: flex-start;
+}
+
+.piAiPill,
+.chatPill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 91px;
+  overflow: clip;
+  background: var(--blue-600);
+  box-shadow: var(--shadow-1);
+}
+
+.piAiPill {
+  padding: 28px 16px 28px 20px;
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+}
+
+.chatPill {
+  padding: 28px 16px 28px 20px;
+  border-radius: var(--radius-full) 0 0 var(--radius-full);
+}
+
+.piAiPill:hover,
+.chatPill:hover {
+  background: #33324a;
+}
+
+.promo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  padding: 20px;
+  overflow: clip;
+  border-radius: 0 24px 24px 0;
+  background: var(--blue-600);
+  box-shadow: var(--shadow-1);
+}
+
+.promoText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 20px;
+}
+
+.promoTitle {
+  width: 205px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  color: var(--white-300);
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.promoAccent {
+  font-weight: 500;
+  color: var(--yellow-icons);
+}
+
+.promoButton {
+  padding: 10px 20px;
+  border-radius: 846.154px;
+  background: #4d4966;
+  font-size: 16px;
+  line-height: 22px;
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.promoButton:hover {
+  background: #5a5578;
+}
+
+.mortgage {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 20px;
+  width: 100%;
+  height: 133px;
+  padding: 18px 36px 18px 18px;
+  border-radius: 16px 0 0 16px;
+  background: var(--blue-600);
+  filter: drop-shadow(0 4px 35px rgba(0, 0, 0, 0.35));
+}
+
+.mortgageText {
+  font-size: 20px;
+  line-height: normal;
+  color: var(--yellow-icons);
+  text-align: right;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+/* ---- "כוכבי פאי" cards ---- */
+
+.topRated {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 14px;
+  width: 422px;
+  padding: 14px 20px 20px;
+  overflow: clip;
+  background: var(--blue-600);
+  box-shadow: var(--shadow-1);
+}
+
+.topRated.left {
+  border-radius: 0 24px 24px 0;
+}
+
+.topRated.right {
+  border-radius: 24px 0 0 24px;
+}
+
+.topRatedEmpty {
+  height: 223.89px;
+}
+
+.topRatedHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 16px;
+  line-height: 22px;
+  color: #d2d0dc;
+  white-space: nowrap;
+}
+
+.topRatedHeader > span {
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.starBadge {
+  position: relative;
+  width: 24.89px;
+  height: 24.89px;
+  flex-shrink: 0;
+}
+
+.starBadge img {
+  position: absolute;
+  inset: -22.93%;
+  width: 145.86%;
+  height: 145.86%;
+  max-width: none;
+}
+
+.starBadgeNum {
+  position: absolute;
+  top: calc(50% + 1.43px);
+  left: calc(50% - 0.36px);
+  translate: -50% -50%;
+  font-size: 14.27px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.1427px;
+  color: var(--blue-100);
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.topRatedDivider {
+  width: 100%;
+  height: 1px;
+}
+
+.topRatedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.topRatedRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.identity {
+  display: flex;
+  flex: 1 0 0;
+  align-items: center;
+  min-width: 1px;
+}
+
+.identityLeft {
+  justify-content: flex-end;
+}
+
+.identityInner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 281px;
+  text-align: inherit;
+}
+
+.identityInner:hover,
+.proItem:hover {
+  opacity: 0.85;
+}
+
+.identityLeft .identityInner {
+  justify-content: flex-end;
+}
+
+.topRatedName {
+  width: 120px;
+  font-size: 16px;
+  line-height: 22px;
+  color: #fff;
+  text-align: right;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.identityLeft .topRatedName {
+  text-align: left;
+}
+
+.bigRating {
+  direction: ltr;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.review {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  background: #1f1e27;
+}
+
+.reviewText {
+  display: -webkit-box;
+  flex: 1 0 0;
+  min-width: 1px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 16px;
+  line-height: 22px;
+  color: #d2d0dc;
+  text-align: right;
+}
+
+/* ---- Profile picture: gold ring at 2.56% inset, photo at 7.69% ---- */
+
+.profilePic {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.profileRing {
+  position: absolute;
+  inset: 2.56%;
+}
+
+.profileRing img {
+  position: absolute;
+  max-width: none;
+}
+
+.profilePhoto {
+  position: absolute;
+  inset: 7.69%;
+  width: 84.62%;
+  height: 84.62%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.review .profilePhoto {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Professionals strip (Figma 458:82808) ---- */
+
+.pros {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1920px;
+  height: auto;
+  padding-bottom: 18px;
+}
+
+.prosInner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 1760px;
+  margin: 0 80px;
+  backdrop-filter: blur(52px);
+}
+
+.prosHeader {
+  padding: 0 24px;
+}
+
+.prosRail {
+  display: flex;
+  align-items: flex-start;
+  width: 1760px;
+  height: 138px;
+  overflow: hidden;
+  filter: drop-shadow(0 4px 2px rgba(0, 0, 0, 0.25));
+}
+
+.prosTrack {
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+  will-change: transform;
+}
+
+.proItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 135.385px;
+  flex-shrink: 0;
+}
+
+.proLabel {
+  display: flex;
+  flex-direction: column;
+  width: 99px;
+  height: 26px;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.14px;
+  color: #fff;
+  text-align: center;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.proLabel > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.prosArrow {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  overflow: clip;
+  background: var(--blue-600);
+}
+
+.prosArrow:hover {
+  background: #33324a;
+}
+
+.prosArrowPrev {
+  top: 59px;
+  right: 0;
+  height: 100px;
+  padding-left: 16px;
+  border-radius: 1500px 0 0 1500px;
+}
+
+.prosArrowNext {
+  top: 60px;
+  left: 0;
+  height: 98px;
+  padding: 9px 16px 9px 0;
+  border-radius: 0 1500px 1500px 0;
+}

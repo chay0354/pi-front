@@ -1,0 +1,102 @@
+/* JoinAgency + AgencyJoinCode. */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.lead {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.codeInput {
+  text-align: center;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.codeInput::placeholder {
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+
+.seats {
+  margin: -12px 0 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.loader {
+  display: flex;
+  justify-content: center;
+  padding-top: 24px;
+}
+
+.codeBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80px;
+  border: 1px solid rgba(254, 231, 135, 0.4);
+  border-radius: 16px;
+  background: #2b2a39;
+  color: #ffbf3e;
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: 7px;
+}
+
+.codeActions {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 12px;
+  margin-top: -10px;
+}
+
+.secondary {
+  flex-direction: row-reverse;
+}
+
+.warning {
+  margin: 0;
+  font-size: 15px;
+  color: #ffd9a0;
+}
+
+.error {
+  margin: 0;
+  font-size: 16px;
+  color: #ffd9d9;
+}
+
+.primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 58px;
+  border-radius: var(--radius-full);
+  background: #ffbf3e;
+  color: var(--blue-100);
+  font-size: 19px;
+  font-weight: 500;
+  transition: filter 0.15s;
+}
+
+.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.primary:disabled {
+  background: rgba(255, 191, 62, 0.35);
+}
+
+.note {
+  margin: -12px 0 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}

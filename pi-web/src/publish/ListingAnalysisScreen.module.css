@@ -1,0 +1,274 @@
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #27262f;
+  color: #fff;
+  animation: screenIn 0.22s ease-out;
+}
+
+@keyframes screenIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  height: 104px;
+  padding: 0 16px;
+  border-bottom: 1px solid #373548;
+  background: #2b2a39;
+}
+
+.headerBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+  height: 57px;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+button.headerBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.headerTitle {
+  margin: 0;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.loadingWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(232, 179, 77, 0.25);
+  border-top-color: #e8b34d;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #4d4966 transparent;
+}
+
+.scrollInner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 31px 31px 52px;
+}
+
+.summaryCard {
+  margin-bottom: 26px;
+  padding: 31px;
+  border-radius: 16px;
+  background: #2b2a39;
+}
+
+.summaryTopRow {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+
+.summaryLabel {
+  color: #fff;
+  font-size: 23px;
+  font-weight: 400;
+  line-height: 29px;
+  text-align: start;
+}
+
+.summaryCountWrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  text-align: end;
+}
+
+.summaryCountCurrent {
+  color: #e8b34d;
+  font-size: 42px;
+  font-weight: 600;
+  line-height: 48px;
+  letter-spacing: 0.7px;
+}
+
+.summaryCountSlash {
+  color: #fff;
+  font-size: 23px;
+  font-weight: 400;
+  letter-spacing: 0.7px;
+}
+
+.summaryCountQuota {
+  color: #fff;
+  font-size: 21px;
+  font-weight: 400;
+  letter-spacing: 0.7px;
+}
+
+.progressTrack {
+  height: 5px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  border-radius: 1112px;
+  background: #373548;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+}
+
+.summaryFooter {
+  margin: 0;
+  color: #d2d0dc;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 21px;
+  letter-spacing: 0.7px;
+  text-align: center;
+}
+
+.tableHeader {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.tableHeaderLeft,
+.tableHeaderRight {
+  color: #d2d0dc;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 21px;
+  letter-spacing: 0.7px;
+}
+
+.tableRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+}
+
+.rowRight {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.rowCategoryName {
+  max-width: 143px;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 29px;
+  text-align: start;
+}
+
+.rowLeft {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 13px;
+  min-width: 0;
+}
+
+.rowSubtextCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.rowSubtextTitle {
+  overflow: hidden;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSubtextNote {
+  margin-top: 3px;
+  color: #d2d0dc;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: start;
+}
+
+.rowCount {
+  min-width: 36px;
+  color: #fff;
+  font-size: 31px;
+  font-weight: 600;
+  line-height: 36px;
+  text-align: end;
+}
+
+.categoryImageWrap {
+  display: inline-block;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #2c2a3a;
+}
+
+.categoryImage {
+  display: block;
+  object-fit: contain;
+}
+
+.categoryImagePlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider {
+  height: 1px;
+  background: #373548;
+}

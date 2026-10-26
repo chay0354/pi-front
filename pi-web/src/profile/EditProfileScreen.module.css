@@ -1,0 +1,338 @@
+/* Edit profile — mobile EditProfileScreen at dp × 1.3, inside a 390×844 phone. */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 17, 24, 0.72);
+}
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  width: 507px;
+  height: min(1097px, calc(100% - 48px));
+  overflow: hidden;
+  border-radius: 36px;
+  background: #27262f;
+  color: #fff;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+}
+
+.header {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 18px;
+  border-bottom: 1px solid #373548;
+  background: #2b2a39;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+  height: 57px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 31px 31px 62px;
+  scrollbar-width: none;
+}
+
+.body::-webkit-scrollbar {
+  display: none;
+}
+
+.avatarSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 31px;
+}
+
+.avatarHit {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.avatarWrap {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: 13px;
+}
+
+.cameraBadge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  background: #000;
+}
+
+.changeText {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.videoSection {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 26px;
+}
+
+.videoFrame,
+.videoPlaceholder {
+  position: relative;
+  align-self: center;
+  width: 100%;
+  max-width: 286px;
+  padding: 0;
+  border: 0;
+  background: #1e1d27;
+  cursor: pointer;
+}
+
+.videoFrame {
+  height: 125px;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.videoOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.videoPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 94px;
+  border: 1px dashed #373548;
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: inherit;
+  font-size: 17px;
+}
+
+.videoActions {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  margin-top: 10px;
+}
+
+.videoLink,
+.removeVideo {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.videoLink {
+  color: #e8b34d;
+}
+
+.removeVideo {
+  color: #ff6b6b;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 21px;
+}
+
+.label {
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 17px;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 21px;
+  border: 1px solid #373548;
+  border-radius: 16px;
+  background: #1e1d27;
+  color: #fff;
+  font-family: inherit;
+  font-size: 20px;
+  text-align: right;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.area {
+  min-height: 125px;
+  resize: vertical;
+}
+
+.ltr {
+  text-align: right;
+}
+
+.readonly {
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(30, 29, 39, 0.55);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip,
+.chipOn {
+  padding: 10px 16px;
+  border: 1px solid #373548;
+  border-radius: 26px;
+  background: #1e1d27;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.chipOn {
+  border-color: #e8b34d;
+  background: rgba(232, 179, 77, 0.18);
+  color: #fff;
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 17px;
+}
+
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.save {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 68px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancel {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.save:disabled,
+.chip:disabled,
+.chipOn:disabled,
+.avatarHit:disabled,
+.changeText:disabled,
+.videoFrame:disabled,
+.videoPlaceholder:disabled,
+.videoLink:disabled,
+.removeVideo:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.spinner,
+.spinnerDark {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner {
+  border-top-color: #fff;
+  border-right-color: rgba(255, 255, 255, 0.35);
+}
+
+.spinnerDark {
+  border-top-color: #1e1d27;
+  border-right-color: rgba(30, 29, 39, 0.35);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

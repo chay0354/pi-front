@@ -1,0 +1,151 @@
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #1e1d27;
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 104px;
+  padding: 0 26px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.card {
+  width: min(560px, calc(100% - 48px));
+  padding: 32px 28px;
+  border-radius: 16px;
+  background: #2b2a39;
+  text-align: center;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  color: #f7f3e6;
+  font-size: 32px;
+}
+
+.hint {
+  margin: 0 0 16px;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.star,
+.starOn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.starOn {
+  border-color: #ffc40a;
+}
+
+.star span,
+.starOn span {
+  position: absolute;
+  color: #1e1d27;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #8c85b3;
+  border-radius: 24px;
+  background: #2b2a39;
+  color: #fff;
+  font-family: inherit;
+  font-size: 20px;
+  text-align: right;
+  resize: vertical;
+}
+
+.send {
+  width: 100%;
+  height: 56px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+  color: #1e1d27;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send:disabled {
+  background: #4d4966;
+  color: #fff;
+  opacity: 0.4;
+  cursor: default;
+}
+
+.thanks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 80px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.thanks p {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.thanks span {
+  font-size: 20px;
+  color: #ffc40a;
+}

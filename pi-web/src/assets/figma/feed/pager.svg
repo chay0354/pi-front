@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="72" height="8" viewBox="0 0 72 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="pager">
+<ellipse id="Ellipse 34" cx="4" cy="4" rx="4" ry="4" transform="rotate(180 4 4)" fill="url(#paint0_linear_0_198)"/>
+<ellipse id="Ellipse 35" cx="20" cy="4" rx="4" ry="4" transform="rotate(180 20 4)" fill="white" fill-opacity="0.4"/>
+<ellipse id="Ellipse 36" cx="36" cy="4" rx="4" ry="4" transform="rotate(180 36 4)" fill="white" fill-opacity="0.4"/>
+<ellipse id="Ellipse 37" cx="52" cy="4" rx="4" ry="4" transform="rotate(180 52 4)" fill="white" fill-opacity="0.4"/>
+<ellipse id="Ellipse 38" cx="68" cy="4" rx="4" ry="4" transform="rotate(180 68 4)" fill="white" fill-opacity="0.4"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_198" x1="1.11073" y1="0.708946" x2="6.51289" y2="7.27233" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FFE073"/>
+<stop offset="1" stop-color="#FFBA30"/>
+</linearGradient>
+</defs>
+</svg>

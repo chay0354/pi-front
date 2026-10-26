@@ -1,0 +1,149 @@
+.root {
+  min-width: 286px;
+  max-width: 348px;
+  margin-bottom: 3px;
+  animation: voiceIn 0.22s ease-out;
+}
+
+@keyframes voiceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mainRow {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.avatarWrap {
+  position: relative;
+  width: 55px;
+  height: 55px;
+}
+
+.avatar {
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.micBadge {
+  position: absolute;
+  inset-inline-end: -1px;
+  bottom: -1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.playBtn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.waveColumn {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.waveTrack {
+  position: relative;
+  width: 100%;
+  height: 36px;
+  margin-bottom: 3px;
+  overflow: visible;
+}
+
+.waveBarsRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 31px;
+  gap: 3px;
+}
+
+.waveBarsOverlay {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  height: 31px;
+}
+
+.playedMask {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 3px;
+  height: 31px;
+  overflow: hidden;
+}
+
+.waveBarSlot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  height: 31px;
+}
+
+.waveBar {
+  width: 3px;
+  min-height: 4px;
+  border-radius: 1px;
+}
+
+.scrubber {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 13px;
+  height: 13px;
+  margin-top: -6.5px;
+  margin-inline-start: -6.5px;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.metaRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metaTimeRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.metaText {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}

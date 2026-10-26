@@ -1,0 +1,76 @@
+.touch {
+  display: block;
+  flex-shrink: 0;
+}
+
+.touch:hover .pillIdle {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.touch:hover .pillSelected {
+  filter: brightness(1.05);
+}
+
+.touch:active {
+  opacity: 0.85;
+}
+
+.pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  width: 73px;
+  height: 52px;
+  padding: 0 10px;
+  border-radius: 1100px;
+}
+
+.pillIdle {
+  border: 2px solid #4d4966;
+}
+
+.pillSelected {
+  background: linear-gradient(135deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+}
+
+.text {
+  color: #fff;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.textSelected {
+  color: #1e1d27;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  margin-right: 8px;
+  border-radius: 50%;
+  border: 2px solid #4d4966;
+  background: transparent;
+}
+
+.dotSelected {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #27262f;
+}
+
+.dotInner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffe56a 4.56%, #f7c63a 50.76%, #e5a80f 88.31%);
+}

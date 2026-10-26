@@ -1,0 +1,156 @@
+.rail {
+  direction: ltr;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 240px;
+  height: 702px;
+}
+
+.viewModes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 178px;
+  padding-left: 24px;
+}
+
+.viewMode {
+  position: relative;
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+/* Figma 163:23606: 21×19 box at (1.5, 3), with the stroke overflowing it by 0.75px. */
+.likedSelected {
+  position: absolute;
+  top: 2.25px;
+  left: 0.75px;
+}
+
+/* Figma 163:23607 / mobile likedBadge. */
+.likedBadge {
+  position: absolute;
+  top: 0;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 12px;
+  padding: 0 3px;
+  border-radius: 20px;
+  background: linear-gradient(105.1deg, #34f3e0 1.02%, #04cfe1 91.5%);
+  color: var(--blue-100);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lower {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 629px;
+}
+
+.pills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 0 0;
+  width: 187px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 0 0;
+  min-height: 1px;
+  width: 100%;
+  overflow: clip;
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  background: var(--blue-600);
+  box-shadow: var(--shadow-1);
+}
+
+.pill:hover,
+.pill[data-open] {
+  background: var(--blue-500);
+}
+
+.selected .pillLabel {
+  color: #fc0;
+}
+
+.searchPill {
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.checkPill {
+  gap: 10px;
+  padding: 0 16px 0 28px;
+}
+
+.iconPill {
+  gap: 12px;
+  padding: 0 20px 0 28px;
+}
+
+.pillLabel {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--white-100);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pillIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.checkboxEmpty {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--cta);
+  border-radius: 50%;
+}
+
+.publish {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  height: 82px;
+  padding: 28px 24px;
+  overflow: clip;
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  background: var(--blue-600);
+  box-shadow: var(--shadow-1);
+}
+
+.publish:hover {
+  background: #33324a;
+}
+
+.publishLabel {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.2px;
+  color: var(--white-100);
+  white-space: nowrap;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}

@@ -1,0 +1,17 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icons">
+<path id="Rectangle 34625071" d="M3 4.38096C3 3.19749 3.9594 2.2381 5.14287 2.23811L14.0638 2.23815L22.8571 2.23811C24.0406 2.2381 25 3.19749 25 4.38096V23.8571C25 25.0406 24.0406 26 22.8571 26H5.14286C3.95939 26 3 25.0406 3 23.8571V4.38096Z" stroke="#FFC40A" stroke-width="1.5"/>
+<path id="Rectangle 34625072" d="M12 15C12 14.4477 12.4477 14 13 14H15C15.5523 14 16 14.4477 16 15V21C16 21.5523 15.5523 22 15 22H13C12.4477 22 12 21.5523 12 21V15Z" stroke="url(#paint0_linear_0_515)" stroke-width="1.5"/>
+<circle id="Ellipse 674" cx="14" cy="8.5" r="2.5" stroke="url(#paint1_linear_0_515)" stroke-width="1.5"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_515" x1="12.1333" y1="13.3386" x2="16.585" y2="13.8932" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_515" x1="11.6667" y1="5.58665" x2="16.9874" y2="6.91229" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+</defs>
+</svg>

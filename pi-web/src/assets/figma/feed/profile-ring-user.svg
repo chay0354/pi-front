@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="38.6667" height="38.6667" viewBox="0 0 38.6667 38.6667" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="19.3333" cy="19.3333" r="18.6667" stroke="url(#profileRingUser)" stroke-width="1.33333"/>
+<defs>
+<linearGradient id="profileRingUser" x1="0" y1="0" x2="38.6667" y2="38.6667" gradientUnits="userSpaceOnUse">
+<stop offset="0.0456" stop-color="#99F6E4"/>
+<stop offset="0.5076" stop-color="#5EEAD4"/>
+<stop offset="0.8831" stop-color="#0D9488"/>
+</linearGradient>
+</defs>
+</svg>

@@ -1,0 +1,90 @@
+/* Positions follow the 1920×1080 Figma frame (node 336:32843). */
+
+.screen {
+  position: relative;
+  width: 1920px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--blue-100);
+}
+
+.feedColumn {
+  position: absolute;
+  top: 244px;
+  bottom: 0;
+  left: 495px;
+  width: 930px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 0 40px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 24px;
+  scrollbar-width: none;
+}
+
+.feedColumn::-webkit-scrollbar {
+  display: none;
+}
+
+.feedColumn > article {
+  scroll-snap-align: start;
+}
+
+/* Grid view (Figma 465:32251): 3 × 400px cards, 24px gaps, from x 336. */
+.gridColumn {
+  position: absolute;
+  top: 240px;
+  bottom: 0;
+  left: 336px;
+  width: 1248px;
+  padding: 28px 0 40px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.gridColumn::-webkit-scrollbar {
+  display: none;
+}
+
+.grid {
+  direction: rtl;
+  display: grid;
+  grid-template-columns: repeat(3, 400px);
+  gap: 24px;
+}
+
+.message {
+  padding-top: 280px;
+  font-size: 20px;
+  color: var(--white-80);
+  text-align: center;
+}
+
+/* Figma 744:77925: y 491, centred on the stage (x 662–1258). */
+.emptyState {
+  position: absolute;
+  top: 491px;
+  left: 662.17px;
+  pointer-events: none;
+}
+
+.arrows {
+  position: absolute;
+  top: 572px;
+  left: 366px;
+}
+
+.leftRail {
+  position: absolute;
+  z-index: 22;
+  top: 298px;
+  left: 0;
+}
+
+.rightPanel {
+  position: absolute;
+  top: 294px;
+  left: 1603px;
+}

@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="23.5" height="27.1644" viewBox="0 0 23.5 27.1644" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 1000003462">
+<circle id="Ellipse 635" cx="11.7488" cy="6.86111" r="6.11111" stroke="#FFC40A" stroke-width="1.5"/>
+<path id="Rectangle 34624990" d="M0.75 22.1643C0.75 20.6492 1.60601 19.2641 2.96115 18.5866L11.2034 14.4654C11.5475 14.2934 11.9525 14.2934 12.2966 14.4654L20.5389 18.5866C21.894 19.2641 22.75 20.6492 22.75 22.1643V25.1921C22.75 25.8672 22.2028 26.4144 21.5278 26.4144H1.97222C1.29721 26.4144 0.75 25.8672 0.75 25.1921V22.1643Z" stroke="#FFC40A" stroke-width="1.5"/>
+<path id="Rectangle 34624985" d="M12.9702 19.0825L14.1924 26.4159L9.30349 26.4159L10.5257 19.0825L12.9702 19.0825Z" stroke="url(#paint0_linear_0_102)" stroke-width="1.32222"/>
+<path id="Rectangle 34624991" d="M12.9702 17.8589L14.1924 15.1922L11.7479 14.1922L9.30349 15.1922L10.5257 17.8589L12.9702 17.8589Z" stroke="url(#paint1_linear_0_102)" stroke-width="1.32222"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_102" x1="14.5965" y1="19.327" x2="11.8787" y2="26.5994" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_102" x1="14.5965" y1="17.7367" x2="13.8483" y2="13.7324" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+</defs>
+</svg>

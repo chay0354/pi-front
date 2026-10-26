@@ -1,0 +1,33 @@
+import {FormContainer} from './FormContainer';
+import {Title} from './Title';
+import {RadioWithText} from './RadioWithText';
+import styles from './fields.module.css';
+
+export const RadioOptions = ({data = [], title, selectedValue, onChange = () => {}}) => {
+  const optionWidth = `${100 / (data.length || 1)}%`;
+
+  return (
+    <FormContainer>
+      <Title text={title} required />
+      <div dir="ltr" className={styles.radioOptionsRow}>
+        {data.map((item, index) => {
+          // Prefer `name` (API / filter codes, e.g. land form) over `value`, then `title` (Hebrew label).
+          const value = item.name ?? item.value ?? item.title;
+          return (
+            <RadioWithText
+              key={index}
+              isNotLastIndex={false}
+              title={item.title}
+              name={value}
+              setName={() => onChange(value)}
+              index={index}
+              isSelected={selectedValue === value}
+              radioOptionStyle={{paddingTop: 0}}
+              containerStyle={{width: optionWidth}}
+            />
+          );
+        })}
+      </div>
+    </FormContainer>
+  );
+};

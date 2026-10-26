@@ -1,0 +1,46 @@
+/* Extends the filter panel (FilterPopup.module.css) with the mobile PiAiSearchModal content. */
+
+.body {
+  gap: 20px;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+  text-align: center;
+}
+
+.welcomeTitle {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
+  color: var(--white-300);
+}
+
+.welcomeExample {
+  font-size: 16px;
+  font-style: italic;
+  line-height: 22px;
+  color: var(--white-80);
+}
+
+.count {
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--white-80);
+}
+
+.hint {
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-clue);
+}
+
+/* Cards sit on the darker screen colour so they stand out from the panel (mobile CARD_BG on BG). */
+.card {
+  flex-shrink: 0;
+  align-self: center;
+  background: var(--blue-100);
+}

@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icons">
+<g id="Vector">
+</g>
+<path id="Vector 248" d="M25.6333 23.2414L22.3 25L20.0777 18.5517H12.8753C11.6371 18.5517 10.6333 17.5479 10.6333 16.3097V11.242C10.6333 10.0038 11.6371 9 12.8753 9H13.3913C14.6295 9 15.6333 10.0038 15.6333 11.242V13.2759H19.5222" stroke="#FFC40A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Ellipse 1926" d="M7.8018 14C4.41256 14 1.66504 16.6863 1.66504 20C1.66504 23.3137 4.41256 26 7.8018 26C10.5584 26 12.8904 24.223 13.665 21.7768" stroke="url(#paint0_linear_0_534)" stroke-width="1.5" stroke-linecap="round"/>
+<path id="Vector_2" d="M10.6333 3.5C10.6333 4.16304 10.8967 4.79893 11.3655 5.26777C11.8344 5.73661 12.4703 6 13.1333 6C13.7963 6 14.4322 5.73661 14.9011 5.26777C15.3699 4.79893 15.6333 4.16304 15.6333 3.5C15.6333 2.83696 15.3699 2.20107 14.9011 1.73223C14.4322 1.26339 13.7963 1 13.1333 1C12.4703 1 11.8344 1.26339 11.3655 1.73223C10.8967 2.20107 10.6333 2.83696 10.6333 3.5Z" stroke="#FFC40A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_534" x1="2.06504" y1="13.008" x2="14.8348" y2="16.1895" gradientUnits="userSpaceOnUse">
+<stop stop-color="#34F3E0"/>
+<stop offset="1" stop-color="#04CFE1"/>
+</linearGradient>
+</defs>
+</svg>

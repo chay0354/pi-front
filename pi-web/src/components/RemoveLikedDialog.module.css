@@ -1,0 +1,81 @@
+.backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 40;
+}
+
+.dialog {
+  position: absolute;
+  top: 380px;
+  left: 777px;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 33px;
+  width: 366px;
+  padding: 28px 20px;
+  border-radius: 12px;
+  background: var(--blue-600);
+  filter: drop-shadow(0 4px 35px rgba(0, 0, 0, 0.35));
+  text-align: center;
+}
+
+.title {
+  width: 326px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 31px;
+  color: var(--white-300);
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+.body {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: normal;
+  color: var(--white-100);
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
+}
+
+/* RTL row: "הסר מהרשימה" on the right, "ביטול" on the left. */
+.buttons {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 12px;
+}
+
+.cancel,
+.confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border-radius: 846.154px;
+  white-space: nowrap;
+}
+
+.cancel {
+  width: 151.615px;
+  padding: 8.462px 20.308px;
+  background: #4d4966;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--white-100);
+}
+
+.confirm {
+  width: 149px;
+  padding: 8.462px 12px;
+  background: linear-gradient(185.15deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.2px;
+  color: var(--blue-100);
+}

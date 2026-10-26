@@ -1,0 +1,269 @@
+/* Login / registration / password recovery — mobile LoginScreen, UserRegistrationScreen, SecretCodeRecoveryScreen. */
+
+.logo {
+  align-self: center;
+  width: 84px;
+  height: 77px;
+  object-fit: contain;
+  margin-top: -40px;
+}
+
+/* ── Login ─────────────────────────────────────────── */
+.loginCard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 22px 24px;
+  border: 1px solid rgba(255, 196, 10, 0.38);
+  border-radius: 24px;
+  background: #2b2a39;
+}
+
+.loginTitle {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.loginInstruction {
+  margin: 0;
+  font-size: 17px;
+  color: var(--grey-200, #b5b3c2);
+}
+
+.loginError {
+  padding: 12px 14px;
+  border: 1px solid #ff4444;
+  border-radius: 10px;
+  background: rgba(255, 68, 68, 0.14);
+  color: #ffcccc;
+  font-size: 15px;
+}
+
+.loginField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loginLabel {
+  font-size: 16px;
+}
+
+.loginInput,
+.loginPasswordRow {
+  height: 52px;
+  border: 1px solid #3b3a4c;
+  border-radius: 12px;
+  background: #1f1e2a;
+  transition: border-color 0.15s;
+}
+
+.loginInput {
+  padding: 0 16px;
+  font-size: 18px;
+}
+
+.loginInput:focus,
+.loginPasswordRow:focus-within {
+  border-color: var(--yellow-icons, #ffc40a);
+}
+
+.loginPasswordRow {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.loginInputBare {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 16px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+}
+
+.loginToggle {
+  padding: 0 14px;
+  height: 100%;
+  color: var(--yellow-icons, #ffc40a);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.loginInput::placeholder,
+.loginInputBare::placeholder {
+  color: var(--grey-200, #8f8d9c);
+}
+
+.loginForgot {
+  align-self: flex-start;
+  padding: 4px 0;
+  color: var(--yellow-icons, #ffc40a);
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.loginButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  margin-top: 4px;
+  border-radius: 14px;
+  background: var(--yellow-icons, #ffc40a);
+  color: var(--blue-100);
+  font-size: 22px;
+  font-weight: 500;
+  transition: filter 0.15s;
+}
+
+.loginButton:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.loginButtonDisabled {
+  background: #6d687b;
+  color: var(--blue-100);
+  opacity: 0.55;
+}
+
+/* ── Registration ───────────────────────────────────── */
+.registerCard {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 0 0 36px;
+}
+
+.profileSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatarBtn {
+  position: relative;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.avatarBtn:hover {
+  transform: scale(1.03);
+}
+
+.avatarBadge {
+  position: absolute;
+  bottom: -5px;
+  right: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--blue-100);
+}
+
+.profileLabel {
+  font-size: 15px;
+  color: #d2d0dc;
+}
+
+.titleBlockCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+}
+
+.formBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.socialError {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 0, 0, 0.15);
+  color: #ffcccc;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ── Secret code recovery ───────────────────────────── */
+.keyCard {
+  align-items: center;
+  min-height: 420px;
+  padding: 28px;
+  border-radius: 16px;
+  background: #2b2a39;
+  text-align: center;
+}
+
+.keyIcon {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.keyTitle {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 500;
+}
+
+.keyBody {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.45;
+  color: #d2d0dc;
+}
+
+.emailReadOnly {
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid #ffc40a;
+  border-radius: var(--radius-full);
+  background: rgba(255, 196, 10, 0.08);
+  font-size: 19px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.keyCard > button {
+  width: 100%;
+  margin-top: auto;
+}
+
+.sentTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.sentLine {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.5;
+}
+
+.sentHint {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #9e9da4;
+}

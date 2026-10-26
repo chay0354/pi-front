@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="23" height="23" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="checkbox ">
+<path d="M0.5 11.5C0.5 5.42487 5.42487 0.5 11.5 0.5V0.5C17.5751 0.5 22.5 5.42487 22.5 11.5V11.5C22.5 17.5751 17.5751 22.5 11.5 22.5V22.5C5.42487 22.5 0.5 17.5751 0.5 11.5V11.5Z" fill="#27262F"/>
+<path d="M0.5 11.5C0.5 5.42487 5.42487 0.5 11.5 0.5V0.5C17.5751 0.5 22.5 5.42487 22.5 11.5V11.5C22.5 17.5751 17.5751 22.5 11.5 22.5V22.5C5.42487 22.5 0.5 17.5751 0.5 11.5V11.5Z" stroke="#CCA447"/>
+<circle id="Slider" cx="11.4999" cy="11.5001" r="4.4" fill="url(#paint0_linear_0_139)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_139" x1="8.49981" y1="15.0001" x2="14.9849" y2="7.50024" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEE787"/>
+<stop offset="0.234553" stop-color="#C5A24F"/>
+<stop offset="0.551663" stop-color="#BD9947"/>
+<stop offset="1" stop-color="#9C6522"/>
+</linearGradient>
+</defs>
+</svg>

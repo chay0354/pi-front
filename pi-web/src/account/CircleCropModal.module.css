@@ -1,0 +1,136 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 16, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 520px;
+  padding: 20px 40px 32px;
+  border-radius: 20px;
+  background: var(--blue-100);
+  box-shadow: var(--shadow-1);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+button.iconBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--blue-100);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.stage:active {
+  cursor: grabbing;
+}
+
+.image {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+
+.mask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 400px rgba(30, 29, 39, 0.82);
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #f7c63a;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hint {
+  margin-top: 20px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 0;
+}
+
+.zoomBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--blue-600);
+}
+
+.zoomBtn:disabled {
+  opacity: 0.4;
+}
+
+.zoomLabel {
+  min-width: 64px;
+  font-size: 18px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: #4d4966;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.confirm:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
