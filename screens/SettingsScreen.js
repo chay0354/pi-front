@@ -22,6 +22,7 @@ import {
   getUserProfileImageUrl,
 } from '../utils/userProfileImage';
 import {getCurrentUser, getFollowHubRows, toSubscriptionId} from '../utils/api';
+import PropertyAlertModal from '../components/PropertyAlertModal';
 import {MaterialCommunityIcons} from '@expo/vector-icons';
 import {flexStart} from '../utils/rtlLayout';
 
@@ -96,6 +97,7 @@ const SettingsScreen = ({
   const isMarketingManagerUser = isMarketingManager(currentUser);
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
   const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
+  const [propertyAlertsOpen, setPropertyAlertsOpen] = useState(false);
   const viewerId = toSubscriptionId(
     currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id,
   );
@@ -256,10 +258,11 @@ const SettingsScreen = ({
     );
   };
   const openBrokerUpdates = () => {
-    Alert.alert('עדכון נכסים חדשים שעולים', 'התוכן יהיה זמין בקרוב.');
+    setPropertyAlertsOpen(true);
   };
 
   return (
+    <>
     <ScrollView
       style={styles.settingsScreen}
       contentContainerStyle={[
@@ -658,6 +661,13 @@ const SettingsScreen = ({
         </View>
       </View>
     </ScrollView>
+      <PropertyAlertModal
+        visible={propertyAlertsOpen}
+        onClose={() => setPropertyAlertsOpen(false)}
+        subscriptionId={viewerId}
+        email={currentUser?.email || ''}
+      />
+    </>
   );
 };
 

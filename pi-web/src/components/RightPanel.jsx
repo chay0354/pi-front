@@ -1,4 +1,3 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
 import iconSearch from '../assets/figma/feed/icon-search.svg';
 import styles from './RightPanel.module.css';
 
@@ -23,50 +22,21 @@ function FilterIcon({filter, selected}) {
   return <img className={styles.filterIcon} src={filter.icon} alt="" />;
 }
 
-function scrollHints(el) {
-  if (!el) return {up: false, down: false};
-  return {
-    up: el.scrollTop > 4,
-    down: el.scrollHeight - el.clientHeight - el.scrollTop > 4,
-  };
-}
+/** Pills that fit the panel's height in one column; longer lists (BnB) switch to a tile grid. */
+const MAX_PILLS = 6;
 
 function FilterList({filters, selectedFilterId, onSelectFilter}) {
-  const listRef = useRef(null);
-  const [hints, setHints] = useState({up: false, down: false});
-  const update = useCallback(() => {
-    const next = scrollHints(listRef.current);
-    setHints(prev => (prev.up === next.up && prev.down === next.down ? prev : next));
-  }, []);
-
-  useEffect(() => {
-    update();
-    const el = listRef.current;
-    if (!el) return undefined;
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [update, filters]);
-
-  const scrollByRow = direction => {
-    listRef.current?.scrollBy({top: direction * 84, behavior: 'smooth'});
-  };
-
+  const grid = filters.length > MAX_PILLS;
   return (
-    <div className={styles.filtersWrap}>
-      {hints.up && (
-        <button type="button" className={`${styles.scrollHint} ${styles.scrollHintUp}`} aria-label="סינונים למעלה" onClick={() => scrollByRow(-1)}>
-          <span className={styles.chevron} aria-hidden />
-        </button>
-      )}
-      <div ref={listRef} className={styles.filters} onScroll={update}>
+    <div className={grid ? styles.tilesWrap : styles.filtersWrap}>
+      <div className={grid ? styles.tiles : styles.filters}>
         {filters.map(filter => {
           const selected = filter.id === selectedFilterId;
           return (
             <button
               key={filter.id}
               type="button"
-              className={`${styles.filter} ${selected ? styles.selected : ''}`}
+              className={`${grid ? styles.tile : styles.filter} ${selected ? styles.selected : ''}`}
               aria-pressed={selected}
               onClick={() => onSelectFilter(selected ? null : filter.id)}>
               <span className={styles.filterLabel}>{filter.label}</span>
@@ -75,11 +45,6 @@ function FilterList({filters, selectedFilterId, onSelectFilter}) {
           );
         })}
       </div>
-      {hints.down && (
-        <button type="button" className={`${styles.scrollHint} ${styles.scrollHintDown}`} aria-label="סינונים נוספים" onClick={() => scrollByRow(1)}>
-          <span className={styles.chevron} aria-hidden />
-        </button>
-      )}
     </div>
   );
 }

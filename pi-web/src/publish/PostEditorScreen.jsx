@@ -7,8 +7,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import {mdiChevronLeft} from '@mdi/js';
+import {mdiChevronLeft, mdiCrop} from '@mdi/js';
 import MdiIcon from './MdiIcon';
+import FreeImageCropModal from './components/FreeImageCropModal';
 import PostTargetProfessionalsSheet from './components/PostTargetProfessionalsSheet';
 import OpenHouseDetailsModal from './components/OpenHouseDetailsModal';
 import {uploadFile, createListing, updateListing, createStory} from '../api/listingsPublish';
@@ -629,6 +630,9 @@ export default function PostEditorScreen({
   const [backgroundImageUri, setBackgroundImageUri] = useState(null);
   const [backgroundImageAsset, setBackgroundImageAsset] = useState(null);
   const [backgroundVideoAsset, setBackgroundVideoAsset] = useState(null);
+  const [postImageCropOpen, setPostImageCropOpen] = useState(null);
+  const postImageSourceRef = useRef(null);
+  const postImageCropRef = useRef(null);
   const [selectedFormat, setSelectedFormat] = useState(null);
   const [textAlignMode, setTextAlignMode] = useState('center');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
@@ -705,6 +709,8 @@ export default function PostEditorScreen({
     editingFieldLayoutRef.current = null;
     editingOriginRef.current = {x: null, y: null};
     isFinishingEditRef.current = false;
+    postImageSourceRef.current = null;
+    postImageCropRef.current = null;
     setBackgroundImageUri(null);
     setBackgroundImageAsset(null);
     setBackgroundVideoAsset(null);
@@ -1037,7 +1043,31 @@ export default function PostEditorScreen({
   const applyBackgroundImage = uri => {
     if (!uri) return;
     setBackgroundVideoAsset(null);
+    postImageSourceRef.current = uri;
+    postImageCropRef.current = null;
     setBackgroundImageUri(uri);
+  };
+
+  const openPostImageCrop = () => {
+    const source = postImageSourceRef.current || backgroundImageUri;
+    if (!source) return;
+    if (!postImageSourceRef.current) postImageSourceRef.current = source;
+    setPostImageCropOpen({uri: source, crop: postImageCropRef.current});
+  };
+
+  const handlePostImageCropConfirm = result => {
+    setPostImageCropOpen(null);
+    if (result?.error) {
+      window.alert(result.error);
+      return;
+    }
+    if (result?.crop) postImageCropRef.current = result.crop;
+    if (!result?.uri) return;
+    if (result.file) {
+      rememberObjectUrl(result.uri);
+      setBackgroundImageAsset({uri: result.uri, file: result.file, mimeType: 'image/jpeg', name: result.name});
+    }
+    setBackgroundImageUri(result.uri);
   };
 
   const applyBackgroundVideo = asset => {
@@ -1056,6 +1086,8 @@ export default function PostEditorScreen({
   };
 
   const clearAllEditorState = () => {
+    postImageSourceRef.current = null;
+    postImageCropRef.current = null;
     setBackgroundImageUri(null);
     setBackgroundImageAsset(null);
     setBackgroundVideoAsset(null);
@@ -1653,12 +1685,18 @@ export default function PostEditorScreen({
     setColorPageIndex(page);
   };
 
-  const isEditingPost = initialListing != null && publishTarget !== 'story';
-
   return (
-    <div className={isEditingPost ? styles.screenHost : styles.backdrop}>
-    <div className={isEditingPost ? `${styles.screen} ${styles.screenFull}` : styles.screen} dir="rtl">
+    <div className={styles.backdrop}>
+    <button
+      type="button"
+      className={styles.drawerOverlay}
+      aria-label="סגור"
+      disabled={publishing}
+      onClick={onClose}
+    />
+    <div className={styles.screen} dir="rtl">
       <header className={styles.topNav}>
+        <div className={styles.topNavRow}>
         <button
           type="button"
           className={`${styles.backBtn} ${publishing ? styles.backBtnDisabled : ''}`}
@@ -1699,6 +1737,7 @@ export default function PostEditorScreen({
             <img src={publishBtnSrc} alt="" className={styles.publishBtnImage} />
           )}
         </button>
+        </div>
         {showPostUploadProgress ? (
           <div className={styles.uploadProgressWrap}>
             <div className={styles.uploadProgressTrack}>
@@ -1759,6 +1798,12 @@ export default function PostEditorScreen({
                 <img src={closeIconSrc} alt="" className={styles.closeIcon} />
               </button>
               <div className={styles.previewTools}>
+                {backgroundImageUri && !backgroundVideoAsset?.uri ? (
+                  <button type="button" className={styles.imageCropChip} aria-label="עריכה" onClick={openPostImageCrop}>
+                    <MdiIcon path={mdiCrop} size={21} color="#FFFFFF" />
+                    <span className={styles.imageCropChipText}>עריכה</span>
+                  </button>
+                ) : null}
                 <button type="button" className={styles.toolBtn} aria-label="גלריה" onClick={pickBackgroundImageFromGallery}>
                   <img src={galleryIconSrc} alt="" className={styles.galleryIcon} />
                 </button>
@@ -1888,7 +1933,7 @@ export default function PostEditorScreen({
               }}
               style={{paddingBottom: 13}}>
               {selectedFormat === 'aa' ? (
-                <div className={styles.textStylesScroll}>
+                <div className={styles.textStylesScroll} dir="ltr">
                   <div className={styles.textStylesRow} dir="ltr">
                     {TEXT_STYLES.map((styleItem, index) => (
                       <button
@@ -2162,6 +2207,15 @@ export default function PostEditorScreen({
         onSkip={handleProfessionalTargetSkip}
         onConfirm={handleProfessionalTargetConfirm}
       />
+      {postImageCropOpen?.uri ? (
+        <FreeImageCropModal
+          imageUri={postImageCropOpen.uri}
+          initialCrop={postImageCropOpen.crop || null}
+          onCancel={() => setPostImageCropOpen(null)}
+          onConfirm={handlePostImageCropConfirm}
+          title="עריכת תמונה"
+        />
+      ) : null}
     </div>
     </div>
   );

@@ -1,9 +1,10 @@
 import {useState, useRef, useEffect, useMemo, useCallback} from 'react';
-import {mdiChevronLeft} from '@mdi/js';
+import {mdiClose} from '@mdi/js';
 import MdiIcon from './MdiIcon';
 import {useSession} from '../auth/session';
 import {pickFile} from '../account/AccountUi';
 import CircleCropModal from '../account/CircleCropModal';
+import FreeImageCropModal from './components/FreeImageCropModal';
 import {
   uploadFile,
   errorMessageFromUnknown,
@@ -425,6 +426,7 @@ export default function AdsForm({
   const [partnerPhotoCropVisible, setPartnerPhotoCropVisible] = useState(false);
   const [adImageCrop, setAdImageCrop] = useState(null);
   const adImageSourceRef = useRef({main: null, extra: {}});
+  const adImageCropRectRef = useRef({main: null, extra: {}});
   const [partnerPhotoSourceUri, setPartnerPhotoSourceUri] = useState(null);
   /** Sales image (תמונה מכירתית) — stored in ads.sales_image_url. */
   const salesImageInputRef = useRef(null);
@@ -1248,6 +1250,7 @@ export default function AdsForm({
       return;
     }
     adImageSourceRef.current.main = picked.uri;
+    adImageCropRectRef.current.main = null;
     setMainImage(picked);
   };
 
@@ -1356,7 +1359,9 @@ export default function AdsForm({
         ? adImageSourceRef.current.main || currentUri
         : adImageSourceRef.current.extra[slot] || currentUri;
     if (!source) return;
-    setAdImageCrop({slot, uri: source});
+    const savedCrop =
+      slot === 'main' ? adImageCropRectRef.current.main : adImageCropRectRef.current.extra[slot] || null;
+    setAdImageCrop({slot, uri: source, crop: savedCrop});
   };
 
   const handleAdImageCropConfirm = result => {
@@ -1367,6 +1372,8 @@ export default function AdsForm({
       return;
     }
     if (!result?.uri || slot == null) return;
+    if (slot === 'main') adImageCropRectRef.current.main = result.crop || null;
+    else adImageCropRectRef.current.extra[slot] = result.crop || null;
     const file = {
       uri: result.uri,
       type: 'image/jpeg',
@@ -1387,6 +1394,7 @@ export default function AdsForm({
   const applyAdditionalImageFile = (index, file) => {
     const picked = pickedFileAsset(file, 'image');
     adImageSourceRef.current.extra[index] = picked.uri;
+    adImageCropRectRef.current.extra[index] = null;
     setAdditionalImages(prev => {
       const next = [...prev];
       next[index] = picked;
@@ -2478,58 +2486,65 @@ export default function AdsForm({
 
   return (
     <div ref={rootRef} className={styles.screen}>
-      <div className={styles.scroll}>
-        <header className={styles.header}>
-          <button type="button" className={styles.backBtn} onClick={onClose} aria-label="חזרה">
-            <MdiIcon path={mdiChevronLeft} size={34} color="#fff" />
-          </button>
-          <h1 className={styles.headerTitle}>יצירת מודעה</h1>
-          <span className={styles.headerSpacer} aria-hidden="true" />
-        </header>
-        <FormScrollProvider>
-          <div className={styles.column}>{adsFormFields.map(renderField)}</div>
-        </FormScrollProvider>
-      </div>
-      <div className={styles.publishFooter}>
-        <div className={styles.publishFooterInner}>
-          <PublishAdButton
-            onPress={handlePublish}
-            uploading={uploading}
-            ready={formReadyToPublish}
-            isEditing={isEditingAd}
-          />
+      <button type="button" className={styles.overlay} aria-label="סגור" onClick={onClose} />
+      <div className={styles.panel} role="dialog" aria-modal="true" aria-label="יצירת מודעה">
+        <div className={styles.scroll}>
+          <header className={styles.header}>
+            <button type="button" className={styles.backBtn} onClick={onClose} aria-label="סגור">
+              <MdiIcon path={mdiClose} size={26} color="#fff" />
+            </button>
+            <h1 className={styles.headerTitle}>יצירת מודעה</h1>
+            <span className={styles.headerSpacer} aria-hidden="true" />
+          </header>
+          <FormScrollProvider>
+            <div className={styles.column}>{adsFormFields.map(renderField)}</div>
+          </FormScrollProvider>
         </div>
+        <div className={styles.publishFooter}>
+          <div className={styles.publishFooterInner}>
+            <PublishAdButton
+              onPress={handlePublish}
+              uploading={uploading}
+              ready={formReadyToPublish}
+              isEditing={isEditingAd}
+            />
+          </div>
+        </div>
+        <PublishValidationModal
+          visible={publishValidationVisible}
+          messages={publishValidationMessages}
+          onClose={() => setPublishValidationVisible(false)}
+        />
+        {bnbLogoCropVisible && bnbLogoCropUri ? (
+          <CircleCropModal
+            imageUri={bnbLogoCropUri}
+            onCancel={handleBnbLogoCropCancel}
+            onConfirm={handleBnbLogoCropConfirm}
+            title="חתוך את לוגו העסק"
+            contained
+          />
+        ) : null}
+        {partnerPhotoCropVisible && partnerPhotoCropUri ? (
+          <CircleCropModal
+            imageUri={partnerPhotoCropUri}
+            onCancel={handlePartnerPhotoCropCancel}
+            onConfirm={handlePartnerPhotoCropConfirm}
+            title="חתוך את התמונה"
+            shape="square"
+            fit="contain"
+            contained
+          />
+        ) : null}
+        {adImageCrop?.uri ? (
+          <FreeImageCropModal
+            imageUri={adImageCrop.uri}
+            initialCrop={adImageCrop.crop || null}
+            onCancel={() => setAdImageCrop(null)}
+            onConfirm={handleAdImageCropConfirm}
+            title="עריכת תמונה"
+          />
+        ) : null}
       </div>
-
-      <PublishValidationModal
-        visible={publishValidationVisible}
-        messages={publishValidationMessages}
-        onClose={() => setPublishValidationVisible(false)}
-      />
-      {bnbLogoCropVisible && bnbLogoCropUri ? (
-        <CircleCropModal
-          imageUri={bnbLogoCropUri}
-          onCancel={handleBnbLogoCropCancel}
-          onConfirm={handleBnbLogoCropConfirm}
-          title="חתוך את לוגו העסק"
-        />
-      ) : null}
-      {partnerPhotoCropVisible && partnerPhotoCropUri ? (
-        <CircleCropModal
-          imageUri={partnerPhotoCropUri}
-          onCancel={handlePartnerPhotoCropCancel}
-          onConfirm={handlePartnerPhotoCropConfirm}
-          title="חתוך את התמונה"
-        />
-      ) : null}
-      {adImageCrop?.uri ? (
-        <CircleCropModal
-          imageUri={adImageCrop.uri}
-          onCancel={() => setAdImageCrop(null)}
-          onConfirm={handleAdImageCropConfirm}
-          title="עריכת תמונה"
-        />
-      ) : null}
     </div>
   );
 }

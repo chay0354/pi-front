@@ -19,7 +19,6 @@ import styles from './ListingAnalysisScreen.module.css';
 const DEFAULT_LISTING_QUOTA = DEFAULT_MONTHLY_LISTING_QUOTA;
 const CATEGORY_ICON_SIZE = 73;
 const EDIT_PUBLISH_CATEGORY_ICON_SIZE = 143;
-const CATEGORY_ICON_CROP = 0.24;
 const ANALYSIS_ICON_BORDER_RADIUS = Math.round(
   (18 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE,
 );
@@ -32,12 +31,7 @@ const categoryMeta = listingCategoryId => {
   return categoriesEditProfile.find(c => c.id === uiId) || null;
 };
 
-function CroppedCategoryImage({source, categoryId}) {
-  const inner = 1 - 2 * CATEGORY_ICON_CROP;
-  const imageSize = Math.ceil(CATEGORY_ICON_SIZE / inner);
-  const offset = (imageSize - CATEGORY_ICON_SIZE) / 2;
-  const extraTop =
-    categoryId === 8 ? Math.round((5 * CATEGORY_ICON_SIZE) / EDIT_PUBLISH_CATEGORY_ICON_SIZE) : 0;
+function CroppedCategoryImage({source}) {
   return (
     <span
       className={styles.categoryImageWrap}
@@ -46,17 +40,7 @@ function CroppedCategoryImage({source, categoryId}) {
         height: CATEGORY_ICON_SIZE,
         borderRadius: ANALYSIS_ICON_BORDER_RADIUS,
       }}>
-      <img
-        src={source}
-        alt=""
-        className={styles.categoryImage}
-        style={{
-          width: imageSize,
-          height: imageSize,
-          marginLeft: -offset,
-          marginTop: -offset + extraTop,
-        }}
-      />
+      <img src={source} alt="" className={styles.categoryImage} />
     </span>
   );
 }
@@ -207,7 +191,7 @@ export default function ListingAnalysisScreen({onClose, currentUser = null, list
                   <div className={styles.tableRow}>
                     <div className={styles.rowRight}>
                       {meta?.image ? (
-                        <CroppedCategoryImage source={meta.image} categoryId={row.listingCategoryId} />
+                        <CroppedCategoryImage source={meta.image} />
                       ) : (
                         <span
                           className={`${styles.categoryImageWrap} ${styles.categoryImagePlaceholder}`}

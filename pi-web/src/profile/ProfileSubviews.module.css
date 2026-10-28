@@ -292,6 +292,27 @@
   object-fit: contain;
 }
 
+.viewerMute {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.viewerMute:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 .viewerClose {
   position: absolute;
   top: 24px;

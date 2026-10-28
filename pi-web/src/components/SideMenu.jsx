@@ -34,6 +34,7 @@ import iconBrokerSmall from '../assets/menu/subscription-broker-icon.png';
 import pencilIcon from '../assets/menu/pencil-icon.png';
 import logo from '../assets/menu/logo.png';
 import slogan from '../assets/menu/its-just-simple.png';
+import PropertyAlertsDialog from './PropertyAlertsDialog';
 import styles from './SideMenu.module.css';
 
 /** Mobile SettingsScreen LEGAL_DEFAULTS — an empty URL shows the “בקרוב” alert. */
@@ -180,15 +181,21 @@ export default function SideMenu({
   const isMarketingManagerUser = isMarketingManager(currentUser);
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
   const [followingPreviewLoading, setFollowingPreviewLoading] = useState(false);
+  const [propertyAlertsOpen, setPropertyAlertsOpen] = useState(false);
   const viewerId = toSubscriptionId(currentUser?.id || currentUser?.subscription_id || currentUser?.owner_id);
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key !== 'Escape') return;
+      if (propertyAlertsOpen) {
+        setPropertyAlertsOpen(false);
+        return;
+      }
+      onClose?.();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, propertyAlertsOpen]);
 
   // Refresh the subscription so profile_picture_url / company_logo_url are not stale vs storage.
   useEffect(() => {
@@ -265,7 +272,7 @@ export default function SideMenu({
     isLoggedBroker && {
       label: 'עדכון נכסים חדשים שעולים',
       icon: 'updates',
-      onPress: () => showAlert('עדכון נכסים חדשים שעולים', 'התוכן יהיה זמין בקרוב.'),
+      onPress: () => setPropertyAlertsOpen(true),
     },
     isMarketingManagerUser && {label: 'צור קוד הצטרפות', icon: 'secret', onPress: () => onOpenAgencyJoinCode?.()},
     isMarketingManagerUser && {label: 'ניהול משווקים', icon: 'projectMarketer', onPress: () => onOpenAgencyMembers?.()},
@@ -425,6 +432,13 @@ export default function SideMenu({
           />
         </div>
       </aside>
+      {propertyAlertsOpen && viewerId ? (
+        <PropertyAlertsDialog
+          subscriptionId={viewerId}
+          email={currentUser?.email || ''}
+          onClose={() => setPropertyAlertsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

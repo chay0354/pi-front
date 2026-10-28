@@ -109,7 +109,7 @@ export const MultiPicturesUpload = ({
           onClick={stopClick}
         />
       </div>
-      <Title text="תמונות נוספות" textStyle={{marginTop: 15, alignSelf: 'flex-start'}} />
+      <Title text="תמונות נוספות" textStyle={{marginTop: 20, alignSelf: 'flex-start'}} />
       {moreImagesRender([0, 1])}
       {moreImagesRender([2, 3])}
       {allowMoreImages && !extraVisible ? (

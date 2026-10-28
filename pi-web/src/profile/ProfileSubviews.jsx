@@ -4,6 +4,7 @@ import FeedCard from '../components/FeedCard';
 import GridCard from '../components/GridCard';
 import {toFeedItem} from '../feed/listingRules';
 import {Icon, ProfileAvatar} from './ProfileParts';
+import VolumeIcon from '../components/VolumeIcon';
 import {getPiReviewStarSource} from './lib/piRatingBadgeAssets';
 import {reviewHasStarRating} from './lib/listingGridCardFigma';
 import {isPostListingRecord} from './lib/pickTopViewedListingForProfile';
@@ -323,6 +324,8 @@ export function ProfilePostsFeedView({listings, focusId, title, onClose, active}
 export function MediaViewer({slides, index, onIndex, onClose}) {
   const count = slides.length;
   const videoRefs = useRef([]);
+  const [muted, setMuted] = useState(false);
+  const currentIsVideo = Boolean(slides[index]?.isVideo);
   useEscape(onClose);
   useEffect(() => {
     const onKey = e => {
@@ -336,8 +339,9 @@ export function MediaViewer({slides, index, onIndex, onClose}) {
     videoRefs.current.forEach((video, i) => {
       if (!video) return;
       if (i === index) {
-        video.muted = false;
+        video.muted = muted;
         video.play().catch(() => {
+          if (muted) return;
           video.muted = true;
           video.play().catch(() => {});
         });
@@ -345,12 +349,22 @@ export function MediaViewer({slides, index, onIndex, onClose}) {
         video.pause();
       }
     });
-  }, [index]);
+  }, [index, muted]);
   return (
     <div className={styles.viewer} role="dialog" aria-label="תמונות המודעה">
       <button type="button" className={styles.viewerClose} onClick={onClose} aria-label="סגור">
         <Icon name="close" size={30} />
       </button>
+      {currentIsVideo ? (
+        <button
+          type="button"
+          className={styles.viewerMute}
+          aria-label={muted ? 'הפעל קול' : 'השתק'}
+          aria-pressed={!muted}
+          onClick={() => setMuted(value => !value)}>
+          <VolumeIcon muted={muted} size={28} />
+        </button>
+      ) : null}
       <div className={styles.viewerTrack} style={{transform: `translateX(${-index * 100}%)`}}>
         {slides.map((slide, i) => (
           <div key={slide.isVideo ? `fs-video-${i}` : `fs-img-${i}-${slide.uri}`} className={styles.viewerSlide}>

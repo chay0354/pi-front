@@ -4,15 +4,12 @@
   z-index: 50;
 }
 
-/* Figma Rectangle 1 (244:26503): #27262F @ 60% over a 200px background blur. */
 .backdrop {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(39, 38, 47, 0.6);
-  backdrop-filter: blur(200px);
-  -webkit-backdrop-filter: blur(200px);
+  background: transparent;
   cursor: default;
   animation: fadeIn 200ms ease-out;
 }

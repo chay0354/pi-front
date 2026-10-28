@@ -97,12 +97,12 @@
   flex-direction: row;
   align-items: center;
   flex-shrink: 0;
-  gap: 14px;
+  gap: 4px;
   direction: ltr;
 }
 
 .ratingNum {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 500;
   letter-spacing: 0.2px;
   line-height: 1;
@@ -111,8 +111,8 @@
 
 .ratingRing {
   display: block;
-  width: 44px;
-  height: 44px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   pointer-events: none;
 }
@@ -290,6 +290,60 @@
   min-height: 0;
   overflow: hidden;
   background: #000;
+}
+
+.muteBtn {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.muteBtn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.pauseLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.playIcon {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.playIcon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -35% -50%;
+  border-top: 22px solid transparent;
+  border-bottom: 22px solid transparent;
+  border-left: 36px solid rgba(255, 255, 255, 0.95);
 }
 
 .fadeLayer {

@@ -62,6 +62,7 @@
 .loginInput {
   padding: 0 16px;
   font-size: 18px;
+  color: #fff;
 }
 
 .loginInput:focus,
@@ -83,7 +84,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: inherit;
+  color: #fff;
   font-size: 18px;
 }
 

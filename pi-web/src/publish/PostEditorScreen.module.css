@@ -1,47 +1,40 @@
-/* Post editor — chrome at mobile dp × 1.3. The frame stays a phone (390×844 × 1.3),
-   centered on the 1920 stage, so it does not stretch across the desktop. */
+/* Post editor — same left side drawer as יצירת מודעה. */
 
 .backdrop {
   position: absolute;
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(18, 17, 24, 0.72);
+  justify-content: flex-end;
 }
 
-.screenHost {
+.drawerOverlay {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  animation: fadeIn 0.18s ease-out;
 }
 
 .screen {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 507px;
-  height: min(1097px, calc(100% - 48px));
-  overflow: hidden;
-  border-radius: 36px;
-  background: #fff;
-  color: #fff;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
-  animation: screenIn 0.22s ease-out;
-}
-
-.screenFull {
-  width: 100%;
+  width: 500px;
+  max-width: 100%;
   height: 100%;
-  border-radius: 0;
-  box-shadow: none;
+  overflow: hidden;
+  border-radius: 0 24px 24px 0;
+  background: #1e1d27;
+  color: #fff;
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.45);
+  animation: screenIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes screenIn {
   from {
-    opacity: 0;
-    transform: translateY(12px);
+    transform: translateX(-100%);
   }
 }
 
@@ -50,14 +43,19 @@
   top: 0;
   z-index: 30;
   display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #1e1d27;
+}
+
+.topNavRow {
+  display: flex;
   flex-direction: row-reverse;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   height: 104px;
   padding: 0 26px;
-  overflow: hidden;
-  background: #1e1d27;
 }
 
 .backBtn,
@@ -145,15 +143,11 @@
 }
 
 .uploadProgressWrap {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 0 21px 8px;
+  gap: 4px;
+  padding: 0 21px 12px;
   pointer-events: none;
 }
 
@@ -268,6 +262,24 @@
   align-items: center;
   justify-content: center;
   gap: 23px;
+}
+
+.imageCropChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 52px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 26px;
+  background: #00000066;
+  cursor: pointer;
+}
+
+.imageCropChipText {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .galleryIcon {
@@ -535,6 +547,7 @@
   flex-direction: row;
   align-items: center;
   gap: 16px;
+  width: max-content;
   padding: 0 29px;
   white-space: nowrap;
 }
@@ -765,7 +778,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 31px 208px;
-  background: rgba(0, 0, 0, 0.5);
+  background: transparent;
   animation: fadeIn 0.18s ease-out;
 }
 
@@ -774,7 +787,7 @@
   align-items: stretch;
   justify-content: flex-end;
   padding: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: transparent;
 }
 
 .hashtagCard {

@@ -256,11 +256,14 @@ export default function PublishFlow({start, onExit, onHome, onMenu}) {
   const editorOverEditPublish = screen === 'postEditor' && postEditorConfig.returnScreen === 'editPublish';
   const editorOverAdsForm = screen === 'postEditor' && postEditorConfig.returnScreen === 'adsForm';
   const adsFormMounted = screen === 'adsForm' || editorOverAdsForm;
+  // The ad form is a side drawer, so ערוך/פרסם stays visible behind it.
+  const adsFormOverEditPublish = adsFormMounted && adsFormReturn === 'editPublish';
+  const editPublishMounted = screen === 'editPublish' || editorOverEditPublish || adsFormOverEditPublish;
 
   return (
     <>
-      {screen === 'editPublish' || editorOverEditPublish ? (
-        <div inert={editorOverEditPublish ? true : undefined} style={{display: 'contents'}}>
+      {editPublishMounted ? (
+        <div inert={screen !== 'editPublish' ? true : undefined} style={{display: 'contents'}}>
         <EditPublishAdScreen
           refreshKey={refreshKey}
           currentUser={currentUser}

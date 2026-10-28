@@ -5,8 +5,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 10, 16, 0.72);
-  backdrop-filter: blur(6px);
+  background: transparent;
+}
+
+.overlayContained {
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.overlayContained .panel {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  justify-content: center;
 }
 
 .panel {
@@ -82,6 +94,13 @@ button.iconBtn:hover {
   inset: 0;
   border: 2px solid #f7c63a;
   border-radius: 50%;
+  pointer-events: none;
+}
+
+.square {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #f7c63a;
   pointer-events: none;
 }
 

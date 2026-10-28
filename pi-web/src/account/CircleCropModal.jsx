@@ -9,8 +9,10 @@ const ZOOM_STEP = 0.1;
 /** Slack past each image edge — you can keep panning a little after the photo ends. */
 const PAN_OVERSCROLL = 80;
 
-function getLayout(imgSize, pan, zoom) {
-  const baseScale = Math.max(CROP_SIZE / imgSize.width, CROP_SIZE / imgSize.height);
+function getLayout(imgSize, pan, zoom, fit = 'cover') {
+  const byWidth = CROP_SIZE / imgSize.width;
+  const byHeight = CROP_SIZE / imgSize.height;
+  const baseScale = fit === 'contain' ? Math.min(byWidth, byHeight) : Math.max(byWidth, byHeight);
   const totalScale = baseScale * zoom;
   const displayW = imgSize.width * totalScale;
   const displayH = imgSize.height * totalScale;
@@ -52,7 +54,15 @@ function renderCrop(img, layout) {
  * Circle crop editor. `onConfirm` receives `{uri, type, name, file}` (an uploadable picked file),
  * or `{error}` when the crop could not be produced.
  */
-export default function CircleCropModal({imageUri, title = 'חתוך את הלוגו', onCancel, onConfirm}) {
+export default function CircleCropModal({
+  imageUri,
+  title = 'חתוך את הלוגו',
+  shape = 'circle',
+  fit = 'cover',
+  contained = false,
+  onCancel,
+  onConfirm,
+}) {
   const [img, setImg] = useState(null);
   const [pan, setPan] = useState({x: 0, y: 0});
   const [zoom, setZoom] = useState(1);
@@ -76,22 +86,22 @@ export default function CircleCropModal({imageUri, title = 'חתוך את הלו
     () => (img ? {width: img.naturalWidth || 1, height: img.naturalHeight || 1} : {width: 1, height: 1}),
     [img],
   );
-  const layout = useMemo(() => getLayout(imgSize, pan, zoom), [imgSize, pan, zoom]);
+  const layout = useMemo(() => getLayout(imgSize, pan, zoom, fit), [imgSize, pan, zoom, fit]);
 
   const applyPan = useCallback(
     next => {
-      const {displayW, displayH} = getLayout(imgSize, next, zoom);
+      const {displayW, displayH} = getLayout(imgSize, next, zoom, fit);
       setPan(clampPan(next, displayW, displayH));
     },
-    [imgSize, zoom],
+    [imgSize, zoom, fit],
   );
 
   useEffect(() => {
     setPan(p => {
-      const {displayW, displayH} = getLayout(imgSize, p, zoom);
+      const {displayW, displayH} = getLayout(imgSize, p, zoom, fit);
       return clampPan(p, displayW, displayH);
     });
-  }, [zoom, imgSize]);
+  }, [zoom, imgSize, fit]);
 
   useEffect(() => {
     const onKey = e => {
@@ -142,7 +152,12 @@ export default function CircleCropModal({imageUri, title = 'חתוך את הלו
   if (!imageUri) return null;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={title} data-account-modal="">
+    <div
+      className={`${styles.overlay} ${contained ? styles.overlayContained : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      data-account-modal="">
       <div className={styles.panel}>
         <header className={styles.header}>
           <button type="button" className={styles.iconBtn} onClick={onCancel} aria-label="ביטול">
@@ -176,10 +191,12 @@ export default function CircleCropModal({imageUri, title = 'חתוך את הלו
           ) : (
             <Spinner />
           )}
-          <span className={styles.mask} aria-hidden="true" />
-          <span className={styles.ring} aria-hidden="true" />
+          {shape === 'circle' ? <span className={styles.mask} aria-hidden="true" /> : null}
+          <span className={shape === 'circle' ? styles.ring : styles.square} aria-hidden="true" />
         </div>
-        <p className={styles.hint}>גרור כדי למקם · השתמש בזום לדיוק</p>
+        <p className={styles.hint}>
+          {shape === 'circle' ? 'גרור כדי למקם · השתמש בזום לדיוק' : 'גרור כדי לבחור את החלק · השתמש בזום לדיוק'}
+        </p>
 
         <div className={styles.zoomRow}>
           <button

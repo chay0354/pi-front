@@ -68,12 +68,13 @@
   background: rgba(39, 38, 47, 0.7);
 }
 
+/* Two panels like the web Figma: details aside on the right, media + content on the left. */
 .layout {
   display: grid;
-  grid-template-columns: 520px 1016px;
-  column-gap: 64px;
+  grid-template-columns: 423px 1056px;
+  column-gap: 25px;
   align-items: start;
-  width: 1600px;
+  width: 1504px;
   margin: 0 auto;
   padding: 8px 0 96px;
 }
@@ -81,27 +82,56 @@
 .aside {
   display: flex;
   flex-direction: column;
-  padding: 40px 36px 32px;
-  border-radius: 28px;
-  background: var(--blue-500);
+  padding: 22px;
+  border-radius: 22px;
+  background: #262531;
 }
 
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding: 20px;
+  border-radius: 22px;
+  background: #262531;
 }
 
-/* Identity header */
+.asideDivider,
+.mainDivider {
+  display: block;
+  flex-shrink: 0;
+  height: 1px;
+  background: #2c2b39;
+}
+
+.asideDivider {
+  margin: 25px -22px;
+}
+
+.mainDivider {
+  margin: 40px -20px;
+}
+
+/* Identity card */
 .identity {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 14px 20px 8px;
+  border-radius: 16px;
+  background: #373548;
+}
+
+.identityRating {
+  position: absolute;
+  top: 8px;
+  left: 20px;
 }
 
 .avatarWrap {
   position: relative;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .avatarBadge {
@@ -115,16 +145,16 @@
 }
 
 .userName {
-  margin: 0 0 12px;
-  font-size: 24px;
+  margin: 0 0 4px;
+  font-size: 17px;
   font-weight: 500;
   color: var(--white-300);
   text-align: center;
 }
 
 .userEmail {
-  margin-bottom: 28px;
-  font-size: 18px;
+  margin-bottom: 20px;
+  font-size: 13px;
   color: #ffffffcc;
 }
 
@@ -132,8 +162,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 80px;
-  margin-bottom: 30px;
+  gap: 62px;
+  margin-bottom: 14px;
 }
 
 .stat {
@@ -149,22 +179,22 @@
 }
 
 .statNumber {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 500;
   color: var(--white-300);
 }
 
 .statLabel {
   margin-top: 2px;
-  font-size: 16px;
+  font-size: 13px;
   color: #ffffffcc;
 }
 
 .actionRow {
   display: flex;
   justify-content: center;
+  gap: 14px;
   width: 100%;
-  margin-bottom: 8px;
 }
 
 .actionBtn {
@@ -177,9 +207,66 @@
 
 .actionBtn img {
   display: block;
-  width: 134px;
-  height: 74px;
+  width: 92px;
+  height: 67px;
   object-fit: contain;
+}
+
+/* Ad summary under the identity card */
+.adSummary {
+  display: flex;
+  flex-direction: column;
+  margin-top: 40px;
+}
+
+.adSummary:first-child {
+  margin-top: 0;
+}
+
+.summaryActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.summaryIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.summaryIcon:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mapTitle {
+  margin: 0 0 22px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--white-300);
+  text-align: center;
+}
+
+.reportLink {
+  align-self: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #ffffffcc;
+}
+
+.reportLink:hover {
+  text-decoration: underline;
+}
+
+.descriptionTitle {
+  margin: 36px 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--white-300);
 }
 
 .overlayLine,
@@ -227,8 +314,8 @@
 }
 
 .brokerName {
-  font-size: 32px;
-  line-height: 38px;
+  font-size: 26px;
+  line-height: 32px;
 }
 
 .brokerNamePro {
@@ -295,8 +382,8 @@
 }
 
 .bio {
-  font-size: 19px;
-  line-height: 32px;
+  font-size: 17px;
+  line-height: 36px;
   white-space: pre-line;
 }
 
@@ -467,12 +554,18 @@
   margin-bottom: 8px;
 }
 
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .hero {
   position: relative;
   width: 100%;
-  height: 572px;
+  height: 472px;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 28px;
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -509,7 +602,55 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+}
+
+/* Five thumbs fit the column; extra images scroll sideways. */
+.thumbs {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.thumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.thumb {
+  position: relative;
+  flex: 0 0 188px;
+  width: 188px;
+  height: 137px;
+  padding: 0;
+  overflow: hidden;
+  border: 5px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.thumb img,
+.thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.thumbPlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.thumbActive {
+  border-color: var(--yellow-icons, #ffc40a);
 }
 
 .heroPlaceholder {
@@ -608,6 +749,27 @@
   filter: brightness(0) invert(1);
 }
 
+.heroMute {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.heroMute:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
 .heroShare {
   position: absolute;
   top: 20px;
@@ -672,7 +834,17 @@
   pointer-events: none;
 }
 
-.gridTile:hover .gridTileFrame {
+.gridTileVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.gridTile:hover .gridTileFrame,
+.gridTile:hover .gridTileVideo {
   filter: brightness(1.08);
 }
 
@@ -708,15 +880,14 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 32px 4px 16px;
 }
 
 .piPurposeRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  margin-bottom: 10px;
+  min-height: 36px;
+  margin-bottom: 18px;
 }
 
 .adProfessionalName {
@@ -733,17 +904,17 @@
 }
 
 .purposeTag {
-  padding: 7px 14px;
+  padding: 4px 12px;
   border-radius: 20px;
   background: #fff;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 500;
   color: #1e1d27;
 }
 
 .adPrice {
-  margin: 0 0 8px;
-  font-size: 38px;
+  margin: 0 0 6px;
+  font-size: 30px;
   font-weight: 600;
   color: var(--white-300);
 }
@@ -751,9 +922,9 @@
 .adLocation {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 19px;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 16px;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -793,7 +964,7 @@
 }
 
 .postedBy {
-  margin-bottom: 12px;
+  margin: 24px 0 12px;
 }
 
 .postedByLabel {
@@ -874,8 +1045,13 @@
 }
 
 .companyFollowPending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #4d4966;
   color: #fff;
+  line-height: 1;
+  text-align: center;
 }
 
 .companyFollowCancel {
@@ -898,7 +1074,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
+  background: transparent;
 }
 
 .unfollowCard {
@@ -944,8 +1120,8 @@
 }
 
 .adDescription {
-  font-size: 20px;
-  line-height: 30px;
+  font-size: 17px;
+  line-height: 42px;
   white-space: pre-line;
 }
 
@@ -958,28 +1134,28 @@
 
 .features {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 11px 14px;
 }
 
 .featureChip {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 62px;
-  padding: 0 18px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  gap: 10px;
+  height: 53px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #2b2a39;
 }
 
 .featureIcon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
 }
 
 .featureLabel {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .offers {
@@ -1065,7 +1241,8 @@
 }
 
 .constructionCheck {
-  object-fit: contain;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .constructionLabel {
@@ -1088,7 +1265,7 @@
 
 /* My properties */
 .myProperties {
-  margin: 24px 0;
+  margin: 0;
 }
 
 .myPropertiesHeader {
@@ -1123,15 +1300,16 @@
 
 .propertyRow {
   display: flex;
-  gap: 20px;
+  gap: 22px;
   padding-bottom: 10px;
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: #4d4966 transparent;
 }
 
+/* Four cards fill the row. */
 .propertyCard {
-  flex: 0 0 300px;
+  flex: 0 0 calc((100% - 66px) / 4);
   overflow: hidden;
   border-radius: 14px;
   background: #252436;
@@ -1146,7 +1324,7 @@
 .propertyImageWrap {
   position: relative;
   display: block;
-  height: 170px;
+  height: 115px;
 }
 
 .propertyImage {
@@ -1210,40 +1388,70 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding-bottom: 32px;
+  padding: 0 4px 4px;
 }
 
 .reviewsPiTitle {
-  margin-bottom: 18px;
-  font-size: 20px;
+  margin-bottom: 24px;
+  font-size: 17px;
   color: #d2d0dc;
   text-align: center;
 }
 
+/* Smaller tiles than the shared picker. */
+.ratePicker {
+  gap: 24px;
+}
+
+.ratePicker > button {
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.ratePicker > button > span {
+  width: 37px;
+  height: 37px;
+}
+
+.ratePicker > button > span > img {
+  width: 37px;
+  height: 37px;
+}
+
+.ratePicker > button > span > img:only-child {
+  width: 48px;
+  height: 48px;
+}
+
+.ratePicker > button > span > span {
+  padding-top: 7px;
+  font-size: 20px;
+}
+
 .rateBtn {
   align-self: center;
-  width: 560px;
-  height: 52px;
-  margin: 30px 0 28px;
+  width: 360px;
+  height: 44px;
+  margin: 28px 0 22px;
   border-radius: 846px;
-  font-size: 22px;
+  font-size: 18px;
   letter-spacing: 0.2px;
 }
 
 .reviewsListTitle {
-  margin: 0 0 22px;
-  font-size: 20px;
-  font-weight: 600;
+  margin: 0 0 26px;
+  font-size: 17px;
+  font-weight: 400;
   color: #d2d0dc;
   text-align: center;
 }
 
 .reviewsInput {
-  height: 60px;
-  margin-bottom: 30px;
+  height: 53px;
+  margin-bottom: 32px;
   padding: 0 18px;
-  border: 1px solid var(--grey-100);
-  border-radius: 12px;
+  border: 1px solid #4c4962;
+  border-radius: 17px;
   background: transparent;
   font: inherit;
   font-size: 18px;
@@ -1268,37 +1476,36 @@
 }
 
 .reviewList {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 29px;
 }
 
 .reviewCard {
-  padding: 18px 20px;
-  border-radius: 12px;
+  padding: 18px 20px 14px;
+  border-radius: 13px;
   background: #2b2a39;
 }
 
 .reviewHeader {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 10px;
+  gap: 12px;
 }
 
 .reviewAvatar {
   position: relative;
   display: flex;
   justify-content: center;
-  width: 68px;
+  width: 66px;
 }
 
 .reviewStar {
   position: absolute;
-  bottom: -8px;
+  bottom: -10px;
   left: 50%;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   translate: -50% 0;
   object-fit: contain;
 }
@@ -1306,11 +1513,11 @@
 .reviewMeta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .reviewName {
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 500;
   color: var(--white-300);
 }
@@ -1319,23 +1526,23 @@
   align-self: flex-start;
   direction: ltr;
   unicode-bidi: isolate;
-  font-size: 15px;
+  font-size: 13px;
   color: #d2d0dc;
 }
 
 .reviewBody {
-  margin-top: 12px;
-  font-size: 18px;
-  line-height: 28px;
+  margin-top: 20px;
+  font-size: 17px;
+  line-height: 33px;
   white-space: pre-line;
 }
 
 .readMoreWrap {
-  margin-top: 24px;
+  margin-top: 26px;
   text-align: center;
 }
 
 .readMore {
-  font-size: 19px;
+  font-size: 17px;
   text-decoration: underline;
 }

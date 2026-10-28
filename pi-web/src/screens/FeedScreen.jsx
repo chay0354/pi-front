@@ -9,9 +9,11 @@ import FeedArrows from '../components/FeedArrows';
 import GridCard from '../components/GridCard';
 import EmptyState from '../components/EmptyState';
 import RecommendedPros from '../components/RecommendedPros';
+import RecommendedProjects from '../components/RecommendedProjects';
 import {DEFAULT_CATEGORY_ID} from '../feed/categories';
 import {EMPTY_FEED_FILTERS, filterSlotsForCategory, isFilterValueActive} from '../feed/feedFilters';
 import {RECOMMENDED_PROS_EVERY, useRecommendedPros} from '../feed/recommendedPros';
+import {useFeaturedProjects} from '../feed/useHome';
 import {sidebarFiltersForCategory} from '../feed/sidebarFilters';
 import {isVideoAdListing, toFeedItem} from '../feed/listingRules';
 import {useFeed} from '../feed/useFeed';
@@ -110,17 +112,23 @@ export default function FeedScreen({
   };
   const filters = sidebarFiltersForCategory(category);
   const pros = useRecommendedPros();
+  const featuredProjects = useFeaturedProjects();
+  const projects = useMemo(() => featuredProjects.slice(0, 5), [featuredProjects]);
 
   const entries = useMemo(() => {
     const out = [];
+    let slot = 0;
     items.forEach((item, i) => {
       out.push({key: item.id, item});
-      if (!searching && !videoOnly && pros.length > 0 && (i + 1) % RECOMMENDED_PROS_EVERY === 0) {
-        out.push({key: `pros-${i}`, pros});
-      }
+      if (searching || videoOnly || (i + 1) % RECOMMENDED_PROS_EVERY !== 0) return;
+      const showProjects = slot % 2 === 1 && projects.length > 0;
+      slot += 1;
+      if (showProjects) out.push({key: `projects-${i}`, projects});
+      else if (pros.length > 0) out.push({key: `pros-${i}`, pros});
+      else if (projects.length > 0) out.push({key: `projects-${i}`, projects});
     });
     return out;
-  }, [items, pros, searching, videoOnly]);
+  }, [items, pros, projects, searching, videoOnly]);
 
   const selectCategory = useCallback(id => {
     setCategory(id);
@@ -305,7 +313,9 @@ export default function FeedScreen({
           <div className={styles.feedColumn} ref={listRef} onScroll={onScroll}>
             {statusMessage(items.length)}
             {entries.map((entry, i) =>
-              entry.pros ? (
+              entry.projects ? (
+                <RecommendedProjects key={entry.key} projects={entry.projects} active={screenActive && i === activeIndex} />
+              ) : entry.pros ? (
                 <RecommendedPros key={entry.key} pros={entry.pros} active={screenActive && i === activeIndex} />
               ) : (
                 <FeedCard key={entry.key} item={entry.item} active={screenActive && i === activeIndex} />

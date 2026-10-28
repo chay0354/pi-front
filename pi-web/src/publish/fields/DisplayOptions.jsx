@@ -6,8 +6,8 @@ import slideshowImage from '../../assets/mobile/Frame1261158883.png';
 import styles from './fields.module.css';
 
 const OPTIONS = [
-  {name: 'collage', title: "קולאז'", subtitle: 'תצוגה משולבת', image: collageImage},
   {name: 'slideshow', title: 'מצגת', subtitle: 'תמונות מתחלפות', image: slideshowImage},
+  {name: 'collage', title: "קולאז'", subtitle: 'תצוגה משולבת', image: collageImage},
 ];
 
 export const DisplayOptions = ({displayOption, setDisplayOption}) => (
@@ -22,9 +22,9 @@ export const DisplayOptions = ({displayOption, setDisplayOption}) => (
           onClick={() => setDisplayOption?.(displayOption === option.name ? null : option.name)}
           aria-pressed={displayOption === option.name}>
           <span className={styles.doContent}>
-            <span className={styles.doTitle}>{option.title}</span>
-            <span className={styles.doSpacer} />
             <RadioIcon isSelected={displayOption === option.name} />
+            <span className={styles.doSpacer} />
+            <span className={styles.doTitle}>{option.title}</span>
           </span>
           <img src={option.image} alt="" className={styles.doImage} />
           <span className={styles.doSubtitle}>{option.subtitle}</span>

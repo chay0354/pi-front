@@ -10,6 +10,7 @@ import {ProfileNavContext} from './profile/navigation';
 import {useSession} from './auth/session';
 import AccountFlow, {subscriptionEntry} from './account/AccountFlow';
 import {getChatUnreadCount} from './api/chat';
+import SplashScreen from './components/SplashScreen';
 
 const PublishFlow = lazy(() => import('./publish/PublishFlow'));
 const ChatFlow = lazy(() => import('./chat/ChatFlow'));
@@ -189,6 +190,7 @@ export default function App() {
   // A transform (not CSS zoom) keeps element boxes correct for DevTools and the Cursor element picker.
   return (
     <div style={{direction: 'ltr', width: '100vw', height: '100vh', overflow: 'clip'}}>
+      <SplashScreen />
       <div
         id="pi-stage"
         style={{

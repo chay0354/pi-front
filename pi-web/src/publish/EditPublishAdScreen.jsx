@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   mdiAlertCircleOutline,
   mdiChevronLeft,
+  mdiHeartOutline,
   mdiImageOff,
   mdiRocketLaunch,
   mdiSnowflake,
@@ -151,13 +152,19 @@ const getListingEngagementStats = (listing, postRecord) => {
   return {views, likes, comments};
 };
 
-function ListingStatsRow({listing, postRecord}) {
-  const {views, comments} = getListingEngagementStats(listing, postRecord);
+function ListingStatsRow({listing, postRecord, className}) {
+  const {views, likes, comments} = getListingEngagementStats(listing, postRecord);
   return (
-    <div className={styles.statsRow}>
+    <div className={className ? `${styles.statsRow} ${className}` : styles.statsRow}>
       <span className={styles.statItem}>
         <img src={ICONS.views} alt="" width={24} height={24} />
         <span className={styles.statText}>{Number(views).toLocaleString('en-US')}</span>
+      </span>
+      <span className={styles.statItem}>
+        <span className={styles.statIconMuted}>
+          <MdiIcon path={mdiHeartOutline} size={24} color="#666666" />
+        </span>
+        <span className={styles.statText}>{Number(likes || 0).toLocaleString('en-US')}</span>
       </span>
       <span className={styles.statItem}>
         <img src={ICONS.comments} alt="" width={24} height={24} />
@@ -703,6 +710,48 @@ export default function EditPublishAdScreen({
     );
   };
 
+  const renderAdBody = (listing, postRecord, frozen, large) => (
+    <div className={large ? `${styles.adBody} ${styles.adBodyLarge}` : styles.adBody}>
+      <div className={styles.adSummary}>
+        {renderExposure(listing)}
+        <div className={styles.adTextCol}>
+          <p className={large ? `${styles.adDescription} ${styles.adDescriptionLarge}` : styles.adDescription}>
+            {postRecord ? getFeedPostCardCaption(listing) : listing.description || '—'}
+          </p>
+          <ListingStatsRow listing={listing} postRecord={postRecord} className={styles.statsRowGrid} />
+        </div>
+      </div>
+      <div className={styles.gridActionRow}>
+        <button
+          type="button"
+          className={styles.gridActionBtn}
+          onClick={() => openBoostConfirm(listing)}
+          disabled={!canBoostThisMonth}>
+          <span>הקפצה</span>
+          <img src={ICONS.boost} alt="" className={styles.gridActionIcon} />
+        </button>
+        <button
+          type="button"
+          className={styles.gridActionBtn}
+          onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>
+          <span className={frozen ? styles.frozenText : undefined}>{frozen ? 'הוקפאה' : 'הקפאה'}</span>
+          {frozen ? (
+            <span
+              className={`${styles.frozenIcon} ${styles.gridActionIcon}`}
+              style={{'--icon': `url(${ICONS.freeze})`}}
+            />
+          ) : (
+            <img src={ICONS.freeze} alt="" className={styles.gridActionIcon} />
+          )}
+        </button>
+        <button type="button" className={styles.gridActionBtn} onClick={() => setRemoveConfirmListing(listing)}>
+          <span>הסרה</span>
+          <img src={ICONS.remove} alt="" className={styles.gridActionIcon} />
+        </button>
+      </div>
+    </div>
+  );
+
   const renderGridAdCard = (listing, index) => {
     const postRecord = isPostListingRecord(listing);
     const frozen = isFrozen(listing);
@@ -715,42 +764,7 @@ export default function EditPublishAdScreen({
           {renderTypeBadge(listing)}
           <div className={styles.advertisementNo}>{postRecord ? `פוסט מס׳ ${ordinal}` : `מודעה מס׳ ${ordinal}`}</div>
         </div>
-        <div className={styles.adBody}>
-          <div className={styles.adSummary}>
-            {renderExposure(listing)}
-            <div className={styles.adTextCol}>
-              <p className={styles.adDescription}>
-                {postRecord ? getFeedPostCardCaption(listing) : listing.description || '—'}
-              </p>
-              <ListingStatsRow listing={listing} postRecord={postRecord} />
-              <div className={styles.actionRow}>
-                <button
-                  type="button"
-                  className={styles.actionBtn}
-                  onClick={() => openBoostConfirm(listing)}
-                  disabled={!canBoostThisMonth}>
-                  <span>הקפצה</span>
-                  <img src={ICONS.boost} alt="" width={24} height={24} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.actionBtn}
-                  onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>
-                  <span className={frozen ? styles.frozenText : undefined}>{frozen ? 'הוקפאה' : 'הקפאה'}</span>
-                  {frozen ? (
-                    <span className={styles.frozenIcon} style={{'--icon': `url(${ICONS.freeze})`}} />
-                  ) : (
-                    <img src={ICONS.freeze} alt="" width={24} height={24} />
-                  )}
-                </button>
-                <button type="button" className={styles.actionBtn} onClick={() => setRemoveConfirmListing(listing)}>
-                  <span>הסרה</span>
-                  <img src={ICONS.remove} alt="" width={24} height={24} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        {renderAdBody(listing, postRecord, frozen, false)}
       </article>
     );
   };
@@ -767,44 +781,7 @@ export default function EditPublishAdScreen({
           {renderTypeBadge(listing)}
           <div className={styles.advertisementNo}>{postRecord ? `פוסט מס׳ ${ordinal}` : `מודעה מס׳ ${ordinal}`}</div>
         </div>
-        <div className={`${styles.adBody} ${styles.adBodyLarge}`}>
-          <div className={styles.adSummary}>
-            {renderExposure(listing)}
-            <div className={styles.adTextCol}>
-              <p className={`${styles.adDescription} ${styles.adDescriptionLarge}`}>
-                {postRecord ? getFeedPostCardCaption(listing) : listing.description || '—'}
-              </p>
-              <div className={styles.cardFooter}>
-                <ListingStatsRow listing={listing} postRecord={postRecord} />
-                <div className={styles.actionRow}>
-                  <button
-                    type="button"
-                    className={styles.actionBtn}
-                    onClick={() => openBoostConfirm(listing)}
-                    disabled={!canBoostThisMonth}>
-                    <span>הקפצה</span>
-                    <img src={ICONS.boost} alt="" width={24} height={24} />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.actionBtn}
-                    onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>
-                    <span className={frozen ? styles.frozenText : undefined}>{frozen ? 'הוקפאה' : 'הקפאה'}</span>
-                    {frozen ? (
-                      <span className={styles.frozenIcon} style={{'--icon': `url(${ICONS.freeze})`}} />
-                    ) : (
-                      <img src={ICONS.freeze} alt="" width={24} height={24} />
-                    )}
-                  </button>
-                  <button type="button" className={styles.actionBtn} onClick={() => setRemoveConfirmListing(listing)}>
-                    <span>הסרה</span>
-                    <img src={ICONS.remove} alt="" width={24} height={24} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {renderAdBody(listing, postRecord, frozen, true)}
       </article>
     );
   };
@@ -889,18 +866,18 @@ export default function EditPublishAdScreen({
             <button
               type="button"
               className={styles.viewBtn}
-              aria-pressed={viewMode === 'grid'}
-              aria-label="תצוגת רשת"
-              onClick={() => setViewMode('grid')}>
-              <img src={ICONS.grid} alt="" width={24} height={24} />
-            </button>
-            <button
-              type="button"
-              className={styles.viewBtn}
               aria-pressed={viewMode === 'list'}
               aria-label="תצוגת רשימה"
               onClick={() => setViewMode('list')}>
               <img src={ICONS.list} alt="" width={24} height={24} />
+            </button>
+            <button
+              type="button"
+              className={styles.viewBtn}
+              aria-pressed={viewMode === 'grid'}
+              aria-label="תצוגת רשת"
+              onClick={() => setViewMode('grid')}>
+              <img src={ICONS.grid} alt="" width={24} height={24} />
             </button>
           </div>
           <button type="button" className={styles.createPill} onClick={() => setShowCreateSheet(true)}>

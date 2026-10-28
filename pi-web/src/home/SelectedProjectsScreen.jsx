@@ -94,7 +94,7 @@ export default function SelectedProjectsScreen({onClose}) {
         <span className={styles.back} />
       </header>
       <label className={styles.search}>
-        <MdiIcon path={mdiMagnify} size={22} color="#8c85b3" />
+        <MdiIcon path={mdiMagnify} size={30} color="#8c85b3" />
         <input value={query} placeholder="חפש לפי עיר / חברה" onChange={e => setQuery(e.target.value)} />
       </label>
       {loading ? <p className={styles.status}>טוען...</p> : null}

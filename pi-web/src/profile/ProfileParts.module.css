@@ -263,46 +263,49 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  padding: 28px;
+  padding: 0 4px;
 }
 
 .smartLogo {
-  width: 104px;
-  height: 42px;
-  margin-bottom: 14px;
+  width: 84px;
+  height: 37px;
+  margin-bottom: 8px;
   object-fit: contain;
 }
 
 .smartIntro {
-  margin-bottom: 22px;
-  font-size: 18px;
-  line-height: 26px;
+  margin-bottom: 15px;
+  font-size: 16px;
+  line-height: 22px;
   color: var(--white-100);
   text-align: center;
 }
 
+/* One row of content-sized chips, packed from the right. */
 .smartGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
   width: 100%;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 .smartBtn {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 60px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: #252436;
+  gap: 8px;
+  height: 53px;
+  padding: 0 11px;
+  border-radius: 8px;
+  background: #2b2a39;
   transition: background 0.15s;
 }
 
 .smartBtn:hover:not(:disabled) {
-  background: #2f2e44;
+  background: #35344a;
 }
 
 .smartBtn:disabled {
@@ -311,24 +314,24 @@
 }
 
 .smartBtnIcon {
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
 .smartBtnLabel {
-  font-size: 18px;
+  font-size: 16px;
   color: var(--white-100);
   white-space: nowrap;
 }
 
 .smartText {
   width: 100%;
-  height: 260px;
+  height: 218px;
   padding: 16px 20px;
-  border: 1px solid var(--grey-100);
-  border-radius: 22px;
+  border: 1px solid #5a5674;
+  border-radius: 19px;
   background: transparent;
   font: inherit;
   font-size: 18px;
@@ -354,15 +357,6 @@
 }
 
 .smartPartners .smartIntro {
-  font-size: 19px;
-}
-
-.smartPartners .smartBtnIcon {
-  width: 32px;
-  height: 32px;
-}
-
-.smartPartners .smartBtnLabel {
   font-size: 19px;
 }
 

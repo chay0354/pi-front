@@ -1709,7 +1709,7 @@
   z-index: 45;
   display: flex;
   align-items: flex-end;
-  background: rgba(0, 0, 0, 0.5);
+  background: transparent;
 }
 
 .msgMenuSheet {

@@ -38,6 +38,7 @@ import {collageCells} from '../feed/collage';
 import {detectImagePadding} from '../feed/imagePadding';
 import {layoutPostTextBlock, postTextFont, postTextFrame, postTextVisual} from '../feed/postText';
 import {feedListingProfilePayload, useProfileNav} from '../profile/navigation';
+import VolumeIcon from './VolumeIcon';
 import styles from './FeedCard.module.css';
 
 const PURPOSE_LABEL = {rent: 'להשכרה', sale: 'למכירה'};
@@ -285,18 +286,56 @@ function playWithSound(video) {
   });
 }
 
+/** One mute choice for every feed video, so it stays as you scroll. */
+let feedMuted = false;
+const feedMuteListeners = new Set();
+
+function useFeedMuted() {
+  const [muted, setMuted] = useState(feedMuted);
+  useEffect(() => {
+    feedMuteListeners.add(setMuted);
+    return () => feedMuteListeners.delete(setMuted);
+  }, []);
+  const toggle = useCallback(() => {
+    feedMuted = !feedMuted;
+    feedMuteListeners.forEach(listener => listener(feedMuted));
+  }, []);
+  return [muted, toggle];
+}
+
+function MuteButton({muted, onToggle}) {
+  return (
+    <button
+      type="button"
+      className={styles.muteBtn}
+      aria-label={muted ? 'הפעל קול' : 'השתק'}
+      aria-pressed={!muted}
+      onClick={event => {
+        event.stopPropagation();
+        onToggle();
+      }}>
+      <VolumeIcon muted={muted} size={26} />
+    </button>
+  );
+}
+
 /**
  * Plays the card's videos while it is the active feed item, like mobile's FeedVideoPlayer:
  * the `bindSound` video is audible, `bind` videos (blurred backdrops) stay muted.
  */
-function useVideoPlayback(active) {
+function useVideoPlayback(active, soundOn = true) {
   const nodes = useRef(new Map());
+  const [paused, setPaused] = useState(false);
   const bind = useCallback(node => {
     if (node) nodes.current.set(node, false);
   }, []);
   const bindSound = useCallback(node => {
     if (node) nodes.current.set(node, true);
   }, []);
+  const togglePaused = useCallback(() => setPaused(value => !value), []);
+  useEffect(() => {
+    if (!active) setPaused(false);
+  }, [active]);
   useEffect(() => {
     nodes.current.forEach((audible, video) => {
       if (!video.isConnected) {
@@ -304,9 +343,14 @@ function useVideoPlayback(active) {
         awaitingGesture.delete(video);
         return;
       }
-      if (active && audible) {
+      if (active && paused) {
+        awaitingGesture.delete(video);
+        video.pause();
+      } else if (active && audible && soundOn) {
         playWithSound(video);
       } else if (active) {
+        awaitingGesture.delete(video);
+        video.muted = true;
         video.play().catch(() => {});
       } else {
         awaitingGesture.delete(video);
@@ -314,8 +358,24 @@ function useVideoPlayback(active) {
         video.muted = true;
       }
     });
-  }, [active]);
-  return {bind, bindSound};
+  }, [active, soundOn, paused]);
+  return {bind, bindSound, paused, togglePaused};
+}
+
+function PauseLayer({paused, onToggle}) {
+  return (
+    <button
+      type="button"
+      className={styles.pauseLayer}
+      aria-label={paused ? 'הפעל סרטון' : 'עצור סרטון'}
+      aria-pressed={paused}
+      onClick={event => {
+        event.stopPropagation();
+        onToggle();
+      }}>
+      {paused ? <span className={styles.playIcon} aria-hidden /> : null}
+    </button>
+  );
 }
 
 function PostTextLayer({payload}) {
@@ -372,11 +432,12 @@ function PostTextLayer({payload}) {
 
 export function PostMedia({item, active}) {
   const [index, setIndex] = useState(0);
+  const [muted, toggleMuted] = useFeedMuted();
   const showVideo = Boolean(item.videoUrl) && (item.preferVideo || item.images.length === 0);
   const still = item.images[index] || item.images[0] || '';
   const count = item.images.length;
   const colorFill = useColorEdgeFill(!showVideo ? still : '');
-  const {bind: bindVideo, bindSound} = useVideoPlayback(active && showVideo);
+  const {bind: bindVideo, bindSound, paused, togglePaused} = useVideoPlayback(active && showVideo, !muted);
 
   return (
     <div
@@ -434,6 +495,12 @@ export function PostMedia({item, active}) {
         )}
       </div>}
       {item.postText ? <PostTextLayer payload={item.postText} /> : null}
+      {showVideo ? (
+        <>
+          <PauseLayer paused={paused} onToggle={togglePaused} />
+          <MuteButton muted={muted} onToggle={toggleMuted} />
+        </>
+      ) : null}
       {!showVideo && count > 1 && (
         <>
           <button
@@ -841,7 +908,8 @@ function Media({item, active}) {
     showVideo ? 'video' : 'image',
   );
   const fitted = layout.fit;
-  const {bind: bindVideo, bindSound} = useVideoPlayback(active && showVideo);
+  const [muted, toggleMuted] = useFeedMuted();
+  const {bind: bindVideo, bindSound, paused, togglePaused} = useVideoPlayback(active && showVideo, !muted);
 
   if (showVideo) {
     return (
@@ -859,6 +927,8 @@ function Media({item, active}) {
           loop
           playsInline
         />
+        <PauseLayer paused={paused} onToggle={togglePaused} />
+        <MuteButton muted={muted} onToggle={toggleMuted} />
       </>
     );
   }

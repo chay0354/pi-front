@@ -4,7 +4,7 @@ import {MultiPicturesUpload} from './MultiPicturesUpload';
 import {Divider} from './Divider';
 import {VideoUpload} from './VideoUpload';
 
-const dividerStyle = {marginVertical: 10};
+const dividerStyle = {marginTop: 0, marginBottom: 18.5};
 
 export const MultiImageWithVideo = ({
   mainImage,

@@ -1,8 +1,10 @@
 import {Fragment, useCallback, useEffect, useRef, useState} from 'react';
-import {mdiClose} from '@mdi/js';
+import {mdiClose, mdiHeart, mdiHeartOutline, mdiShareVariant} from '@mdi/js';
+import {persistAdLike, useIsLiked} from '../feed/likedListings';
 import {cancelFollowRequest, getFollowStatus, sendFollowRequest, submitReview, toSubscriptionId, unfollowUser} from '../api/client';
 import {useSession} from '../auth/session';
 import MdiIcon from '../publish/MdiIcon';
+import VolumeIcon from '../components/VolumeIcon';
 import {isReduceMotion} from '../a11y/prefs';
 import {PostMedia} from '../components/FeedCard';
 import {toFeedItem} from '../feed/listingRules';
@@ -50,6 +52,7 @@ import {
   firstNonEmpty,
   formatPostViewCount,
   getListingViewCount,
+  isVideoLikeMediaUrl,
   useUserProfile,
 } from '../profile/useUserProfile';
 import styles from './ProfileScreen.module.css';
@@ -103,15 +106,20 @@ function PostGridTile({tile, onOpen}) {
   const base = toFeedItem(tile.listing);
   const still = tile.isVideo ? tile.posterUri : tile.uri;
   const item = {...base, videoUrl: null, preferVideo: false, images: still ? [still] : base.images.slice(0, 1)};
+  const videoFrame = tile.isVideo && !item.images.length && tile.uri;
   return (
     <button type="button" className={styles.gridTile} onClick={() => onOpen(tile)} aria-label="פתח פוסט">
-      <span
-        className={styles.gridTileFrame}
-        style={{width: POST_FRAME_W, height: POST_FRAME_H, transform: `scale(${POST_TILE_SCALE})`}}>
-        <PostMedia item={item} active={false} />
-      </span>
+      {videoFrame ? (
+        <video className={styles.gridTileVideo} src={`${tile.uri}#t=0.1`} muted preload="metadata" playsInline />
+      ) : (
+        <span
+          className={styles.gridTileFrame}
+          style={{width: POST_FRAME_W, height: POST_FRAME_H, transform: `scale(${POST_TILE_SCALE})`}}>
+          <PostMedia item={item} active={false} />
+        </span>
+      )}
       {tile.isVideo ? (
-        <span className={`${styles.gridPlay} ${tile.posterUri ? styles.gridPlayDim : ''}`}>
+        <span className={`${styles.gridPlay} ${tile.posterUri || videoFrame ? styles.gridPlayDim : ''}`}>
           <Icon name="play-circle" size={44} color="rgba(255,255,255,0.85)" />
         </span>
       ) : null}
@@ -246,14 +254,22 @@ function playWithSound(video) {
   });
 }
 
-function HeroVideo({slide, active}) {
+function HeroVideo({slide, active, muted}) {
   const ref = useRef(null);
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
-    if (active) playWithSound(video);
-    else video.pause();
-  }, [active, slide.uri]);
+    if (!active) {
+      video.pause();
+      return;
+    }
+    video.muted = muted;
+    video.play().catch(() => {
+      if (muted) return;
+      video.muted = true;
+      video.play().catch(() => {});
+    });
+  }, [active, muted, slide.uri]);
   return (
     <>
       {slide.posterUri ? (
@@ -369,6 +385,28 @@ function ProjectOffers({cards}) {
         })}
       </div>
     </div>
+  );
+}
+
+function ListingFavoriteButton({id}) {
+  const liked = useIsLiked(id);
+  const {currentUser} = useSession();
+  return (
+    <button
+      type="button"
+      className={styles.summaryIcon}
+      aria-label="הוספה למועדפים"
+      aria-pressed={liked}
+      onClick={() => {
+        const userId = currentUser?.id || currentUser?.subscription_id;
+        if (!userId) {
+          requireLogin();
+          return;
+        }
+        if (id != null) persistAdLike(id, userId).catch(err => window.alert(err?.message || 'לא ניתן לעדכן מועדפים'));
+      }}>
+      <MdiIcon path={liked ? mdiHeart : mdiHeartOutline} size={26} color="#fff" />
+    </button>
   );
 }
 
@@ -508,6 +546,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
   const scrollRef = useRef(null);
   const [subview, setSubview] = useState(null);
   const [heroIndex, setHeroIndex] = useState(0);
+  const [heroMuted, setHeroMuted] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
   const [selectedRating, setSelectedRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -697,6 +736,8 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
     !vm.showProfilePostGridAtTop &&
     (vm.isDedicatedListingAdProfile || !vm.isProfessional);
   const showLastAdCard = vm.showProfilePostGridAtTop ? vm.renderProfilePostGrid : Boolean(lastAd);
+  const showAdSummary =
+    showAdBody && !vm.isBnbListingAdProfile && !vm.isPartnersListingAdProfile && !vm.isLandListingAdProfile;
   const showMyProperties = !vm.isRegularUserAdView && !vm.hideMyPropertiesSection && !vm.isDedicatedListingAdProfile;
 
   const renderPiRating = () =>
@@ -731,6 +772,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
   };
 
   const renderHero = () => (
+    <div className={styles.gallery}>
     <div className={styles.hero}>
       {vm.lastAdImages.length > 0 ? (
         <>
@@ -739,7 +781,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
               {vm.lastAdImages.map((slide, i) => (
                 <div key={slide.isVideo ? `video-${i}` : `img-${i}-${slide.uri}`} className={styles.heroSlide}>
                   {slide.isVideo ? (
-                    <HeroVideo slide={slide} active={screenActive && i === heroIndex} />
+                    <HeroVideo slide={slide} active={screenActive && i === heroIndex} muted={heroMuted} />
                   ) : (
                     <>
                       <img className={styles.heroBlur} src={slide.uri} alt="" onError={hideBrokenImage} />
@@ -782,6 +824,16 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
           <button type="button" className={styles.heroExpand} onClick={() => setViewerIndex(heroIndex)} aria-label="מסך מלא">
             <img src={asset('full_screen.png')} alt="" width={22} height={22} />
           </button>
+          {vm.lastAdImages[heroIndex]?.isVideo ? (
+            <button
+              type="button"
+              className={styles.heroMute}
+              aria-label={heroMuted ? 'הפעל קול' : 'השתק'}
+              aria-pressed={!heroMuted}
+              onClick={() => setHeroMuted(value => !value)}>
+              <VolumeIcon muted={heroMuted} size={26} />
+            </button>
+          ) : null}
         </>
       ) : (
         <img
@@ -796,50 +848,88 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
         </button>
       ) : null}
     </div>
+    {vm.lastAdImages.length > 1 ? (
+      <div className={styles.thumbs} dir="ltr">
+        {vm.lastAdImages.map((slide, i) => {
+          const poster = slide.isVideo ? slide.posterUri : null;
+          const posterIsImage = poster && !isVideoLikeMediaUrl(poster);
+          return (
+            <button
+              key={slide.isVideo ? `thumb-video-${i}` : `thumb-${i}-${slide.uri}`}
+              type="button"
+              className={`${styles.thumb} ${i === heroIndex ? styles.thumbActive : ''}`}
+              onClick={() => setHeroIndex(i)}
+              aria-label={slide.isVideo ? `סרטון ${i + 1}` : `תמונה ${i + 1}`}
+              aria-current={i === heroIndex ? 'true' : undefined}>
+              {slide.isVideo ? (
+                posterIsImage ? (
+                  <img src={poster} alt="" onError={hideBrokenImage} />
+                ) : (
+                  <video src={slide.uri} poster={poster || undefined} muted preload="metadata" playsInline />
+                )
+              ) : (
+                <img src={slide.uri} alt="" onError={hideBrokenImage} />
+              )}
+              {slide.isVideo ? (
+                <span className={styles.thumbPlay}>
+                  <Icon name="play-circle" size={30} color="rgba(255,255,255,0.92)" />
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    ) : null}
+    </div>
   );
 
-  const renderStandardAdBody = () => {
-    const heroAddress = firstNonEmpty(
-      lastAd?.address,
-      lastAd?.location,
-      lastAd?.search_address,
-      lastAd?.land_address,
-      user?.address,
-      user?.location,
-      user?.search_address,
-      user?.land_address,
-      user?._fromTikTokPost ? user?.creator_business_address : null,
-      user?._fromTikTokPost ? user?.business_address : null,
-    );
-    return (
-      <>
-        <div className={styles.piPurposeRow}>
-          {(vm.showProfileRatingFeatures && !vm.isRegularUserAdView ? (
-            <PiRatingBadge rating={vm.displayPiRating} variant="profile" />
-          ) : null) || <span />}
-          {vm.isProfessional ? (
-            <span className={styles.adProfessionalName}>{vm.displayName}</span>
-          ) : vm.isCompany && isPreSaleListing(lastAd || user) ? (
-            <img className={styles.preSale} src={asset('pre-sale.png')} alt="Pre-sale" />
-          ) : !vm.isCompany ? (
-            <span className={styles.purposeTag}>{lastAd.purpose || 'להשכרה'}</span>
-          ) : null}
-        </div>
-        {!vm.isProfessional ? (
-          <h2 className={styles.adPrice}>
-            {vm.isCompany
-              ? String(lastAd?.project_name || lastAd?.projectName || '').trim() || formatPriceHe(lastAd)
-              : lastAd.price || '₪5,000'}
-          </h2>
-        ) : null}
-        {heroAddress ? (
-          <p className={styles.adLocation}>
-            <Icon name="location-pin" size={22} color="rgba(255,255,255,0.9)" />
-            <span>{heroAddress}</span>
-          </p>
-        ) : null}
-        {vm.isBroker ? <span className={styles.adDivider} /> : null}
-        {vm.isCompany && !isCommercialCategoryListing(lastAd || user) ? (
+  const heroAddress = firstNonEmpty(
+    lastAd?.address,
+    lastAd?.location,
+    lastAd?.search_address,
+    lastAd?.land_address,
+    user?.address,
+    user?.location,
+    user?.search_address,
+    user?.land_address,
+    user?._fromTikTokPost ? user?.creator_business_address : null,
+    user?._fromTikTokPost ? user?.business_address : null,
+  );
+
+  /** Aside block under the identity card: tag + heart/share, price, address, features, map. */
+  const renderAdSummary = () => (
+    <section className={styles.adSummary}>
+      <div className={styles.piPurposeRow}>
+        {vm.isProfessional ? (
+          <span className={styles.adProfessionalName}>{vm.displayName}</span>
+        ) : vm.isCompany && isPreSaleListing(lastAd || user) ? (
+          <img className={styles.preSale} src={asset('pre-sale.png')} alt="Pre-sale" />
+        ) : !vm.isCompany ? (
+          <span className={styles.purposeTag}>{lastAd.purpose || 'להשכרה'}</span>
+        ) : (
+          <span />
+        )}
+        <span className={styles.summaryActions}>
+          <ListingFavoriteButton id={lastAd?.id} />
+          <button type="button" className={styles.summaryIcon} onClick={shareProfile} aria-label="שתף מודעה">
+            <MdiIcon path={mdiShareVariant} size={24} color="#fff" />
+          </button>
+        </span>
+      </div>
+      {!vm.isProfessional ? (
+        <h2 className={styles.adPrice}>
+          {vm.isCompany
+            ? String(lastAd?.project_name || lastAd?.projectName || '').trim() || formatPriceHe(lastAd)
+            : lastAd.price || '₪5,000'}
+        </h2>
+      ) : null}
+      {heroAddress ? (
+        <p className={styles.adLocation}>
+          <Icon name="location-pin" size={20} color="rgba(255,255,255,0.9)" />
+          <span>{heroAddress}</span>
+        </p>
+      ) : null}
+      {vm.isCompany && !isCommercialCategoryListing(lastAd || user) ? (
           <div className={styles.companyStats}>
             <span className={styles.companyStat}>
               <img className={styles.statIcon} src={asset('building_icon.png')} alt="" />
@@ -854,67 +944,14 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
               {formatCompanyApartmentsLabel(vm.companyStats.apartments)}
             </span>
           </div>
-        ) : null}
-        {vm.isCompany ? <span className={styles.adDivider} /> : null}
-        {vm.isRegularUserAdView ? (
-          <>
-            <span className={styles.adDivider} />
-            <p className={`${styles.adDescription} ${styles.clamp6}`}>
-              {String(lastAd.description || '').trim() || 'אין תיאור'}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className={styles.postedBy}>
-              <span className={styles.postedByLabel}>פורסם ע"י</span>
-              <div className={styles.postedByRow}>
-                <span className={styles.postedByPublisher}>
-                  {lastAd.profileImageUrl || vm.displayImage ? (
-                    <img className={styles.postedByAvatar} src={lastAd.profileImageUrl || vm.displayImage} alt="" />
-                  ) : (
-                    <span className={`${styles.postedByAvatar} ${styles.postedByAvatarPh}`}>
-                      <Icon name="account" size={16} />
-                    </span>
-                  )}
-                  <span className={styles.postedByName}>{vm.displayName}</span>
-                </span>
-                {vm.showCompanyFeedHeroTop ? renderCompanyFeedFollowAction() : null}
-              </div>
-            </div>
-            <p className={`${styles.adDescription} ${styles.clamp6}`}>{lastAd.description || DUMMY_AD_DESCRIPTION}</p>
-          </>
-        )}
-        <span className={styles.adDivider} />
-        {vm.isBroker && vm.listingCategoryNum !== 7 ? (
-          <>
-            <FeatureChips features={vm.adFeatures} keyPrefix="feat" />
-            <span className={styles.adDividerWide} />
-          </>
-        ) : vm.isCompany && vm.projectOffersCards.length > 0 ? (
-          <>
-            <ProjectOffers cards={vm.projectOffersCards} />
-            <span className={styles.adDividerWide} />
-            <ConstructionStatus status={lastAd?.construction_status} />
-            <span className={styles.adDivider} />
-          </>
-        ) : (
-          <>
-            {vm.isCompany ? (
-              <>
-                <ConstructionStatus status={lastAd?.construction_status} />
-                <span className={styles.adDividerWide} />
-              </>
-            ) : null}
-            {vm.isRegularUserAdView && vm.listingCategoryNum !== 7 ? (
-              <>
-                <FeatureChips features={vm.adFeatures} keyPrefix="feat-regular" />
-                <span className={styles.adDividerWide} />
-              </>
-            ) : null}
-          </>
-        )}
-        {!vm.isBroker && !vm.isCompany && !vm.isRegularUserAdView ? <span className={styles.adDividerWide} /> : null}
-        {vm.showLocationMap ? (
+      ) : null}
+      {(vm.isBroker || vm.isRegularUserAdView) && vm.listingCategoryNum !== 7 ? (
+        <FeatureChips features={vm.adFeatures} keyPrefix="feat" />
+      ) : null}
+      {vm.showLocationMap ? (
+        <>
+          <span className={styles.asideDivider} />
+          <h3 className={styles.mapTitle}>מיקום הנכס</h3>
           <LocationMap
             address={firstNonEmpty(
               lastAd?.address,
@@ -923,12 +960,59 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
               lastAd?.land_address,
               vm.brokerAddress,
             )}
-            height={340}
+            height={230}
           />
-        ) : null}
-      </>
-    );
-  };
+        </>
+      ) : null}
+      {isOwn ? null : (
+        <button type="button" className={styles.reportLink} onClick={openReport}>
+          דווח על מודעה
+        </button>
+      )}
+    </section>
+  );
+
+  /** Main column under the gallery: description, plus company offers / construction status. */
+  const renderStandardAdBody = () => (
+    <>
+      {vm.showCompanyFeedHeroTop ? (
+        <div className={styles.postedBy}>
+          <span className={styles.postedByLabel}>פורסם ע"י</span>
+          <div className={styles.postedByRow}>
+            <span className={styles.postedByPublisher}>
+              {lastAd.profileImageUrl || vm.displayImage ? (
+                <img className={styles.postedByAvatar} src={lastAd.profileImageUrl || vm.displayImage} alt="" />
+              ) : (
+                <span className={`${styles.postedByAvatar} ${styles.postedByAvatarPh}`}>
+                  <Icon name="account" size={16} />
+                </span>
+              )}
+              <span className={styles.postedByName}>{vm.displayName}</span>
+            </span>
+            {renderCompanyFeedFollowAction()}
+          </div>
+        </div>
+      ) : null}
+      <h3 className={styles.descriptionTitle}>תיאור</h3>
+      <p className={`${styles.adDescription} ${styles.clamp6}`}>
+        {vm.isRegularUserAdView
+          ? String(lastAd.description || '').trim() || 'אין תיאור'
+          : lastAd.description || DUMMY_AD_DESCRIPTION}
+      </p>
+      {vm.isCompany && vm.projectOffersCards.length > 0 ? (
+        <>
+          <span className={styles.adDividerWide} />
+          <ProjectOffers cards={vm.projectOffersCards} />
+        </>
+      ) : null}
+      {vm.isCompany ? (
+        <>
+          <span className={styles.adDividerWide} />
+          <ConstructionStatus status={lastAd?.construction_status} />
+        </>
+      ) : null}
+    </>
+  );
 
   const renderAdBody = () => (
     <div className={styles.adBody}>
@@ -1027,7 +1111,6 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
         </>
       ) : null}
       <p className={styles.bio}>{vm.brokerBio && String(vm.brokerBio).trim() ? vm.brokerBio : 'אין תיאור'}</p>
-      {!vm.hideMyPropertiesSection ? <span className={styles.bioDivider} /> : null}
     </section>
   );
 
@@ -1098,7 +1181,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
           <div className={styles.contactMain}>
             <ProfileAvatar
               uri={vm.contactLogo || undefined}
-              size={110}
+              size={98}
               subscriptionType={vm.parentAgency || vm.resolvedCreator || user}
               forceGoldRing={vm.forceGoldRingForListing}
               className={styles.contactAvatar}
@@ -1139,7 +1222,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
             </button>
           ) : null}
         </div>
-        {showProfileMessagingCta ? (
+        {showProfileMessagingCta && !showStandardHeader ? (
           <div className={styles.cta}>
             <button type="button" className={styles.piChatBtn} onClick={handleChatPress} aria-label="Pi chat">
               <img src={asset('menu/pichat.png')} alt="" />
@@ -1159,7 +1242,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
       {!vm.isBnbCommentsOnly ? (
         <>
           <p className={styles.reviewsPiTitle}>כמה כוכבי פאי היית נותן על השירות שקיבלת?</p>
-          <RatingImprovePicker value={selectedRating} onChange={setSelectedRating} />
+          <RatingImprovePicker className={styles.ratePicker} value={selectedRating} onChange={setSelectedRating} />
           <GoldButton className={styles.rateBtn} onClick={handleRate} disabled={submittingReview}>
             {submittingReview ? 'שולח...' : 'דרג'}
           </GoldButton>
@@ -1218,7 +1301,6 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
             aria-label={vm.isBnbCommentsOnly ? 'כל התגובות' : 'כל הביקורות'}>
             קרא עוד
           </button>
-          <span className={styles.contactDivider} />
         </div>
       ) : null}
     </section>
@@ -1286,7 +1368,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
                 <span className={styles.avatarWrap}>
                   <ProfileAvatar
                     uri={vm.displayLogoUri || undefined}
-                    size={128}
+                    size={70}
                     subscriptionType={vm.resolvedCreator || user}
                     forceGoldRing={vm.forceGoldRingForListing}
                   />
@@ -1317,34 +1399,40 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
                   }}
                   onOpen={onOpenFollowHub}
                 />
-                <div className={styles.actionRow}>
-                  <button type="button" className={styles.actionBtn} onClick={handleChatPress} aria-label="הודעה">
-                    <img src={asset('chatWithText.png')} alt="" />
-                  </button>
-                  <button type="button" className={styles.actionBtn} onClick={handleCallPress} aria-label="חייג">
-                    <img src={asset('callWithText.png')} alt="" />
-                  </button>
-                </div>
+                {!isOwn ? (
+                  <div className={styles.actionRow}>
+                    <button type="button" className={styles.actionBtn} onClick={handleChatPress} aria-label="הודעה">
+                      <img src={asset('chatWithText.png')} alt="" />
+                    </button>
+                    <button type="button" className={styles.actionBtn} onClick={handleCallPress} aria-label="טלפון">
+                      <img src={asset('callWithText.png')} alt="" />
+                    </button>
+                  </div>
+                ) : null}
+                {vm.showProfileRatingFeatures && !vm.isRegularUserAdView ? (
+                  <span className={styles.identityRating}>
+                    <PiRatingBadge rating={vm.displayPiRating} variant="profile" />
+                  </span>
+                ) : null}
               </div>
             ) : null}
 
-            {vm.showProfileRatingFeatures &&
-            !vm.openedFromPost &&
-            !vm.showProfessionalFigmaProfile &&
-            !vm.isDedicatedListingAdProfile &&
-            asideHasIdentity ? (
-              <span className={styles.overlayLine} />
+            {showAdSummary ? renderAdSummary() : null}
+            {showBrokerCard ? (
+              <>
+                {asideHasIdentity || showAdSummary ? <span className={styles.asideDivider} /> : null}
+                {renderBrokerCard()}
+              </>
             ) : null}
-            {showBrokerCard ? renderBrokerCard() : null}
 
             {vm.showContactDetailsBlock ? (
               <>
-                {asideHasIdentity || showBrokerCard ? <span className={styles.contactDivider} /> : null}
+                {asideHasIdentity || showBrokerCard || showAdSummary ? <span className={styles.asideDivider} /> : null}
                 {renderContactDetails()}
               </>
             ) : null}
 
-            {reportButton}
+            {showAdSummary || isOwn ? null : reportButton}
           </aside>
 
           <main className={styles.main}>
@@ -1364,16 +1452,21 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
 
             {vm.showPiAiSmartInfoBlock ? (
               <>
-                <span className={styles.profileDivider} />
+                <span className={styles.mainDivider} />
                 <SmartInfoBlock address={vm.adAddress} variant="main" />
               </>
             ) : null}
 
-            {showMyProperties ? renderMyProperties() : null}
+            {showMyProperties ? (
+              <>
+                <span className={styles.mainDivider} />
+                {renderMyProperties()}
+              </>
+            ) : null}
 
             {vm.showListingFeedbackSection ? (
               <>
-                <span className={styles.contactDivider} />
+                <span className={styles.mainDivider} />
                 {renderReviews()}
               </>
             ) : null}

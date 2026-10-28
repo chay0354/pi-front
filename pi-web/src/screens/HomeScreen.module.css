@@ -2,25 +2,73 @@
 
 .screen {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 1920px;
   height: 100%;
   overflow: hidden;
   background: var(--blue-100);
 }
 
+.aiResults {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-left: 400px;
+  padding: 24px 32px 40px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.aiResults::-webkit-scrollbar {
+  display: none;
+}
+
+.aiGrid {
+  direction: rtl;
+  display: grid;
+  grid-template-columns: repeat(3, 400px);
+  justify-content: start;
+  gap: 24px;
+}
+
+.aiProGrid {
+  direction: rtl;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.aiStatus {
+  margin: 0 0 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  text-align: center;
+}
+
 .stage {
   position: relative;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   width: 1920px;
-  height: 100%;
   min-height: 0;
 }
 
 /* The skyline is the first layer. Everything after it stays above that photo. */
-.stage > :not(.backdrop) {
+.stage > :not(.backdrop):not(.aiLayer) {
   position: relative;
   z-index: 1;
+}
+
+.aiLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.aiLayer > * {
+  pointer-events: auto;
 }
 
 /* Middle band fills whatever height is left between the top bar and the pros strip. */
@@ -297,7 +345,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(14, 13, 20, 0.72);
+  background: transparent;
 }
 
 .appQrCard {
@@ -490,22 +538,81 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 20px;
   width: 100%;
   height: 133px;
   padding: 18px 36px 18px 18px;
+  border: 0;
   border-radius: 16px 0 0 16px;
   background: var(--blue-600);
   filter: drop-shadow(0 4px 35px rgba(0, 0, 0, 0.35));
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.mortgage:hover {
+  background: #33324a;
+}
+
+.mortgageInner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 20px;
+  width: 100%;
+  transition: opacity 0.28s ease;
+}
+
+.mortgageFade {
+  opacity: 0;
 }
 
 .mortgageText {
+  margin: 0;
   font-size: 20px;
   line-height: normal;
   color: var(--yellow-icons);
   text-align: right;
   text-box-edge: cap alphabetic;
   text-box-trim: trim-both;
+}
+
+.promoIcon {
+  position: relative;
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+}
+
+.promoDisc {
+  position: absolute;
+  top: 8px;
+  left: 4px;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4d4966 0%, #2b2a39 70%);
+  box-shadow: inset 0 0 0 2px rgba(52, 243, 224, 0.35);
+}
+
+.promoGlass {
+  position: absolute;
+  z-index: 1;
+  left: calc(50% + 6px);
+  top: calc(50% - 8px);
+  width: 82.5px;
+  height: 82.5px;
+  translate: -50% -50%;
+  pointer-events: none;
+}
+
+.promoGlyph {
+  position: absolute;
+  z-index: 2;
+  top: 13px;
+  left: 9px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 
 /* ---- "כוכבי פאי" cards ---- */

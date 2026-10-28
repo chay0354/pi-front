@@ -6,7 +6,10 @@ import {getProfessionalsDirectory, toSubscriptionId} from '../api/client';
 import {getProfessionalSpecializationsForTypes} from '../account/constants';
 import {PiRatingBadge, ProfileAvatar} from '../profile/ProfileParts';
 import {isHlsUri, muxThumbnailUri, resolveAdVideoUri} from '../profile/lib/videoPlayback';
+import FeedArrows from '../components/FeedArrows';
 import styles from './ProfessionalsDirectoryScreen.module.css';
+
+const FEED_SCROLL_PAD = 24;
 
 const FILTER_TYPES = ['תיווך', 'עורך דין', 'עיצוב פנים', 'יועץ משכנתאות', 'שמאות', 'אדריכלות', 'מלווה משקיעים'];
 const TYPE_ALIASES = {
@@ -122,24 +125,36 @@ function TagRow({tags, list = false}) {
   );
 }
 
+const proTitle = item => String(item?.display_name || (isBroker(item) ? 'תיווך' : 'בעל מקצוע')).trim();
+const proPoster = (item, videoUri) => (videoUri && muxThumbnailUri(videoUri, {width: 720, time: 0})) || item?.profile_image_url || '';
+
+/** Regular view: one feed-sized card per professional, like the TikTok feed column. */
 function ProfessionalCard({item, own, active, muted, onToggleMute, onOpen, onMessage}) {
   const videoUri = resolveVideoUri(item);
-  const photo = item?.profile_image_url || '';
-  const poster = (videoUri && muxThumbnailUri(videoUri, {width: 480, time: 0})) || photo || '';
-  const title = String(item?.display_name || (isBroker(item) ? 'תיווך' : 'בעל מקצוע')).trim();
-  const address = String(item?.address || 'מיקום לא זמין').trim();
-  const description = String(item?.bio || 'ללא תיאור').trim();
+  const poster = proPoster(item, videoUri);
+  const title = proTitle(item);
+  const address = String(item?.address || '').trim();
+  const description = String(item?.bio || '').trim();
   const types = collectTypes(item);
-  const tags = collectTags(item);
-  const regions = collectRegionTags(item);
+  const tags = [...collectTags(item), ...collectRegionTags(item)].slice(0, 5);
   const videoRef = useRef(null);
   useEffect(() => {
     const node = videoRef.current;
-    if (!node || !active) return undefined;
+    if (!node) return undefined;
+    if (!active) {
+      node.pause();
+      return undefined;
+    }
     node.muted = muted;
     const start = () => {
       const play = node.play?.();
-      if (play && typeof play.catch === 'function') play.catch(() => {});
+      if (play && typeof play.catch === 'function') {
+        play.catch(() => {
+          if (node.muted) return;
+          node.muted = true;
+          node.play?.().catch(() => {});
+        });
+      }
     };
     start();
     node.addEventListener('loadeddata', start);
@@ -147,96 +162,118 @@ function ProfessionalCard({item, own, active, muted, onToggleMute, onOpen, onMes
   }, [active, muted, videoUri]);
 
   return (
-    <article className={styles.card} data-pro-id={item.id}>
-      <div className={styles.media}>
-        {videoUri && active ? (
+    <article className={styles.feedCard} data-pro-id={item.id} aria-label={title}>
+      <header className={styles.feedTop}>
+        <PiRatingBadge rating={ratingValue(item.average_rating)} variant="listing" />
+        <button type="button" className={styles.feedIdentity} onClick={onOpen}>
+          <span className={styles.feedIdentityText}>
+            <span className={styles.feedName}>{title}</span>
+            {types.length ? <span className={styles.feedTypes}>{types.join(' · ')}</span> : null}
+          </span>
+          <ProfileAvatar uri={item.profile_image_url} name={title} size={52} subscriptionType={isBroker(item) ? 'broker' : 'professional'} />
+        </button>
+      </header>
+
+      <div className={styles.feedMedia}>
+        {poster ? <img className={styles.feedBlur} src={poster} alt="" /> : null}
+        {videoUri ? (
           <video
             ref={videoRef}
-            className={styles.mediaFill}
+            className={styles.feedMediaFit}
             src={videoUri}
-            autoPlay
             muted={muted}
             loop
             playsInline
-            preload="auto"
+            preload={active ? 'auto' : 'metadata'}
             poster={poster || undefined}
           />
         ) : poster ? (
-          <img className={styles.mediaFill} src={poster} alt="" />
+          <img className={styles.feedMediaFit} src={poster} alt="" />
         ) : (
-          <span className={`${styles.mediaFill} ${styles.mediaFallback}`} />
+          <span className={styles.feedNoMedia} />
         )}
-        <span className={styles.mediaShade} />
         <button type="button" className={styles.mediaOpen} aria-label={title} onClick={onOpen} />
-        {videoUri && active ? (
+        {videoUri ? (
           <button type="button" className={styles.mute} aria-label={muted ? 'הפעל קול' : 'השתק'} onClick={onToggleMute}>
-            <MdiIcon path={muted ? mdiVolumeOff : mdiVolumeHigh} size={31} color="#fff" />
+            <MdiIcon path={muted ? mdiVolumeOff : mdiVolumeHigh} size={26} color="#fff" />
           </button>
         ) : null}
       </div>
-      <div className={styles.cardBody}>
-        <button type="button" className={styles.cardText} onClick={onOpen}>
-          <span className={styles.cardHead}>
-            <span className={styles.cardTitleCol}>
-              <span className={styles.cardTitle}>{title}</span>
-              <TagRow tags={types} />
-              {isBroker(item) ? null : (
-                <span className={styles.address}>
-                  <img src={locationIcon} alt="" />
-                  <span>{address}</span>
-                </span>
-              )}
-            </span>
-            <PiRatingBadge rating={ratingValue(item.average_rating)} variant="card" />
-          </span>
-          <span className={styles.tagGroup}>
-            <TagRow tags={tags} />
-            <TagRow tags={regions} />
-          </span>
-          <span className={styles.bio}>{description}</span>
-        </button>
-        <button type="button" className={styles.message} aria-label="הודעה" disabled={own} onClick={onMessage}>
+
+      <footer className={styles.feedBottom}>
+        <button type="button" className={styles.feedMessage} aria-label="הודעה" disabled={own} onClick={onMessage}>
           <img src={messageButton} alt="" />
         </button>
+        <button type="button" className={styles.feedDetails} onClick={onOpen}>
+          {address && !isBroker(item) ? (
+            <span className={styles.address}>
+              <span>{address}</span>
+              <img src={locationIcon} alt="" />
+            </span>
+          ) : null}
+          <TagRow tags={tags} />
+          {description ? <span className={styles.bio}>{description}</span> : null}
+        </button>
+      </footer>
+    </article>
+  );
+}
+
+/** Small view: the 3-per-row grid card from the feed's grid mode. */
+function ProfessionalGridCard({item, onOpen}) {
+  const videoUri = resolveVideoUri(item);
+  const poster = proPoster(item, videoUri);
+  const title = proTitle(item);
+  const address = String(item?.address || '').trim();
+  const types = collectTypes(item);
+  const tags = [...collectTags(item), ...collectRegionTags(item)].slice(0, 3);
+  return (
+    <article
+      className={styles.gridCard}
+      role="button"
+      tabIndex={0}
+      aria-label={title}
+      onClick={onOpen}
+      onKeyDown={e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        onOpen?.();
+      }}>
+      <div className={styles.gridMedia}>
+        {poster ? <img className={styles.gridPhoto} src={poster} alt="" loading="lazy" /> : <span className={styles.feedNoMedia} />}
+        <span className={styles.gridShade} aria-hidden />
+        <span className={styles.gridAvatar}>
+          <ProfileAvatar uri={item.profile_image_url} name={title} size={54} subscriptionType={isBroker(item) ? 'broker' : 'professional'} />
+        </span>
+        {videoUri ? <span className={styles.gridPlay} aria-hidden /> : null}
+      </div>
+      <div className={styles.gridContent}>
+        <div className={styles.gridTopRow}>
+          <span className={styles.gridRating}>
+            <PiRatingBadge rating={ratingValue(item.average_rating)} variant="listing" />
+          </span>
+          {types[0] ? <span className={styles.gridType}>{types[0]}</span> : null}
+        </div>
+        <p className={styles.gridTitle}>{title}</p>
+        {address && !isBroker(item) ? (
+          <p className={styles.gridAddress}>
+            <span>{address}</span>
+            <img src={locationIcon} alt="" />
+          </p>
+        ) : null}
+        <TagRow tags={tags} list />
       </div>
     </article>
   );
 }
 
-function ProfessionalListCard({item, onOpen}) {
-  const title = String(item?.display_name || (isBroker(item) ? 'תיווך' : 'בעל מקצוע')).trim();
-  const address = String(item?.address || 'מיקום לא זמין').trim();
-  return (
-    <article className={styles.listCard}>
-      <button type="button" className={styles.listHit} onClick={onOpen}>
-        <span className={styles.listTop}>
-          <ProfileAvatar uri={item.profile_image_url} name={title} size={101} subscriptionType={isBroker(item) ? 'broker' : 'professional'} />
-          <span className={styles.listInfo}>
-            <span className={styles.listTitleRow}>
-              <span className={styles.listTitleCol}>
-                <span className={styles.listTitle}>{title}</span>
-                <TagRow tags={collectTypes(item)} list />
-              </span>
-              <PiRatingBadge rating={ratingValue(item.average_rating)} variant="list" />
-            </span>
-            {isBroker(item) ? null : (
-              <span className={styles.listAddress}>
-                <img src={locationIcon} alt="" />
-                <span>{address}</span>
-              </span>
-            )}
-          </span>
-        </span>
-        <span className={styles.tagGroup}>
-          <TagRow tags={collectTags(item)} list />
-          <TagRow tags={collectRegionTags(item)} list />
-        </span>
-      </button>
-    </article>
-  );
-}
-
-export default function ProfessionalsDirectoryScreen({currentUser, onClose, onOpenProfessional, onMessage}) {
+export default function ProfessionalsDirectoryScreen({
+  currentUser,
+  onClose,
+  onOpenProfessional,
+  onMessage,
+  initialTypes = [],
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [professionals, setProfessionals] = useState([]);
@@ -246,12 +283,12 @@ export default function ProfessionalsDirectoryScreen({currentUser, onClose, onOp
   const [draftTypes, setDraftTypes] = useState([]);
   const [draftSpecs, setDraftSpecs] = useState([]);
   const [location, setLocation] = useState('');
-  const [types, setTypes] = useState([]);
+  const [types, setTypes] = useState(() => (Array.isArray(initialTypes) ? initialTypes.filter(Boolean) : []));
   const [specs, setSpecs] = useState([]);
   const [sort, setSort] = useState('none');
   const [view, setView] = useState('cards');
-  const [visibleIds, setVisibleIds] = useState(() => new Set());
-  const [unmutedId, setUnmutedId] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [muted, setMuted] = useState(false);
   const listRef = useRef(null);
 
   const load = useCallback(() => {
@@ -303,39 +340,70 @@ export default function ProfessionalsDirectoryScreen({currentUser, onClose, onOp
   }, [professionals, query, location, types, specs, sort]);
 
   useEffect(() => {
-    const root = listRef.current;
-    if (view !== 'cards' || !root) {
-      setVisibleIds(new Set());
-      return undefined;
-    }
-    const ratios = new Map();
-    const pick = () => {
-      const next = new Set();
-      ratios.forEach((ratio, id) => {
-        if (id && ratio >= 0.45) next.add(String(id));
-      });
-      setVisibleIds(prev => {
-        if (prev.size === next.size && [...next].every(id => prev.has(id))) return prev;
-        return next;
-      });
-    };
-    const observer = new IntersectionObserver(
-      entries => {
-        entries.forEach(entry => {
-          ratios.set(entry.target.getAttribute('data-pro-id'), entry.intersectionRatio);
-        });
-        pick();
-      },
-      {root, threshold: [0, 0.45, 0.75, 1]},
-    );
-    root.querySelectorAll('[data-pro-id]').forEach(node => observer.observe(node));
-    return () => observer.disconnect();
+    listRef.current?.scrollTo({top: 0});
+    setActiveIndex(0);
   }, [view, filtered]);
+
+  const scrollToIndex = useCallback(
+    index => {
+      const root = listRef.current;
+      if (!root) return;
+      const clamped = Math.max(0, Math.min(filtered.length - 1, index));
+      const card = root.querySelectorAll(':scope > article')[clamped];
+      if (card) root.scrollTo({top: Math.max(0, card.offsetTop - FEED_SCROLL_PAD), behavior: 'smooth'});
+    },
+    [filtered.length],
+  );
+
+  const onFeedScroll = event => {
+    const root = event.currentTarget;
+    const y = root.scrollTop + FEED_SCROLL_PAD;
+    let index = 0;
+    root.querySelectorAll(':scope > article').forEach((card, i) => {
+      if (card.offsetTop <= y + card.offsetHeight * 0.35) index = i;
+    });
+    setActiveIndex(prev => (prev === index ? prev : index));
+  };
+
+  useEffect(() => {
+    if (view !== 'cards' || filtersOpen) return undefined;
+    const onKey = event => {
+      if (event.target instanceof HTMLInputElement) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        scrollToIndex(activeIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        scrollToIndex(activeIndex - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [view, filtersOpen, activeIndex, scrollToIndex]);
 
   const myId = toSubscriptionId(currentUser?.id || currentUser?.subscription_id);
   const filtersOn = Boolean(location || types.length || specs.length);
   const sortImage = sort === 'none' ? sortNone : sort === 'desc' ? sortUp : sortDown;
   const sortLabel = sort === 'none' ? 'מיין לפי דירוג' : sort === 'desc' ? 'ממוין לפי דירוג גבוה לנמוך' : 'ממוין לפי דירוג נמוך לגבוה';
+
+  const statusRow = (
+    <>
+      {loading ? (
+        <p className={styles.status}>
+          <span className={styles.spinner} />
+        </p>
+      ) : null}
+      {error ? (
+        <p className={styles.status}>
+          {error}
+          <button type="button" className={styles.retry} onClick={load}>
+            נסה שוב
+          </button>
+        </p>
+      ) : null}
+      {!loading && !error && filtered.length === 0 ? <p className={styles.status}>לא נמצאו בעלי מקצוע</p> : null}
+    </>
+  );
 
   const toggleDraft = (value, kind) => {
     if (kind === 'type') {
@@ -387,47 +455,56 @@ export default function ProfessionalsDirectoryScreen({currentUser, onClose, onOp
             <button
               type="button"
               className={styles.viewToggle}
-              aria-label={view === 'cards' ? 'תצוגת רשימה' : 'תצוגת כרטיסים'}
-              onClick={() => {
-                setUnmutedId(null);
-                setVisibleIds(new Set());
-                setView(prev => (prev === 'cards' ? 'list' : 'cards'));
-              }}>
+              aria-label={view === 'cards' ? 'תצוגה קטנה' : 'תצוגה רגילה'}
+              onClick={() => setView(prev => (prev === 'cards' ? 'list' : 'cards'))}>
               <img src={view === 'cards' ? viewCardsIcon : viewListIcon} alt="" />
             </button>
           </div>
         </header>
 
-        <div className={styles.list} ref={listRef}>
-          {loading ? <p className={styles.status}><span className={styles.spinner} /></p> : null}
-          {error ? (
-            <p className={styles.status}>
-              {error}
-              <button type="button" className={styles.retry} onClick={load}>נסה שוב</button>
-            </p>
-          ) : null}
-          {!loading && !error && filtered.length === 0 ? <p className={styles.status}>לא נמצאו בעלי מקצוע</p> : null}
-          {filtered.map(item => {
-            const own = Boolean(myId && String(item.id) === String(myId));
-            if (view === 'list') {
-              return <ProfessionalListCard key={item.id} item={item} onOpen={() => onOpenProfessional?.(item)} />;
-            }
-            return (
-              <ProfessionalCard
-                key={item.id}
-                item={item}
-                own={own}
-                active={visibleIds.has(String(item.id))}
-                muted={String(unmutedId) !== String(item.id)}
-                onToggleMute={() => setUnmutedId(prev => (String(prev) === String(item.id) ? null : item.id))}
-                onOpen={() => onOpenProfessional?.(item)}
-                onMessage={() => {
-                  if (!own) onMessage?.(item);
-                }}
-              />
-            );
-          })}
-        </div>
+        {view === 'list' ? (
+          <div className={styles.gridColumn} ref={listRef}>
+            {statusRow}
+            <div className={styles.grid}>
+              {filtered.map(item => (
+                <ProfessionalGridCard key={item.id} item={item} onOpen={() => onOpenProfessional?.(item)} />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={styles.feedColumn} ref={listRef} onScroll={onFeedScroll}>
+              {statusRow}
+              {filtered.map((item, i) => {
+                const own = Boolean(myId && String(item.id) === String(myId));
+                return (
+                  <ProfessionalCard
+                    key={item.id}
+                    item={item}
+                    own={own}
+                    active={!filtersOpen && i === activeIndex}
+                    muted={muted}
+                    onToggleMute={() => setMuted(value => !value)}
+                    onOpen={() => onOpenProfessional?.(item)}
+                    onMessage={() => {
+                      if (!own) onMessage?.(item);
+                    }}
+                  />
+                );
+              })}
+            </div>
+            {filtered.length > 1 ? (
+              <div className={styles.arrows}>
+                <FeedArrows
+                  canPrev={activeIndex > 0}
+                  canNext={activeIndex < filtered.length - 1}
+                  onPrev={() => scrollToIndex(activeIndex - 1)}
+                  onNext={() => scrollToIndex(activeIndex + 1)}
+                />
+              </div>
+            ) : null}
+          </>
+        )}
 
         {filtersOpen ? (
           <div className={styles.settings}>

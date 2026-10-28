@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px 31px;
-  background: rgba(0, 0, 0, 0.72);
+  background: transparent;
   animation: fadeIn 0.18s ease-out;
 }
 

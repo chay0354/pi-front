@@ -3619,3 +3619,25 @@ export async function unregisterPushToken(token) {
   });
   return response.json().catch(() => ({}));
 }
+
+export async function getPropertyAlerts(subscriptionId) {
+  const response = await apiFetch(
+    `${apiBase()}/api/property-alerts?subscriptionId=${encodeURIComponent(subscriptionId)}`,
+    {timeoutMs: 15000},
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || 'לא הצלחנו לטעון את ההתראות');
+  return data;
+}
+
+export async function savePropertyAlerts({subscriptionId, enabled, categories}) {
+  const response = await apiFetch(`${apiBase()}/api/property-alerts`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subscriptionId, enabled: enabled === true, categories}),
+    timeoutMs: 15000,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || 'השמירה נכשלה');
+  return data;
+}

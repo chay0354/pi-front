@@ -1,4 +1,4 @@
-import {mdiChevronLeft} from '@mdi/js';
+import {mdiChevronLeft, mdiClose} from '@mdi/js';
 import MdiIcon from './MdiIcon';
 import {mobileAsset} from './lib/publishRules';
 import styles from './CreateAdSheet.module.css';
@@ -24,16 +24,19 @@ export function CreateAdSheetRow({title, subtitle, iconSource, onPress}) {
   );
 }
 
-/** "צור מודעה" drawer — Figma node 2:238701, anchored to the bottom of its host. */
-export default function CreateAdSheet({children, onClose}) {
+/** "צור מודעה" drawer — slides in from the left edge of its host. */
+export default function CreateAdSheet({children, onClose, title = 'פרסם מודעה'}) {
   return (
     <div className={styles.root} data-account-modal="">
       <button type="button" className={styles.overlay} aria-label="סגור" onClick={onClose} />
-      <div className={styles.sheet} role="dialog" aria-modal="true">
-        <div className={styles.handleWrap}>
-          <span className={styles.handle} />
-        </div>
-        {children}
+      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={title}>
+        <header className={styles.header}>
+          <h2 className={styles.headerTitle}>{title}</h2>
+          <button type="button" className={styles.closeBtn} aria-label="סגור" onClick={onClose}>
+            <MdiIcon path={mdiClose} size={26} color="#fff" />
+          </button>
+        </header>
+        <div className={styles.options}>{children}</div>
       </div>
     </div>
   );

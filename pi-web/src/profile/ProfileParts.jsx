@@ -134,9 +134,9 @@ const STAR_ART = [1, 2, 3, 4].map(n => asset(`improve/figma-star-${n}.svg`));
 const STAR_FIVE = asset('starts/5.png');
 
 /** Mobile RatingImprovePicker (Figma 8:78507): five tiles, 1 on the physical left. */
-export function RatingImprovePicker({value = 0, onChange}) {
+export function RatingImprovePicker({value = 0, onChange, className = ''}) {
   return (
-    <div className={styles.picker} dir="ltr">
+    <div className={`${styles.picker} ${className}`} dir="ltr">
       {[1, 2, 3, 4, 5].map(n => (
         <button
           key={n}
@@ -247,7 +247,11 @@ const SMART_BUTTONS = [
   {label: 'החיים בשכונה', key: 'neighborhood'},
   {label: 'מטרדים', key: 'nuisances'},
   {label: 'מרכזי קניות', key: 'shopping'},
-];
+].map((item, index) => ({...item, icon: SMART_ICONS[index]}));
+/** Figma single-row order, right to left. */
+const SMART_ROW = ['schools', 'nuisances', 'security', 'transport', 'shopping', 'neighborhood', 'institutions', 'avgprice'].map(key =>
+  SMART_BUTTONS.find(item => item.key === key),
+);
 
 /** PiAi neighborhood block — profile (`main`) and dedicated BnB / שותפים / קרקע (`partners`) styles. */
 export function SmartInfoBlock({address = '', variant = 'main'}) {
@@ -260,9 +264,9 @@ export function SmartInfoBlock({address = '', variant = 'main'}) {
   return (
     <div className={`${styles.smart} ${variant === 'partners' ? styles.smartPartners : ''}`}>
       <img className={styles.smartLogo} src={PI_AI_LOGO} alt="PiAi" />
-      <p className={styles.smartIntro}>קבלו מידע חכם על סביבת הנכס בלחיצת כפתור</p>
+      <p className={styles.smartIntro}>קבל מידע חכם על סביבת הנכס בלחיצת כפתור</p>
       <div className={styles.smartGrid}>
-        {SMART_BUTTONS.map((item, index) => (
+        {SMART_ROW.map(item => (
           <button
             key={item.key}
             type="button"
@@ -276,7 +280,7 @@ export function SmartInfoBlock({address = '', variant = 'main'}) {
               setLoading(false);
               if (result.text) setText(result.text);
             }}>
-            <img className={styles.smartBtnIcon} src={SMART_ICONS[index]} alt="" />
+            <img className={styles.smartBtnIcon} src={item.icon} alt="" />
             <span className={styles.smartBtnLabel}>{item.label}</span>
           </button>
         ))}

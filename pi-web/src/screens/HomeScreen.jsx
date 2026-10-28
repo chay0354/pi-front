@@ -1,17 +1,20 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {mdiClose} from '@mdi/js';
 import TopBar from '../components/TopBar';
 import {PiRating} from '../components/FeedCard';
 import VolumeIcon from '../components/VolumeIcon';
-import PiAiPanel from '../components/PiAiPanel';
-import {MortgageIcon, PiAiMascot, PiChatMark} from '../components/figma/home.generated';
+import GridCard from '../components/GridCard';
+import PiAiPanel, {PiAiQueryBar} from '../components/PiAiPanel';
+import {PiAiMascot, PiChatMark} from '../components/figma/home.generated';
+import {isFeedPost, toFeedItem} from '../feed/listingRules';
+import {usePiAiSearch} from '../feed/usePiAiSearch';
+import {inferPiAiKind, usePiAiProfessionals} from '../feed/usePiAiProfessionals';
+import AiProfessionalCard from '../home/AiProfessionalCard';
+import ProPromo from '../home/ProPromo';
 import {useFeaturedProjects, useHomeProfessionals} from '../feed/useHome';
-import {getStoriesFeed} from '../api/client';
 import {useSession} from '../auth/session';
 import ProfessionalsDirectoryScreen from '../home/ProfessionalsDirectoryScreen';
 import SelectedProjectsScreen from '../home/SelectedProjectsScreen';
-import StoryStrip from '../home/StoryStrip';
-import StoryViewer from '../home/StoryViewer';
 import {directoryProfilePayload, featuredProjectProfilePayload, useProfileNav} from '../profile/navigation';
 import {AppDownloadQr} from '../promo/AppDownloadQr';
 import {FEATURED_AD_MS, FEATURED_APP_ADS} from '../promo/appDownload';
@@ -341,7 +344,7 @@ function ProItem({pro, hidden, onOpen}) {
 }
 
 /** Conveyor: the list is rendered twice and the track drifts rightward, wrapping after one copy. */
-function ProsStrip({pros, onOpenPro, onOpenDirectory, rings, storiesLoading, onOpenRing}) {
+function ProsStrip({pros, onOpenPro, onOpenDirectory}) {
   const trackRef = useRef(null);
   const offset = useRef(0);
   const pending = useRef(0);
@@ -376,7 +379,6 @@ function ProsStrip({pros, onOpenPro, onOpenDirectory, rings, storiesLoading, onO
     <section className={styles.pros} aria-label="בעלי מקצוע בתחום הנדל״ן">
       <div className={styles.prosInner}>
         <SectionHeader className={styles.prosHeader} title="בעלי מקצוע בתחום הנדל״ן" action="לכל בעלי המקצוע" onAction={onOpenDirectory} />
-        <StoryStrip rings={rings} loading={storiesLoading} onOpen={onOpenRing} />
         <div
           className={styles.prosRail}
           onMouseEnter={() => (paused.current = true)}
@@ -406,53 +408,43 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
   const {pros, topBroker, topProfessional} = useHomeProfessionals();
   const {currentUser} = useSession();
   const [piAiOpen, setPiAiOpen] = useState(false);
+  const [piAiDraft, setPiAiDraft] = useState('');
+  const [piAiQuery, setPiAiQuery] = useState('');
+  const piAiKind = inferPiAiKind(piAiQuery);
+  const piAiSearch = usePiAiSearch(piAiKind === 'listings' ? piAiQuery : '');
+  const piAiProSearch = usePiAiProfessionals(piAiKind === 'professionals' ? piAiQuery : '');
+  const piAiActiveSearch = piAiKind === 'professionals' ? piAiProSearch : piAiSearch;
+  const piAiItems = useMemo(
+    () => piAiSearch.rows.filter(row => !isFeedPost(row)).map(toFeedItem),
+    [piAiSearch.rows],
+  );
+  const piAiPros = piAiProSearch.rows;
+  const piAiResults = Boolean(piAiQuery.trim());
   const [qrOpen, setQrOpen] = useState(false);
-  const [storyRings, setStoryRings] = useState([]);
-  const [storiesLoading, setStoriesLoading] = useState(true);
-  const [viewerRing, setViewerRing] = useState(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [directoryTypes, setDirectoryTypes] = useState([]);
+  const openDirectory = (types = []) => {
+    setDirectoryTypes(Array.isArray(types) ? types : types ? [types] : []);
+    setDirectoryOpen(true);
+  };
+  const closeDirectory = () => {
+    setDirectoryOpen(false);
+    setDirectoryTypes([]);
+  };
   const [projectsOpen, setProjectsOpen] = useState(false);
   const onOpenPiAi = () => setPiAiOpen(true);
-  const closePiAi = useCallback(() => setPiAiOpen(false), []);
+  const closePiAi = useCallback(() => {
+    setPiAiOpen(false);
+    setPiAiDraft('');
+    setPiAiQuery('');
+  }, []);
+  const openCategoryFromAi = id => {
+    closePiAi();
+    onOpenCategory?.(id);
+  };
   const nav = useProfileNav();
   const openPro = pro => nav.open(directoryProfilePayload(pro.raw));
   const openProject = project => nav.open(featuredProjectProfilePayload(project.raw));
-
-  const loadStories = useCallback(async () => {
-    try {
-      const res = await getStoriesFeed({limit: 80});
-      if (res?.success === false || !Array.isArray(res?.rings)) return;
-      setStoryRings(res.rings);
-    } catch {
-      /* keep the last good rings */
-    } finally {
-      setStoriesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadStories();
-  }, [loadStories]);
-
-  const ringIndex = viewerRing
-    ? storyRings.findIndex(ring => String(ring.subscription_id) === String(viewerRing.subscription_id))
-    : -1;
-  const prevStory = ringIndex > 0 ? storyRings.slice(0, ringIndex).reverse().find(ring => ring.slides?.length) : null;
-  const nextStory = ringIndex >= 0 ? storyRings.slice(ringIndex + 1).find(ring => ring.slides?.length) : null;
-
-  const openStoryProfile = ring => {
-    if (!ring?.subscription_id) return;
-    setViewerRing(null);
-    nav.open({
-      id: ring.subscription_id,
-      subscription_id: ring.subscription_id,
-      owner_id: ring.subscription_id,
-      name: ring.display_name,
-      display_name: ring.display_name,
-      profile_image_url: ring.profile_image_url,
-      subscription_type: ring.subscription_type,
-    });
-  };
 
   const messageProfessional = item => {
     onOpenChat?.({
@@ -465,23 +457,64 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
 
   return (
     <div className={styles.screen}>
-      {piAiOpen && <PiAiPanel onClose={closePiAi} />}
+      {piAiResults ? <PiAiQueryBar query={piAiQuery} /> : null}
       <div className={styles.stage}>
-        <div className={styles.backdrop} aria-hidden>
-          <div className={styles.backdropImage}>
-            <img src={imgBackdrop} alt="" />
+        {!piAiResults ? (
+          <div className={styles.backdrop} aria-hidden>
+            <div className={styles.backdropImage}>
+              <img src={imgBackdrop} alt="" />
+            </div>
+            <div className={styles.backdropFade} />
           </div>
-          <div className={styles.backdropFade} />
-        </div>
+        ) : null}
 
-        <TopBar selectedCategory={null} onSelectCategory={onOpenCategory} onHome={() => {}} onMenu={onMenu} />
+        <TopBar
+          selectedCategory={null}
+          onSelectCategory={openCategoryFromAi}
+          onHome={closePiAi}
+          onMenu={onMenu}
+        />
 
+        {piAiResults ? (
+          <div className={styles.aiResults}>
+            {piAiActiveSearch.status === 'loading' ? (
+              <p className={styles.aiStatus} dir="auto">
+                {piAiActiveSearch.message || 'מחפש עבורך…'}
+              </p>
+            ) : null}
+            {piAiActiveSearch.status === 'ready' &&
+            (piAiKind === 'professionals' ? piAiPros.length : piAiItems.length) === 0 ? (
+              <p className={styles.aiStatus} dir="auto">
+                {piAiKind === 'professionals' ? 'לא נמצאו בעלי מקצוע תואמים' : 'לא נמצאו מודעות תואמות'}
+              </p>
+            ) : null}
+            {piAiKind === 'professionals' ? (
+              <div className={styles.aiProGrid}>
+                {piAiPros.map(item => (
+                  <AiProfessionalCard
+                    key={item.id}
+                    item={item}
+                    onOpen={() => nav.open(directoryProfilePayload(item))}
+                    onMessage={messageProfessional}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className={styles.aiGrid}>
+                {piAiItems.map(item => (
+                  <GridCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         <div className={styles.canvas}>
         <FeaturedProject
           projects={projects}
           onOpen={() => setProjectsOpen(true)}
           onOpenProject={openProject}
-          active={nav.active && !viewerRing && !directoryOpen && !projectsOpen}
+          active={nav.active && !directoryOpen && !projectsOpen && !piAiOpen}
           qrOpen={qrOpen}
           onQrOpen={() => setQrOpen(true)}
           onQrClose={() => setQrOpen(false)}
@@ -514,43 +547,34 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
             onClick={onOpenChat}>
             <PiChatMark unread={unreadChatCount > 0} />
           </button>
-          <div className={styles.mortgage}>
-            <MortgageIcon />
-            <p className={styles.mortgageText} dir="auto">
-              מחפשים יועצי משכנתאות?
-            </p>
-          </div>
+          <ProPromo onOpen={type => openDirectory([type])} />
           <TopRatedCard entry={topBroker} side="right" onOpenPro={openPro} />
         </div>
         </div>
 
-        <ProsStrip
-          pros={pros}
-          onOpenPro={openPro}
-          onOpenDirectory={() => setDirectoryOpen(true)}
-          rings={storyRings}
-          storiesLoading={storiesLoading}
-          onOpenRing={ring => ring?.slides?.length && setViewerRing(ring)}
-        />
+        <ProsStrip pros={pros} onOpenPro={openPro} onOpenDirectory={() => openDirectory()} />
+        </>
+        )}
+        {piAiOpen ? (
+          <div className={styles.aiLayer}>
+            <PiAiPanel
+              draft={piAiDraft}
+              setDraft={setPiAiDraft}
+            query={piAiQuery}
+            search={piAiActiveSearch}
+            resultCount={piAiKind === 'professionals' ? piAiPros.length : piAiItems.length}
+            kind={piAiKind}
+            onSearch={setPiAiQuery}
+              onClose={closePiAi}
+            />
+          </div>
+        ) : null}
       </div>
-      {viewerRing ? (
-        <StoryViewer
-          ring={viewerRing}
-          prevRing={prevStory}
-          nextRing={nextStory}
-          onClose={() => {
-            setViewerRing(null);
-            loadStories();
-          }}
-          onNextUser={() => setViewerRing(nextStory || null)}
-          onPrevUser={() => prevStory && setViewerRing(prevStory)}
-          onOpenProfile={openStoryProfile}
-        />
-      ) : null}
       {directoryOpen ? (
         <ProfessionalsDirectoryScreen
           currentUser={currentUser}
-          onClose={() => setDirectoryOpen(false)}
+          initialTypes={directoryTypes}
+          onClose={closeDirectory}
           onOpenProfessional={item => nav.open(directoryProfilePayload(item))}
           onMessage={messageProfessional}
         />
