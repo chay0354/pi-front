@@ -2,7 +2,7 @@
 // Config as JS so Hebrew strings keep correct UTF-8 when manifest is served (avoids Windows encoding issues).
 const fs = require('fs');
 const path = require('path');
-const {withMainApplication, withInfoPlist} = require('@expo/config-plugins');
+const { withMainApplication, withInfoPlist } = require('@expo/config-plugins');
 
 const GOOGLE_IOS_URL_SCHEME =
   'com.googleusercontent.apps.965378472819-nfjkaacsv3df931eviblavrkcr5hqoga';
@@ -20,7 +20,7 @@ function withGoogleIosUrlScheme(config) {
     const has = types.some(t =>
       (t.CFBundleURLSchemes || []).includes(GOOGLE_IOS_URL_SCHEME),
     );
-    if (!has) types.push({CFBundleURLSchemes: [GOOGLE_IOS_URL_SCHEME]});
+    if (!has) types.push({ CFBundleURLSchemes: [GOOGLE_IOS_URL_SCHEME] });
     c.modResults.CFBundleURLTypes = types;
     return c;
   });
@@ -80,14 +80,14 @@ module.exports = {
     name: 'pi 2701',
     slug: 'pi-frontend',
     version: '1.0.11',
-    runtimeVersion: {policy: 'appVersion'},
+    runtimeVersion: { policy: 'appVersion' },
     updates: {
       url: 'https://u.expo.dev/76dac87d-af46-4a44-96a6-88fa003f32b0',
       fallbackToCacheTimeout: 0,
     },
     scheme: 'pifrontend',
     orientation: 'portrait',
-    icon: './assets/app-icon/icon.png',
+    icon: './assets/app-icon/AppLogo-noborder-1024.png',
     userInterfaceStyle: 'light',
     splash: {
       image: './assets/SplashScreen.png',
@@ -107,10 +107,10 @@ module.exports = {
       supportsTablet: true,
       ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY
         ? {
-            config: {
-              googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY,
-            },
-          }
+          config: {
+            googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY,
+          },
+        }
         : {}),
       buildNumber: '1',
       infoPlist: {
@@ -137,7 +137,7 @@ module.exports = {
           action: 'VIEW',
           category: ['BROWSABLE', 'DEFAULT'],
           data: [
-            {scheme: 'pifrontend', host: 'post', pathPrefix: '/'},
+            { scheme: 'pifrontend', host: 'post', pathPrefix: '/' },
           ],
         },
         {
@@ -155,10 +155,10 @@ module.exports = {
       ],
       supportsRTL: true,
       softwareKeyboardLayoutMode: 'resize',
-      icon: './assets/app-icon/new-logo.png',
+      icon: './assets/app-icon/AppLogo-noborder-1024.png',
       adaptiveIcon: {
-        foregroundImage: './assets/app-icon/new-logo.png',
-        backgroundColor: '#FFFFFF',
+        foregroundImage: './assets/app-icon/adaptive-foreground-safe.png',
+        backgroundColor: '#1e1d27',
       },
       permissions: [
         'CAMERA',
@@ -172,16 +172,16 @@ module.exports = {
         'POST_NOTIFICATIONS',
       ],
       ...(androidGoogleServicesFile
-        ? {googleServicesFile: androidGoogleServicesFile}
+        ? { googleServicesFile: androidGoogleServicesFile }
         : {}),
       ...(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY
         ? {
-            config: {
-              googleMaps: {
-                apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY,
-              },
+          config: {
+            googleMaps: {
+              apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY,
             },
-          }
+          },
+        }
         : {}),
     },
     web: {
@@ -194,7 +194,7 @@ module.exports = {
       'expo-secure-store',
       'expo-document-picker',
       'expo-apple-authentication',
-      ['expo-notifications', {color: '#F7C63A'}],
+      ['expo-notifications', { color: '#F7C63A' }],
       [
         'expo-location',
         {
