@@ -27,10 +27,13 @@ const TICK_STEP_STAGGER_MS = Platform.OS === 'ios' ? 50 : 40;
 /** Cap ticks from a single jump so a loop teleport never buzzes forever. */
 const TICK_MAX_STEPS = 8;
 
-const CATEGORY_SLOT_W = 174;
-const CATEGORY_SLOT_H = 212;
-const CATEGORY_SIDE_SCALE_X = 0.64;
-const CATEGORY_SIDE_SCALE_Y = 142 / CATEGORY_SLOT_H;
+/** Center PNGs are 612² with a 312px card → 104pt card (Figma 7:24438). */
+const CATEGORY_SLOT_W = 204;
+const CATEGORY_SLOT_H = 204;
+/** Side PNGs (308×481) render at Figma's 102.4×160pt. */
+const CATEGORY_SIDE_SCALE_X = 160 / CATEGORY_SLOT_H;
+/** Sides sit a little lower than the center slot; Figma keeps their bottom with the center card and their top about 18pt higher. */
+const CATEGORY_SIDE_DROP_Y = 10;
 
 const LOOP_COPIES = 7;
 const CENTER_SWITCH_HYSTERESIS_RATIO = 0.12;
@@ -254,7 +257,7 @@ const CarouselCategoryItem = memo(function CarouselCategoryItem({
 
       const translateY = offset.interpolate({
         inputRange: [-iW, 0, iW],
-        outputRange: [0, -2, 0],
+        outputRange: [CATEGORY_SIDE_DROP_Y, 0, CATEGORY_SIDE_DROP_Y],
         extrapolate: 'clamp',
       });
 
@@ -1010,7 +1013,7 @@ const styles = StyleSheet.create({
     height: 220,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     overflow: 'visible',
     flexShrink: 0,
   },

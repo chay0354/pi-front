@@ -1403,7 +1403,8 @@
   color: #fff;
   font-family: inherit;
   font-size: 23px;
-  text-align: start;
+  text-align: right;
+  direction: rtl;
   outline: none;
 }
 

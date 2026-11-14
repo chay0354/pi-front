@@ -1,9 +1,9 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   mdiAlertCircleOutline,
-  mdiChevronLeft,
   mdiHeartOutline,
   mdiImageOff,
+  mdiPhoneOutline,
   mdiRocketLaunch,
   mdiSnowflake,
   mdiSnowflakeMelt,
@@ -15,13 +15,20 @@ import iconClose from '../assets/figma/edit-publish/close.svg';
 import iconEye from '../assets/figma/edit-publish/eye.svg';
 import iconMessage from '../assets/figma/edit-publish/message.svg';
 import iconSnow from '../assets/figma/edit-publish/snow.svg';
-import iconEdit from '../assets/figma/edit-publish/edit.svg';
 import iconGrid from '../assets/figma/edit-publish/grid.svg';
+import iconGridActive from '../assets/figma/edit-publish/grid-active.svg';
 import iconList from '../assets/figma/edit-publish/list.svg';
+import iconListIdle from '../assets/figma/edit-publish/list-idle.svg';
 import iconPlus from '../assets/figma/edit-publish/plus.svg';
 import iconPlusV from '../assets/figma/edit-publish/plus-v.svg';
 import iconPlusH from '../assets/figma/edit-publish/plus-h.svg';
 import iconAnalysis from '../assets/figma/edit-publish/analysis.svg';
+import iconCategoryCheck from '../assets/figma/edit-publish/category-check.svg';
+import iconBackChevron from '../assets/figma/edit-publish/back-chevron.svg';
+import thermoHigh from '../assets/figma/edit-publish/thermo-high.svg';
+import thermoMedium from '../assets/figma/edit-publish/thermo-medium.svg';
+import thermoLow from '../assets/figma/edit-publish/thermo-low.svg';
+import thermoLine from '../assets/figma/edit-publish/thermo-line.svg';
 import CreateAdSheet, {CREATE_SHEET_POST_ICON, CreateAdSheetDivider, CreateAdSheetRow} from './CreateAdSheet';
 import FeedPostPreviewMedia from './components/FeedPostPreviewMedia';
 import {VideoPreviewThumb} from './fields/VideoPreviewThumb';
@@ -63,18 +70,20 @@ const ICONS = {
   remove: iconClose,
   analysis: iconAnalysis,
   grid: iconGrid,
+  gridActive: iconGridActive,
   list: iconList,
+  listIdle: iconListIdle,
   plus: iconPlus,
-  edit: iconEdit,
-  checkbox: mobileAsset('checkbox.png'),
+  checkbox: iconCategoryCheck,
+  back: iconBackChevron,
   bnbPrivate: mobileAsset('ad-uplaud/bnb-private.png'),
   bnbBusiness: mobileAsset('ad-uplaud/bnb-bussiness.png'),
 };
 
 const EXPOSURE_ASSETS = {
-  high: mobileAsset('edit/high.png'),
-  medium: mobileAsset('exposure-medium.png'),
-  low: mobileAsset('exposure-low.png'),
+  high: thermoHigh,
+  medium: thermoMedium,
+  low: thermoLow,
 };
 
 /** True when a listing/post belongs to the logged-in account (edit/publish mine-only). */
@@ -149,26 +158,35 @@ const getListingEngagementStats = (listing, postRecord) => {
       : listing.comment_count != null
         ? Number(listing.comment_count)
         : 0;
-  return {views, likes, comments};
+  const contacts =
+    listing.contact_count != null
+      ? Number(listing.contact_count)
+      : listing.contacts != null
+        ? Number(listing.contacts)
+        : 0;
+  return {views, likes, comments, contacts};
 };
 
-function ListingStatsRow({listing, postRecord, className}) {
-  const {views, likes, comments} = getListingEngagementStats(listing, postRecord);
+function ListingStatsRow({listing, postRecord}) {
+  const {views, likes, comments, contacts} = getListingEngagementStats(listing, postRecord);
+  const format = value => Number(value || 0).toLocaleString('en-US');
   return (
-    <div className={className ? `${styles.statsRow} ${className}` : styles.statsRow}>
-      <span className={styles.statItem}>
-        <img src={ICONS.views} alt="" width={24} height={24} />
-        <span className={styles.statText}>{Number(views).toLocaleString('en-US')}</span>
+    <div className={styles.statsRow}>
+      <span className={styles.statItem} title="פניות בטלפון וב-Pi Chat">
+        <MdiIcon path={mdiPhoneOutline} size={22} color="#8c8a99" />
+        <span className={styles.statText}>{format(contacts)}</span>
       </span>
       <span className={styles.statItem}>
-        <span className={styles.statIconMuted}>
-          <MdiIcon path={mdiHeartOutline} size={24} color="#666666" />
-        </span>
-        <span className={styles.statText}>{Number(likes || 0).toLocaleString('en-US')}</span>
+        <img src={ICONS.views} alt="" width={24} height={24} />
+        <span className={styles.statText}>{format(views)}</span>
+      </span>
+      <span className={styles.statItem}>
+        <MdiIcon path={mdiHeartOutline} size={24} color="#8c8a99" />
+        <span className={styles.statText}>{format(likes)}</span>
       </span>
       <span className={styles.statItem}>
         <img src={ICONS.comments} alt="" width={24} height={24} />
-        <span className={styles.statText}>{Number(comments).toLocaleString('en-US')}</span>
+        <span className={styles.statText}>{format(comments)}</span>
       </span>
     </div>
   );
@@ -268,7 +286,7 @@ const getRightmostStripCategoryId = strip => (strip?.length ? strip[0].id : null
 const getExposureLabel = exposure => {
   if (exposure === 'high') return 'גבוהה';
   if (exposure === 'medium') return 'בינונית';
-  return 'נמוכה';
+  return 'מועטה';
 };
 
 function readFrozenIds() {
@@ -587,7 +605,7 @@ export default function EditPublishAdScreen({
         setBoostedOverrides(prev => ({...prev, [String(listingId)]: res.boost_expires_at}));
       }
       setBoostConfirmListing(null);
-      window.alert('ההקפצה הופעלה! הדירוג הוא "גבוהה" למשך 24 שעות.');
+      window.alert('ההקפצה הופעלה! המודעה תופיע בראש הזרימה למשך 24 שעות.');
     } catch (e) {
       if (e?.code === 'QUOTA_EXCEEDED') {
         setBoostQuota(q => ({quota: Number(e?.quota ?? q.quota), used: Number(e?.used ?? q.used), remaining: 0}));
@@ -602,7 +620,7 @@ export default function EditPublishAdScreen({
 
   const openBoostConfirm = listing => {
     if (!canBoostThisMonth) {
-      window.alert('הגעת למכסת ההקפצות החודשית (הקפצה אחת בחודש).');
+      window.alert('עברת את המכסה של ההקפצות החודש');
       return;
     }
     setBoostConfirmListing(listing);
@@ -692,96 +710,97 @@ export default function EditPublishAdScreen({
     <span className={styles.typeBadge}>{getListingTypeBadgeLabel(listing, currentUser)}</span>
   );
 
-  const renderEditBadge = (listing, postRecord, className) =>
-    !postRecord || onEditPost ? (
-      <button type="button" className={className} onClick={() => openEdit(listing, postRecord)} aria-label="עריכה">
-        <img src={ICONS.edit} alt="" width={27} height={27} />
-      </button>
-    ) : null;
-
   const renderExposure = listing => {
     const exposure = computeExposureLevel(listing);
     return (
-      <img
-        src={EXPOSURE_ASSETS[exposure]}
-        alt={`חשיפה ${getExposureLabel(exposure)}`}
-        className={exposure === 'high' ? styles.exposureHigh : styles.exposure}
-      />
+      <div className={styles.exposure}>
+        <div className={styles.thermo}>
+          <img src={EXPOSURE_ASSETS[exposure]} alt="" className={styles.thermoBody} />
+          <div className={styles.thermoTicks}>
+            <img src={thermoLine} alt="" />
+            <img src={thermoLine} alt="" />
+            <img src={thermoLine} alt="" />
+          </div>
+        </div>
+        <p className={styles.exposureLabel}>
+          חשיפה
+          <br />
+          {getExposureLabel(exposure)}
+        </p>
+      </div>
     );
   };
 
-  const renderAdBody = (listing, postRecord, frozen, large) => (
-    <div className={large ? `${styles.adBody} ${styles.adBodyLarge}` : styles.adBody}>
-      <div className={styles.adSummary}>
-        {renderExposure(listing)}
-        <div className={styles.adTextCol}>
-          <p className={large ? `${styles.adDescription} ${styles.adDescriptionLarge}` : styles.adDescription}>
-            {postRecord ? getFeedPostCardCaption(listing) : listing.description || '—'}
-          </p>
-          <ListingStatsRow listing={listing} postRecord={postRecord} className={styles.statsRowGrid} />
+  const renderAdBody = (listing, postRecord, frozen) => (
+    <div className={styles.adBody}>
+      {renderExposure(listing)}
+      <div className={styles.adTextCol}>
+        <p className={styles.adDescription}>
+          {postRecord ? getFeedPostCardCaption(listing) : listing.description || '—'}
+        </p>
+        <div className={styles.adFooter}>
+          <ListingStatsRow listing={listing} postRecord={postRecord} />
+          <div className={styles.gridActionRow}>
+            <button type="button" className={styles.gridActionBtn} onClick={() => openBoostConfirm(listing)}>
+              <span>הקפצה</span>
+              <img src={ICONS.boost} alt="" className={styles.gridActionIcon} />
+            </button>
+            <button
+              type="button"
+              className={styles.gridActionBtn}
+              onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>
+              <span className={frozen ? styles.frozenText : undefined}>{frozen ? 'הוקפאה' : 'הקפאה'}</span>
+              {frozen ? (
+                <span
+                  className={`${styles.frozenIcon} ${styles.gridActionIcon}`}
+                  style={{'--icon': `url(${ICONS.freeze})`}}
+                />
+              ) : (
+                <img src={ICONS.freeze} alt="" className={styles.gridActionIcon} />
+              )}
+            </button>
+            <button type="button" className={styles.gridActionBtn} onClick={() => setRemoveConfirmListing(listing)}>
+              <span>הסרה</span>
+              <img src={ICONS.remove} alt="" className={styles.gridActionIcon} />
+            </button>
+          </div>
         </div>
-      </div>
-      <div className={styles.gridActionRow}>
-        <button
-          type="button"
-          className={styles.gridActionBtn}
-          onClick={() => openBoostConfirm(listing)}
-          disabled={!canBoostThisMonth}>
-          <span>הקפצה</span>
-          <img src={ICONS.boost} alt="" className={styles.gridActionIcon} />
-        </button>
-        <button
-          type="button"
-          className={styles.gridActionBtn}
-          onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>
-          <span className={frozen ? styles.frozenText : undefined}>{frozen ? 'הוקפאה' : 'הקפאה'}</span>
-          {frozen ? (
-            <span
-              className={`${styles.frozenIcon} ${styles.gridActionIcon}`}
-              style={{'--icon': `url(${ICONS.freeze})`}}
-            />
-          ) : (
-            <img src={ICONS.freeze} alt="" className={styles.gridActionIcon} />
-          )}
-        </button>
-        <button type="button" className={styles.gridActionBtn} onClick={() => setRemoveConfirmListing(listing)}>
-          <span>הסרה</span>
-          <img src={ICONS.remove} alt="" className={styles.gridActionIcon} />
-        </button>
       </div>
     </div>
   );
 
-  const renderGridAdCard = (listing, index) => {
+  const renderAdCard = (listing, index, large) => {
     const postRecord = isPostListingRecord(listing);
     const frozen = isFrozen(listing);
     const ordinal = listingOrdinalById.get(listingStableKey(listing)) ?? index + 1;
+    const editable = !postRecord || Boolean(onEditPost);
+    const imageClass = [styles.adImageWrap, large ? styles.adImageWrapLarge : '', postRecord ? styles.adImageWrapPost : '']
+      .filter(Boolean)
+      .join(' ');
     return (
-      <article className={styles.adCard}>
-        <div className={`${styles.adImageWrap} ${postRecord ? styles.adImageWrapPost : ''}`}>
+      <article className={large ? `${styles.adCard} ${styles.adCardLarge}` : styles.adCard}>
+        <div
+          className={editable ? `${imageClass} ${styles.adImageEditable}` : imageClass}
+          role={editable ? 'button' : undefined}
+          tabIndex={editable ? 0 : undefined}
+          aria-label={editable ? 'עריכה' : undefined}
+          onClick={editable ? () => openEdit(listing, postRecord) : undefined}
+          onKeyDown={
+            editable
+              ? e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openEdit(listing, postRecord);
+                  }
+                }
+              : undefined
+          }>
           {renderListingMedia(listing, styles.adImage)}
-          {renderEditBadge(listing, postRecord, styles.editBadge)}
+          <span className={styles.adImageShade} />
           {renderTypeBadge(listing)}
           <div className={styles.advertisementNo}>{postRecord ? `פוסט מס׳ ${ordinal}` : `מודעה מס׳ ${ordinal}`}</div>
         </div>
-        {renderAdBody(listing, postRecord, frozen, false)}
-      </article>
-    );
-  };
-
-  const renderListAdCard = (listing, index) => {
-    const postRecord = isPostListingRecord(listing);
-    const frozen = isFrozen(listing);
-    const ordinal = listingOrdinalById.get(listingStableKey(listing)) ?? index + 1;
-    return (
-      <article className={`${styles.adCard} ${styles.adCardLarge}`}>
-        <div className={`${styles.adImageWrap} ${styles.adImageWrapLarge} ${postRecord ? styles.adImageWrapPost : ''}`}>
-          {renderListingMedia(listing, styles.adImage)}
-          {renderEditBadge(listing, postRecord, styles.editBadge)}
-          {renderTypeBadge(listing)}
-          <div className={styles.advertisementNo}>{postRecord ? `פוסט מס׳ ${ordinal}` : `מודעה מס׳ ${ordinal}`}</div>
-        </div>
-        {renderAdBody(listing, postRecord, frozen, true)}
+        {renderAdBody(listing, postRecord, frozen)}
       </article>
     );
   };
@@ -853,7 +872,9 @@ export default function EditPublishAdScreen({
             <span className={styles.categoryStrip} />
           )}
           <button type="button" className={styles.backBtn} onClick={onClose}>
-            <MdiIcon path={mdiChevronLeft} size={24} color="#fff" />
+            <span className={styles.backIcon}>
+              <img src={ICONS.back} alt="" />
+            </span>
             <span>חזור</span>
           </button>
         </div>
@@ -869,7 +890,7 @@ export default function EditPublishAdScreen({
               aria-pressed={viewMode === 'list'}
               aria-label="תצוגת רשימה"
               onClick={() => setViewMode('list')}>
-              <img src={ICONS.list} alt="" width={24} height={24} />
+              <img src={viewMode === 'list' ? ICONS.list : ICONS.listIdle} alt="" width={24} height={24} />
             </button>
             <button
               type="button"
@@ -877,7 +898,7 @@ export default function EditPublishAdScreen({
               aria-pressed={viewMode === 'grid'}
               aria-label="תצוגת רשת"
               onClick={() => setViewMode('grid')}>
-              <img src={ICONS.grid} alt="" width={24} height={24} />
+              <img src={viewMode === 'grid' ? ICONS.gridActive : ICONS.grid} alt="" width={24} height={24} />
             </button>
           </div>
           <button type="button" className={styles.createPill} onClick={() => setShowCreateSheet(true)}>
@@ -919,7 +940,7 @@ export default function EditPublishAdScreen({
                 const key = id != null ? `${String(id)}-${index}` : `listing-${index}`;
                 return (
                   <div key={key} className={styles.cell}>
-                    {viewMode === 'grid' ? renderGridAdCard(listing, index) : renderListAdCard(listing, index)}
+                    {renderAdCard(listing, index, viewMode !== 'grid')}
                   </div>
                 );
               })}

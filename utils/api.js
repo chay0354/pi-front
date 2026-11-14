@@ -2436,6 +2436,24 @@ export const recordListingView = async (listingId) => {
   }
 };
 
+/** Count a phone tap or a Pi Chat open on a listing or post. */
+export const recordListingContact = async (listingId, userId = null) => {
+  if (!listingId) return null;
+  try {
+    const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/contact`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(userId ? {user_id: String(userId)} : {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return null;
+    return data && typeof data.contact_count === 'number' ? data.contact_count : null;
+  } catch (error) {
+    console.warn('Record contact failed:', error.message);
+    return null;
+  }
+};
+
 export const recordListingShare = async (listingId, count = 1) => {
   if (!listingId) return null;
   try {
@@ -2876,6 +2894,20 @@ export const updateGroupTitle = async ({userEmail, conversationId, title}) => {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to save title');
+  return data;
+};
+
+export const deleteChatGroup = async ({userEmail, conversationId}) => {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups/delete`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      user_email: String(userEmail || '').trim().toLowerCase(),
+      conversation_id: String(conversationId || '').trim(),
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to delete group');
   return data;
 };
 

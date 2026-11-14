@@ -1,0 +1,272 @@
+/* Story viewer — Figma 425:53087, laid out on the 1920 stage. */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: #1e1d27;
+  color: #fff;
+}
+
+.topBar {
+  display: flex;
+  flex: 0 0 60px;
+  align-items: center;
+  justify-content: flex-start;
+  height: 60px;
+  padding: 0 40px;
+  background: #1e1d27;
+  box-shadow: 0 10px 10px rgba(0, 0, 0, 0.2);
+}
+
+.closeBtn,
+.iconBtn,
+.navBtn,
+.identity,
+.railRow {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.closeBtn:hover,
+.iconBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.rail {
+  display: flex;
+  flex: 0 0 372px;
+  flex-direction: column;
+  gap: 1px;
+  width: 372px;
+  min-height: 0;
+  overflow-y: auto;
+  background: #1e1d27;
+  scrollbar-width: thin;
+}
+
+.railRow {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 24px;
+  background: #2b2a39;
+  text-align: start;
+}
+
+.railRow:hover,
+.railRowActive {
+  background: #34334a;
+}
+
+.railText {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.railTime {
+  color: #d2d0dc;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.54px;
+}
+
+.railName {
+  overflow: hidden;
+  color: #f7f3e6;
+  font-size: 16px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.avatarRing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.avatarPhoto {
+  position: absolute;
+  inset: 7.69%;
+  width: 84.62%;
+  height: 84.62%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.viewer {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+  min-width: 0;
+  padding: 24px 32px;
+}
+
+.navBtn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 98px;
+  height: 98px;
+  border-radius: 50%;
+  background: #2b2a39;
+}
+
+.navBtn:hover:not(:disabled) {
+  background: #3a3950;
+}
+
+.navBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.card {
+  position: relative;
+  flex: 0 1 auto;
+  width: auto;
+  height: min(896px, 100%);
+  aspect-ratio: 614 / 896;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+  cursor: pointer;
+}
+
+.storyFill {
+  position: absolute;
+  inset: 0;
+}
+
+.storyCanvas {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.cardChrome {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+}
+
+.progressRow {
+  display: flex;
+  direction: ltr;
+  gap: 4px;
+  height: 4px;
+}
+
+.progressTrack {
+  flex: 1;
+  overflow: hidden;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #ffe073 11%, #ffba30 87%);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.identityName {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls,
+.cardBottom {
+  display: flex;
+  direction: ltr;
+  align-items: center;
+  gap: 24px;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.cardBottom {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 2;
+}

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {View, Text, StyleSheet, Platform, I18nManager} from 'react-native';
-import {forceLtrStyle, physicalLeftStyle} from '../utils/rtlLayout';
+import {forceLtrStyle} from '../utils/rtlLayout';
 import {
   getPostTextVisualStyle,
   POST_TEXT_STYLE_FONTS,
@@ -17,12 +17,19 @@ const physicalTextAlign = align => {
 };
 
 /**
+ * `left: 0` inside a 28px host. After layout, x near 0 means authored `left`
+ * is the physical left. x near the far edge means this phone still mirrors
+ * `left` (iOS Hebrew vs English locale disagrees with forceRTL).
+ */
+const leftAxisMirroredFromProbe = x => Number(x) > 10;
+
+/**
  * Renders saved post text over feed media.
  * Prefers normalized nx/ny from measureInWindow at publish (WYSIWYG).
  *
- * X position uses physicalLeftStyle: measureInWindow is physical-left based,
- * but native forceRTL mirrors style `left` — without the pre-flip, every block
- * lands on the opposite side of the frame.
+ * The layer is forced LTR so `left` is the physical left on both phone
+ * languages. A probe still checks: if this device mirrors `left` anyway,
+ * the x is pre-flipped so the glyphs stay where they were placed.
  */
 const PostTextOverlays = ({
   overlays,
@@ -33,10 +40,29 @@ const PostTextOverlays = ({
   feedHeight,
   canvas = 'preview',
 }) => {
+  const [leftMirrored, setLeftMirrored] = useState(false);
   if (!Array.isArray(overlays) || overlays.length === 0) return null;
+
+  const placeLeft = (x, width) => {
+    const parentW = Number(feedWidth) || 0;
+    const w = Math.max(0, Number(width) || 0);
+    const px = Number(x) || 0;
+    if (!leftMirrored || !(parentW > 0)) return px;
+    return parentW - px - w;
+  };
 
   return (
     <View style={styles.root} pointerEvents="none" collapsable={false}>
+      <View style={styles.probeHost} pointerEvents="none" collapsable={false}>
+        <View
+          collapsable={false}
+          style={styles.probeMark}
+          onLayout={e => {
+            const next = leftAxisMirroredFromProbe(e?.nativeEvent?.layout?.x);
+            setLeftMirrored(prev => (prev === next ? prev : next));
+          }}
+        />
+      </View>
       {overlays.map((block, index) => {
         const visual = getPostTextVisualStyle(block.color, block.bgMode);
         const layout = scalePostTextOverlayBlock(block, {
@@ -63,12 +89,10 @@ const PostTextOverlays = ({
             collapsable={false}
             style={[
               styles.blockWrap,
-              physicalLeftStyle(
-                layout.translateX,
-                layout.width,
-                feedWidth,
-              ),
               {
+                left: placeLeft(layout.translateX, layout.width),
+                width: layout.width,
+                maxWidth: layout.width,
                 top: layout.translateY,
                 padding: layout.padding ?? 0,
               },
@@ -122,6 +146,22 @@ const PostTextOverlays = ({
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
+    ...forceLtrStyle,
+  },
+  probeHost: {
+    position: 'absolute',
+    width: 28,
+    height: 2,
+    opacity: 0,
+    top: 0,
+    left: 0,
+  },
+  probeMark: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 4,
+    height: 2,
   },
   blockWrap: {
     position: 'absolute',

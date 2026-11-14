@@ -40,6 +40,7 @@ import {
   addMembersToChatGroup,
   updateGroupTitle,
   removeMemberFromChatGroup,
+  deleteChatGroup,
   updateGroupMemberRole,
   respondToExclusiveOffer,
 } from '../api/chat';
@@ -376,6 +377,7 @@ export default function ChatScreen({
   onOpenPost,
   onOpenPeerProfile,
   onContactListingOwner,
+  onNeedLogin,
   embedded = false,
 }) {
   const postAspect = usePostFrameAspect();
@@ -1053,6 +1055,11 @@ export default function ChatScreen({
     [myEmail, groupConversationId],
   );
 
+  const handleDeleteGroupModal = useCallback(
+    () => deleteChatGroup({userEmail: myEmail, conversationId: groupConversationId}),
+    [myEmail, groupConversationId],
+  );
+
   const handleSetMemberRoleModal = useCallback(
     (targetEmail, role) =>
       updateGroupMemberRole({userEmail: myEmail, conversationId: groupConversationId, targetEmail, role}),
@@ -1303,7 +1310,10 @@ export default function ChatScreen({
       setInputText('');
       return;
     }
-    if (!myEmail) return;
+    if (!myEmail) {
+      onNeedLogin?.();
+      return;
+    }
     const firstInThread = messages.length === 0;
     if (isGroupThread) {
       if (!groupConversationId) return;
@@ -1897,19 +1907,22 @@ export default function ChatScreen({
     [myEmail, exclusiveRespondConversationId, exclusiveRespondLoading, fetchMessages],
   );
 
+  const guestDirectCompose = !myEmail && isDirectPeer && !isGroupThread && !isWelcome;
   const composerActive =
-    (isWelcome || (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
+    (isWelcome ||
+      guestDirectCompose ||
+      (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
     !composerBlockedExclusive;
   const canSubmitMessage =
     !sending &&
     !composerBlockedExclusive &&
     (inputText || '').trim().length > 0 &&
     (isWelcome || isDirectPeer || (isGroupThread && groupConversationId));
-  const canSendChatMedia = composerActive && !isWelcome && !sending && !isRecording;
+  const canSendChatMedia = !!myEmail && composerActive && !isWelcome && !sending && !isRecording;
 
   useEffect(() => {
-    canRecordVoiceRef.current = composerActive && !isWelcome && !sending;
-  }, [composerActive, isWelcome, sending]);
+    canRecordVoiceRef.current = !!myEmail && composerActive && !isWelcome && !sending;
+  }, [myEmail, composerActive, isWelcome, sending]);
 
   const offerLocationText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
@@ -3261,6 +3274,7 @@ export default function ChatScreen({
         onRemoveMember={handleRemoveMemberModal}
         onSetMemberRole={handleSetMemberRoleModal}
         onLeaveGroup={handleLeaveGroupModal}
+        onDeleteGroup={handleDeleteGroupModal}
         onConversationDeleted={() => {
           setShowGroupManageModal(false);
           onClose?.();

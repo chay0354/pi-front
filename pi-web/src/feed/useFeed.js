@@ -10,6 +10,7 @@ import {
   toFeedItem,
 } from './listingRules';
 import {applyFeedFilters} from './feedFilters';
+import {resolveAdVideoUri} from '../profile/lib/videoPlayback';
 import {
   isNewsSidebarFilterDef,
   isRenderingsSidebarFilterDef,
@@ -17,8 +18,47 @@ import {
 } from './sidebarFilters';
 
 const isCompany = l => String(l?.subscription_type || '').toLowerCase() === 'company';
-const hasVideo = l =>
-  Boolean(l?.video_url || l?.video_playback_url || (l?.listing_videos || []).length);
+
+/** Mobile isRenderingsSidebarListing: a company ad with a playable video. Display mode is ignored. */
+function isRenderingsSidebarListing(listing) {
+  if (!listing || isFeedPost(listing)) return false;
+  if (!isCompany(listing)) return false;
+  return Boolean(resolveAdVideoUri(listing));
+}
+
+function boostExpiryMs(row) {
+  const raw = row?.boost_expires_at ?? row?.boostExpiresAt;
+  if (raw == null || raw === '') return 0;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** הקפצה: an active boost is the head of the flow. Newest boost first. */
+function pinActiveBoostsFirst(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  const now = Date.now();
+  const boosted = [];
+  const rest = [];
+  for (const row of rows) {
+    if (boostExpiryMs(row) > now) boosted.push(row);
+    else rest.push(row);
+  }
+  if (boosted.length === 0) return rows;
+  if (boosted.length > 1) boosted.sort((a, b) => boostExpiryMs(b) - boostExpiryMs(a));
+  return boosted.concat(rest);
+}
+
+/** Mobile asRenderingsVideoListing: inside הדמיות the video is the page, even for "תמונה ראשית". */
+function asRenderingsVideoListing(listing) {
+  if (!listing) return listing;
+  const uri = resolveAdVideoUri(listing);
+  return {
+    ...listing,
+    feed_display_priority: 'video',
+    feedDisplayPriority: 'video',
+    ...(uri && !String(listing.video_playback_url || '').trim() ? {video_playback_url: uri} : {}),
+  };
+}
 
 /** Same request plan as the mobile feed (TikTokFeedScreen loadListings). */
 async function fetchRows(category, filter, videoOnly, signal) {
@@ -97,7 +137,7 @@ function applySidebarRules(rows, filter) {
   } else if (filter.id === 'under_construction') {
     out = out.filter(l => isCompany(l) && constructionStatusMatches(l, 'beginning_of_construction'));
   } else if (isRenderingsSidebarFilterDef(filter)) {
-    out = out.filter(l => isCompany(l) && !isFeedPost(l) && hasVideo(l));
+    out = out.filter(isRenderingsSidebarListing).map(asRenderingsVideoListing);
   }
   for (const key of ['land_in_mortgage', 'permit', 'hospitality_nature', 'search_purpose']) {
     if (!filter[key]) continue;
@@ -134,8 +174,10 @@ export function useFeed({category, sidebarFilterId, purposes, feedFilters, video
     fetchRows(category, filter, videoOnly, controller.signal)
       .then(rows => {
         let cleaned = excludeSalesImageCompanionListings(rows).filter(hasFeedContent);
+        cleaned = applySidebarRules(cleaned, filter);
         if (videoOnly) cleaned = cleaned.filter(isVideoAdListing);
-        setState({status: 'ready', rows: applySidebarRules(cleaned, filter), error: null});
+        cleaned = pinActiveBoostsFirst(cleaned);
+        setState({status: 'ready', rows: cleaned, error: null});
       })
       .catch(error => {
         if (controller.signal.aborted) return;

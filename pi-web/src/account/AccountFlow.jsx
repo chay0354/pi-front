@@ -199,7 +199,13 @@ export default function AccountFlow({start, onExit}) {
         return (
           <div
             key={item.id}
-            style={{position: 'absolute', inset: 0, display: isTop ? 'block' : 'none'}}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: index + 1,
+              background: '#1e1d27',
+              visibility: isTop ? 'visible' : 'hidden',
+            }}
             inert={isTop ? undefined : true}
             aria-hidden={isTop ? undefined : true}>
             {render(item)}

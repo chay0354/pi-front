@@ -1,13 +1,12 @@
 import {useEffect, useRef, useState} from 'react';
-import {mdiVolumeHigh, mdiVolumeOff} from '@mdi/js';
-import MdiIcon from '../publish/MdiIcon';
-import {mobileAsset} from '../publish/lib/publishRules';
+import iconMute from '../assets/figma/piai/results/mute.svg';
+import iconPin from '../assets/figma/piai/results/pro-pin.svg';
+import iconChat from '../assets/figma/piai/results/pichat-union.svg';
+import iconChatMark from '../assets/figma/piai/results/pichat-mark.svg';
+import iconChatWord from '../assets/figma/piai/results/pichat-word.svg';
 import {PiRatingBadge} from '../profile/ProfileParts';
 import {isHlsUri, muxThumbnailUri, resolveAdVideoUri} from '../profile/lib/videoPlayback';
 import styles from './AiProfessionalCard.module.css';
-
-const locationIcon = mobileAsset('pros/location-pro.png');
-const messageButton = mobileAsset('pros/pro-messges.png');
 
 const isBroker = item => String(item?.subscription_type || '').trim().toLowerCase() === 'broker';
 const asList = value => {
@@ -57,8 +56,12 @@ export default function AiProfessionalCard({item, onOpen, onMessage}) {
   const address = String(item?.address || '').trim();
   const tags = asList(item?.specializations).slice(0, 3);
   const videoUri = videoUriOf(item);
-  const poster = (videoUri && muxThumbnailUri(videoUri, {width: 640, time: 0})) || item?.profile_image_url || '';
-  const rating = Number(item?.average_rating);
+  const cover = String(item?.directory_cover_url || '').trim();
+  const portrait = String(item?.profile_image_url || '').trim();
+  const poster = (videoUri && muxThumbnailUri(videoUri, {width: 640, time: 0})) || cover || portrait;
+  const ratingValue = Number(item?.average_rating);
+  const rating = Number.isFinite(ratingValue) && ratingValue > 0 ? Math.round(ratingValue) : 5;
+  const bio = String(item?.bio || '').trim();
   const [muted, setMuted] = useState(true);
   const videoRef = useRef(null);
 
@@ -94,23 +97,28 @@ export default function AiProfessionalCard({item, onOpen, onMessage}) {
             type="button"
             className={styles.mute}
             aria-label={muted ? 'הפעל קול' : 'השתק'}
+            aria-pressed={!muted}
             onClick={event => {
               event.stopPropagation();
               setMuted(value => !value);
             }}>
-            <MdiIcon path={muted ? mdiVolumeOff : mdiVolumeHigh} size={22} color="#fff" />
+            <img src={iconMute} alt="" width={24} height={24} />
           </button>
         ) : null}
       </div>
       <button type="button" className={styles.body} onClick={onOpen}>
-        <PiRatingBadge rating={Number.isFinite(rating) && rating > 0 ? rating : 5} variant="listing" />
-        <p className={styles.name}>{heading}</p>
-        {address ? (
-          <p className={styles.address}>
-            <span>{address}</span>
-            <img src={locationIcon} alt="" />
-          </p>
-        ) : null}
+        <div className={styles.identity}>
+          <div className={styles.titleRow}>
+            <p className={styles.name}>{heading}</p>
+            <PiRatingBadge rating={rating} variant="listing" />
+          </div>
+          {address ? (
+            <p className={styles.address}>
+              <img src={iconPin} alt="" width={24} height={24} />
+              <span>{address}</span>
+            </p>
+          ) : null}
+        </div>
         {tags.length ? (
           <div className={styles.tags}>
             {tags.map(tag => (
@@ -120,6 +128,7 @@ export default function AiProfessionalCard({item, onOpen, onMessage}) {
             ))}
           </div>
         ) : null}
+        {bio ? <p className={styles.bio}>{bio}</p> : null}
       </button>
       <button
         type="button"
@@ -129,7 +138,13 @@ export default function AiProfessionalCard({item, onOpen, onMessage}) {
           event.stopPropagation();
           onMessage?.(item);
         }}>
-        <img src={messageButton} alt="" />
+        <span>שליחת הודעה</span>
+        <span className={styles.piChat} aria-hidden>
+          <img src={iconChat} alt="" width={77} height={34.4138} />
+          <img className={styles.piChatWord} src={iconChatWord} alt="" width={26.6994} height={18.1182} />
+          <img className={styles.piChatMark} src={iconChatMark} alt="" width={15.4} height={8.89443} />
+          <span className={styles.piChatText}>Chat</span>
+        </span>
       </button>
     </article>
   );

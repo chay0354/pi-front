@@ -1,9 +1,10 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {mdiCamera, mdiChevronLeft, mdiVideoOutline} from '@mdi/js';
 import MdiIcon from '../publish/MdiIcon';
-import {uploadFile, uploadProfilePicture} from '../api/client';
+import {getSubscription, uploadFile, uploadProfilePicture} from '../api/client';
 import CircleCropModal from '../account/CircleCropModal';
 import {updateSubscriptionProfile} from '../api/chat';
+import {FigmaCheckbox} from '../publish/components/FigmaCheckbox';
 import {useSession} from '../auth/session';
 import {
   isB2BSubscriptionType,
@@ -26,12 +27,55 @@ import {
 import {ProfileAvatar} from './ProfileParts';
 import styles from './EditProfileScreen.module.css';
 
+/** Same proportions as the phone directory card (about 342×212). */
+const HORIZONTAL_FRAME = {width: 400, height: 248};
+const MAX_VIDEO_SEC = 210;
+
+function parseDirectoryVideoCrop(value) {
+  if (!value) return null;
+  let crop = value;
+  if (typeof value === 'string') {
+    try {
+      crop = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!crop || typeof crop !== 'object') return null;
+  const aspect = Number(crop.aspect);
+  const frameWidth = Number(crop.frameWidth);
+  const frameHeight = Number(crop.frameHeight);
+  const frameLeft = Number(crop.frameLeft);
+  const frameTop = Number(crop.frameTop);
+  if (![aspect, frameWidth, frameHeight, frameLeft, frameTop].every(Number.isFinite)) return null;
+  if (aspect <= 0 || frameWidth <= 0 || frameHeight <= 0) return null;
+  return {aspect, frameWidth, frameHeight, frameLeft, frameTop};
+}
+
+function videoDurationSec(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const node = document.createElement('video');
+    node.preload = 'metadata';
+    node.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(node.duration) ? node.duration : null);
+    };
+    node.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    node.src = url;
+  });
+}
+
 export default function EditProfileScreen({onClose}) {
   const {currentUser, setCurrentUser} = useSession();
   const type = currentUser?.subscription_type || subscriptionTypes.user;
   const subTypeLower = String(type).toLowerCase();
   const logoOnlyProfile = usesOrgLogoAsAvatar(subTypeLower);
   const canEditProfilePhoto = !logoOnlyProfile;
+  const canEditHorizontalCover = subTypeLower === subscriptionTypes.broker || subTypeLower === subscriptionTypes.professional;
   const canEditProfileVideo = isB2BSubscriptionType(subTypeLower) && !logoOnlyProfile;
   const canEditCompanyLogo = canEditSeparateCompanyLogo(subTypeLower, currentUser);
   const businessNameFieldKey = getProfileBusinessNameFieldKey(type, currentUser);
@@ -39,7 +83,14 @@ export default function EditProfileScreen({onClose}) {
 
   const [form, setForm] = useState(() => hydrateProfileEditForm(currentUser, getProfileEditFields(type, currentUser)));
   const [photoUrl, setPhotoUrl] = useState(() => getUserProfilePhotoUrl(currentUser) || getUserCompanyLogoUrl(currentUser));
+  const [photoSourceUri, setPhotoSourceUri] = useState(null);
+  const [directoryCoverUrl, setDirectoryCoverUrl] = useState(() => {
+    const cover = currentUser?.directory_cover_url;
+    return cover && String(cover).trim() ? String(cover).trim() : null;
+  });
+  const [directoryVideoCrop, setDirectoryVideoCrop] = useState(() => parseDirectoryVideoCrop(currentUser?.directory_video_crop));
   const [logoUrl, setLogoUrl] = useState(() => getUserCompanyLogoUrl(currentUser));
+  const pristine = useRef(true);
   const [profileVideoUrl, setProfileVideoUrl] = useState(() =>
     currentUser?.video_url && String(currentUser.video_url).trim() ? String(currentUser.video_url).trim() : null,
   );
@@ -65,6 +116,35 @@ export default function EditProfileScreen({onClose}) {
   }, [videoPreview]);
 
   useEffect(() => {
+    const id = currentUser?.id || currentUser?.subscription_id;
+    if (!id) return undefined;
+    let cancelled = false;
+    getSubscription(id)
+      .then(data => {
+        const sub = data?.subscription;
+        if (!sub || cancelled || !pristine.current) return;
+        const nextType = sub.subscription_type || type;
+        setForm(hydrateProfileEditForm(sub, getProfileEditFields(nextType, sub)));
+        const photo = getUserProfilePhotoUrl(sub) || getUserCompanyLogoUrl(sub);
+        if (photo) setPhotoUrl(photo);
+        const logo = getUserCompanyLogoUrl(sub);
+        if (logo) setLogoUrl(logo);
+        const cover = sub.directory_cover_url && String(sub.directory_cover_url).trim();
+        setDirectoryCoverUrl(cover || null);
+        setDirectoryVideoCrop(parseDirectoryVideoCrop(sub.directory_video_crop));
+        const video = sub.video_url && String(sub.video_url).trim();
+        if (video) setProfileVideoUrl(video);
+        setCurrentUser(prev => (prev ? {...prev, ...sub} : prev));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Load the saved row once so read-only and cover fields match the phone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const onKey = e => {
       if (e.key !== 'Escape' || document.querySelector('[data-account-modal]')) return;
       e.stopPropagation();
@@ -74,9 +154,13 @@ export default function EditProfileScreen({onClose}) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  const setField = (key, value) => setForm(prev => ({...prev, [key]: value}));
+  const setField = (key, value) => {
+    pristine.current = false;
+    setForm(prev => ({...prev, [key]: value}));
+  };
 
   const toggleChip = (field, option, selected) => {
+    pristine.current = false;
     const current = Array.isArray(form[field.key]) ? form[field.key] : [];
     const next = field.key === 'types' ? (selected ? [] : [option]) : selected ? current.filter(v => v !== option) : [...current, option];
     if (field.key === 'types') {
@@ -90,12 +174,38 @@ export default function EditProfileScreen({onClose}) {
 
   const beginCrop = (file, target) => {
     if (!file || busy) return;
-    if (crop?.uri) URL.revokeObjectURL(crop.uri);
-    setCrop({uri: URL.createObjectURL(file), target, name: file.name || 'photo.jpg'});
+    pristine.current = false;
+    const uri = URL.createObjectURL(file);
+    if (target === 'profile' || (target === 'cover' && !photoSourceUri)) {
+      if (target === 'profile' && uri !== photoSourceUri && uri !== photoUrl) setDirectoryCoverUrl(null);
+      setPhotoSourceUri(prev => {
+        if (prev && prev !== uri && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return uri;
+      });
+    }
+    setCrop(prev => {
+      if (prev?.uri && prev.uri !== uri && prev.uri !== photoSourceUri && prev.uri.startsWith('blob:')) URL.revokeObjectURL(prev.uri);
+      return {uri, target};
+    });
+  };
+
+  const openHorizontalPhoto = () => {
+    const source = photoSourceUri || photoUrl;
+    if (!source || busy) return;
+    pristine.current = false;
+    setCrop({uri: source, target: 'cover'});
+  };
+
+  const openHorizontalVideo = () => {
+    if (!videoSrc || busy) return;
+    pristine.current = false;
+    setCrop({uri: videoSrc, target: 'video'});
   };
 
   const cancelCrop = () => {
-    if (crop?.uri) URL.revokeObjectURL(crop.uri);
+    if (crop?.uri && crop.uri !== photoSourceUri && crop.uri !== photoUrl && crop.uri !== videoSrc && crop.uri.startsWith('blob:')) {
+      URL.revokeObjectURL(crop.uri);
+    }
     setCrop(null);
   };
 
@@ -103,10 +213,15 @@ export default function EditProfileScreen({onClose}) {
     const target = crop?.target;
     const uri = crop?.uri;
     setCrop(null);
-    if (uri) URL.revokeObjectURL(uri);
+    if (target === 'video') {
+      if (result?.crop) setDirectoryVideoCrop(result.crop);
+      else if (result?.error) window.alert(result.error);
+      return;
+    }
+    if (uri && uri !== photoSourceUri && uri.startsWith('blob:')) URL.revokeObjectURL(uri);
     if (result?.uri && result.uri !== uri) URL.revokeObjectURL(result.uri);
     if (result?.file && target) uploadImage(result.file, target);
-    else if (result?.error) window.alert('לא ניתן לחתוך את התמונה');
+    else if (result?.error) window.alert(result.error || 'לא ניתן לחתוך את התמונה');
   };
 
   const uploadImage = async (file, target) => {
@@ -118,6 +233,7 @@ export default function EditProfileScreen({onClose}) {
       const url = uploaded?.url || uploaded?.publicUrl;
       if (!url) throw new Error('לא התקבלה כתובת תמונה');
       if (target === 'logo') setLogoUrl(url);
+      else if (target === 'cover') setDirectoryCoverUrl(url);
       else setPhotoUrl(url);
     } catch (err) {
       window.alert(err?.message || (target === 'logo' ? 'לא ניתן לבחור לוגו' : 'לא ניתן לבחור תמונה'));
@@ -133,8 +249,18 @@ export default function EditProfileScreen({onClose}) {
       window.alert('לא ניתן לזהות את המשתמש.');
       return;
     }
+    const missing = fields.filter(f => f.required && !String(form[f.key] ?? '').trim());
+    if (missing.length > 0) {
+      window.alert(`אנא מלא/י: ${missing.map(f => f.label).join(', ')}`);
+      return;
+    }
     const payload = {};
     fields.forEach(f => {
+      if (f.readOnly) return;
+      if (f.type === 'toggle') {
+        payload[f.key] = form[f.key] === true;
+        return;
+      }
       if (f.type === 'chips' || f.key === 'activity_regions' || f.key === 'types' || f.key === 'specializations') {
         payload[f.key] = Array.isArray(form[f.key]) ? form[f.key].map(v => String(v).trim()).filter(Boolean) : [];
         return;
@@ -142,6 +268,10 @@ export default function EditProfileScreen({onClose}) {
       payload[f.key] = form[f.key] != null ? String(form[f.key]).trim() : '';
     });
     if (canEditProfilePhoto) Object.assign(payload, buildProfilePhotoSavePayload(photoUrl));
+    if (canEditHorizontalCover) {
+      payload.directory_cover_url = directoryCoverUrl || null;
+      payload.directory_video_crop = directoryVideoCrop || null;
+    }
     if (canEditCompanyLogo && logoUrl) payload.company_logo_url = logoUrl;
     applyProfilePhoneSync(payload, type);
 
@@ -172,7 +302,10 @@ export default function EditProfileScreen({onClose}) {
       const updated = res?.subscription || null;
       const photoPatch = canEditProfilePhoto ? buildProfilePhotoSavePayload(photoUrl) : {};
       const logoPatch = canEditCompanyLogo && logoUrl ? {company_logo_url: logoUrl, companyLogoUrl: logoUrl} : {};
-      setCurrentUser(prev => (prev ? {...prev, ...(updated || payload), ...photoPatch, ...logoPatch} : prev));
+      const coverPatch = canEditHorizontalCover
+        ? {directory_cover_url: directoryCoverUrl || null, directory_video_crop: directoryVideoCrop || null}
+        : {};
+      setCurrentUser(prev => (prev ? {...prev, ...(updated || payload), ...photoPatch, ...logoPatch, ...coverPatch} : prev));
       window.alert('הפרופיל עודכן בהצלחה.');
       onClose?.();
     } catch (err) {
@@ -184,8 +317,10 @@ export default function EditProfileScreen({onClose}) {
 
   const removeProfileVideo = () => {
     if (uploadingVideo || saving) return;
+    pristine.current = false;
     setPendingProfileVideo(null);
     setProfileVideoUrl(null);
+    setDirectoryVideoCrop(null);
   };
 
   const subscriberNumber =
@@ -199,7 +334,8 @@ export default function EditProfileScreen({onClose}) {
 
   return (
     <div className={styles.screen} dir="rtl">
-      <div className={styles.phone}>
+      <button type="button" className={styles.backdrop} aria-label="סגירה" tabIndex={-1} onClick={onClose} />
+      <div className={styles.phone} role="dialog" aria-modal="true" aria-label="עריכת פרופיל">
         <header className={styles.header}>
           <button type="button" className={styles.backBtn} onClick={onClose} aria-label="חזרה">
             <MdiIcon path={mdiChevronLeft} size={36} color="#fff" />
@@ -222,6 +358,11 @@ export default function EditProfileScreen({onClose}) {
                 <button type="button" className={styles.changeText} disabled={busy} onClick={() => photoInput.current?.click()}>
                   {photoLabel}
                 </button>
+                {canEditHorizontalCover && (photoSourceUri || photoUrl) ? (
+                  <button type="button" className={styles.changeText} disabled={busy} onClick={openHorizontalPhoto}>
+                    עריכת תצוגה אופקית
+                  </button>
+                ) : null}
                 <input
                   ref={photoInput}
                   hidden
@@ -262,6 +403,11 @@ export default function EditProfileScreen({onClose}) {
                   {videoSrc ? 'החלפת סרטון' : 'בחירת סרטון'}
                 </button>
                 {videoSrc ? (
+                  <button type="button" className={styles.changeText} disabled={busy} onClick={openHorizontalVideo}>
+                    עריכת תצוגה אופקית
+                  </button>
+                ) : null}
+                {videoSrc ? (
                   <button type="button" className={styles.removeVideo} disabled={busy} onClick={removeProfileVideo}>
                     הסרת סרטון
                   </button>
@@ -272,10 +418,18 @@ export default function EditProfileScreen({onClose}) {
                 hidden
                 type="file"
                 accept="video/*"
-                onChange={e => {
+                onChange={async e => {
                   const file = e.target.files?.[0];
-                  if (file) setPendingProfileVideo(file);
                   e.target.value = '';
+                  if (!file) return;
+                  const seconds = await videoDurationSec(file);
+                  if (seconds != null && Math.round(seconds) > MAX_VIDEO_SEC) {
+                    window.alert('הסרטון ארוך מדי\nלא ניתן להעלות סרטון שאורכו מעל 3:30 דקות. בחרו סרטון קצר יותר.');
+                    return;
+                  }
+                  pristine.current = false;
+                  setDirectoryVideoCrop(null);
+                  setPendingProfileVideo(file);
                 }}
               />
             </section>
@@ -295,7 +449,26 @@ export default function EditProfileScreen({onClose}) {
           return (
             <div key={f.key}>
               <div className={styles.field}>
-                <p className={styles.label}>{f.label}</p>
+                {f.type === 'toggle' ? (
+                  <button
+                    type="button"
+                    className={styles.toggle}
+                    role="checkbox"
+                    aria-checked={form[f.key] === true}
+                    disabled={busy}
+                    onClick={() => setField(f.key, form[f.key] !== true)}>
+                    <FigmaCheckbox checked={form[f.key] === true} size={24} />
+                    <span className={styles.toggleText}>
+                      <span className={styles.toggleLabel}>{f.label}</span>
+                      {f.hint ? <span className={styles.toggleHint}>{f.hint}</span> : null}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                <p className={styles.label}>
+                  {f.label}
+                  {f.required ? <span className={styles.required}> *</span> : null}
+                </p>
                 {f.type === 'chips' ? (
                   chipOptions.length === 0 ? (
                     <p className={styles.hint}>{f.emptyHint || 'אין אפשרויות'}</p>
@@ -316,6 +489,8 @@ export default function EditProfileScreen({onClose}) {
                       })}
                     </div>
                   )
+                ) : f.readOnly ? (
+                  <div className={`${styles.input} ${styles.readonly}`}>{form[f.key] || '—'}</div>
                 ) : f.multiline ? (
                   <textarea
                     className={`${styles.input} ${styles.area}`}
@@ -333,6 +508,8 @@ export default function EditProfileScreen({onClose}) {
                     dir={ltr ? 'ltr' : undefined}
                     onChange={e => setField(f.key, e.target.value)}
                   />
+                )}
+                  </>
                 )}
                 </div>
               {canEditCompanyLogo && f.key === businessNameFieldKey ? (
@@ -383,7 +560,17 @@ export default function EditProfileScreen({onClose}) {
       {crop ? (
         <CircleCropModal
           imageUri={crop.uri}
-          title={crop.target === 'logo' ? 'חתוך את לוגו החברה' : 'חתוך את תמונת הפרופיל'}
+          media={crop.target === 'video' ? 'video' : 'image'}
+          shape={crop.target === 'cover' || crop.target === 'video' ? 'rect' : 'circle'}
+          frameWidth={crop.target === 'cover' || crop.target === 'video' ? HORIZONTAL_FRAME.width : undefined}
+          frameHeight={crop.target === 'cover' || crop.target === 'video' ? HORIZONTAL_FRAME.height : undefined}
+          title={
+            crop.target === 'logo'
+              ? 'חתוך את לוגו החברה'
+              : crop.target === 'cover' || crop.target === 'video'
+                ? 'עריכת תצוגה אופקית'
+                : 'חתוך את תמונת הפרופיל'
+          }
           onCancel={cancelCrop}
           onConfirm={confirmCrop}
         />

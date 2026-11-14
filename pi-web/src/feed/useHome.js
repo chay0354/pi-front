@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {getListings, getProfessionalsDirectory, getReviews} from '../api/client';
+import {getListings, getProfessionalsDirectory, getReviews, getStoriesFeed} from '../api/client';
 import {subscriptionType, toFeedItem} from './listingRules';
 import {
   cappedMuxUri,
@@ -108,6 +108,29 @@ export function useFeaturedProjects() {
     return () => controller.abort();
   }, []);
   return projects;
+}
+
+/** Home story rings: only subscriptions that still have an active story. */
+export function useHomeStories() {
+  const [rings, setRings] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    getStoriesFeed()
+      .then(data => {
+        if (cancelled) return;
+        const next = (Array.isArray(data?.rings) ? data.rings : []).filter(
+          ring => ring?.subscription_id && Array.isArray(ring.slides) && ring.slides.length > 0,
+        );
+        setRings(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return rings;
 }
 
 /** Professionals strip plus the two "כוכבי פאי" cards (brokers on the right, professionals on the left). */

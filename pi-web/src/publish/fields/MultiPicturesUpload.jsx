@@ -18,6 +18,7 @@ export const MultiPicturesUpload = ({
   onEditMainImage,
   onEditAdditionalImage,
   allowMoreImages = false,
+  coverTitle = 'תמונת נושא',
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = useState(false);
   const progress = uploadProgress || {};
@@ -76,7 +77,7 @@ export const MultiPicturesUpload = ({
 
   return (
     <>
-      <Title text="תמונת נושא או הדמייה" required />
+      <Title text={coverTitle} required />
       <div className={styles.mpUploadArea}>
         <button type="button" className={styles.mpUploadHit} onClick={handleMainImageUpload} disabled={!!progress.mainImage}>
           {progress.mainImage ? (

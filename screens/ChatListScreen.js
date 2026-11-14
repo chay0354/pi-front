@@ -40,6 +40,7 @@ import {
   uploadGroupImage,
   getChatParticipantDisplay,
   deleteChatConversation,
+  deleteChatGroup,
   updateSubscriptionProfile,
 } from '../utils/api';
 import {ContextHook} from '../hooks/ContextHook';
@@ -47,7 +48,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import {getUserProfileImageUrl, logProfilePic, DEFAULT_PI_PROFILE_AVATAR} from '../utils/userProfileImage';
 import {normalizeChatAvatarUrl} from '../utils/chatAvatar';
-import {flexEnd, flexStart, hebrewTextAlign} from '../utils/rtlLayout';
+import {
+  flexEnd,
+  flexStart,
+  hebrewTextAlign,
+  physicalRightInputStyle,
+} from '../utils/rtlLayout';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ChatListRowAvatar, {
   CHAT_GROUP_AVATAR_PLACEHOLDER,
@@ -223,9 +229,9 @@ const SWIPE_DELETE_WIDTH = 88;
 const SWIPE_OPEN_THRESHOLD = 44;
 
 /**
- * Wraps a direct-chat row so it can be swiped to reveal a delete action.
+ * Wraps a chat row so it can be swiped to reveal a delete action.
  * RTL: swipe right (+X) reveals delete on the start edge (physical left with swap).
- * Falls back to rendering children as-is when not deletable (groups / Pi).
+ * Direct chats and groups use the same swipe. Pi stays fixed.
  */
 function SwipeableConversationRow({
   deletable,
@@ -399,6 +405,10 @@ const ChatListScreen = ({
   const insets = useSafeAreaInsets();
   const {setCurrentUser} = useContext(ContextHook);
   const [search, setSearch] = useState('');
+  const [phonePeople, setPhonePeople] = useState([]);
+  const [phonePeopleLoading, setPhonePeopleLoading] = useState(false);
+  const [phonePeopleError, setPhonePeopleError] = useState('');
+  const phonePeopleSeq = useRef(0);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -913,13 +923,39 @@ const ChatListScreen = ({
     const exclude = currentUser?.email
       ? String(currentUser.email).trim().toLowerCase()
       : null;
-    searchBrokers(q, exclude)
-      .then(res => {
+    const phoneDigits = q.replace(/\D/g, '');
+    const peopleLookup =
+      phoneDigits.length >= 7
+        ? getUsersForGroupPicker(phoneDigits, exclude, 'all')
+        : Promise.resolve({users: []});
+    Promise.all([
+      searchBrokers(q, exclude).catch(() => ({brokers: []})),
+      peopleLookup.catch(() => ({users: []})),
+    ])
+      .then(([res, people]) => {
         if (brokerSearchSeq.current !== seq) {
           return;
         }
-        const list = res.brokers || [];
-        setBrokerResults(list);
+        const brokers = res.brokers || [];
+        const seen = new Set(
+          brokers
+            .map(b => String(b?.email || '').trim().toLowerCase())
+            .filter(Boolean),
+        );
+        const extra = (people.users || [])
+          .filter(u => {
+            const email = String(u?.email || '').trim().toLowerCase();
+            return email && !seen.has(email);
+          })
+          .map(u => ({
+            id: u.id,
+            email: u.email,
+            title: u.title,
+            subtitle: u.subtitle || '',
+            profileImageUrl: u.profileImageUrl || null,
+            subscriptionType: u.subscriptionType || null,
+          }));
+        setBrokerResults([...brokers, ...extra]);
       })
       .catch(err => {
         if (brokerSearchSeq.current !== seq) return;
@@ -936,6 +972,25 @@ const ChatListScreen = ({
         if (brokerSearchSeq.current === seq) setBrokerSearchLoading(false);
       });
   }, [newChatSearch, showNewChat, currentUser?.email]);
+
+  const openChatWithPerson = useCallback(
+    person => {
+      const email =
+        person?.email != null ? String(person.email).trim().toLowerCase() : '';
+      if (!email) return;
+      onOpenChat?.({
+        id: email,
+        otherUserEmail: email,
+        name: person.title || 'משתמש',
+        profileImageUrl:
+          getUserProfileImageUrl(person) || person.profileImageUrl || null,
+        subscriptionType: person.subscriptionType || null,
+        preview: '',
+        time: '',
+      });
+    },
+    [onOpenChat],
+  );
 
   const openChatWithBroker = useCallback(
     b => {
@@ -1054,29 +1109,148 @@ const ChatListScreen = ({
     return () => clearInterval(interval);
   }, [currentUser?.email, fetchConversations]);
 
+  useEffect(() => {
+    const raw = String(search || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    const nameQuery = raw
+      .replace(/\d/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const phoneActive = digits.length >= 7;
+    const nameActive = nameQuery.length >= 2;
+    if (!phoneActive && !nameActive) {
+      phonePeopleSeq.current += 1;
+      setPhonePeople([]);
+      setPhonePeopleLoading(false);
+      setPhonePeopleError('');
+      return;
+    }
+    const myEmail = currentUser?.email
+      ? String(currentUser.email).trim().toLowerCase()
+      : null;
+    const seq = ++phonePeopleSeq.current;
+    setPhonePeopleLoading(true);
+    setPhonePeopleError('');
+    const timer = setTimeout(() => {
+      const lookups = [];
+      if (phoneActive) lookups.push(getUsersForGroupPicker(digits, myEmail, 'all'));
+      if (nameActive) lookups.push(getUsersForGroupPicker(nameQuery, myEmail, 'all'));
+      Promise.all(lookups)
+        .then(parts => {
+          if (phonePeopleSeq.current !== seq) return;
+          const seen = new Set();
+          const merged = [];
+          parts.forEach(res => {
+            (res?.users || []).forEach(person => {
+              const email = String(person?.email || '').trim().toLowerCase();
+              if (!email || seen.has(email)) return;
+              seen.add(email);
+              merged.push(person);
+            });
+          });
+          setPhonePeople(merged);
+          setPhonePeopleError('');
+        })
+        .catch(err => {
+          if (phonePeopleSeq.current !== seq) return;
+          setPhonePeople([]);
+          setPhonePeopleError(
+            err?.message ? String(err.message) : 'החיפוש לפי טלפון נכשל',
+          );
+        })
+        .finally(() => {
+          if (phonePeopleSeq.current === seq) setPhonePeopleLoading(false);
+        });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, currentUser?.email]);
+
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? conversations.filter(
-        c =>
+  const phoneQuery = search.replace(/\D/g, '');
+  const nameQuery = search
+    .replace(/\d/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const phoneSearchActive = phoneQuery.length >= 7;
+  const peopleSearchActive = phoneSearchActive || nameQuery.length >= 2;
+  const shortPhoneOnly = phoneQuery.length > 0 && phoneQuery.length < 7 && nameQuery.length < 2;
+  const phoneEmails = new Set(
+    phonePeople
+      .map(person => String(person?.email || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const conversationEmails = new Set(
+    conversations
+      .map(conv => String(conv?.otherUserEmail || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const phonePeopleOnly = phonePeople.filter(person => {
+    const email = String(person?.email || '').trim().toLowerCase();
+    return email && !conversationEmails.has(email);
+  });
+  const filtered = q && !shortPhoneOnly
+    ? conversations.filter(c => {
+        const email = String(c.otherUserEmail || '').trim().toLowerCase();
+        if (phoneSearchActive && email && phoneEmails.has(email)) return true;
+        return (
           (c.name || '').toLowerCase().includes(q) ||
           (c.preview || '').toLowerCase().includes(q) ||
           (c.listingCategoryLabel || '').toLowerCase().includes(q) ||
           (c.exclusiveOfferStatus != null &&
             q.length >= 2 &&
-            /בלע|ממתין|נדחה/i.test(q)),
-      )
+            /בלע|ממתין|נדחה/i.test(q))
+        );
+      })
     : conversations;
 
   const handleDeleteConversation = useCallback(
     conv => {
-      if (!conv || conv.isGroup === true || conv.id === '1') return;
+      if (!conv || conv.id === '1') return;
       const myEmail = currentUser?.email
         ? String(currentUser.email).trim().toLowerCase()
         : '';
+      if (!myEmail) return;
+      const isGroup = conv.isGroup === true;
+      const conversationId =
+        conv.conversationId != null && String(conv.conversationId).trim()
+          ? String(conv.conversationId).trim()
+          : conv.id != null
+            ? String(conv.id).trim()
+            : '';
+      if (isGroup) {
+        if (!conversationId) return;
+        Alert.alert(
+          'מחיקת קבוצה',
+          'האם למחוק את הקבוצה? היא תימחק אצל כל המשתתפים ולא ניתן לשחזר את ההודעות.',
+          [
+            {text: 'ביטול', style: 'cancel'},
+            {
+              text: 'מחק',
+              style: 'destructive',
+              onPress: async () => {
+                setDeletingConvId(conv.id);
+                try {
+                  await deleteChatGroup({userEmail: myEmail, conversationId});
+                  setConversations(prev => prev.filter(c => c.id !== conv.id));
+                } catch (err) {
+                  Alert.alert(
+                    'שגיאה',
+                    err?.message || 'מחיקת הקבוצה נכשלה, נסה שוב.',
+                  );
+                } finally {
+                  setDeletingConvId(null);
+                }
+              },
+            },
+          ],
+          {cancelable: true},
+        );
+        return;
+      }
       const otherEmail = conv.otherUserEmail
         ? String(conv.otherUserEmail).trim().toLowerCase()
         : '';
-      if (!myEmail || !otherEmail) return;
+      if (!otherEmail) return;
       Alert.alert(
         'מחיקת שיחה',
         'האם למחוק את השיחה? לא ניתן לשחזר את ההודעות.',
@@ -1281,10 +1455,11 @@ const ChatListScreen = ({
         <View style={styles.searchWrap}>
           <TextInput
             style={styles.searchInput}
-            placeholder="חפש"
+            placeholder="חפש שם או טלפון"
             placeholderTextColor={SEARCH_CLUE}
             value={search}
             onChangeText={setSearch}
+            writingDirection="rtl"
           />
           <MaterialCommunityIcons
             name="magnify"
@@ -1305,6 +1480,7 @@ const ChatListScreen = ({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1314,6 +1490,55 @@ const ChatListScreen = ({
           }>
           <View style={styles.scrollContentInner}>
             <View style={styles.topToListSpacer} />
+            {peopleSearchActive ? (
+              <View style={styles.phonePeopleBlock}>
+                {phonePeopleLoading ? (
+                  <View style={styles.phonePeopleEmpty}>
+                    <ActivityIndicator size="small" color={GOLD} />
+                  </View>
+                ) : phonePeopleError ? (
+                  <Text style={styles.phonePeopleEmpty}>{phonePeopleError}</Text>
+                ) : phonePeople.length === 0 ? (
+                  <Text style={styles.phonePeopleEmpty}>
+                    {phoneSearchActive
+                      ? 'לא נמצאו אנשים לפי המספר'
+                      : 'לא נמצאו אנשים לפי השם'}
+                  </Text>
+                ) : null}
+                {phonePeopleOnly.map(person => {
+                  const email = String(person?.email || '').trim().toLowerCase();
+                  const pic = normalizeChatAvatarUrl(
+                    getUserProfileImageUrl(person) || person.profileImageUrl,
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={email || person.id}
+                      style={styles.messageRow}
+                      activeOpacity={0.75}
+                      onPress={() => openChatWithPerson(person)}>
+                      <View style={styles.rowMain}>
+                        <View style={styles.previewRow}>
+                          <Text style={styles.messagePreview} numberOfLines={2}>
+                            {person.subtitle || 'פתח שיחה'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.avatarCol}>
+                        <ChatListRowAvatar
+                          uri={pic}
+                          userRef={email || null}
+                          subscriptionType={person.subscriptionType}
+                          placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
+                        />
+                        <Text style={styles.senderName} numberOfLines={1}>
+                          {person.title || 'משתמש'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
             {filtered.map((conv, index) => {
               const rawPeerPic =
                 conv.id === '1' ? null : getUserProfileImageUrl(conv);
@@ -1322,9 +1547,10 @@ const ChatListScreen = ({
                 conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
               const rowUserRef = conv.otherUserEmail || conv.id || null;
               const isDeletable =
-                conv.isGroup !== true &&
                 conv.id !== '1' &&
-                !!conv.otherUserEmail;
+                (conv.isGroup === true
+                  ? !!(conv.conversationId || conv.id)
+                  : !!conv.otherUserEmail);
               const unreadCount = getConversationUnreadCount(conv);
               return (
                 <SwipeableConversationRow
@@ -1521,6 +1747,7 @@ const ChatListScreen = ({
                     placeholderTextColor={NC_TEXT_SECONDARY}
                     value={groupSearch}
                     onChangeText={setGroupSearch}
+                    writingDirection="rtl"
                   />
                   <MaterialCommunityIcons
                     name="magnify"
@@ -1539,6 +1766,7 @@ const ChatListScreen = ({
                   placeholderTextColor="rgba(255,255,255,0.35)"
                   value={groupNameDraft}
                   onChangeText={setGroupNameDraft}
+                  writingDirection="rtl"
                 />
                 <TouchableOpacity
                   style={styles.ncGroupCameraBtn}
@@ -1667,6 +1895,7 @@ const ChatListScreen = ({
                       placeholderTextColor={NC_TEXT_SECONDARY}
                       value={newChatSearch}
                       onChangeText={setNewChatSearch}
+                      writingDirection="rtl"
                     />
                     <MaterialCommunityIcons
                       name="magnify"
@@ -1890,14 +2119,22 @@ const ChatListScreen = ({
               showsVerticalScrollIndicator={false}>
               {newChatSearch.trim().length >= 1 ? (
                 <>
-                  <Text style={styles.ncSectionLabel}>מתווכים</Text>
+                  <Text style={styles.ncSectionLabel}>
+                    {newChatSearch.replace(/\D/g, '').length >= 7
+                      ? 'אנשים'
+                      : 'מתווכים'}
+                  </Text>
                   <View style={styles.ncBrokerCard}>
                     {brokerSearchLoading ? (
                       <View style={styles.ncBrokerLoading}>
                         <ActivityIndicator size="small" color={GOLD} />
                       </View>
                     ) : brokerResults.length === 0 ? (
-                      <Text style={styles.ncBrokerEmpty}>לא נמצאו מתווכים</Text>
+                      <Text style={styles.ncBrokerEmpty}>
+                        {newChatSearch.replace(/\D/g, '').length >= 7
+                          ? 'לא נמצאו אנשים לפי המספר'
+                          : 'לא נמצאו מתווכים'}
+                      </Text>
                     ) : (
                       brokerResults.map((b, i) => {
                         const pic = getUserProfileImageUrl(b);
@@ -2226,16 +2463,50 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    paddingLeft: 44,
+    paddingLeft: 16,
+    paddingRight: 44,
     color: '#fff',
     fontSize: 20,
     letterSpacing: 0.2,
-    textAlign: hebrewTextAlign,
     fontFamily: 'Rubik-Regular',
-    writingDirection: 'rtl',
+    ...physicalRightInputStyle,
   },
   searchIcon: {position: 'absolute', right: 16},
+  phonePeopleBlock: {
+    width: '100%',
+    backgroundColor: '#2B2A39',
+  },
+  phonePeopleLabel: {
+    color: '#D2D0DC',
+    fontSize: 16,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  phonePeopleEmpty: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 15,
+    fontFamily: 'Rubik-Regular',
+    textAlign: hebrewTextAlign,
+    writingDirection: 'rtl',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  phonePersonRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    minHeight: 84,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#2B2A39',
+    borderBottomWidth: 1,
+    borderBottomColor: ROW_DIVIDER,
+    width: '100%',
+    gap: 12,
+  },
   loadingWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -2556,13 +2827,12 @@ const styles = StyleSheet.create({
     width: '100%',
     // minWidth: 0,
     paddingVertical: 10,
-    paddingRight: 16,
-    paddingLeft: 46,
+    paddingLeft: 16,
+    paddingRight: 46,
     color: '#FFFFFF',
     fontSize: 20,
-    textAlign: hebrewTextAlign,
     fontFamily: 'Rubik-Regular',
-    writingDirection: 'rtl',
+    ...physicalRightInputStyle,
   },
   ncSearchInputPadClear: {
     paddingLeft: 52,
@@ -2742,7 +3012,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 0.2,
     fontFamily: 'Rubik-Regular',
-    textAlign: 'left',
+    direction: 'rtl',
+    textAlign: hebrewTextAlign,
     borderBottomWidth: 1,
     borderBottomColor: '#8C85B3',
     paddingBottom: 4,

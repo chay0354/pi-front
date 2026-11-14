@@ -258,7 +258,7 @@ export const shouldHideListingCardStats = (listing, selectedCategory = null) =>
   isBnbListing(listing, selectedCategory);
 
 const PARTNERS_SEARCH_PURPOSE_LABELS = {
-  enter: 'מחפש להכנס',
+  enter: 'מחפש להיכנס',
   bring_in: 'מחפש להכניס',
   partner: 'מחפש להכניס',
 };

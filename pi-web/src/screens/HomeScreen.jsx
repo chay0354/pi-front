@@ -1,20 +1,21 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {mdiClose} from '@mdi/js';
 import TopBar from '../components/TopBar';
 import {PiRating} from '../components/FeedCard';
 import VolumeIcon from '../components/VolumeIcon';
-import GridCard from '../components/GridCard';
-import PiAiPanel, {PiAiQueryBar} from '../components/PiAiPanel';
+import PiAiListingCard from '../home/PiAiListingCard';
+import PiAiPanel from '../components/PiAiPanel';
 import {PiAiMascot, PiChatMark} from '../components/figma/home.generated';
 import {isFeedPost, toFeedItem} from '../feed/listingRules';
 import {usePiAiSearch} from '../feed/usePiAiSearch';
 import {inferPiAiKind, usePiAiProfessionals} from '../feed/usePiAiProfessionals';
 import AiProfessionalCard from '../home/AiProfessionalCard';
 import ProPromo from '../home/ProPromo';
-import {useFeaturedProjects, useHomeProfessionals} from '../feed/useHome';
+import {useFeaturedProjects, useHomeProfessionals, useHomeStories} from '../feed/useHome';
 import {useSession} from '../auth/session';
 import ProfessionalsDirectoryScreen from '../home/ProfessionalsDirectoryScreen';
 import SelectedProjectsScreen from '../home/SelectedProjectsScreen';
+import StoryScreen from '../home/StoryScreen';
 import {directoryProfilePayload, featuredProjectProfilePayload, useProfileNav} from '../profile/navigation';
 import {AppDownloadQr} from '../promo/AppDownloadQr';
 import {FEATURED_AD_MS, FEATURED_APP_ADS} from '../promo/appDownload';
@@ -35,6 +36,13 @@ import imgArrowLeft from '../assets/figma/home/2a8dc.svg';
 import imgArrowRight from '../assets/figma/home/08530.svg';
 import styles from './HomeScreen.module.css';
 
+const STORY_TYPE_LABEL = {
+  broker: 'תיווך',
+  professional: 'בעל מקצוע',
+  company: 'חברה',
+  project_marketer: 'שיווק',
+};
+
 const PRO_STEP = 135.385;
 const PROS_PER_PAGE = 6;
 const PRO_RAIL_WIDTH = 1760;
@@ -54,10 +62,70 @@ function SectionHeader({title, action, onAction, className = ''}) {
   );
 }
 
+/** Mobile home featured avatar: ProfileAvatar size, gold ring, a step larger for the desktop card. */
+const FEATURED_LOGO_SIZE = 80;
+const FEATURED_RING_RATIO = 3.5 / 82;
+const FEATURED_GAP_RATIO = 2 / 82;
+
+function FeaturedLogo({src}) {
+  const gradientId = `featuredLogoRing-${useId().replace(/:/g, '')}`;
+  const ringWidth = Math.max(1, FEATURED_LOGO_SIZE * FEATURED_RING_RATIO);
+  const inset = ringWidth + FEATURED_LOGO_SIZE * FEATURED_GAP_RATIO;
+  const radius = (FEATURED_LOGO_SIZE - ringWidth) / 2;
+  return (
+    <span className={styles.projectLogo}>
+      <svg className={styles.projectLogoRing} width={FEATURED_LOGO_SIZE} height={FEATURED_LOGO_SIZE} aria-hidden>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="4.56%" stopColor="#FFE56A" />
+            <stop offset="50.76%" stopColor="#F7C63A" />
+            <stop offset="88.31%" stopColor="#E5A80F" />
+          </linearGradient>
+        </defs>
+        <circle cx={FEATURED_LOGO_SIZE / 2} cy={FEATURED_LOGO_SIZE / 2} r={radius} fill="none" stroke={`url(#${gradientId})`} strokeWidth={ringWidth} />
+      </svg>
+      <img
+        className={styles.projectLogoImage}
+        src={src}
+        alt=""
+        style={{
+          top: inset,
+          left: inset,
+          width: FEATURED_LOGO_SIZE - inset * 2,
+          height: FEATURED_LOGO_SIZE - inset * 2,
+        }}
+      />
+    </span>
+  );
+}
+
+const STORY_VIDEO_FILE = /\.(mp4|mov|webm|m4v|m3u8)(\?|#|$)/i;
+
+function isStoryVideoSlide(slide) {
+  if (!slide) return false;
+  if (String(slide.media_type || '').toLowerCase() === 'video') return true;
+  const uri = String(slide.media_url || slide.media_playback_url || '');
+  return STORY_VIDEO_FILE.test(uri);
+}
+
+/** Newest video story in the ring. The circle plays the file itself, not the profile photo. */
+function storyRingVideoUri(ring) {
+  const slides = Array.isArray(ring?.slides) ? ring.slides : [];
+  let chosen = null;
+  for (const slide of slides) {
+    if (isStoryVideoSlide(slide)) chosen = slide;
+  }
+  if (!chosen) return '';
+  const direct = String(chosen.media_url || '').trim();
+  if (/\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(direct)) return direct;
+  return String(chosen.media_playback_url || chosen.media_hls_url || direct).trim();
+}
+
 /** `ringOutset` is the ring SVG's overflow past its frame, in percent (Figma inset). */
-function ProfilePic({src, size, ring, ringOutset = 0}) {
+function ProfilePic({src, size, ring, ringOutset = 0, video = ''}) {
   const [failed, setFailed] = useState(false);
   const ringBox = `${100 + 2 * ringOutset}%`;
+  const photo = src && !failed ? src : noProfileImage;
   return (
     <span className={styles.profilePic} style={{width: size, height: size}}>
       {ring && (
@@ -69,12 +137,24 @@ function ProfilePic({src, size, ring, ringOutset = 0}) {
           />
         </span>
       )}
-      <img
-        className={styles.profilePhoto}
-        src={src && !failed ? src : noProfileImage}
-        alt=""
-        onError={() => setFailed(true)}
-      />
+      {video ? (
+        <video
+          className={styles.profilePhoto}
+          src={video}
+          poster={photo}
+          muted
+          loop
+          autoPlay
+          playsInline
+        />
+      ) : (
+        <img
+          className={styles.profilePhoto}
+          src={photo}
+          alt=""
+          onError={() => setFailed(true)}
+        />
+      )}
     </span>
   );
 }
@@ -207,11 +287,7 @@ function FeaturedProject({projects, onOpen, onOpenProject, active, qrOpen, onQrO
               </button>
             </div>
           )}
-          {showingProject && project?.logo && (
-            <span className={styles.projectLogo}>
-              <img className={styles.projectLogoImage} src={project.logo} alt="" />
-            </span>
-          )}
+          {showingProject && project?.logo && <FeaturedLogo src={project.logo} />}
           {showingProject && (
             <button
               type="button"
@@ -334,7 +410,7 @@ function ProItem({pro, hidden, onOpen}) {
       aria-hidden={hidden || undefined}
       tabIndex={hidden ? -1 : undefined}
       onClick={() => onOpen(pro)}>
-      <ProfilePic src={pro.image} size={96} ring={imgRingLarge} ringOutset={1.72} />
+      <ProfilePic src={pro.image} video={hidden ? '' : pro.video} size={96} ring={imgRingLarge} ringOutset={1.72} />
       <p className={styles.proLabel} dir="auto">
         <span>{pro.name}</span>
         {pro.profession && <span>{pro.profession}</span>}
@@ -379,6 +455,7 @@ function ProsStrip({pros, onOpenPro, onOpenDirectory}) {
     <section className={styles.pros} aria-label="בעלי מקצוע בתחום הנדל״ן">
       <div className={styles.prosInner}>
         <SectionHeader className={styles.prosHeader} title="בעלי מקצוע בתחום הנדל״ן" action="לכל בעלי המקצוע" onAction={onOpenDirectory} />
+        {pros.length > 0 ? (
         <div
           className={styles.prosRail}
           onMouseEnter={() => (paused.current = true)}
@@ -391,13 +468,18 @@ function ProsStrip({pros, onOpenPro, onOpenDirectory}) {
             {looping && pros.map(pro => <ProItem key={`loop-${pro.id}`} pro={pro} hidden onOpen={onOpenPro} />)}
           </div>
         </div>
+      ) : null}
       </div>
-      <button type="button" className={`${styles.prosArrow} ${styles.prosArrowPrev}`} aria-label="הקודם" onClick={() => scrollBy(-1)}>
-        <img src={imgArrowRight} alt="" width={36} height={36} />
-      </button>
-      <button type="button" className={`${styles.prosArrow} ${styles.prosArrowNext}`} aria-label="הבא" onClick={() => scrollBy(1)}>
-        <img src={imgArrowLeft} alt="" width={16.5} height={24} />
-      </button>
+      {pros.length > 0 ? (
+        <>
+          <button type="button" className={`${styles.prosArrow} ${styles.prosArrowPrev}`} aria-label="הקודם" onClick={() => scrollBy(-1)}>
+            <img src={imgArrowRight} alt="" width={36} height={36} />
+          </button>
+          <button type="button" className={`${styles.prosArrow} ${styles.prosArrowNext}`} aria-label="הבא" onClick={() => scrollBy(1)}>
+            <img src={imgArrowLeft} alt="" width={16.5} height={24} />
+          </button>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -405,7 +487,8 @@ function ProsStrip({pros, onOpenPro, onOpenDirectory}) {
 /** Home screen (Figma 244:33110) — shown before a category feed, like mobile Home. */
 export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadChatCount = 0}) {
   const projects = useFeaturedProjects();
-  const {pros, topBroker, topProfessional} = useHomeProfessionals();
+  const {topBroker, topProfessional} = useHomeProfessionals();
+  const storyRings = useHomeStories();
   const {currentUser} = useSession();
   const [piAiOpen, setPiAiOpen] = useState(false);
   const [piAiDraft, setPiAiDraft] = useState('');
@@ -432,6 +515,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
     setDirectoryTypes([]);
   };
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [storyId, setStoryId] = useState(null);
   const onOpenPiAi = () => setPiAiOpen(true);
   const closePiAi = useCallback(() => {
     setPiAiOpen(false);
@@ -457,7 +541,6 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
 
   return (
     <div className={styles.screen}>
-      {piAiResults ? <PiAiQueryBar query={piAiQuery} /> : null}
       <div className={styles.stage}>
         {!piAiResults ? (
           <div className={styles.backdrop} aria-hidden>
@@ -502,7 +585,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
             ) : (
               <div className={styles.aiGrid}>
                 {piAiItems.map(item => (
-                  <GridCard key={item.id} item={item} />
+                  <PiAiListingCard key={item.id} item={item} />
                 ))}
               </div>
             )}
@@ -514,7 +597,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
           projects={projects}
           onOpen={() => setProjectsOpen(true)}
           onOpenProject={openProject}
-          active={nav.active && !directoryOpen && !projectsOpen && !piAiOpen}
+          active={nav.active && !directoryOpen && !projectsOpen && !piAiOpen && !storyId}
           qrOpen={qrOpen}
           onQrOpen={() => setQrOpen(true)}
           onQrClose={() => setQrOpen(false)}
@@ -552,7 +635,17 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
         </div>
         </div>
 
-        <ProsStrip pros={pros} onOpenPro={openPro} onOpenDirectory={() => openDirectory()} />
+        <ProsStrip
+          pros={storyRings.filter(ring => ring.display_name).map(ring => ({
+            id: String(ring.subscription_id),
+            name: ring.display_name || '',
+            profession: STORY_TYPE_LABEL[String(ring.subscription_type || '').toLowerCase()] || '',
+            image: ring.profile_image_url || null,
+            video: storyRingVideoUri(ring),
+          }))}
+          onOpenPro={pro => setStoryId(pro.id)}
+          onOpenDirectory={() => openDirectory()}
+        />
         </>
         )}
         {piAiOpen ? (
@@ -580,6 +673,27 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
         />
       ) : null}
       {projectsOpen ? <SelectedProjectsScreen onClose={() => setProjectsOpen(false)} /> : null}
+      {storyId ? (
+        <StoryScreen
+          rings={storyRings}
+          subscriptionId={storyId}
+          onClose={() => setStoryId(null)}
+          onOpenProfile={ring => {
+            setStoryId(null);
+            const payload = directoryProfilePayload({
+              id: ring.subscription_id,
+              display_name: ring.display_name,
+              name: ring.display_name,
+              profile_image_url: ring.profile_image_url,
+              subscription_type: ring.subscription_type,
+            });
+            nav.open({
+              ...payload,
+              subscription_type: ring.subscription_type || payload.subscription_type,
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

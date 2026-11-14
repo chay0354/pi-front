@@ -35,6 +35,7 @@ export const MultiImageWithVideo = ({
   onEditMainImage,
   onEditAdditionalImage,
   allowMoreImages = false,
+  coverTitle = 'תמונת נושא',
 }) => {
   const resolvedAdditionalImageChange = handleAdditionalImageChange || onAdditionalImageWebChange;
   const resolvedAdditionalImageInputRefs = additionalImageInputRefs || additionalImageInputRef;
@@ -69,6 +70,7 @@ export const MultiImageWithVideo = ({
         onEditMainImage={onEditMainImage}
         onEditAdditionalImage={onEditAdditionalImage}
         allowMoreImages={allowMoreImages}
+        coverTitle={coverTitle}
       />
       <Divider style={dividerStyle} />
       <VideoUpload

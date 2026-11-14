@@ -13,8 +13,9 @@
 .aiResults {
   flex: 1 1 auto;
   min-height: 0;
-  margin-left: 400px;
-  padding: 24px 32px 40px;
+  margin-left: 495px;
+  width: 1405px;
+  padding: 18px 0 40px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -23,19 +24,22 @@
   display: none;
 }
 
-.aiGrid {
-  direction: rtl;
+.aiGrid,
+.aiProGrid {
+  direction: ltr;
   display: grid;
-  grid-template-columns: repeat(3, 400px);
+  grid-template-columns: repeat(4, 334px);
   justify-content: start;
-  gap: 24px;
+}
+
+.aiGrid {
+  row-gap: 19px;
+  column-gap: 23px;
 }
 
 .aiProGrid {
-  direction: rtl;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
+  align-items: stretch;
+  gap: 23px;
 }
 
 .aiStatus {
@@ -52,6 +56,13 @@
   flex: 1 1 auto;
   width: 1920px;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.stage::-webkit-scrollbar {
+  display: none;
 }
 
 /* The skyline is the first layer. Everything after it stays above that photo. */
@@ -76,10 +87,10 @@
   display: grid;
   grid-template-columns: 422px minmax(0, 1fr) 423px;
   column-gap: 73px;
-  grid-template-rows: minmax(0, 1fr);
-  flex: 1 1 auto;
+  grid-template-rows: minmax(min-content, 1fr);
+  flex: 1 0 auto;
   align-items: stretch;
-  min-height: 0;
+  min-height: min-content;
   padding: 12px 0 8px;
 }
 
@@ -245,13 +256,19 @@
   position: absolute;
   top: 10px;
   left: 10px;
-  width: 45.004px;
-  height: 45.004px;
+  z-index: 3;
+  width: 80px;
+  height: 80px;
+}
+
+.projectLogoRing {
+  position: absolute;
+  inset: 0;
+  display: block;
 }
 
 .projectLogoImage {
-  width: 100%;
-  height: 100%;
+  position: absolute;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -442,8 +459,13 @@
   justify-content: space-between;
   gap: 12px;
   align-self: stretch;
-  min-height: 0;
+  min-height: min-content;
   padding-top: 52px;
+}
+
+.leftColumn > *,
+.rightColumn > * {
+  flex-shrink: 0;
 }
 
 .leftColumn {
@@ -585,22 +607,11 @@
   height: 100px;
 }
 
-.promoDisc {
-  position: absolute;
-  top: 8px;
-  left: 4px;
-  width: 62px;
-  height: 62px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #4d4966 0%, #2b2a39 70%);
-  box-shadow: inset 0 0 0 2px rgba(52, 243, 224, 0.35);
-}
-
 .promoGlass {
   position: absolute;
   z-index: 1;
-  left: calc(50% + 6px);
-  top: calc(50% - 8px);
+  left: calc(50% + 6.18px);
+  top: calc(50% - 7.57px);
   width: 82.5px;
   height: 82.5px;
   translate: -50% -50%;
@@ -610,9 +621,52 @@
 .promoGlyph {
   position: absolute;
   z-index: 2;
-  top: 13px;
-  left: 9px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+  left: calc(50% - 3.91px);
+  top: calc(50% - 18.62px);
+  display: flex;
+  translate: -50% -50%;
+  pointer-events: none;
+}
+
+.promoExtra {
+  position: absolute;
+  z-index: 2;
+  left: 6px;
+  top: 62px;
+  display: flex;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.promoSpark {
+  position: absolute;
+  z-index: 2;
+  left: 84px;
+  top: 46px;
+  width: 11px;
+  height: 11px;
+  pointer-events: none;
+}
+
+.promoDotA,
+.promoDotB {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.promoDotA {
+  left: 83.75px;
+  top: 37.5px;
+  width: 3.75px;
+  height: 3.75px;
+}
+
+.promoDotB {
+  left: 93.13px;
+  top: 59.38px;
+  width: 5px;
+  height: 5px;
 }
 
 /* ---- "כוכבי פאי" cards ---- */
@@ -804,6 +858,7 @@
   height: 84.62%;
   border-radius: 50%;
   object-fit: cover;
+  background: #1e1d27;
 }
 
 .review .profilePhoto {
@@ -819,6 +874,7 @@
   flex: 0 0 auto;
   width: 1920px;
   height: auto;
+  margin-top: 36px;
   padding-bottom: 18px;
 }
 

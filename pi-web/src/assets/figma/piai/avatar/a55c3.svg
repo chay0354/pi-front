@@ -1,0 +1,27 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="0.979233" height="0.664423" viewBox="0 0 0.979233 0.664423" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Vector" filter="url(#filter0_ii_0_471)">
+<path d="M0.278956 0.664207C0.0710317 0.672204 -0.072916 0.456279 0.0390433 0.288338C0.0790288 0.224361 0.159 0.160384 0.286954 0.0964061C0.286954 0.0964061 0.510872 -0.00755839 0.718796 0.0004388C0.934718 0.00843599 1.05467 0.240355 0.926721 0.400299C0.862744 0.488268 0.734791 0.568239 0.494879 0.632217C0.494879 0.632217 0.398912 0.664207 0.278956 0.664207Z" fill="url(#paint0_linear_0_471)"/>
+</g>
+<defs>
+<filter id="filter0_ii_0_471" x="0" y="-0.138305" width="1.03243" height="1.01551" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="-0.159583"/>
+<feGaussianBlur stdDeviation="0.0691527"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.479167 0 0 0 0 0.479167 0 0 0 0 0.479167 0 0 0 0.5 0"/>
+<feBlend mode="normal" in2="shape" result="effect1_innerShadow_0_471"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dx="0.0531944" dy="0.212777"/>
+<feGaussianBlur stdDeviation="0.106389"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="effect1_innerShadow_0_471" result="effect2_innerShadow_0_471"/>
+</filter>
+<linearGradient id="paint0_linear_0_471" x1="0.522888" y1="0.34381" x2="0.0477085" y2="0.715913" gradientUnits="userSpaceOnUse">
+<stop stop-color="white"/>
+<stop offset="1" stop-color="#A4A4A4"/>
+</linearGradient>
+</defs>
+</svg>

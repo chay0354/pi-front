@@ -11,6 +11,7 @@ import {
 import {
   createChatGroup,
   deleteChatConversation,
+  deleteChatGroup,
   getChatConversations,
   getChatParticipantDisplay,
   getUsersForGroupPicker,
@@ -326,6 +327,10 @@ const ChatListScreen = ({
 }) => {
   const {setCurrentUser} = useSession();
   const [search, setSearch] = useState('');
+  const [phonePeople, setPhonePeople] = useState([]);
+  const [phonePeopleLoading, setPhonePeopleLoading] = useState(false);
+  const [phonePeopleError, setPhonePeopleError] = useState('');
+  const phonePeopleSeq = useRef(0);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deletingConvId, setDeletingConvId] = useState(null);
@@ -754,10 +759,35 @@ const ChatListScreen = ({
     setBrokerSearchLoading(true);
     setBrokerSearchError(null);
     const exclude = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
-    searchBrokers(q, exclude)
-      .then(res => {
+    const phoneDigits = q.replace(/\D/g, '');
+    const peopleLookup =
+      phoneDigits.length >= 7
+        ? getUsersForGroupPicker(phoneDigits, exclude, 'all')
+        : Promise.resolve({users: []});
+    Promise.all([
+      searchBrokers(q, exclude).catch(() => ({brokers: []})),
+      peopleLookup.catch(() => ({users: []})),
+    ])
+      .then(([res, people]) => {
         if (brokerSearchSeq.current !== seq) return;
-        setBrokerResults(res.brokers || []);
+        const brokers = res.brokers || [];
+        const seen = new Set(
+          brokers.map(b => String(b?.email || '').trim().toLowerCase()).filter(Boolean),
+        );
+        const extra = (people.users || [])
+          .filter(u => {
+            const email = String(u?.email || '').trim().toLowerCase();
+            return email && !seen.has(email);
+          })
+          .map(u => ({
+            id: u.id,
+            email: u.email,
+            title: u.title,
+            subtitle: u.subtitle || '',
+            profileImageUrl: u.profileImageUrl || null,
+            subscriptionType: u.subscriptionType || null,
+          }));
+        setBrokerResults([...brokers, ...extra]);
       })
       .catch(err => {
         if (brokerSearchSeq.current !== seq) return;
@@ -770,6 +800,23 @@ const ChatListScreen = ({
         if (brokerSearchSeq.current === seq) setBrokerSearchLoading(false);
       });
   }, [newChatSearch, showNewChat, currentUser?.email]);
+
+  const openChatWithPerson = useCallback(
+    person => {
+      const email = person?.email != null ? String(person.email).trim().toLowerCase() : '';
+      if (!email) return;
+      openConversation({
+        id: email,
+        otherUserEmail: email,
+        name: person.title || 'משתמש',
+        profileImageUrl: getUserProfileImageUrl(person) || person.profileImageUrl || null,
+        subscriptionType: person.subscriptionType || null,
+        preview: '',
+        time: '',
+      });
+    },
+    [openConversation],
+  );
 
   const openChatWithBroker = useCallback(
     b => {
@@ -876,23 +923,119 @@ const ChatListScreen = ({
     return () => clearInterval(interval);
   }, [currentUser?.email, fetchConversations]);
 
+  useEffect(() => {
+    const raw = String(search || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    const nameQuery = raw.replace(/\d/g, ' ').replace(/\s+/g, ' ').trim();
+    const phoneActive = digits.length >= 7;
+    const nameActive = nameQuery.length >= 2;
+    if (!phoneActive && !nameActive) {
+      phonePeopleSeq.current += 1;
+      setPhonePeople([]);
+      setPhonePeopleLoading(false);
+      setPhonePeopleError('');
+      return undefined;
+    }
+    const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : null;
+    const seq = ++phonePeopleSeq.current;
+    setPhonePeopleLoading(true);
+    setPhonePeopleError('');
+    const timer = setTimeout(() => {
+      const lookups = [];
+      if (phoneActive) lookups.push(getUsersForGroupPicker(digits, myEmail, 'all'));
+      if (nameActive) lookups.push(getUsersForGroupPicker(nameQuery, myEmail, 'all'));
+      Promise.all(lookups)
+        .then(parts => {
+          if (phonePeopleSeq.current !== seq) return;
+          const seen = new Set();
+          const merged = [];
+          parts.forEach(res => {
+            (res?.users || []).forEach(person => {
+              const email = String(person?.email || '').trim().toLowerCase();
+              if (!email || seen.has(email)) return;
+              seen.add(email);
+              merged.push(person);
+            });
+          });
+          setPhonePeople(merged);
+          setPhonePeopleError('');
+        })
+        .catch(err => {
+          if (phonePeopleSeq.current !== seq) return;
+          setPhonePeople([]);
+          setPhonePeopleError(err?.message ? String(err.message) : 'החיפוש לפי טלפון נכשל');
+        })
+        .finally(() => {
+          if (phonePeopleSeq.current === seq) setPhonePeopleLoading(false);
+        });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, currentUser?.email]);
+
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? conversations.filter(
-        c =>
+  const phoneQuery = search.replace(/\D/g, '');
+  const nameQuery = search.replace(/\d/g, ' ').replace(/\s+/g, ' ').trim();
+  const phoneSearchActive = phoneQuery.length >= 7;
+  const peopleSearchActive = phoneSearchActive || nameQuery.length >= 2;
+  const shortPhoneOnly = phoneQuery.length > 0 && phoneQuery.length < 7 && nameQuery.length < 2;
+  const phoneEmails = new Set(
+    phonePeople.map(person => String(person?.email || '').trim().toLowerCase()).filter(Boolean),
+  );
+  const conversationEmails = new Set(
+    conversations
+      .map(conv => String(conv?.otherUserEmail || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const phonePeopleOnly = phonePeople.filter(person => {
+    const email = String(person?.email || '').trim().toLowerCase();
+    return email && !conversationEmails.has(email);
+  });
+  const filtered = q && !shortPhoneOnly
+    ? conversations.filter(c => {
+        const email = String(c.otherUserEmail || '').trim().toLowerCase();
+        if (phoneSearchActive && email && phoneEmails.has(email)) return true;
+        return (
           (c.name || '').toLowerCase().includes(q) ||
           (c.preview || '').toLowerCase().includes(q) ||
           (c.listingCategoryLabel || '').toLowerCase().includes(q) ||
-          (c.exclusiveOfferStatus != null && q.length >= 2 && /בלע|ממתין|נדחה/i.test(q)),
-      )
+          (c.exclusiveOfferStatus != null && q.length >= 2 && /בלע|ממתין|נדחה/i.test(q))
+        );
+      })
     : conversations;
 
   const handleDeleteConversation = useCallback(
     conv => {
-      if (!conv || conv.isGroup === true || conv.id === '1') return;
+      if (!conv || conv.id === '1') return;
       const myEmail = currentUser?.email ? String(currentUser.email).trim().toLowerCase() : '';
+      if (!myEmail) return;
+      const isGroup = conv.isGroup === true;
+      const conversationId =
+        conv.conversationId != null && String(conv.conversationId).trim()
+          ? String(conv.conversationId).trim()
+          : conv.id != null
+            ? String(conv.id).trim()
+            : '';
+      if (isGroup) {
+        if (!conversationId) return;
+        const ok = window.confirm(
+          'מחיקת קבוצה\n\nהאם למחוק את הקבוצה? היא תימחק אצל כל המשתתפים ולא ניתן לשחזר את ההודעות.',
+        );
+        if (!ok) return;
+        (async () => {
+          setDeletingConvId(conv.id);
+          try {
+            await deleteChatGroup({userEmail: myEmail, conversationId});
+            setConversations(prev => prev.filter(c => c.id !== conv.id));
+          } catch (err) {
+            window.alert(err?.message || 'מחיקת הקבוצה נכשלה, נסה שוב.');
+          } finally {
+            setDeletingConvId(null);
+          }
+        })();
+        return;
+      }
       const otherEmail = conv.otherUserEmail ? String(conv.otherUserEmail).trim().toLowerCase() : '';
-      if (!myEmail || !otherEmail) return;
+      if (!otherEmail) return;
       const ok = window.confirm('מחיקת שיחה\n\nהאם למחוק את השיחה? לא ניתן לשחזר את ההודעות.');
       if (!ok) return;
       (async () => {
@@ -1045,7 +1188,7 @@ const ChatListScreen = ({
           <input
             className={styles.searchInput}
             type="search"
-            placeholder="חפש"
+            placeholder="חפש שם או טלפון"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -1065,12 +1208,69 @@ const ChatListScreen = ({
         <div className={styles.scroll}>
           <div className={styles.scrollContent}>
             <div className={styles.topToListSpacer} />
+            {peopleSearchActive ? (
+              <div className={styles.phonePeopleBlock}>
+                {phonePeopleLoading ? (
+                  <p className={styles.phonePeopleEmpty}>מחפש...</p>
+                ) : phonePeopleError ? (
+                  <p className={styles.phonePeopleEmpty}>{phonePeopleError}</p>
+                ) : phonePeople.length === 0 ? (
+                  <p className={styles.phonePeopleEmpty}>
+                    {phoneSearchActive ? 'לא נמצאו אנשים לפי המספר' : 'לא נמצאו אנשים לפי השם'}
+                  </p>
+                ) : null}
+                {phonePeopleOnly.map(person => {
+                  const email = String(person?.email || '').trim().toLowerCase();
+                  const pic = normalizeChatAvatarUrl(
+                    getUserProfileImageUrl(person) || person.profileImageUrl,
+                  );
+                  return (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      key={email || person.id}
+                      className={styles.messageRow}
+                      style={{cursor: 'pointer'}}
+                      onClick={() => openChatWithPerson(person)}
+                      onKeyDown={e => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();
+                        openChatWithPerson(person);
+                      }}>
+                      <div className={styles.rowMain} style={{alignItems: flexEnd}}>
+                        <div className={styles.previewRow}>
+                          <span className={styles.messagePreview}>
+                            {person.subtitle || 'פתח שיחה'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={styles.avatarCol}>
+                        <ChatListRowAvatar
+                          size={73}
+                          uri={pic}
+                          userRef={email || null}
+                          subscriptionType={person.subscriptionType}
+                          placeholderImage={CHAT_LIST_AVATAR_PLACEHOLDER}
+                        />
+                        <span className={styles.senderName}>
+                          {person.title || 'משתמש'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {filtered.map((conv, index) => {
               const rawPeerPic = conv.id === '1' ? null : getUserProfileImageUrl(conv);
               const rowAvatarUrl = normalizeChatAvatarUrl(rawPeerPic);
               const rowDebugKey = conv.id ?? conv.otherUserEmail ?? conv.name ?? `conv-${index}`;
               const rowUserRef = conv.otherUserEmail || conv.id || null;
-              const isDeletable = conv.isGroup !== true && conv.id !== '1' && !!conv.otherUserEmail;
+              const isDeletable =
+                conv.id !== '1' &&
+                (conv.isGroup === true
+                  ? !!(conv.conversationId || conv.id)
+                  : !!conv.otherUserEmail);
               const unreadCount = getConversationUnreadCount(conv);
               return (
                 <SwipeableConversationRow
@@ -1391,14 +1591,20 @@ const ChatListScreen = ({
               <div className={styles.ncScrollContent}>
                 {newChatSearch.trim().length >= 1 ? (
                   <>
-                    <p className={styles.ncSectionLabel}>מתווכים</p>
+                    <p className={styles.ncSectionLabel}>
+                      {newChatSearch.replace(/\D/g, '').length >= 7 ? 'אנשים' : 'מתווכים'}
+                    </p>
                     <div className={styles.ncBrokerCard}>
                       {brokerSearchLoading ? (
                         <div className={styles.ncBrokerLoading}>
                           <span className={styles.spinner} aria-hidden />
                         </div>
                       ) : brokerResults.length === 0 ? (
-                        <p className={styles.ncBrokerEmpty}>לא נמצאו מתווכים</p>
+                        <p className={styles.ncBrokerEmpty}>
+                          {newChatSearch.replace(/\D/g, '').length >= 7
+                            ? 'לא נמצאו אנשים לפי המספר'
+                            : 'לא נמצאו מתווכים'}
+                        </p>
                       ) : (
                         brokerResults.map((b, i) => {
                           const pic = getUserProfileImageUrl(b);

@@ -22,21 +22,17 @@ function FilterIcon({filter, selected}) {
   return <img className={styles.filterIcon} src={filter.icon} alt="" />;
 }
 
-/** Pills that fit the panel's height in one column; longer lists (BnB) switch to a tile grid. */
-const MAX_PILLS = 6;
-
 function FilterList({filters, selectedFilterId, onSelectFilter}) {
-  const grid = filters.length > MAX_PILLS;
   return (
-    <div className={grid ? styles.tilesWrap : styles.filtersWrap}>
-      <div className={grid ? styles.tiles : styles.filters}>
+    <div className={styles.filtersWrap}>
+      <div className={styles.filters}>
         {filters.map(filter => {
           const selected = filter.id === selectedFilterId;
           return (
             <button
               key={filter.id}
               type="button"
-              className={`${grid ? styles.tile : styles.filter} ${selected ? styles.selected : ''}`}
+              className={`${styles.filter} ${selected ? styles.selected : ''}`}
               aria-pressed={selected}
               onClick={() => onSelectFilter(selected ? null : filter.id)}>
               <span className={styles.filterLabel}>{filter.label}</span>

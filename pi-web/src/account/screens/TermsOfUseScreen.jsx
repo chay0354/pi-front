@@ -1,5 +1,6 @@
 import {useRef, useState} from 'react';
 import {Icon} from '../AccountUi';
+import RightDrawer from '../../components/RightDrawer';
 import {TERMS_OF_USE_HEBREW} from '../termsOfUseContent';
 import styles from './TermsOfUseScreen.module.css';
 
@@ -57,6 +58,7 @@ export default function TermsOfUseScreen({onClose}) {
   };
 
   return (
+    <RightDrawer label="תנאי שימוש" onClose={onClose}>
     <div className={styles.root}>
       <div ref={scrollRef} className={styles.scroll}>
         <article className={styles.doc}>
@@ -92,5 +94,6 @@ export default function TermsOfUseScreen({onClose}) {
         </div>
       </footer>
     </div>
+    </RightDrawer>
   );
 }

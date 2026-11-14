@@ -39,6 +39,16 @@ import {resolvePublisherIdentityForSave} from './lib/listingPublisherIdentity';
 import {PublishAdButton} from './fields/PublishAdButton';
 import {CompanyOffersLandSizes} from './fields/CompanyOffersLandSizes';
 import {SharedSpacesCompany} from './fields/SharedSpacesCompany';
+import {VirtualTourUrl} from './fields/VirtualTourUrl';
+import {
+  VIRTUAL_TOUR_FIELD_KEY,
+  VIRTUAL_TOUR_GD_KEY,
+  VIRTUAL_TOUR_INVALID_MESSAGE,
+  canAddVirtualTour,
+  listingVirtualTourUrl,
+  normalizeVirtualTourUrl,
+  withVirtualTourField,
+} from './lib/virtualTour';
 import {
   AccommodationOffers,
   AdditionalDetails,
@@ -381,8 +391,10 @@ export default function AdsForm({
   /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7) */
   const adsFormFields = useMemo(() => {
     const raw = buildGlobalGroundFieldList(formList, category, propertyType) ?? formList[category]?.fields ?? [];
-    return localizeUploadFormFields(raw, currentUser?.subscription_type);
-  }, [formList, category, propertyType, currentUser?.subscription_type]);
+    const isCompany = resolveSubscriptionType(currentUser) === subscriptionTypes.company;
+    const withTour = canAddVirtualTour(isCompany, category) ? withVirtualTourField(raw) : raw;
+    return localizeUploadFormFields(withTour, currentUser?.subscription_type);
+  }, [formList, category, propertyType, currentUser]);
 
   /** 'enter' | 'bring_in' | 'partner' */
   const [searchPurpose, setSearchPurpose] = useState(null);
@@ -415,6 +427,8 @@ export default function AdsForm({
 
   const mainImageInputRef = useRef(null);
   const [constructionStatus, setConstructionStatus] = useState(null);
+  /** Company project visualization link — general_details.virtual_tour_url */
+  const [virtualTourUrl, setVirtualTourUrl] = useState('');
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
   const bnbBusinessLogoInputRef = useRef(null);
@@ -956,6 +970,7 @@ export default function AdsForm({
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
     }
+    setVirtualTourUrl(listingVirtualTourUrl(initialListing));
     if (['low', 'medium', 'high'].includes(String(initialListing.exposure_level || '').toLowerCase())) {
       setExposureLevel(String(initialListing.exposure_level).toLowerCase());
     }
@@ -1532,10 +1547,14 @@ export default function AdsForm({
         }
       }
     }
+    if (fieldKeys.includes(VIRTUAL_TOUR_FIELD_KEY) && normalizeVirtualTourUrl(virtualTourUrl) === null) {
+      publishErrors.push(VIRTUAL_TOUR_INVALID_MESSAGE);
+    }
     return publishErrors;
   }, [
     category,
     adsFormFields,
+    virtualTourUrl,
     searchPurpose,
     preferredApartmentType,
     budget,
@@ -1609,6 +1628,11 @@ export default function AdsForm({
           ? {sales_image_editor: salesImageEditorMeta.generalDetails}
           : {}),
       };
+      const hasVirtualTourField = fieldKeys.includes(VIRTUAL_TOUR_FIELD_KEY);
+      const virtualTourForPayload = hasVirtualTourField ? normalizeVirtualTourUrl(virtualTourUrl) || '' : '';
+      if (virtualTourForPayload) {
+        generalDetailsForPayload[VIRTUAL_TOUR_GD_KEY] = virtualTourForPayload;
+      }
       const accommodationOffersPayload =
         guestCount || checkInDate || checkOutDate
           ? {
@@ -1890,6 +1914,7 @@ export default function AdsForm({
               agriculturalLand: landRadioValues['קרקע חקלאית'] || null,
               landOwnership: landRadioValues['בעלות קרקע'] || null,
               generalDetails: Object.keys(generalDetailsForPayload).length > 0 ? generalDetailsForPayload : undefined,
+              ...(hasVirtualTourField && {virtualTourUrl: virtualTourForPayload}),
               saleAtPresale: saleAtPresale === true,
               sharedSpacesCompany: sharedSpacesCompany === true,
               salesImageUrl: uploadedSalesImageUrl || null,
@@ -2187,6 +2212,11 @@ export default function AdsForm({
             additionalImageInputRefs={additionalImageInputRefs}
             onEditMainImage={() => openAdImageEditor('main')}
             onEditAdditionalImage={openAdImageEditor}
+            coverTitle={
+              resolveSubscriptionType(currentUser) === subscriptionTypes.company
+                ? 'תמונת נושא או הדמייה'
+                : 'תמונת נושא'
+            }
             hasVideo={hasVideo}
             setHasVideo={setHasVideo}
             videoFile={videoFile}
@@ -2471,6 +2501,8 @@ export default function AdsForm({
             setConstructionStatus={setConstructionStatus}
           />
         );
+      case VIRTUAL_TOUR_FIELD_KEY:
+        return <VirtualTourUrl key={VIRTUAL_TOUR_FIELD_KEY} value={virtualTourUrl} setValue={setVirtualTourUrl} />;
       case 'companyofferslandsizes':
         return (
           <CompanyOffersLandSizes

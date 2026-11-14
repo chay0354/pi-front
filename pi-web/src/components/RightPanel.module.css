@@ -73,6 +73,15 @@
   right: 0;
   width: 208px;
   height: 499px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--blue-100);
+  scrollbar-width: none;
+}
+
+.filtersWrap::-webkit-scrollbar {
+  display: none;
 }
 
 .filters {
@@ -86,53 +95,6 @@
   flex-shrink: 0;
 }
 
-.tilesWrap {
-  position: absolute;
-  top: 136px;
-  right: 10px;
-  width: 297px;
-}
-
-.tiles {
-  direction: rtl;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.tile {
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  height: 108px;
-  padding: 12px 6px;
-  border: 2px solid transparent;
-  border-radius: 20px;
-  background: var(--blue-600);
-  box-shadow: var(--shadow-1);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.tile:hover {
-  background: #33324a;
-}
-
-.tile.selected {
-  border-color: var(--yellow-icons);
-}
-
-.tile .filterIcon {
-  width: 36px;
-  height: 36px;
-}
-
-.tile .filterLabel {
-  font-size: 18px;
-}
-
 .filter {
   display: flex;
   align-items: center;
@@ -144,7 +106,7 @@
   overflow: clip;
   border-radius: var(--radius-full) 0 0 var(--radius-full);
   background: var(--blue-600);
-  box-shadow: var(--shadow-1);
+  box-shadow: none;
 }
 
 .filter:hover {

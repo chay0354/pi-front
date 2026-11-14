@@ -797,10 +797,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     zIndex: 10,
     elevation: 6,
-    shadowColor: '#5EEAD4',
-    shadowOffset: {width: 0, height: 0},
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
   },
   chatBadgeText: {
     color: '#1a1a2e',

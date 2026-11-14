@@ -485,6 +485,7 @@ function App() {
   const [editingListing, setEditingListing] = useState(null); // When editing an ad from EditPublishAdScreen
   const [sharedListingForChat, setSharedListingForChat] = useState(null); // When opening chat from share
   const [chatReturnScreen, setChatReturnScreen] = useState(screenName.settings); // Where to return when closing chat
+  const [chatComposerDraft, setChatComposerDraft] = useState('');
   const [selectedConversation, setSelectedConversation] = useState(null); // Conversation opened from chat list
   const [unreadChatCount, setUnreadChatCount] = useState(0); // Unread message count for chat badge (real messages only)
   const [piWelcomeRead, setPiWelcomeRead] = useState(false); // Until user opens Pi welcome once, count it as 1 unread
@@ -1301,6 +1302,7 @@ function App() {
     } catch (_) {}
     setCurrentScreen(screenName.tikTokFeed);
   }, []);
+  if (__DEV__) global.__piNav = {go: setCurrentScreen, feed: openTikTokFromHome}; // TEMP-IOS-MIRROR
 
   const handleEditPublishCategoryChange = useCallback(categoryId => {
     const catNum =
@@ -1362,14 +1364,37 @@ function App() {
   const openProfileReviewsFromProfile = useCallback((list, opts) => {
     setProfileReviewsList(Array.isArray(list) ? list : []);
     setProfileReviewsVariant(opts?.variant === 'comments' ? 'comments' : 'reviews');
-    setCurrentScreen(screenName.profileReviews);
   }, []);
 
   const closeProfileReviewsList = useCallback(() => {
     setProfileReviewsList(null);
     setProfileReviewsVariant('reviews');
-    setCurrentScreen(screenName.userProfile);
-  }, []);
+    // Older builds pushed this as its own screen. Pop that entry if we're on it
+    // so back doesn't land on an empty reviews page over a hidden feed.
+    if (currentScreen === screenName.profileReviews) {
+      goBack(screenName.userProfile);
+    }
+  }, [currentScreen, goBack]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const onBackPress = () => {
+      if (
+        !profileReviewsList ||
+        (currentScreen !== screenName.userProfile &&
+          currentScreen !== screenName.profileReviews)
+      ) {
+        return false;
+      }
+      closeProfileReviewsList();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => subscription.remove();
+  }, [closeProfileReviewsList, currentScreen, profileReviewsList]);
 
   const presenceUserEmail =
     currentUser?.email != null && String(currentUser.email).trim() !== ''
@@ -2048,6 +2073,11 @@ function App() {
                   )
                 }
                 onClose={() => {
+                  if (profileReviewsList) {
+                    setProfileReviewsList(null);
+                    setProfileReviewsVariant('reviews');
+                    return;
+                  }
                   if (
                     profileOverviewSnapshot &&
                     isAdsListingRecord(profileUser)
@@ -2218,14 +2248,17 @@ function App() {
                 }
               />
             )}
-            {currentScreen === screenName.profileReviews &&
-              profileReviewsList && (
+            {profileReviewsList &&
+            (currentScreen === screenName.userProfile ||
+              currentScreen === screenName.profileReviews) ? (
+              <View style={styles.profileReviewsOverlay}>
                 <ProfileReviewsScreen
                   reviews={profileReviewsList}
                   variant={profileReviewsVariant}
                   onClose={closeProfileReviewsList}
                 />
-              )}
+              </View>
+            ) : null}
             {currentScreen === screenName.companyReport &&
               companyReportPayload && (
                 <CompanyReportScreen
@@ -2247,11 +2280,11 @@ function App() {
                   currentUser={currentUser}
                   onClose={() => {
                     setCompanyReportPayload(null);
-                    setCurrentScreen(screenName.userProfile);
+                    goBack(screenName.userProfile);
                   }}
                   onSubmittedSuccessfully={() => {
                     setCompanyReportPayload(null);
-                    setCurrentScreen(screenName.userProfile);
+                    goBack(screenName.userProfile);
                     setShowCompanyReportSuccess(true);
                   }}
                 />
@@ -3127,12 +3160,19 @@ function App() {
                 onClose={() => {
                   setSharedListingForChat(null);
                   setSelectedConversation(null);
+                  setChatComposerDraft('');
                   setChatListRefreshKey(k => k + 1);
                   goBack(chatReturnScreen);
                 }}
                 sharedListing={sharedListingForChat}
                 conversation={selectedConversation}
                 currentUser={currentUser}
+                draftText={chatComposerDraft}
+                onDraftChange={setChatComposerDraft}
+                onRequireRegistration={() => {
+                  setReturnToScreenAfterAuth('chat');
+                  setCurrentScreen(screenName.userRegistration);
+                }}
                 onMessageSent={() => setChatListRefreshKey(k => k + 1)}
                 onOpenPost={listing => {
                   setSharedListingForChat(null);
@@ -3743,6 +3783,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     opacity: 0,
     zIndex: 0,
+  },
+  /** Full ביקורות list sits on the profile. Not a history screen — closing it
+   * must not pop onto an empty page over the hidden feed. */
+  profileReviewsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    elevation: 30,
+    backgroundColor: '#1E1D27',
   },
   container: {
     flex: 1,

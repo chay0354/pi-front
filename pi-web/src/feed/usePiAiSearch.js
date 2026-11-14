@@ -10,6 +10,7 @@ import {
   inferPiAiQueryConstraints,
   parsePiAiQuery,
   rankListingsByQuery,
+  shouldReturnFullPiAiPool,
 } from './piAiMatchListings';
 
 const IDLE = {status: 'idle', query: '', rows: [], message: ''};
@@ -42,6 +43,7 @@ async function runPiAiSearch(q, signal) {
     };
   }
 
+  const fullPool = shouldReturnFullPiAiPool(q, parsed);
   let rows = null;
   let aiSaidNoMatch = false;
   const ai = await piAiSearchListings(q, searchPool.map(buildListingAiSummary), {signal});
@@ -52,12 +54,19 @@ async function runPiAiSearch(q, signal) {
     else aiSaidNoMatch = true;
   }
   if (rows == null && !aiSaidNoMatch) {
-    rows = rankListingsByQuery(q, searchPool, {topN: 20})
-      .ranked.filter(r => r.score >= 6)
-      .map(r => r.listing);
+    if (fullPool) rows = searchPool;
+    else {
+      rows = rankListingsByQuery(q, searchPool, {topN: 20})
+        .ranked.filter(r => r.score >= 6)
+        .map(r => r.listing);
+    }
   }
 
-  if ((!rows || rows.length === 0) && searchPool.length) {
+  if (fullPool && searchPool.length) {
+    const picked = rows || [];
+    const seen = new Set(picked.map(row => String(row.id)));
+    rows = [...picked, ...searchPool.filter(row => !seen.has(String(row.id)))];
+  } else if ((!rows || rows.length === 0) && searchPool.length) {
     const c = inferPiAiQueryConstraints(q);
     // The pool already satisfies every hard constraint, so it is a valid answer.
     const hasHardNumbers =

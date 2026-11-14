@@ -23,26 +23,36 @@ function toPro(row) {
   };
 }
 
-/** Highest-rated professionals; the directory's own order (most recently updated) breaks ties. */
-export function topProfessionals(rows, count = RECOMMENDED_PROS_COUNT) {
+/** Highest-rated accounts of one type; the directory's own order breaks ties. */
+export function topByType(rows, type, count = RECOMMENDED_PROS_COUNT) {
   return (Array.isArray(rows) ? rows : [])
-    .filter(r => text(r?.subscription_type).toLowerCase() === 'professional')
+    .filter(r => text(r?.subscription_type).toLowerCase() === type)
     .map((row, order) => ({pro: toPro(row), order}))
     .sort((a, b) => b.pro.rating - a.pro.rating || a.order - b.order)
     .slice(0, count)
     .map(x => x.pro);
 }
 
+export function topProfessionals(rows, count = RECOMMENDED_PROS_COUNT) {
+  return topByType(rows, 'professional', count);
+}
+
 export function useRecommendedPros() {
-  const [pros, setPros] = useState([]);
+  const [groups, setGroups] = useState({pros: [], brokers: []});
   useEffect(() => {
     const controller = new AbortController();
     getProfessionalsDirectory({signal: controller.signal})
-      .then(data => setPros(topProfessionals(data?.professionals)))
+      .then(data => {
+        const rows = data?.professionals;
+        setGroups({
+          pros: topByType(rows, 'professional'),
+          brokers: topByType(rows, 'broker'),
+        });
+      })
       .catch(() => {
-        if (!controller.signal.aborted) setPros([]);
+        if (!controller.signal.aborted) setGroups({pros: [], brokers: []});
       });
     return () => controller.abort();
   }, []);
-  return pros;
+  return groups;
 }

@@ -25,7 +25,7 @@ export const MultiPicturesUpload = ({
   onEditMainImage,
   onEditAdditionalImage,
   allowMoreImages = false,
-  coverTitle = 'תמונת נושא או הדמייה',
+  coverTitle = 'תמונת נושא',
 }) => {
   const [showAdditionalImages, setShowAdditionalImages] = React.useState(false);
   const hasExtraImages = [4, 5, 6, 7, 8, 9].some(

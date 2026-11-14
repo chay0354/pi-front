@@ -136,12 +136,38 @@ export function canEditSeparateCompanyLogo(subscriptionType, user = null) {
   return isB2BSubscriptionType(subscriptionType || user?.subscription_type || user?.subscriptionType || '');
 }
 
+/** Stable 072 placeholder until a real virtual number is assigned. Same seed, same number. */
+function suggestVirtualPhone(seed) {
+  const basis = String(seed || 'pi').trim() || 'pi';
+  let hash = 2166136261;
+  for (let i = 0; i < basis.length; i += 1) {
+    hash ^= basis.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const digits = String(hash >>> 0).padStart(7, '0').slice(-7);
+  return `072${digits}`;
+}
+
 /** Editable profile fields per account type (keys match `subscriptions` columns). */
 export function getProfileEditFields(subscriptionType, user = null) {
   const t = String(subscriptionType || '').toLowerCase();
   const about = {key: 'description', label: 'אודות', placeholder: 'ספר/י קצת על עצמך', multiline: true};
   const phonePad = {keyboardType: 'phone-pad'};
   const urlPad = {keyboardType: 'url'};
+  const virtualPhone = {key: 'virtual_phone', label: 'מספר וירטואלי', readOnly: true, ...phonePad};
+  const hidePrivatePhone = {
+    key: 'hide_private_phone',
+    label: 'הסתרת מספר פרטי',
+    type: 'toggle',
+    hint: 'המספר הפרטי לא יוצג בפרופיל ובמודעות',
+  };
+  const officePhone = {
+    key: 'office_phone',
+    label: 'מספר משרד ישיר',
+    placeholder: 'מספר טלפון משרד',
+    required: true,
+    ...phonePad,
+  };
 
   if (t === subscriptionTypes.broker) {
     return [
@@ -150,8 +176,11 @@ export function getProfileEditFields(subscriptionType, user = null) {
       {key: 'brokerage_license_number', label: 'מספר רשיון תיווך', placeholder: 'הזן מספר רישיון'},
       {key: 'broker_office_name', label: 'שם משרד המתווך', placeholder: 'הזן שם משרד'},
       {key: 'name', label: 'שם הסוכן', placeholder: 'הזן שם מלא'},
+      {key: 'business_address', label: 'כתובת בית העסק', placeholder: 'הזן כתובת'},
       {key: 'dealer_number', label: 'מספר- ח.פ/עוסק/פטור', placeholder: 'הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)'},
-      {key: 'phone', label: 'מספר טלפון', placeholder: 'הזן מספר טלפון', ...phonePad},
+      {key: 'phone', label: 'מספר פרטי ישיר', placeholder: 'הזן מספר טלפון', ...phonePad},
+      hidePrivatePhone,
+      virtualPhone,
       {...about, label: 'תיאור', placeholder: 'כתוב תיאור כללי על השירות שלך'},
     ];
   }
@@ -163,8 +192,10 @@ export function getProfileEditFields(subscriptionType, user = null) {
     return [
       nameField,
       {key: 'contact_person_name', label: 'איש קשר', placeholder: 'שם איש הקשר'},
-      {key: 'mobile_phone', label: 'טלפון נייד', placeholder: 'מספר טלפון נייד', ...phonePad},
-      {key: 'office_phone', label: 'טלפון משרד', placeholder: 'מספר טלפון משרד', ...phonePad},
+      officePhone,
+      {key: 'mobile_phone', label: 'מספר פרטי ישיר', placeholder: 'מספר טלפון נייד (אופציונאלי)', ...phonePad},
+      hidePrivatePhone,
+      virtualPhone,
       {key: 'company_website', label: 'אתר אינטרנט', placeholder: 'https://', ...urlPad},
       {key: 'business_address', label: 'כתובת', placeholder: 'כתובת'},
       about,
@@ -175,8 +206,10 @@ export function getProfileEditFields(subscriptionType, user = null) {
     return [
       {key: 'business_name', label: 'שם החברה', placeholder: 'שם החברה'},
       {key: 'contact_person_name', label: 'איש קשר', placeholder: 'שם איש הקשר'},
-      {key: 'mobile_phone', label: 'טלפון נייד', placeholder: 'מספר טלפון נייד', ...phonePad},
-      {key: 'office_phone', label: 'טלפון משרד', placeholder: 'מספר טלפון משרד', ...phonePad},
+      officePhone,
+      {key: 'mobile_phone', label: 'מספר פרטי ישיר', placeholder: 'מספר טלפון נייד (אופציונאלי)', ...phonePad},
+      hidePrivatePhone,
+      virtualPhone,
       {key: 'company_website', label: 'אתר אינטרנט', placeholder: 'https://', ...urlPad},
       {key: 'business_address', label: 'כתובת חברה', placeholder: 'כתובת החברה'},
       about,
@@ -190,8 +223,10 @@ export function getProfileEditFields(subscriptionType, user = null) {
       {key: 'name', label: 'שם העסק', placeholder: 'הזן שם'},
       {key: 'business_address', label: 'כתובת בית העסק', placeholder: 'הזן כתובת'},
       {key: 'dealer_number', label: 'מספר- ח.פ/עוסק/פטור', placeholder: 'הזן מספר- ח.פ/עוסק/פטור (אופציונאלי)'},
-      {key: 'phone', label: 'מספר טלפון 1', placeholder: 'הזן מספר טלפון', ...phonePad},
-      {key: 'office_phone', label: 'מספר טלפון 2', placeholder: 'הזן מספר טלפון (אופציונאלי)', ...phonePad},
+      {...officePhone, placeholder: 'הזן מספר טלפון משרד'},
+      {key: 'phone', label: 'מספר פרטי ישיר', placeholder: 'הזן מספר טלפון (אופציונאלי)', ...phonePad},
+      hidePrivatePhone,
+      virtualPhone,
       {...about, label: 'תיאור', placeholder: 'כתוב תיאור כללי על השירות שלך'},
     ];
   }
@@ -222,6 +257,10 @@ export function hydrateProfileEditForm(user, fields) {
       } else initial[f.key] = [];
       return;
     }
+    if (f.type === 'toggle') {
+      initial[f.key] = u[f.key] === true || u[f.key] === 'true';
+      return;
+    }
     let val = u[f.key] != null ? String(u[f.key]) : '';
     if (f.key === 'broker_office_name' && !val.trim() && u.business_name) val = String(u.business_name);
     if (f.key === 'business_name' && !val.trim() && u.broker_office_name) val = String(u.broker_office_name);
@@ -234,6 +273,9 @@ export function hydrateProfileEditForm(user, fields) {
     if (f.key === 'phone' && !val.trim()) {
       if (u.mobile_phone) val = String(u.mobile_phone);
       else if (u.phone) val = String(u.phone);
+    }
+    if (f.key === 'virtual_phone' && !val.trim()) {
+      val = suggestVirtualPhone(u.id || u.email || u.subscriber_number);
     }
     initial[f.key] = val;
   });

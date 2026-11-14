@@ -136,6 +136,41 @@ button.headerBackBtn:hover {
   color: rgba(255, 255, 255, 0.35);
 }
 
+.phonePeopleBlock {
+  width: 100%;
+  background: #2b2a39;
+}
+
+.phonePeopleLabel,
+.phonePeopleEmpty {
+  margin: 0;
+  padding: 8px 16px;
+  color: #d2d0dc;
+  font-size: 16px;
+  text-align: right;
+}
+
+.phonePeopleEmpty {
+  color: rgba(255, 255, 255, 0.55);
+  padding-bottom: 14px;
+}
+
+.phonePersonRow {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 84px;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #2b2a39;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
 .searchIcon {
   position: absolute;
   right: 16px;

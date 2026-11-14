@@ -5,6 +5,8 @@ import iconLocation from '../assets/figma/pros/location.svg';
 import iconArrow from '../assets/figma/pros/arrow.svg';
 import {attachPlayback} from '../profile/lib/attachPlayback';
 import {featuredProjectProfilePayload, useProfileNav} from '../profile/navigation';
+import {toFeedItem} from '../feed/listingRules';
+import {PiRating} from './FeedCard';
 import VolumeIcon from './VolumeIcon';
 import styles from './RecommendedPros.module.css';
 
@@ -43,11 +45,6 @@ function ProjectMedia({project, playing, muted, onToggleMute}) {
         }}
       />
       <div className={styles.mediaShade} />
-      {project.logo ? (
-        <span className={styles.projectLogo}>
-          <img className={styles.projectLogoImage} src={project.logo} alt="" />
-        </span>
-      ) : null}
       <button
         type="button"
         className={styles.mute}
@@ -66,31 +63,55 @@ function ProjectMedia({project, playing, muted, onToggleMute}) {
   );
 }
 
+const PURPOSE_LABEL = {rent: 'להשכרה', sale: 'למכירה'};
+const formatPrice = n => `₪${Math.round(n).toLocaleString('en-US')}`;
+
 function ProjectCard({project, playing, muted, onToggleMute}) {
   const nav = useProfileNav();
   const open = () => nav.open(featuredProjectProfilePayload(project.raw));
-  const address = String(project.raw?.address || '').trim();
+  const item = toFeedItem(project.raw);
+  const address = item.address || String(project.raw?.address || '').trim();
+  const price = item.price != null ? formatPrice(item.price) : '';
+  const rooms = item.rooms != null ? `${item.rooms} חד׳` : '';
+  const rating = item.piRating ?? 5;
   return (
     <div className={styles.proCard}>
       <div className={styles.mediaHit} onClick={open}>
         <ProjectMedia project={project} playing={playing} muted={muted} onToggleMute={onToggleMute} />
       </div>
       <div className={styles.content}>
-        <div className={styles.info}>
-          <div className={styles.identity}>
-            <button type="button" className={`${styles.proName} ${styles.proNameLink}`} dir="rtl" onClick={open}>
-              {project.name || 'פרויקט'}
-            </button>
-            {address ? (
-              <div className={styles.address}>
-                <span className={styles.addressText} dir="auto">
-                  {address}
-                </span>
-                <img src={iconLocation} alt="" width={24} height={24} />
-              </div>
-            ) : null}
+        <button type="button" className={styles.body} onClick={open}>
+          <div className={styles.titleRow}>
+            <span className={styles.publisher}>
+              {project.logo ? <img className={styles.logo} src={project.logo} alt="" /> : null}
+              <span className={styles.proName} dir="auto">
+                {project.name || item.creatorName || 'פרויקט'}
+              </span>
+            </span>
+            <PiRating value={rating} />
           </div>
-        </div>
+          {PURPOSE_LABEL[item.purpose] || price ? (
+            <div className={styles.priceRow}>
+              {price ? (
+                <p className={styles.price} dir="auto">
+                  {price}
+                </p>
+              ) : null}
+              {PURPOSE_LABEL[item.purpose] ? <span className={styles.purpose}>{PURPOSE_LABEL[item.purpose]}</span> : null}
+            </div>
+          ) : null}
+          {rooms ? (
+            <p className={styles.meta} dir="auto">
+              {rooms}
+            </p>
+          ) : null}
+          {address ? (
+            <p className={styles.address}>
+              <img src={iconLocation} alt="" width={24} height={24} />
+              <span dir="auto">{address}</span>
+            </p>
+          ) : null}
+        </button>
         <button type="button" className={styles.watch} dir="rtl" onClick={open}>
           צפו בפרויקט
         </button>

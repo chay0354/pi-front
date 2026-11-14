@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {mdiChevronLeft, mdiMagnify, mdiTuneVertical, mdiVolumeHigh, mdiVolumeOff} from '@mdi/js';
 import MdiIcon from '../publish/MdiIcon';
 import {mobileAsset} from '../publish/lib/publishRules';
-import {getProfessionalsDirectory, toSubscriptionId} from '../api/client';
+import {getProfessionalsDirectory} from '../api/client';
 import {getProfessionalSpecializationsForTypes} from '../account/constants';
 import {PiRatingBadge, ProfileAvatar} from '../profile/ProfileParts';
 import {isHlsUri, muxThumbnailUri, resolveAdVideoUri} from '../profile/lib/videoPlayback';
@@ -28,7 +28,6 @@ const sortDown = mobileAsset('profile/arow-down.png');
 const viewCardsIcon = mobileAsset('swipereight.png');
 const viewListIcon = mobileAsset('swiperleft.png');
 const locationIcon = mobileAsset('pros/location-pro.png');
-const messageButton = mobileAsset('pros/pro-messges.png');
 
 const isBroker = item => String(item?.subscription_type || '').trim().toLowerCase() === 'broker';
 
@@ -129,7 +128,7 @@ const proTitle = item => String(item?.display_name || (isBroker(item) ? 'תיו�
 const proPoster = (item, videoUri) => (videoUri && muxThumbnailUri(videoUri, {width: 720, time: 0})) || item?.profile_image_url || '';
 
 /** Regular view: one feed-sized card per professional, like the TikTok feed column. */
-function ProfessionalCard({item, own, active, muted, onToggleMute, onOpen, onMessage}) {
+function ProfessionalCard({item, active, muted, onToggleMute, onOpen}) {
   const videoUri = resolveVideoUri(item);
   const poster = proPoster(item, videoUri);
   const title = proTitle(item);
@@ -201,9 +200,6 @@ function ProfessionalCard({item, own, active, muted, onToggleMute, onOpen, onMes
       </div>
 
       <footer className={styles.feedBottom}>
-        <button type="button" className={styles.feedMessage} aria-label="הודעה" disabled={own} onClick={onMessage}>
-          <img src={messageButton} alt="" />
-        </button>
         <button type="button" className={styles.feedDetails} onClick={onOpen}>
           {address && !isBroker(item) ? (
             <span className={styles.address}>
@@ -268,10 +264,8 @@ function ProfessionalGridCard({item, onOpen}) {
 }
 
 export default function ProfessionalsDirectoryScreen({
-  currentUser,
   onClose,
   onOpenProfessional,
-  onMessage,
   initialTypes = [],
 }) {
   const [loading, setLoading] = useState(true);
@@ -381,7 +375,6 @@ export default function ProfessionalsDirectoryScreen({
     return () => window.removeEventListener('keydown', onKey);
   }, [view, filtersOpen, activeIndex, scrollToIndex]);
 
-  const myId = toSubscriptionId(currentUser?.id || currentUser?.subscription_id);
   const filtersOn = Boolean(location || types.length || specs.length);
   const sortImage = sort === 'none' ? sortNone : sort === 'desc' ? sortUp : sortDown;
   const sortLabel = sort === 'none' ? 'מיין לפי דירוג' : sort === 'desc' ? 'ממוין לפי דירוג גבוה לנמוך' : 'ממוין לפי דירוג נמוך לגבוה';
@@ -475,23 +468,16 @@ export default function ProfessionalsDirectoryScreen({
           <>
             <div className={styles.feedColumn} ref={listRef} onScroll={onFeedScroll}>
               {statusRow}
-              {filtered.map((item, i) => {
-                const own = Boolean(myId && String(item.id) === String(myId));
-                return (
-                  <ProfessionalCard
-                    key={item.id}
-                    item={item}
-                    own={own}
-                    active={!filtersOpen && i === activeIndex}
-                    muted={muted}
-                    onToggleMute={() => setMuted(value => !value)}
-                    onOpen={() => onOpenProfessional?.(item)}
-                    onMessage={() => {
-                      if (!own) onMessage?.(item);
-                    }}
-                  />
-                );
-              })}
+              {filtered.map((item, i) => (
+                <ProfessionalCard
+                  key={item.id}
+                  item={item}
+                  active={!filtersOpen && i === activeIndex}
+                  muted={muted}
+                  onToggleMute={() => setMuted(value => !value)}
+                  onOpen={() => onOpenProfessional?.(item)}
+                />
+              ))}
             </div>
             {filtered.length > 1 ? (
               <div className={styles.arrows}>

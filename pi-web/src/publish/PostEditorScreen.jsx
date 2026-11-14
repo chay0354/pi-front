@@ -7,8 +7,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import {mdiChevronLeft, mdiCrop} from '@mdi/js';
+import {mdiClose, mdiCrop, mdiDeleteOutline, mdiImageMultipleOutline, mdiImageRemoveOutline} from '@mdi/js';
 import MdiIcon from './MdiIcon';
+import {ProfileAvatar} from '../profile/ProfileParts';
+import {resolveProfileDisplayName} from '../profile/lib/profileFields';
+import {getUserCompanyLogoUrl, getUserProfileImageUrl} from '../profile/lib/userProfileImage';
 import FreeImageCropModal from './components/FreeImageCropModal';
 import PostTargetProfessionalsSheet from './components/PostTargetProfessionalsSheet';
 import OpenHouseDetailsModal from './components/OpenHouseDetailsModal';
@@ -88,13 +91,10 @@ const COLOR_PAGES = [
 
 const BACKGROUND_GRADIENTS = POST_BACKGROUND_GRADIENTS;
 
-const closeIconSrc = mobileAsset('editors/close.png');
-const galleryIconSrc = mobileAsset('editors/gallery.png');
 const polygonSrc = mobileAsset('editors/polygon.png');
-const penIconSrc = mobileAsset('editors/penIcon.png');
 const formatIconSrc = mobileAsset('editors/Action-icons.png');
 const formatIconSelectedSrc = mobileAsset('editors/Action-icons-selected.png');
-const publishBtnSrc = mobileAsset('post-button.png');
+const COLOR_SWATCHES = COLOR_PAGES.flat();
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -109,12 +109,6 @@ const sliderPageYToFontSize = (pageY, trackPageY, trackHeight) => {
   const offset = clamp(relativeY - POLYGON_KNOB_SIZE / 2, 0, visualTravel);
   const normalized = 1 - offset / visualTravel;
   return Math.round(MIN_FONT_SIZE + normalized * (MAX_FONT_SIZE - MIN_FONT_SIZE));
-};
-
-const getColorPageIndexForColor = color => {
-  const target = String(color || DEFAULT_TEXT_COLOR).toUpperCase();
-  const pageIndex = COLOR_PAGES.findIndex(page => page.some(c => String(c).toUpperCase() === target));
-  return pageIndex >= 0 ? pageIndex : 0;
 };
 
 const createTextBlockId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -623,7 +617,7 @@ export default function PostEditorScreen({
   const [uploadProgress, setUploadProgress] = useState(0);
   const uploadTimerRef = useRef(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [capturingStoryFrame, setCapturingStoryFrame] = useState(false);
+  const [, setCapturingStoryFrame] = useState(false);
   const [textModeOverlayText, setTextModeOverlayText] = useState('');
   const [textContent, setTextContent] = useState('');
   const [mediaImages, setMediaImages] = useState([]);
@@ -636,12 +630,10 @@ export default function PostEditorScreen({
   const [selectedFormat, setSelectedFormat] = useState(null);
   const [textAlignMode, setTextAlignMode] = useState('center');
   const [selectedTextStyleIndex, setSelectedTextStyleIndex] = useState(0);
-  const [colorPageIndex, setColorPageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(DEFAULT_TEXT_COLOR);
   const [selectedBackgroundGradientIndex, setSelectedBackgroundGradientIndex] = useState(0);
   const [textBlocks, setTextBlocks] = useState([]);
   const [editingTextBlockId, setEditingTextBlockId] = useState(null);
-  const [showMediaSourceSheet, setShowMediaSourceSheet] = useState(false);
   const [showProfessionalTargetSheet, setShowProfessionalTargetSheet] = useState(false);
   const [showOpenHouseDetailsModal, setShowOpenHouseDetailsModal] = useState(false);
   const [openHouseDraft, setOpenHouseDraft] = useState({place: '', date: ''});
@@ -650,7 +642,6 @@ export default function PostEditorScreen({
   const [hashtags, setHashtags] = useState([]);
   const [showHashtagModal, setShowHashtagModal] = useState(false);
   const [hashtagInput, setHashtagInput] = useState('');
-  const [formatToolbarHeight, setFormatToolbarHeight] = useState(72);
   const [stageLayout, setStageLayout] = useState({width: 0, height: 0});
   const postPreviewRef = useRef(null);
   const backgroundMediaRef = useRef(null);
@@ -678,7 +669,6 @@ export default function PostEditorScreen({
   const originalStoryMediaUrlRef = useRef(null);
   const didHydrateListingRef = useRef(false);
   const didHydrateOverlaysRef = useRef(false);
-  const colorsPagerRef = useRef(null);
 
   const editingListingId = initialListing?.id != null ? String(initialListing.id).trim() : '';
   const isEditMode = Boolean(editingListingId);
@@ -1100,7 +1090,6 @@ export default function PostEditorScreen({
     isFinishingEditRef.current = false;
     setSelectedFormat(null);
     setSelectedColor(DEFAULT_TEXT_COLOR);
-    setColorPageIndex(0);
     setTextModeOverlayText('');
     setTextContent('');
     setTextAlignMode('center');
@@ -1145,16 +1134,6 @@ export default function PostEditorScreen({
     const asset = pickedFileAsset(file);
     rememberObjectUrl(asset.uri);
     applyCameraCaptureAsset(asset);
-  };
-
-  const runCameraTabMediaAction = action => {
-    setShowMediaSourceSheet(false);
-    openFilePicker(action === 'photo' ? 'photo' : action === 'video' ? 'video' : 'library');
-  };
-
-  const openCameraTabMediaPicker = () => {
-    switchToCameraTab();
-    setShowMediaSourceSheet(true);
   };
 
   const pickBackgroundImageFromGallery = () => openFilePicker('library');
@@ -1599,21 +1578,23 @@ export default function PostEditorScreen({
 
   const showTextFormatToolbar = Boolean(editingTextBlockId) && !isCapturing;
   const lockPreviewLayout = Boolean(editingTextBlockId);
-  const isFullFrameCapture = isCapturing && capturingStoryFrame;
   const effectiveStageHeight = Math.max(stageLayout.height, lockedStageHeight, maxStageHeightRef.current);
   const pinStageHeight = (lockPreviewLayout && lockedStageHeight > 0) || (textBlocks.length > 0 && effectiveStageHeight > 0);
-
-  const webToolbarInputMarginBottom = useMemo(() => {
-    if (!editingTextBlockId || isCapturing) return 0;
-    if (selectedFormat === 'color') return 260;
-    if (selectedFormat === 'aa') return 140;
-    return 88;
-  }, [selectedFormat, editingTextBlockId, isCapturing]);
-
-  const editingInputBottom = useMemo(() => {
-    if (!editingTextBlockId || isCapturing) return 12;
-    return Math.max(Math.max(formatToolbarHeight, 72), webToolbarInputMarginBottom) + 12;
-  }, [editingTextBlockId, isCapturing, formatToolbarHeight, webToolbarInputMarginBottom]);
+  const editingInputBottom = 24;
+  const hasBackgroundMedia = Boolean(backgroundImageUri || backgroundVideoAsset?.uri);
+  const authorName = currentUser ? resolveProfileDisplayName(currentUser) : '';
+  const authorPhotoUrl = currentUser ? getUserProfileImageUrl(currentUser) : null;
+  const authorLogoUrl = currentUser ? getUserCompanyLogoUrl(currentUser) : null;
+  const modalTitle = isSalesImageEditor
+    ? 'עריכת תמונה'
+    : isOpenHousePost
+      ? isEditMode
+        ? 'עריכת בית פתוח'
+        : 'בית פתוח חדש'
+      : isEditMode
+        ? 'עריכת פוסט'
+        : 'יצירת פוסט';
+  const publishLabel = isSalesImageEditor ? 'סיום' : isEditMode ? 'עדכן פוסט' : 'פרסם';
 
   useEffect(() => {
     editingTextBlockIdRef.current = editingTextBlockId;
@@ -1641,16 +1622,15 @@ export default function PostEditorScreen({
   }, [onClose, publishing]);
 
   useEffect(() => {
-    if (!showMediaSourceSheet && !showHashtagModal) return undefined;
+    if (!showHashtagModal) return undefined;
     const onKey = e => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
-      setShowMediaSourceSheet(false);
       setShowHashtagModal(false);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [showMediaSourceSheet, showHashtagModal]);
+  }, [showHashtagModal]);
 
   const showPostUploadProgress = publishing && publishTarget !== 'story';
   const editingVisual = getTextVisualStyle(editingBlock?.color ?? selectedColor, editingBlock?.bgMode ?? 0);
@@ -1679,11 +1659,215 @@ export default function PostEditorScreen({
     }
   };
 
-  const onColorsPagerScroll = e => {
-    const w = e.currentTarget.clientWidth || 1;
-    const page = Math.min(Math.max(Math.round(e.currentTarget.scrollLeft / w) || 0, 0), COLOR_PAGES.length - 1);
-    setColorPageIndex(page);
-  };
+  const editingBgMode = editingBlock?.bgMode ?? 0;
+
+  const toolsSection = (
+    <section className={styles.panelSection}>
+      <h3 className={styles.panelSectionTitle}>הוסף לפוסט</h3>
+      <div className={styles.toolGrid}>
+        <button type="button" className={styles.toolTile} onClick={pickBackgroundImageFromGallery}>
+          <span className={`${styles.toolTileIcon} ${styles.toolTileIconGreen}`}>
+            <MdiIcon path={mdiImageMultipleOutline} size={24} color="#45BD62" />
+          </span>
+          <span className={styles.toolTileLabel}>תמונה / סרטון</span>
+        </button>
+        <button type="button" className={styles.toolTile} onClick={addTextBlock}>
+          <span className={`${styles.toolTileIcon} ${styles.toolTileIconGold}`}>
+            <span className={styles.toolTileGlyph}>Aa</span>
+          </span>
+          <span className={styles.toolTileLabel}>הוסף טקסט</span>
+        </button>
+        {!isSalesImageEditor ? (
+          <button type="button" className={styles.toolTile} onClick={() => setShowHashtagModal(true)}>
+            <span className={`${styles.toolTileIcon} ${styles.toolTileIconBlue}`}>
+              <span className={styles.toolTileGlyph}>#</span>
+            </span>
+            <span className={styles.toolTileLabel}>האשטאגים</span>
+            {hashtags.length > 0 ? <span className={styles.toolTileBadge}>{hashtags.length}</span> : null}
+          </button>
+        ) : null}
+        {activeTab !== TAB_CAMERA || hasBackgroundMedia ? (
+          <button
+            type="button"
+            className={styles.toolTile}
+            onClick={() => {
+              if (hasBackgroundMedia) {
+                setBackgroundImageUri(null);
+                setBackgroundImageAsset(null);
+                setBackgroundVideoAsset(null);
+                return;
+              }
+              setSelectedBackgroundGradientIndex(prev => {
+                const next = (prev + 1) % BACKGROUND_GRADIENTS.length;
+                return Number.isFinite(next) ? next : 0;
+              });
+            }}>
+            {hasBackgroundMedia ? (
+              <span className={`${styles.toolTileIcon} ${styles.toolTileIconRed}`}>
+                <MdiIcon path={mdiImageRemoveOutline} size={24} color="#F3425F" />
+              </span>
+            ) : (
+              <span
+                className={styles.toolTileSwatch}
+                style={{background: horizontalGradientCss(selectedBackgroundGradient)}}
+              />
+            )}
+            <span className={styles.toolTileLabel}>{hasBackgroundMedia ? 'הסר מדיה' : 'צבע רקע'}</span>
+          </button>
+        ) : null}
+        {backgroundImageUri && !backgroundVideoAsset?.uri ? (
+          <button type="button" className={styles.toolTile} onClick={openPostImageCrop}>
+            <span className={`${styles.toolTileIcon} ${styles.toolTileIconPurple}`}>
+              <MdiIcon path={mdiCrop} size={24} color="#A78BFA" />
+            </span>
+            <span className={styles.toolTileLabel}>חיתוך תמונה</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={styles.toolTile}
+          onClick={() => {
+            clearAllEditorState();
+            setActiveTab(TAB_TEXT);
+          }}>
+          <span className={`${styles.toolTileIcon} ${styles.toolTileIconMuted}`}>
+            <MdiIcon path={mdiDeleteOutline} size={24} color="#D2D0DC" />
+          </span>
+          <span className={styles.toolTileLabel}>נקה הכל</span>
+        </button>
+      </div>
+      <p className={styles.panelHint}>לחצו על טקסט בפוסט כדי לערוך אותו, וגררו כדי למקם אותו.</p>
+    </section>
+  );
+
+  const formatSection = (
+    <section className={styles.panelSection}>
+      <div className={styles.panelSectionHead}>
+        <h3 className={styles.panelSectionTitle}>עיצוב טקסט</h3>
+        <button type="button" className={styles.doneBtn} onClick={finishEditing}>
+          בוצע
+        </button>
+      </div>
+      <div className={styles.formatBar}>
+        <button
+          type="button"
+          className={`${styles.formatTool} ${selectedFormat === 'aa' ? styles.formatToolActive : ''}`}
+          style={selectedFormat === 'aa' ? {background: FORMAT_SELECTED_GRADIENT} : undefined}
+          aria-label="גופן"
+          onClick={() => setSelectedFormat(prev => (prev === 'aa' ? null : 'aa'))}>
+          <span
+            className={styles.aaBtnText}
+            style={{
+              color: selectedFormat === 'aa' ? '#1E1D27' : undefined,
+              fontFamily: TEXT_STYLES[selectedTextStyleIndex].fontFamily,
+              fontWeight: TEXT_STYLES[selectedTextStyleIndex].fontWeight,
+            }}>
+            Aa
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.formatTool} ${selectedFormat === 'color' ? styles.formatToolActive : ''}`}
+          style={selectedFormat === 'color' ? {background: FORMAT_SELECTED_GRADIENT} : undefined}
+          aria-label="צבע"
+          onClick={() => setSelectedFormat(prev => (prev === 'color' ? null : 'color'))}>
+          <img
+            src={selectedFormat === 'color' ? formatIconSelectedSrc : formatIconSrc}
+            alt=""
+            className={styles.formatBtnIcon}
+          />
+        </button>
+        <button
+          type="button"
+          className={styles.formatTool}
+          aria-label="יישור"
+          onClick={() => {
+            const next = textAlignMode === 'left' ? 'center' : textAlignMode === 'center' ? 'right' : 'left';
+            setTextAlignMode(next);
+            syncEditingToBlock({align: next, x: STAGE_TEXT_PAD_LEFT});
+            editingOriginRef.current = {...(editingOriginRef.current || {}), x: STAGE_TEXT_PAD_LEFT};
+          }}>
+          <span
+            className={`${styles.alignIcon} ${
+              textAlignMode === 'left'
+                ? styles.alignIconLeft
+                : textAlignMode === 'center'
+                  ? styles.alignIconCenter
+                  : styles.alignIconRight
+            }`}>
+            <span className={`${styles.alignLine} ${styles.alignLineLong}`} />
+            <span className={`${styles.alignLine} ${styles.alignLineMedium}`} />
+            <span className={`${styles.alignLine} ${styles.alignLineShort}`} />
+          </span>
+        </button>
+        <button
+          type="button"
+          className={styles.formatTool}
+          aria-label="רקע לטקסט"
+          onClick={() => {
+            if (!editingTextBlockId) return;
+            setTextBlocks(prev =>
+              prev.map(b => (b.id === editingTextBlockId ? {...b, bgMode: ((b.bgMode ?? 0) + 1) % 3} : b)),
+            );
+          }}>
+          <span
+            className={styles.backgroundBtn}
+            style={{
+              backgroundColor: editingBgMode === 0 ? 'transparent' : '#ffffff',
+              borderColor: editingBgMode === 0 ? '#ffffff' : '#000000',
+              color: editingBgMode === 0 ? '#ffffff' : '#000000',
+            }}>
+            A
+          </span>
+        </button>
+      </div>
+
+      {selectedFormat === 'aa' ? (
+        <div className={styles.textStylesGrid} dir="ltr">
+          {TEXT_STYLES.map((styleItem, index) => (
+            <button
+              key={styleItem.label}
+              type="button"
+              className={`${styles.textStylePill} ${selectedTextStyleIndex === index ? styles.textStylePillActive : ''}`}
+              style={{fontFamily: styleItem.fontFamily, fontWeight: styleItem.fontWeight}}
+              onClick={() => {
+                setSelectedTextStyleIndex(index);
+                syncEditingToBlock({textStyleIndex: index});
+              }}>
+              {styleItem.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {selectedFormat === 'color' ? (
+        <div className={styles.colorsGrid} dir="ltr">
+          {COLOR_SWATCHES.map(color => {
+            const upper = String(color).toUpperCase();
+            const isSelected = String(selectedColor || DEFAULT_TEXT_COLOR).toUpperCase() === upper;
+            const isLightSwatch = upper === '#FFFFFF' || upper === '#DBDBDB' || upper === '#C7C7C7';
+            return (
+              <button
+                key={color}
+                type="button"
+                className={`${styles.colorSwatch} ${isSelected ? styles.colorSwatchSelected : ''}`}
+                style={{
+                  backgroundColor: color,
+                  borderColor: isSelected ? '#FEE787' : isLightSwatch ? '#9A9A9A' : 'rgba(255,255,255,0.35)',
+                }}
+                aria-label={color}
+                onClick={() => {
+                  setSelectedColor(color);
+                  syncEditingToBlock({color});
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      <p className={styles.panelHint}>גודל הטקסט נקבע בסרגל שבצד הפוסט.</p>
+    </section>
+  );
 
   return (
     <div className={styles.backdrop}>
@@ -1694,70 +1878,70 @@ export default function PostEditorScreen({
       disabled={publishing}
       onClick={onClose}
     />
-    <div className={styles.screen} dir="rtl">
-      <header className={styles.topNav}>
-        <div className={styles.topNavRow}>
+    <div
+      className={`${styles.screen} ${isSalesImageEditor ? styles.screenNarrow : ''}`}
+      dir="rtl"
+      role="dialog" aria-modal="true" aria-label={modalTitle}>
+      <header className={styles.modalHeader}>
+        <span className={styles.modalHeaderSpacer} />
+        <h2 className={styles.modalTitle}>{modalTitle}</h2>
         <button
           type="button"
-          className={`${styles.backBtn} ${publishing ? styles.backBtnDisabled : ''}`}
+          className={styles.closeBtn}
           disabled={publishing}
-          aria-label="חזרה"
+          aria-label="סגור"
           onClick={onClose}>
-          <MdiIcon path={mdiChevronLeft} size={34} color="#fff" />
+          <MdiIcon path={mdiClose} size={24} color="#D2D0DC" />
         </button>
-        <div className={styles.tabs}>
-          <button
-            type="button"
-            className={`${styles.tabBtn} ${activeTab === TAB_CAMERA ? styles.tabTextActive : ''}`}
-            onClick={openCameraTabMediaPicker}>
-            {TAB_CAMERA}
-          </button>
-          <button
-            type="button"
-            className={`${styles.tabBtn} ${activeTab === TAB_TEXT ? styles.tabTextActive : ''}`}
-            onClick={() => {
-              if (activeTab === TAB_TEXT) return;
-              clearAllEditorState();
-              setActiveTab(TAB_TEXT);
-            }}>
-            {TAB_TEXT}
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`${styles.publishBtn} ${!canPublish && !publishing ? styles.publishBtnMuted : ''}`}
-          disabled={publishing}
-          aria-label={publishTarget === 'story' ? 'סיום' : isEditMode ? 'עדכן פוסט' : 'פרסם והעלה'}
-          onClick={handlePublishPress}>
-          {publishTarget === 'story' ? (
-            <span className={styles.finishBtnPill}>
-              <span className={styles.finishBtnText}>סיום</span>
-            </span>
-          ) : (
-            <img src={publishBtnSrc} alt="" className={styles.publishBtnImage} />
-          )}
-        </button>
-        </div>
-        {showPostUploadProgress ? (
-          <div className={styles.uploadProgressWrap}>
-            <div className={styles.uploadProgressTrack}>
-              <div
-                className={styles.uploadProgressFill}
-                style={{width: `${Math.round(uploadProgress * 100)}%`, background: PROFILE_RING_CSS}}
-              />
-            </div>
-            <span className={styles.uploadProgressLabel}>מעלה פוסט...</span>
-          </div>
-        ) : null}
       </header>
 
+      <div className={styles.modalBody}>
+      <aside className={styles.sidePanel}>
+        {currentUser ? (
+          <div className={styles.authorRow}>
+            <ProfileAvatar uri={authorPhotoUrl} fallbackUri={authorLogoUrl} size={48} subscriptionType={currentUser} />
+            <div className={styles.authorInfo}>
+              <span className={styles.authorName}>{authorName}</span>
+              <span className={styles.authorMeta}>{isSalesImageEditor ? 'תמונה למודעה' : 'פוסט בפיד'}</span>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={styles.panelScroll}>
+          {showTextFormatToolbar ? formatSection : toolsSection}
+        </div>
+
+        <footer className={styles.panelFooter}>
+          {showPostUploadProgress ? (
+            <div className={styles.uploadProgressWrap}>
+              <div className={styles.uploadProgressTrack}>
+                <div
+                  className={styles.uploadProgressFill}
+                  style={{width: `${Math.round(uploadProgress * 100)}%`, background: PROFILE_RING_CSS}}
+                />
+              </div>
+              <span className={styles.uploadProgressLabel}>מעלה פוסט...</span>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className={`${styles.publishBtn} ${!canPublish && !publishing ? styles.publishBtnMuted : ''}`}
+            disabled={publishing}
+            onClick={handlePublishPress}>
+            {publishing ? 'מעלה...' : publishLabel}
+          </button>
+        </footer>
+      </aside>
+
+      <div className={styles.canvasColumn}>
+      <div className={`${styles.canvasFrame} ${isSalesImageEditor ? styles.canvasFramePortrait : ''}`}>
       <div
         ref={node => {
           postPreviewRef.current = node;
           onPreviewLayout(node);
         }}
         id="post-editor-preview-root"
-        className={`${styles.previewRoot} ${isFullFrameCapture ? styles.storyCaptureFill : ''}`}>
+        className={styles.previewRoot}>
         <div
           ref={backgroundMediaRef}
           className={`${styles.backgroundMediaLayer} ${lockPreviewLayout && lockedPreviewHeight > 0 ? styles.backgroundMediaLocked : ''}`}
@@ -1783,75 +1967,6 @@ export default function PostEditorScreen({
         </div>
 
         <div className={styles.editorRoot}>
-          {isCapturing ? (
-            <div className={styles.headerContainer} />
-          ) : (
-            <div className={styles.headerContainer}>
-              <button
-                type="button"
-                className={styles.toolBtn}
-                aria-label="נקה"
-                onClick={() => {
-                  clearAllEditorState();
-                  setActiveTab(TAB_TEXT);
-                }}>
-                <img src={closeIconSrc} alt="" className={styles.closeIcon} />
-              </button>
-              <div className={styles.previewTools}>
-                {backgroundImageUri && !backgroundVideoAsset?.uri ? (
-                  <button type="button" className={styles.imageCropChip} aria-label="עריכה" onClick={openPostImageCrop}>
-                    <MdiIcon path={mdiCrop} size={21} color="#FFFFFF" />
-                    <span className={styles.imageCropChipText}>עריכה</span>
-                  </button>
-                ) : null}
-                <button type="button" className={styles.toolBtn} aria-label="גלריה" onClick={pickBackgroundImageFromGallery}>
-                  <img src={galleryIconSrc} alt="" className={styles.galleryIcon} />
-                </button>
-                <button type="button" className={styles.toolBtn} aria-label="טקסט" onClick={addTextBlock}>
-                  <span className={styles.aaBtnText}>Aa</span>
-                </button>
-                {!isSalesImageEditor ? (
-                  <button type="button" className={styles.hashtagBtn} aria-label="האשטאגים" onClick={() => setShowHashtagModal(true)}>
-                    <span className={styles.hashtagBtnSymbol}>#</span>
-                    {hashtags.length > 0 ? (
-                      <span className={styles.hashtagBadge}>
-                        <span className={styles.hashtagBadgeText}>{hashtags.length}</span>
-                      </span>
-                    ) : null}
-                  </button>
-                ) : null}
-                {editingTextBlockId ? (
-                  <button type="button" className={styles.doneBtn} onClick={finishEditing}>
-                    בוצע
-                  </button>
-                ) : null}
-                {activeTab !== TAB_CAMERA || backgroundImageUri || backgroundVideoAsset?.uri ? (
-                  <button
-                    type="button"
-                    className={styles.colorToggleButton}
-                    aria-label="רקע"
-                    onClick={() => {
-                      if (backgroundImageUri || backgroundVideoAsset?.uri) {
-                        setBackgroundImageUri(null);
-                        setBackgroundImageAsset(null);
-                        setBackgroundVideoAsset(null);
-                        return;
-                      }
-                      setSelectedBackgroundGradientIndex(prev => {
-                        const next = (prev + 1) % BACKGROUND_GRADIENTS.length;
-                        return Number.isFinite(next) ? next : 0;
-                      });
-                    }}>
-                    <span
-                      className={styles.colorPreview}
-                      style={{background: horizontalGradientCss(selectedBackgroundGradient)}}
-                    />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          )}
-
           <div className={styles.stageColumn}>
             <div
               ref={node => {
@@ -1921,193 +2036,10 @@ export default function PostEditorScreen({
               </div>
             </div>
           </div>
-
-          {showTextFormatToolbar ? (
-            <div
-              className={styles.keyboardControls}
-              ref={node => {
-                if (node) {
-                  const h = node.offsetHeight;
-                  if (h > 0 && Math.abs(h - formatToolbarHeight) > 1) setFormatToolbarHeight(h);
-                }
-              }}
-              style={{paddingBottom: 13}}>
-              {selectedFormat === 'aa' ? (
-                <div className={styles.textStylesScroll} dir="ltr">
-                  <div className={styles.textStylesRow} dir="ltr">
-                    {TEXT_STYLES.map((styleItem, index) => (
-                      <button
-                        key={styleItem.label}
-                        type="button"
-                        className={`${styles.textStylePill} ${selectedTextStyleIndex === index ? styles.textStylePillActive : ''}`}
-                        style={{fontFamily: styleItem.fontFamily, fontWeight: styleItem.fontWeight}}
-                        onClick={() => {
-                          setSelectedTextStyleIndex(index);
-                          syncEditingToBlock({textStyleIndex: index});
-                        }}>
-                        {styleItem.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {selectedFormat === 'color' ? (
-                <div className={styles.colorsRow}>
-                  <span className={styles.eyedropperBtn}>
-                    <img src={penIconSrc} alt="" className={styles.eyedropperInner} />
-                  </span>
-                  <div ref={colorsPagerRef} className={styles.colorsPager} dir="ltr" onScroll={onColorsPagerScroll}>
-                    {COLOR_PAGES.map((pageColors, pageIndex) => (
-                      <div key={pageIndex} className={styles.colorsListPage}>
-                        {pageColors.map(color => {
-                          const isSelected =
-                            String(selectedColor || DEFAULT_TEXT_COLOR).toUpperCase() === String(color).toUpperCase();
-                          const isLightSwatch =
-                            String(color).toUpperCase() === '#FFFFFF' ||
-                            String(color).toUpperCase() === '#DBDBDB' ||
-                            String(color).toUpperCase() === '#C7C7C7';
-                          return (
-                            <button
-                              key={color}
-                              type="button"
-                              className={styles.colorSwatch}
-                              style={{
-                                backgroundColor: color,
-                                borderWidth: isSelected ? 2 : 1,
-                                borderColor: isSelected ? '#FEE787' : isLightSwatch ? '#9A9A9A' : '#FFFFFF',
-                              }}
-                              aria-label={color}
-                              onClick={() => {
-                                setSelectedColor(color);
-                                syncEditingToBlock({color});
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {selectedFormat === 'color' ? (
-                <div className={styles.paginationDotsRow}>
-                  {COLOR_PAGES.map((_, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      className={`${styles.paginationDot} ${colorPageIndex === index ? styles.paginationDotActive : ''}`}
-                      aria-label={`צבעים ${index + 1}`}
-                      onClick={() => {
-                        setColorPageIndex(index);
-                        const pager = colorsPagerRef.current;
-                        if (pager) pager.scrollTo({left: index * pager.clientWidth, behavior: 'smooth'});
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : null}
-
-              <div className={styles.bottomBar}>
-                <button
-                  type="button"
-                  className={styles.bottomBarItem}
-                  onClick={() => setSelectedFormat(prev => (prev === 'aa' ? null : 'aa'))}>
-                  {selectedFormat === 'aa' ? (
-                    <span className={styles.bottomBarItemGradient} style={{background: FORMAT_SELECTED_GRADIENT}}>
-                      <span
-                        className={styles.aaBtnText}
-                        style={{
-                          color: '#1E1D27',
-                          fontFamily: TEXT_STYLES[selectedTextStyleIndex].fontFamily,
-                          fontWeight: TEXT_STYLES[selectedTextStyleIndex].fontWeight,
-                        }}>
-                        Aa
-                      </span>
-                    </span>
-                  ) : (
-                    <span
-                      className={styles.aaBtnText}
-                      style={{
-                        fontFamily: TEXT_STYLES[selectedTextStyleIndex].fontFamily,
-                        fontWeight: TEXT_STYLES[selectedTextStyleIndex].fontWeight,
-                      }}>
-                      Aa
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  className={styles.bottomBarItem}
-                  onClick={() => {
-                    setSelectedFormat(prev => {
-                      const next = prev === 'color' ? null : 'color';
-                      if (next === 'color') setColorPageIndex(getColorPageIndexForColor(selectedColor));
-                      return next;
-                    });
-                  }}>
-                  {selectedFormat === 'color' ? (
-                    <span className={styles.bottomBarItemGradient} style={{background: FORMAT_SELECTED_GRADIENT}}>
-                      <img src={formatIconSelectedSrc} alt="" className={styles.formatBtnIcon} />
-                    </span>
-                  ) : (
-                    <img src={formatIconSrc} alt="" className={styles.formatBtnIcon} />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  className={styles.alignBtn}
-                  aria-label="יישור"
-                  onClick={() => {
-                    const next = textAlignMode === 'left' ? 'center' : textAlignMode === 'center' ? 'right' : 'left';
-                    setTextAlignMode(next);
-                    syncEditingToBlock({align: next, x: STAGE_TEXT_PAD_LEFT});
-                    editingOriginRef.current = {...(editingOriginRef.current || {}), x: STAGE_TEXT_PAD_LEFT};
-                  }}>
-                  <span
-                    className={`${styles.alignIcon} ${
-                      textAlignMode === 'left'
-                        ? styles.alignIconLeft
-                        : textAlignMode === 'center'
-                          ? styles.alignIconCenter
-                          : styles.alignIconRight
-                    }`}>
-                    <span className={`${styles.alignLine} ${styles.alignLineLong}`} />
-                    <span className={`${styles.alignLine} ${styles.alignLineMedium}`} />
-                    <span className={`${styles.alignLine} ${styles.alignLineShort}`} />
-                  </span>
-                </button>
-
-                <div
-                  className={styles.backgroundBtnContainer}
-                  style={{backgroundColor: (editingBlock?.bgMode ?? 0) === 0 ? 'transparent' : '#ffffff'}}>
-                  <button
-                    type="button"
-                    className={styles.backgroundBtn}
-                    style={{
-                      borderColor: (editingBlock?.bgMode ?? 0) === 0 ? '#ffffff' : '#000000',
-                      color: (editingBlock?.bgMode ?? 0) === 0 ? '#ffffff' : '#000000',
-                    }}
-                    aria-label="רקע לטקסט"
-                    onClick={() => {
-                      if (!editingTextBlockId) return;
-                      setTextBlocks(prev =>
-                        prev.map(b => {
-                          if (b.id !== editingTextBlockId) return b;
-                          return {...b, bgMode: ((b.bgMode ?? 0) + 1) % 3};
-                        }),
-                      );
-                    }}>
-                    A
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
         </div>
+      </div>
+      </div>
+      </div>
       </div>
 
       <input
@@ -2117,30 +2049,6 @@ export default function PostEditorScreen({
         accept="image/*,video/*"
         onChange={onFilePicked}
       />
-
-      {showMediaSourceSheet ? (
-        <div className={styles.modalRoot} data-account-modal="" role="dialog" aria-modal="true" aria-label="מצלמה">
-          <div className={styles.mediaSheetBackdrop} onClick={() => setShowMediaSourceSheet(false)}>
-            <div className={styles.mediaSheetCard} onClick={e => e.stopPropagation()}>
-              <div className={styles.mediaSheetHandle} />
-              <h2 className={styles.mediaSheetTitle}>מצלמה</h2>
-              <p className={styles.mediaSheetSubtitle}>בחר איך להוסיף תמונה או סרטון</p>
-              <button type="button" className={styles.mediaSheetOption} onClick={() => runCameraTabMediaAction('photo')}>
-                צלם תמונה
-              </button>
-              <button type="button" className={styles.mediaSheetOption} onClick={() => runCameraTabMediaAction('video')}>
-                צלם סרטון
-              </button>
-              <button type="button" className={styles.mediaSheetOption} onClick={() => runCameraTabMediaAction('library')}>
-                בחר מהגלריה
-              </button>
-              <button type="button" className={styles.mediaSheetCancel} onClick={() => setShowMediaSourceSheet(false)}>
-                ביטול
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {showHashtagModal && !isSalesImageEditor ? (
         <div className={styles.modalRoot} data-account-modal="" role="dialog" aria-modal="true" aria-label="האשטאגים">

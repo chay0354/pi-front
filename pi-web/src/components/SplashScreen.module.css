@@ -5,23 +5,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background: #1e1d27;
-  opacity: 1;
-  transition: opacity 0.6s ease;
+  transition: background-color 0.7s ease;
 }
 
 .out {
-  opacity: 0;
+  background: transparent;
   pointer-events: none;
 }
 
 .back {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 30%;
+  overflow: hidden;
+  pointer-events: none;
+  animation: splashBackIn 0.8s ease both;
+}
+
+.back img {
+  position: absolute;
+  left: -3.92%;
+  top: -21.12%;
+  width: 105.51%;
+  height: 282.93%;
+  max-width: none;
+  opacity: 0.3;
+}
+
+.backFade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(30, 29, 39, 0) 49.057%, #1e1d27 100%);
+}
+
+.out .back {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.65s ease;
 }
 
 .center {
@@ -34,16 +55,101 @@
 }
 
 .logo {
-  width: min(520px, 38vw);
+  width: min(440px, 34vw);
   height: auto;
+  transform-origin: center center;
+  animation: splashLogoIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fly {
+  animation: none;
+  transition: transform 0.95s cubic-bezier(0.45, 0, 0.15, 1);
+  transform: translate(var(--dx), var(--dy)) scale(var(--scale));
+}
+
+.out .logo:not(.fly) {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
 }
 
 .tagline {
-  margin: 16px 0 0;
+  margin: 18px 0 0;
   color: #f4e7c8;
   font-family: 'Rubik', system-ui, sans-serif;
-  font-size: 28px;
+  font-size: clamp(22px, 2.4vw, 34px);
   font-weight: 400;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+}
+
+.letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(14px);
+  animation: splashLetter 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.out .tagline {
+  animation: splashTagOut 0.4s ease forwards;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes splashBackIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes splashLogoIn {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes splashLetter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splashTagOut {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back,
+  .logo,
+  .letter,
+  .out .tagline {
+    animation: none;
+  }
+
+  .letter {
+    opacity: 1;
+    transform: none;
+  }
 }

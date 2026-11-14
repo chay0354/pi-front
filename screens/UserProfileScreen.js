@@ -43,6 +43,7 @@ import {
   toSubscriptionId,
   likeListing,
   unlikeListing,
+  recordListingContact,
 } from '../utils/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,6 +56,8 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {Divider, SharePostSheet} from '../components';
 import FeedPostPreviewMedia from '../components/FeedPostPreviewMedia';
 import LocationMap from '../components/LocationMap';
+import VirtualTourEmbed from '../components/VirtualTourEmbed';
+import {listingVirtualTourUrl} from '../utils/virtualTour';
 import RatingImprovePicker from '../components/RatingImprovePicker';
 import {isAdsListingRecord} from '../utils/listingShape';
 import {directContactPhones} from '../utils/phoneLabels';
@@ -198,6 +201,15 @@ function iosPagingOffset(index, count, pageSize) {
   const i = Math.max(0, Math.min(n - 1, Number(index) || 0));
   if (Platform.OS !== 'ios' || n <= 1) return i * size;
   return (n - 1 - i) * size;
+}
+
+function iosPagingIndex(scrollX, count, pageSize) {
+  const n = Math.max(1, Number(count) || 1);
+  const size = Math.max(1, Number(pageSize) || 1);
+  const raw = Math.round((Number(scrollX) || 0) / size);
+  const clamped = Math.max(0, Math.min(n - 1, raw));
+  if (Platform.OS !== 'ios' || n <= 1) return clamped;
+  return n - 1 - clamped;
 }
 /** Dots / counters stay LTR so they match swipe index on native RTL. */
 const heroCarouselDotsStyle = forceLtrStyle;
@@ -1336,16 +1348,21 @@ const UserProfileScreen = ({
       Alert.alert('פרטי התקשרות', text);
     }
   };
+  const recordInquiry = () => {
+    if (!isListingFromFeed || isOwnProfile) return;
+    const listingId = user?.id != null ? String(user.id).trim() : '';
+    if (!listingId) return;
+    const viewerId = currentUser?.id || currentUser?.subscription_id || null;
+    recordListingContact(listingId, viewerId);
+  };
   const handleChatPress = () => {
     if (isOwnProfile) return;
-    if (!currentUser && typeof onOpenUserRegistration === 'function') {
-      onOpenUserRegistration();
-      return;
-    }
+    recordInquiry();
     if (typeof onMessage === 'function') onMessage();
   };
   const handleCallPress = () => {
     if (isOwnProfile) return;
+    recordInquiry();
     if (typeof onCall === 'function') onCall(dialContactPhone);
   };
   const handleReportPress = () => {
@@ -1357,12 +1374,9 @@ const UserProfileScreen = ({
     const st = String(
       resolvedCreator?.subscription_type || user?.subscription_type || '',
     ).toLowerCase();
-    const canReport = isRateableSubscriptionType(st);
-    if (canReport && typeof onOpenCompanyReport === 'function') {
-      onOpenCompanyReport();
-      return;
-    }
-    Alert.alert('דיווח', 'הדיווח נשלח בהצלחה.');
+    if (typeof onOpenCompanyReport !== 'function') return;
+    // Private users and partners have no dedicated reasons list — reuse BnB's.
+    onOpenCompanyReport(isRateableSubscriptionType(st) ? null : 'bnb');
   };
   const handleProfileShare = () => {
     const title = String(displayName || '').trim() || 'פרופיל';
@@ -1514,7 +1528,6 @@ const UserProfileScreen = ({
     }
     return stills;
   })();
-  const lastAdHasVideo = lastAdImages.some(item => item?.isVideo);
   const openedFromPost = isPostListingRecord(user);
   const recentPostGridImages = useMemo(() => {
     const rows = [
@@ -1636,35 +1649,6 @@ const UserProfileScreen = ({
     [onOpenListing],
   );
 
-  useEffect(() => {
-    if (user?.id == null) return;
-    setPostGridPageIndex(0);
-    requestAnimationFrame(() => {
-      postGridPagerRef.current?.scrollToIndex?.({index: 0, animated: false});
-      scrollRef.current?.scrollTo({y: 0, animated: false});
-    });
-  }, [user?.id]);
-
-  const postGridViewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60,
-  }).current;
-
-  const onPostGridViewableItemsChanged = useRef(({viewableItems}) => {
-    const first = viewableItems?.[0];
-    if (first?.index != null) {
-      setPostGridPageIndex(first.index);
-    }
-  }).current;
-
-  const handlePostGridScrollToIndexFailed = useCallback(info => {
-    requestAnimationFrame(() => {
-      postGridPagerRef.current?.scrollToIndex?.({
-        index: info.index,
-        animated: false,
-      });
-    });
-  }, []);
-
   const renderPostGridCell = useCallback(
     (item, cellKey) => {
       if (!item) {
@@ -1776,45 +1760,57 @@ const UserProfileScreen = ({
   const [postGridPageIndex, setPostGridPageIndex] = useState(0);
   const postGridPagerRef = useRef(null);
 
+  useEffect(() => {
+    if (user?.id == null) return;
+    setPostGridPageIndex(0);
+    const pageCount = Math.max(1, postGridPages.length);
+    requestAnimationFrame(() => {
+      postGridPagerRef.current?.scrollTo?.({
+        x: iosPagingOffset(0, pageCount, SCREEN_WIDTH),
+        animated: false,
+      });
+      scrollRef.current?.scrollTo({y: 0, animated: false});
+    });
+  }, [user?.id, postGridPages.length]);
+
+  const handlePostGridPageScroll = useCallback(
+    event => {
+      const x = event?.nativeEvent?.contentOffset?.x;
+      setPostGridPageIndex(
+        iosPagingIndex(x, postGridPages.length, SCREEN_WIDTH),
+      );
+    },
+    [postGridPages.length],
+  );
+
   const renderProfilePostGridContent = () => (
     <View style={styles.lastAdPostGridPagerWrap}>
-      <FlatList
+      <ScrollView
         ref={postGridPagerRef}
-        data={postGridPages}
         horizontal
         pagingEnabled
-        inverted={false}
         nestedScrollEnabled
-        removeClippedSubviews={false}
-        initialNumToRender={1}
-        maxToRenderPerBatch={1}
-        windowSize={3}
+        directionalLockEnabled
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onMomentumScrollEnd={handlePostGridPageScroll}
         style={[
           styles.lastAdPostGridPager,
           forceLtrStyle,
           {height: POST_GRID_PAGE_HEIGHT},
         ]}
-        keyExtractor={(_, pageIndex) => `post-grid-page-${pageIndex}`}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: iosPagingOffset(index, postGridPages.length, SCREEN_WIDTH),
-          index,
-        })}
-        initialScrollIndex={0}
-        viewabilityConfig={postGridViewabilityConfig}
-        onViewableItemsChanged={onPostGridViewableItemsChanged}
-        onScrollToIndexFailed={handlePostGridScrollToIndexFailed}
-        renderItem={({item: pageItems, index: pageIndex}) => (
-            <View
-              style={[
-                styles.lastAdGridPage,
-                forceLtrStyle,
-                {
-                  width: SCREEN_WIDTH,
-                  height: POST_GRID_PAGE_HEIGHT,
-                },
-              ]}>
+        contentContainerStyle={forceLtrStyle}>
+        {postGridPages.map((pageItems, pageIndex) => (
+          <View
+            key={`post-grid-page-${pageIndex}`}
+            style={[
+              styles.lastAdGridPage,
+              forceLtrStyle,
+              {
+                width: SCREEN_WIDTH,
+                height: POST_GRID_PAGE_HEIGHT,
+              },
+            ]}>
             <View style={[styles.lastAdGrid, forceLtrStyle]}>
               {Array.from({length: POST_GRID_ROWS}, (_, rowIndex) => (
                 <View
@@ -1835,8 +1831,8 @@ const UserProfileScreen = ({
               ))}
             </View>
           </View>
-        )}
-      />
+        ))}
+      </ScrollView>
       {postGridPages.length > 1 ? (
         <View style={styles.postGridDots}>
           {postGridPages.map((_, i) => (
@@ -2453,6 +2449,10 @@ const UserProfileScreen = ({
   }, [isLandListingAdProfile, lastAd]);
   const showLocationMap =
     isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile;
+  const virtualTourUrl =
+    isListingFromFeed && !openedFromPost && !isDedicatedListingAdProfile
+      ? listingVirtualTourUrl(lastAd)
+      : '';
   /** Feed ad hero: hide listing address only on own profile overview (6-post grid),
    * not when drilling into a specific ad from TikTok/home/projects. */
   const showListingLocationOnAdHero =
@@ -2937,23 +2937,6 @@ const UserProfileScreen = ({
     });
   }, [lastAd?.id, scrollLastAdCarouselToIndex]);
 
-  // Auto-advance stills only — don't interrupt a playing hero video.
-  useEffect(() => {
-    if (lastAdImages.length <= 1 || lastAdHasVideo) return;
-    const t = setInterval(() => {
-      setLastAdImageIndex(prev => {
-        const next = (prev + 1) % lastAdImages.length;
-        scrollLastAdCarouselToIndex(next, true);
-        return next;
-      });
-    }, 4000);
-    return () => clearInterval(t);
-  }, [
-    lastAdImages.length,
-    lastAdHasVideo,
-    scrollLastAdCarouselToIndex,
-  ]);
-
   const visibleReviews =
     listingReviews.length > MAX_VISIBLE_REVIEWS
       ? listingReviews.slice(0, MAX_VISIBLE_REVIEWS)
@@ -3228,19 +3211,6 @@ const UserProfileScreen = ({
                       item.isVideo ? `video-${i}` : `img-${i}-${item.uri}`
                     }
                   />
-                  {lastAdImages.length > 1 && (
-                    <View style={[styles.lastAdDots, heroCarouselDotsStyle]}>
-                      {lastAdImages.map((_, i) => (
-                        <View
-                          key={i}
-                          style={[
-                            styles.lastAdDot,
-                            i === lastAdImageIndex && styles.lastAdDotActive,
-                          ]}
-                        />
-                      ))}
-                    </View>
-                  )}
                   <TouchableOpacity
                     style={styles.lastAdExpandWrap}
                     onPress={() => {
@@ -3280,6 +3250,19 @@ const UserProfileScreen = ({
                 </TouchableOpacity>
               ) : null}
             </View>
+            {!showProfilePostGridAtTop && lastAdImages.length > 1 ? (
+              <View style={[styles.lastAdDots, heroCarouselDotsStyle]}>
+                {lastAdImages.map((_, i) => (
+                  <View
+                    key={`last-ad-dot-${i}`}
+                    style={[
+                      styles.lastAdDot,
+                      i === lastAdImageIndex && styles.lastAdDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
 
             {!openedFromPost &&
               lastAd &&
@@ -3750,6 +3733,15 @@ const UserProfileScreen = ({
                       )}
                       {!isBroker && !isCompany && !isRegularUserAdView ? (
                         <View style={styles.lastAdDividerWhite} />
+                      ) : null}
+                      {isCompany && virtualTourUrl ? (
+                        <>
+                          <VirtualTourEmbed
+                            url={virtualTourUrl}
+                            containerStyle={styles.virtualTourContainer}
+                          />
+                          <View style={styles.lastAdDividerWhite} />
+                        </>
                       ) : null}
                       {showLocationMap ? (
                         <LocationMap
@@ -5512,14 +5504,13 @@ const styles = StyleSheet.create({
     transform: [{translateY: -3}],
   },
   lastAdDots: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
+    paddingTop: 10,
+    paddingBottom: 2,
     paddingHorizontal: 12,
   },
   lastAdHeroVideoBadge: {
@@ -5617,6 +5608,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   locationMapContainer: {alignSelf: 'stretch', width: '100%'},
+  virtualTourContainer: {alignSelf: 'stretch', width: '100%', marginBottom: 4},
   constructionStatusBlock: {
     marginBottom: 12,
     alignSelf: 'stretch',

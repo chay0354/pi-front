@@ -226,7 +226,7 @@ const AgencyMemberListingsScreen = ({
 
   const openBoostConfirm = listing => {
     if (!canBoostThisMonth) {
-      Alert.alert('', 'הגעת למכסת ההקפצות החודשית (הקפצה אחת בחודש).');
+      Alert.alert('', 'עברת את המכסה של ההקפצות החודש');
       return;
     }
     setBoostConfirmListing(listing);
@@ -258,7 +258,7 @@ const AgencyMemberListingsScreen = ({
         }));
       }
       setBoostConfirmListing(null);
-      Alert.alert('', 'ההקפצה הופעלה! הדירוג הוא "גבוהה" למשך 24 שעות.');
+      Alert.alert('', 'ההקפצה הופעלה! המודעה תופיע בראש הזרימה למשך 24 שעות.');
     } catch (e) {
       if (e?.code === 'QUOTA_EXCEEDED') {
         setBoostQuota(prev => ({...prev, remaining: 0}));
@@ -411,7 +411,6 @@ const AgencyMemberListingsScreen = ({
                 ownerUser={member}
                 exposure={exposure}
                 isFrozen={frozen}
-                canBoost={canBoostThisMonth}
                 variant={viewMode}
                 onPress={() => onViewListing?.(listing)}
                 onEdit={() =>

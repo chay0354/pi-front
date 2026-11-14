@@ -102,6 +102,16 @@ import {
   PublishValidationModal,
 } from '../components';
 import {CompanyOffersLandSizes} from '../components/FormsElement/CompanyOffersLandSizes';
+import {VirtualTourUrl} from '../components/FormsElement/VirtualTourUrl';
+import {
+  VIRTUAL_TOUR_FIELD_KEY,
+  VIRTUAL_TOUR_GD_KEY,
+  VIRTUAL_TOUR_INVALID_MESSAGE,
+  canAddVirtualTour,
+  listingVirtualTourUrl,
+  normalizeVirtualTourUrl,
+  withVirtualTourField,
+} from '../utils/virtualTour';
 import {SharedSpacesCompany} from '../components/FormsElement/SharedSpacesCompany';
 import CircleImageCropModal from '../components/CircleImageCropModal';
 import FreeImageCropModal from '../components/FreeImageCropModal';
@@ -579,8 +589,13 @@ const AdsForm = ({
       buildGlobalGroundFieldList(formList, category, propertyType) ??
       formList[category]?.fields ??
       [];
-    return localizeUploadFormFields(raw, currentUser?.subscription_type);
-  }, [formList, category, propertyType, currentUser?.subscription_type]);
+    const isCompany =
+      resolveSubscriptionType(currentUser) === subscriptionTypes.company;
+    const withTour = canAddVirtualTour(isCompany, category)
+      ? withVirtualTourField(raw)
+      : raw;
+    return localizeUploadFormFields(withTour, currentUser?.subscription_type);
+  }, [formList, category, propertyType, currentUser]);
 
   // New fields for category 3 (חדש מקבלן)
   const [searchPurpose, setSearchPurpose] = useState(null); // 'enter', 'bring_in', 'partner'
@@ -1183,6 +1198,7 @@ const AdsForm = ({
     if (initialListing.construction_status != null) {
       setConstructionStatus(initialListing.construction_status);
     }
+    setVirtualTourUrl(listingVirtualTourUrl(initialListing));
     if (
       ['low', 'medium', 'high'].includes(
         String(initialListing.exposure_level || '').toLowerCase(),
@@ -1295,6 +1311,8 @@ const AdsForm = ({
   // File input refs for web
   const mainImageInputRef = useRef(null);
   const [constructionStatus, setConstructionStatus] = useState(null);
+  /** Company project visualization link — general_details.virtual_tour_url */
+  const [virtualTourUrl, setVirtualTourUrl] = useState('');
   const additionalImageInputRefs = useRef([null, null, null, null]);
   const videoInputRef = useRef(null);
   const bnbBusinessLogoInputRef = useRef(null);
@@ -2025,10 +2043,17 @@ const AdsForm = ({
         }
       }
     }
+    if (
+      fieldKeys.includes(VIRTUAL_TOUR_FIELD_KEY) &&
+      normalizeVirtualTourUrl(virtualTourUrl) === null
+    ) {
+      publishErrors.push(VIRTUAL_TOUR_INVALID_MESSAGE);
+    }
     return publishErrors;
   }, [
     category,
     adsFormFields,
+    virtualTourUrl,
     searchPurpose,
     preferredApartmentType,
     budget,
@@ -2112,6 +2137,13 @@ const AdsForm = ({
           ? {sales_image_editor: salesImageEditorMeta.generalDetails}
           : {}),
       };
+      const hasVirtualTourField = fieldKeys.includes(VIRTUAL_TOUR_FIELD_KEY);
+      const virtualTourForPayload = hasVirtualTourField
+        ? normalizeVirtualTourUrl(virtualTourUrl) || ''
+        : '';
+      if (virtualTourForPayload) {
+        generalDetailsForPayload[VIRTUAL_TOUR_GD_KEY] = virtualTourForPayload;
+      }
       const accommodationOffersPayload =
         guestCount || checkInDate || checkOutDate
           ? {
@@ -2458,6 +2490,9 @@ const AdsForm = ({
                 Object.keys(generalDetailsForPayload).length > 0
                   ? generalDetailsForPayload
                   : undefined,
+              ...(hasVirtualTourField && {
+                virtualTourUrl: virtualTourForPayload,
+              }),
               saleAtPresale: saleAtPresale === true,
               sharedSpacesCompany: sharedSpacesCompany === true,
               salesImageUrl: uploadedSalesImageUrl || null,
@@ -2873,9 +2908,9 @@ const AdsForm = ({
                       resolveSubscriptionType(currentUser) === subscriptionTypes.projectMarketer
                     }
                     coverTitle={
-                      resolveSubscriptionType(currentUser) === subscriptionTypes.user
-                        ? 'תמונת נושא'
-                        : 'תמונת נושא או הדמייה'
+                      resolveSubscriptionType(currentUser) === subscriptionTypes.company
+                        ? 'תמונת נושא או הדמייה'
+                        : 'תמונת נושא'
                     }
                     hasVideo={hasVideo}
                     setHasVideo={setHasVideo}
@@ -3222,6 +3257,14 @@ const AdsForm = ({
                     title={field.title}
                     constructionStatus={constructionStatus}
                     setConstructionStatus={setConstructionStatus}
+                  />
+                );
+              case VIRTUAL_TOUR_FIELD_KEY:
+                return (
+                  <VirtualTourUrl
+                    key={VIRTUAL_TOUR_FIELD_KEY}
+                    value={virtualTourUrl}
+                    setValue={setVirtualTourUrl}
                   />
                 );
               case 'companyofferslandsizes':

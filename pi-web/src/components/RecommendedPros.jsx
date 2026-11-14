@@ -6,6 +6,7 @@ import iconArrow from '../assets/figma/pros/arrow.svg';
 import noProfileImage from '../assets/noprofileimage.png';
 import {CompanyChat, PiRating} from './FeedCard';
 import VolumeIcon from './VolumeIcon';
+import {useFeedActions} from '../feed/feedActions';
 import {directoryProfilePayload, useProfileNav} from '../profile/navigation';
 import styles from './RecommendedPros.module.css';
 
@@ -72,50 +73,62 @@ function ProMedia({pro, playing, muted, onToggleMute}) {
 
 function ProCard({pro, playing, muted, onToggleMute}) {
   const nav = useProfileNav();
+  const {onOpenChat} = useFeedActions();
   const open = () => nav.open(directoryProfilePayload(pro.raw));
+  const rating = pro.rating > 0 ? Math.min(5, Math.round(pro.rating)) : 5;
+  const message = event => {
+    event.stopPropagation();
+    onOpenChat?.({
+      email: pro.raw?.email || null,
+      subscriptionId: pro.raw?.id || pro.id,
+      name: pro.name || 'משתמש',
+      profileImageUrl: pro.image,
+    });
+  };
   return (
     <div className={styles.proCard}>
       <div className={styles.mediaHit} onClick={open}>
         <ProMedia pro={pro} playing={playing} muted={muted} onToggleMute={onToggleMute} />
       </div>
       <div className={styles.content}>
-        <div className={styles.info}>
+        <button type="button" className={styles.body} onClick={open}>
           <div className={styles.identity}>
-            <button type="button" className={`${styles.proName} ${styles.proNameLink}`} dir="rtl" onClick={open}>
-              {pro.name}
-            </button>
-            {pro.address && (
-              <div className={styles.address}>
-                <span className={styles.addressText} dir="auto">
-                  {pro.address}
-                </span>
+            <div className={styles.titleRow}>
+              <span className={styles.proName} dir="auto">
+                {pro.name}
+              </span>
+              <PiRating value={rating} />
+            </div>
+            {pro.address ? (
+              <p className={styles.address}>
                 <img src={iconLocation} alt="" width={24} height={24} />
-              </div>
-            )}
+                <span dir="auto">{pro.address}</span>
+              </p>
+            ) : null}
           </div>
-          {pro.tags.length > 0 && (
-            <div className={styles.tags} dir="rtl">
+          {pro.tags.length > 0 ? (
+            <div className={styles.tags}>
               {pro.tags.map(tag => (
                 <span key={tag} className={styles.tag} dir="auto">
                   {tag}
                 </span>
               ))}
             </div>
-          )}
-          {pro.bio && (
-            <p className={styles.bio} dir="rtl">
+          ) : null}
+          {pro.bio ? (
+            <p className={styles.bio} dir="auto">
               {pro.bio}
             </p>
-          )}
-        </div>
-        <CompanyChat className={styles.chat} />
+          ) : null}
+        </button>
+        <CompanyChat className={styles.chat} onClick={message} />
       </div>
     </div>
   );
 }
 
 /** "בעלי מקצוע מומלצים" carousel card shown between feed cards (Figma 882:104911). */
-export default function RecommendedPros({pros, active}) {
+export default function RecommendedPros({pros, active, title = 'בעלי מקצוע מומלצים'}) {
   const railRef = useRef(null);
   const [edges, setEdges] = useState({start: true, end: pros.length <= 2});
   const [unmutedId, setUnmutedId] = useState(null);
@@ -139,7 +152,7 @@ export default function RecommendedPros({pros, active}) {
   const scrollBy = dir => railRef.current?.scrollBy({left: -dir * CARD_STEP, behavior: 'smooth'});
 
   return (
-    <article className={styles.card} aria-label="בעלי מקצוע מומלצים">
+    <article className={styles.card} aria-label={title}>
       <header className={styles.header}>
         <div className={styles.headerTools}>
           <button type="button" className={styles.more} aria-label="אפשרויות">
@@ -149,7 +162,7 @@ export default function RecommendedPros({pros, active}) {
         </div>
         <div className={styles.headerTitle}>
           <h2 className={styles.title} dir="rtl">
-            בעלי מקצוע  מומלצים
+            {title}
           </h2>
           <PiRating value={5} />
         </div>

@@ -41,13 +41,13 @@
   width: 62px;
 }
 
-/* Digit, then the star, with the same gap the 1–4 composite art uses. */
+/* Digit plus the glowing ring. Two sizes only: small and large. */
 .piFive {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   flex-shrink: 0;
-  gap: 14px;
+  gap: 0;
   direction: ltr;
 }
 
@@ -58,22 +58,6 @@
   color: #ffd275;
 }
 
-.piProfile .piDigit {
-  font-size: 32px;
-}
-
-.piListing .piDigit {
-  font-size: 18px;
-}
-
-.piCard .piDigit {
-  font-size: 32px;
-}
-
-.piList .piDigit {
-  font-size: 26px;
-}
-
 .piRing {
   display: block;
   flex-shrink: 0;
@@ -81,40 +65,32 @@
   object-fit: contain;
 }
 
-.piFive.piProfile {
-  gap: 0;
+.piListing .piDigit,
+.piList .piDigit {
+  font-size: 22px;
 }
 
-.piProfile .piRing {
-  width: 108px;
-  height: 108px;
-  margin-left: -15px;
+.piListing .piRing,
+.piList .piRing {
+  width: 72px;
+  height: 72px;
+  margin-left: -8px;
 }
 
-.piListing .piRing {
-  width: 40px;
-  height: 40px;
+.piProfile .piDigit,
+.piCard .piDigit {
+  font-size: 32px;
 }
 
 .piFive.piCard {
-  gap: 0;
   margin-top: -18px;
 }
 
+.piProfile .piRing,
 .piCard .piRing {
   width: 108px;
   height: 108px;
   margin-left: -15px;
-}
-
-.piFive.piList {
-  gap: 0;
-}
-
-.piList .piRing {
-  width: 96px;
-  height: 96px;
-  margin-left: -13px;
 }
 
 /* Rating picker */
@@ -339,11 +315,6 @@
   color: var(--white-100);
   text-align: right;
   resize: none;
-}
-
-.smartText:focus-visible {
-  outline: 2px solid var(--yellow-icons);
-  outline-offset: 2px;
 }
 
 .smartPartners {

@@ -3,6 +3,7 @@ import {
   mdiAccountPlusOutline,
   mdiChevronLeft,
   mdiDotsVertical,
+  mdiDeleteOutline,
   mdiExitToApp,
   mdiPencilOutline,
 } from '@mdi/js';
@@ -39,6 +40,7 @@ export default function ChatGroupManageModal({
   onRemoveMember,
   onSetMemberRole,
   onLeaveGroup,
+  onDeleteGroup,
   onConversationDeleted,
 }) {
   const [titleDraft, setTitleDraft] = useState('');
@@ -308,6 +310,24 @@ export default function ChatGroupManageModal({
           <MdiIcon path={mdiExitToApp} size={26} color="#ff8a8a" />
           <span className={styles.leaveOutlineText}>עזוב את הקבוצה</span>
         </button>
+        {myRole === 'owner' ? (
+          <button
+            type="button"
+            className={styles.deleteOutline}
+            aria-label="מחק קבוצה"
+            onClick={async () => {
+              if (!window.confirm('למחוק את הקבוצה?\nהקבוצה תימחק לכולם, וגם אתה תצא ממנה.')) return;
+              try {
+                const res = await onDeleteGroup?.();
+                if (res?.conversationDeleted || res?.removedSelf) onConversationDeleted?.();
+              } catch (e) {
+                window.alert(e?.message ? String(e.message) : 'מחיקת הקבוצה נכשלה');
+              }
+            }}>
+            <MdiIcon path={mdiDeleteOutline} size={26} color="#ff8a8a" />
+            <span className={styles.leaveOutlineText}>מחק קבוצה</span>
+          </button>
+        ) : null}
         <div className={styles.bottomPad} />
       </div>
 

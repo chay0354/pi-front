@@ -564,6 +564,12 @@ const DraggableTextBlock = React.memo(
     onBringToFront,
     /** Register measureInWindow() for WYSIWYG overlay serialize. */
     onRegisterMeasure,
+    /**
+     * True when authored `left` still lands on the physical right inside the
+     * LTR stage (iOS locale). Drag dx is then inverted so the block follows
+     * the finger.
+     */
+    leftMirroredRef,
   }) => {
     const onPressRef = useRef(onPress);
     onPressRef.current = onPress;
@@ -693,8 +699,9 @@ const DraggableTextBlock = React.memo(
         hasMoved.current = true;
       }
       if (!hasMoved.current) return;
+      const dx = leftMirroredRef?.current ? -g.dx : g.dx;
       const next = clampFreePositionRef.current(
-        touchStartRef.current.x + g.dx,
+        touchStartRef.current.x + dx,
         touchStartRef.current.y + g.dy,
       );
       position.setValue({ x: next.x, y: next.y });
@@ -1074,6 +1081,8 @@ const PostEditorScreen = ({
   const textBlockMeasureRefs = useRef(new Map());
   const textBlocksRef = useRef(textBlocks);
   textBlocksRef.current = textBlocks;
+  /** iOS: authored `left` inside the LTR stage is mirrored on some locales. */
+  const textLeftMirroredRef = useRef(false);
   const registerTextBlockMeasure = useCallback((id, measureFn) => {
     if (!id) return;
     if (typeof measureFn === 'function') {
@@ -2970,6 +2979,19 @@ const PostEditorScreen = ({
                   setStageLayout(layout);
                 }}>
                 <View style={styles.stageLtr} pointerEvents="box-none">
+                  <View
+                    style={styles.textAxisProbeHost}
+                    pointerEvents="none"
+                    collapsable={false}>
+                    <View
+                      collapsable={false}
+                      style={styles.textAxisProbeMark}
+                      onLayout={e => {
+                        const x = e?.nativeEvent?.layout?.x;
+                        textLeftMirroredRef.current = Number(x) > 10;
+                      }}
+                    />
+                  </View>
                   {stageLayout.width > 0 &&
                     effectiveStageHeight > 0 &&
                     mediaImages.map((img, idx) => (
@@ -3002,6 +3024,7 @@ const PostEditorScreen = ({
                       onUpdatePosition={updateBlockPosition}
                       onBringToFront={bringTextBlockToFront}
                       onRegisterMeasure={registerTextBlockMeasure}
+                      leftMirroredRef={textLeftMirroredRef}
                     />
                   ))}
 
@@ -3711,6 +3734,21 @@ const styles = StyleSheet.create({
   stageLtr: {
     ...StyleSheet.absoluteFillObject,
     ...forceLtrStyle,
+  },
+  textAxisProbeHost: {
+    position: 'absolute',
+    width: 28,
+    height: 2,
+    opacity: 0,
+    top: 0,
+    left: 0,
+  },
+  textAxisProbeMark: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 4,
+    height: 2,
   },
   stageLtrDirection: {
     ...forceLtrStyle,

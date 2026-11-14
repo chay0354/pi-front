@@ -3,6 +3,7 @@ import FeedScreen from './screens/FeedScreen';
 import HomeScreen from './screens/HomeScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SideMenu from './components/SideMenu';
+import RightDrawer from './components/RightDrawer';
 import DesktopOnlyNotice, {useIsPhone} from './components/DesktopOnlyNotice';
 import {DEFAULT_CATEGORY_ID} from './feed/categories';
 import {FeedActionsContext} from './feed/feedActions';
@@ -165,6 +166,7 @@ export default function App() {
     }
     setUnreadChatCount(0);
     setChatRefreshKey(k => k + 1);
+    setMenuOpen(false);
     const target = peer && typeof peer === 'object' && !peer.nativeEvent && !peer.target ? peer : null;
     setChat({key: Date.now(), peer: target, overProfile: !!target});
   };
@@ -205,11 +207,12 @@ export default function App() {
           value={{
             onNeedLogin: () => openAccount('userRegistration'),
             onOpenChat: peer => {
-              if (!currentUser) {
+              const target = peer && typeof peer === 'object' ? peer : null;
+              if (!currentUser && !target) {
                 openAccount('userRegistration');
                 return;
               }
-              openChat(peer && typeof peer === 'object' ? peer : undefined);
+              openChat(target || undefined);
             },
           }}>
         <ProfileNavContext.Provider value={baseNav}>
@@ -270,11 +273,12 @@ export default function App() {
                 onOpenCategory={category => openFeed({category})}
                 onMenu={openMenu}
                 onOpenChat={peer => {
-                  if (!currentUser) {
+                  const target = peer && typeof peer === 'object' ? peer : null;
+                  if (!currentUser && !target) {
                     openAccount('userRegistration');
                     return;
                   }
-                  openChat(peer && typeof peer === 'object' ? peer : undefined);
+                  openChat(target || undefined);
                 }}
                 unreadChatCount={currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0}
               />
@@ -284,11 +288,10 @@ export default function App() {
         {menuOpen ? (
           <div
             inert={profiles.length > 0 || account || chat || personal ? true : undefined}
-            style={{position: 'absolute', inset: 0, zIndex: publish || chat ? 3 : 1}}>
+            style={{position: 'absolute', inset: 0, zIndex: chat ? 0 : publish ? 3 : 1}}>
             <SideMenu
               onClose={closeMenu}
               onOpenEditPublishAd={requireUser(() => {
-                setMenuOpen(false);
                 setPublish({key: Date.now(), screen: 'editPublish'});
               })}
               unreadChatCount={currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0}
@@ -299,29 +302,14 @@ export default function App() {
               onOpenSecretCodeRecovery={requireUser(() =>
                 openAccount('recovery', {userEmail: currentUser?.email || '', fromLogin: false}),
               )}
-              onOpenFavorites={requireUser(() => {
-                setMenuOpen(false);
-                openPersonal('favorites');
-              })}
-              onOpenFeedback={requireUser(() => {
-                setMenuOpen(false);
-                openPersonal('feedback');
-              })}
+              onOpenFavorites={requireUser(() => openPersonal('favorites'))}
+              onOpenFeedback={requireUser(() => openPersonal('feedback'))}
               onOpenTermsOfUse={() => openAccount('terms')}
-              onOpenAccessibilityStatement={() => {
-                setMenuOpen(false);
-                openPersonal('statement');
-              }}
-              onOpenAccessibilityMenu={() => {
-                setMenuOpen(false);
-                openPersonal('accessibility');
-              }}
-              onEditProfile={requireUser(() => {
-                openPersonal('edit');
-              })}
+              onOpenAccessibilityStatement={() => openPersonal('statement')}
+              onOpenAccessibilityMenu={() => openPersonal('accessibility')}
+              onEditProfile={requireUser(() => openPersonal('edit'))}
               onOpenFollowHub={tab => {
                 if (!currentUser) return;
-                setMenuOpen(false);
                 setPersonal({key: Date.now(), screen: 'follow', tab: tab || 'following', user: currentUser});
               }}
               onOpenOwnProfile={() => {
@@ -330,10 +318,7 @@ export default function App() {
                 openProfile(currentUser);
               }}
               onOpenAgencyJoinCode={() => openAccount('agencyJoinCode')}
-              onOpenAgencyMembers={requireUser(() => {
-                setMenuOpen(false);
-                openPersonal('agency');
-              })}
+              onOpenAgencyMembers={requireUser(() => openPersonal('agency'))}
             />
           </div>
         ) : null}
@@ -365,6 +350,7 @@ export default function App() {
                   openFeed({category: Number.isFinite(category) ? category : DEFAULT_CATEGORY_ID});
                 }}
                 onOpenPeerProfile={payload => openProfile(payload, {overChat: true})}
+                onNeedLogin={() => openAccount('userRegistration')}
                 initialPeer={chat.peer}
               />
             </Suspense>
@@ -391,37 +377,53 @@ export default function App() {
           </div>
         ) : null}
         {account ? (
-          <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
+          <div style={{position: 'absolute', inset: 0, zIndex: 2, background: '#1e1d27'}}>
             <AccountFlow key={account.key} start={account} onExit={exitAccount} />
           </div>
         ) : null}
         {personal ? (
           <div inert={profiles.some(p => p.overPersonal) ? true : undefined} style={{position: 'absolute', inset: 0, zIndex: 4}}>
-            <Suspense fallback={<div style={{position: 'absolute', inset: 0, background: '#1e1d27'}} />}>
+            <Suspense
+              fallback={<div style={{position: 'absolute', top: 0, right: 0, width: 370, height: '100%', background: '#1e1d27'}} />}>
               {personal.screen === 'favorites' ? (
-                <FavoritesScreen
+                <RightDrawer label="מועדפים" onClose={() => setPersonal(null)}>
+                  <FavoritesScreen
+                    key={personal.key}
+                    currentUser={currentUser}
+                    onClose={() => setPersonal(null)}
+                    onOpenListing={listing => {
+                      setPersonal(null);
+                      setMenuOpen(false);
+                      const category = Number(listing?.category);
+                      openFeed({
+                        category: Number.isFinite(category) && category > 0 ? category : DEFAULT_CATEGORY_ID,
+                        listingId: listing?.id ?? null,
+                      });
+                    }}
+                  />
+                </RightDrawer>
+              ) : personal.screen === 'edit' ? (
+                <EditProfileScreen
                   key={personal.key}
-                  currentUser={currentUser}
-                  onClose={() => setPersonal(null)}
-                  onOpenListing={listing => {
+                  onClose={() => {
                     setPersonal(null);
-                    setMenuOpen(false);
-                    const category = Number(listing?.category);
-                    openFeed({
-                      category: Number.isFinite(category) && category > 0 ? category : DEFAULT_CATEGORY_ID,
-                      listingId: listing?.id ?? null,
-                    });
+                    setMenuOpen(true);
                   }}
                 />
-              ) : personal.screen === 'edit' ? (
-                <EditProfileScreen key={personal.key} onClose={() => setPersonal(null)} />
               ) : personal.screen === 'feedback' ? (
-                <FeedbackScreen key={personal.key} onClose={() => setPersonal(null)} />
+                <RightDrawer label="הצעות לשיפור" onClose={() => setPersonal(null)}>
+                  <FeedbackScreen key={personal.key} onClose={() => setPersonal(null)} />
+                </RightDrawer>
               ) : personal.screen === 'accessibility' ? (
-                <AccessibilityMenuScreen key={personal.key} onClose={() => setPersonal(null)} />
+                <RightDrawer label="נגישות" onClose={() => setPersonal(null)}>
+                  <AccessibilityMenuScreen key={personal.key} onClose={() => setPersonal(null)} />
+                </RightDrawer>
               ) : personal.screen === 'statement' ? (
-                <AccessibilityStatementScreen key={personal.key} onClose={() => setPersonal(null)} />
+                <RightDrawer label="הצהרת נגישות" onClose={() => setPersonal(null)}>
+                  <AccessibilityStatementScreen key={personal.key} onClose={() => setPersonal(null)} />
+                </RightDrawer>
               ) : personal.screen === 'agency' ? (
+                <RightDrawer label="ניהול משווקים" onClose={() => setPersonal(null)}>
                 <AgencyMembersScreen
                   key={personal.key}
                   currentUser={currentUser}
@@ -449,18 +451,21 @@ export default function App() {
                     });
                   }}
                 />
+                </RightDrawer>
               ) : (
-                <FollowHubScreen
-                  key={personal.key}
-                  currentUser={currentUser}
-                  profileUser={personal.user || currentUser}
-                  initialTab={personal.tab}
-                  onClose={() => setPersonal(null)}
-                  onOpenUserProfile={row => {
-                    if (!row || row.is_self) return;
-                    openProfile(row, {overPersonal: true});
-                  }}
-                />
+                <RightDrawer label="במעקב" onClose={() => setPersonal(null)}>
+                  <FollowHubScreen
+                    key={personal.key}
+                    currentUser={currentUser}
+                    profileUser={personal.user || currentUser}
+                    initialTab={personal.tab}
+                    onClose={() => setPersonal(null)}
+                    onOpenUserProfile={row => {
+                      if (!row || row.is_self) return;
+                      openProfile(row, {overPersonal: true});
+                    }}
+                  />
+                </RightDrawer>
               )}
             </Suspense>
           </div>

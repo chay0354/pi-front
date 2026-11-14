@@ -27,7 +27,12 @@ const GOLD_GRADIENT_LOCATIONS = [0.0456, 0.5076, 0.8831];
  * with professional types so matching professionals and, for תיווך, brokers get a chat
  * notification from the system "עדכונים על פוסטים רלוונטים" account.
  */
-const PostTargetProfessionalsSheet = ({visible, onSkip, onConfirm, submitting = false}) => {
+const PostTargetProfessionalsSheet = ({
+  visible,
+  onSkip,
+  onConfirm,
+  submitting = false,
+}) => {
   const insets = useSafeAreaInsets();
   const [selectedTypes, setSelectedTypes] = useState([]);
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
@@ -140,6 +145,8 @@ const PostTargetProfessionalsSheet = ({visible, onSkip, onConfirm, submitting = 
             })}
           </ScrollView>
 
+          <View style={styles.spacer} />
+
           <View style={styles.actionsRow}>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -166,6 +173,10 @@ const PostTargetProfessionalsSheet = ({visible, onSkip, onConfirm, submitting = 
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          <Text style={styles.storyNote}>
+            כל פוסט שמפורסם עולה לסטורי אוטומטית
+          </Text>
         </Animated.View>
       </View>
     </Modal>
@@ -211,7 +222,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     writingDirection: 'rtl',
   },
-  chipsScroll: {flex: 1},
+  chipsScroll: {flexGrow: 0, flexShrink: 1},
+  spacer: {flex: 1},
+  storyNote: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    fontFamily: 'Rubik-Medium',
+    marginTop: 14,
+  },
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -250,7 +271,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 2,
-    marginBottom: 24,
   },
   skipBtn: {
     flex: 1,

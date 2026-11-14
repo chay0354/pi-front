@@ -50,6 +50,7 @@ import {
   addMembersToChatGroup,
   updateGroupTitle,
   removeMemberFromChatGroup,
+  deleteChatGroup,
   updateGroupMemberRole,
   respondToExclusiveOffer,
 } from '../utils/api';
@@ -76,6 +77,7 @@ import {
   forceLtrStyle,
   getRangeSliderPercentFromEvent,
   hebrewTextAlign,
+  physicalRightInputStyle,
 } from '../utils/rtlLayout';
 import {isFeedPostListingRecord} from '../utils/listingShape';
 import {muxThumbnailUri} from '../utils/videoPlayback';
@@ -483,6 +485,10 @@ const ChatScreen = ({
   onOpenPost,
   onOpenPeerProfile,
   onContactListingOwner,
+  /** Guest typed this text, then left for registration. Restored on return. */
+  draftText = '',
+  onDraftChange,
+  onRequireRegistration,
 }) => {
   const insets = useSafeAreaInsets();
   /** Shared-post cards are shaped like a feed page (single source: utils/postFrame). */
@@ -577,7 +583,7 @@ const ChatScreen = ({
   );
   const [brokenImageUrls, setBrokenImageUrls] = useState({});
   const [chatImageSizeByUrl, setChatImageSizeByUrl] = useState({});
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(() => String(draftText || ''));
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolvedDisplay, setResolvedDisplay] = useState(null);
@@ -1430,6 +1436,15 @@ const ChatScreen = ({
     [myEmail, groupConversationId],
   );
 
+  const handleDeleteGroupModal = useCallback(
+    () =>
+      deleteChatGroup({
+        userEmail: myEmail,
+        conversationId: groupConversationId,
+      }),
+    [myEmail, groupConversationId],
+  );
+
   const handleSetMemberRoleModal = useCallback(
     (targetEmail, role) =>
       updateGroupMemberRole({
@@ -1736,11 +1751,15 @@ const ChatScreen = ({
       setInputText('');
       return;
     }
-    if (!myEmail) return;
+    if (!myEmail) {
+      if (typeof onRequireRegistration === 'function') onRequireRegistration();
+      return;
+    }
     if (isGroupThread) {
       if (!groupConversationId) return;
       setSending(true);
       setInputText('');
+      onDraftChange?.('');
       try {
         const res = await sendGroupChatMessage(
           groupConversationId,
@@ -1756,6 +1775,7 @@ const ChatScreen = ({
         }
       } catch (e) {
         setInputText(text);
+        onDraftChange?.(text);
         if (typeof alert !== 'undefined')
           alert(e?.message || 'שליחת ההודעה נכשלה');
       } finally {
@@ -1766,6 +1786,7 @@ const ChatScreen = ({
     if (!otherUserEmail) return;
     setSending(true);
     setInputText('');
+    onDraftChange?.('');
     try {
       const {receiverDisplay, senderDisplay} = getChatDisplays();
       // Only tag listing_id on the first outbound message when opening chat from a listing — not every text,
@@ -1789,6 +1810,7 @@ const ChatScreen = ({
       }
     } catch (e) {
       setInputText(text);
+      onDraftChange?.(text);
       if (typeof alert !== 'undefined')
         alert(e?.message || 'שליחת ההודעה נכשלה');
     } finally {
@@ -3015,6 +3037,8 @@ const ChatScreen = ({
                   <TouchableOpacity
                     activeOpacity={0.92}
                     onPress={() => openChatImageFullScreen(msg.mediaUrl)}
+                    onLongPress={() => handleMessageLongPress(m)}
+                    delayLongPress={300}
                     accessibilityRole="imagebutton"
                     accessibilityLabel="פתח תמונה במסך מלא"
                     style={[styles.chatPhotoTap, photoBox]}>
@@ -3061,6 +3085,8 @@ const ChatScreen = ({
                   <TouchableOpacity
                     activeOpacity={0.92}
                     onPress={() => openChatVideoFullScreen(msg.mediaUrl)}
+                    onLongPress={() => handleMessageLongPress(m)}
+                    delayLongPress={300}
                     accessibilityRole="imagebutton"
                     accessibilityLabel="פתח סרטון במסך מלא"
                     style={[styles.chatPhotoTap, photoBox]}>
@@ -3347,8 +3373,11 @@ const ChatScreen = ({
     ],
   );
 
+  const guestDirectCompose =
+    !myEmail && isDirectPeer && !isGroupThread && !isWelcome;
   const composerActive =
     (isWelcome ||
+      guestDirectCompose ||
       (myEmail && (isDirectPeer || (isGroupThread && groupConversationId)))) &&
     !composerBlockedExclusive;
   const canSubmitMessage =
@@ -3357,12 +3386,16 @@ const ChatScreen = ({
     (inputText || '').trim().length > 0 &&
     (isWelcome || isDirectPeer || (isGroupThread && groupConversationId));
   const canSendChatMedia =
-    composerActive && !isWelcome && !sending && !isRecording;
+    !!myEmail && composerActive && !isWelcome && !sending && !isRecording;
 
   useEffect(() => {
     canRecordVoiceRef.current =
-      composerActive && !isWelcome && !sending && Platform.OS !== 'web';
-  }, [composerActive, isWelcome, sending]);
+      !!myEmail &&
+      composerActive &&
+      !isWelcome &&
+      !sending &&
+      Platform.OS !== 'web';
+  }, [myEmail, composerActive, isWelcome, sending]);
 
   const offerLocationText = useMemo(() => {
     const src = exclusiveListingData || sharedListing || {};
@@ -4124,7 +4157,10 @@ const ChatScreen = ({
                     placeholder="כתוב הודעה"
                     placeholderTextColor={INPUT_PLACEHOLDER}
                     value={inputText}
-                    onChangeText={setInputText}
+                    onChangeText={text => {
+                      setInputText(text);
+                      onDraftChange?.(text);
+                    }}
                     multiline
                     maxLength={2000}
                     editable={composerActive}
@@ -4488,6 +4524,7 @@ const ChatScreen = ({
                 placeholderTextColor="rgba(255,255,255,0.45)"
                 value={addMembersSearch}
                 onChangeText={setAddMembersSearch}
+                writingDirection="rtl"
               />
               <MaterialCommunityIcons
                 name="magnify"
@@ -4668,6 +4705,7 @@ const ChatScreen = ({
         onRemoveMember={handleRemoveMemberModal}
         onSetMemberRole={handleSetMemberRoleModal}
         onLeaveGroup={handleLeaveGroupModal}
+        onDeleteGroup={handleDeleteGroupModal}
         onConversationDeleted={() => {
           setShowGroupManageModal(false);
           if (typeof onClose === 'function') onClose();
@@ -5178,14 +5216,15 @@ const styles = StyleSheet.create({
   },
   addMembersSearchInput: {
     flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
     color: '#fff',
     fontSize: 18,
     fontFamily: 'Rubik-Regular',
     paddingVertical: 10,
-    paddingRight: 16,
-    paddingLeft: 46,
-    textAlign: hebrewTextAlign,
-    writingDirection: 'rtl',
+    paddingLeft: 16,
+    paddingRight: 46,
+    ...physicalRightInputStyle,
   },
   addMembersSearchIcon: {
     position: 'absolute',

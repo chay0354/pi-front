@@ -66,6 +66,7 @@ export const ProfileAvatar = ({
   placeholderImage = DEFAULT_PI_PROFILE_AVATAR,
   fallbackResizeMode = 'contain',
   onImageError,
+  content = null,
 }) => {
   const [primaryFailed, setPrimaryFailed] = useState(false);
   const [fallbackFailed, setFallbackFailed] = useState(false);
@@ -201,7 +202,7 @@ export const ProfileAvatar = ({
           borderRadius: 999,
           overflow: 'hidden',
         }}>
-        {Photo}
+        {content != null ? content : Photo}
       </View>
     </View>
   );

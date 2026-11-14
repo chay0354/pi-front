@@ -467,6 +467,28 @@ const mergeListingRows = (target, rows) => {
   return target;
 };
 
+function boostExpiryMs(row) {
+  const raw = row?.boost_expires_at ?? row?.boostExpiresAt;
+  if (raw == null || raw === '') return 0;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** הקפצה: an active boost is the head of the flow. Newest boost first. */
+function pinActiveBoostsFirst(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  const now = Date.now();
+  const boosted = [];
+  const rest = [];
+  for (const row of rows) {
+    if (boostExpiryMs(row) > now) boosted.push(row);
+    else rest.push(row);
+  }
+  if (boosted.length === 0) return rows;
+  if (boosted.length > 1) boosted.sort((a, b) => boostExpiryMs(b) - boostExpiryMs(a));
+  return boosted.concat(rest);
+}
+
 const isNewsSidebarFilterDef = filter =>
   filter?.id === 'new' && filter?.ads_only === true;
 
@@ -3199,6 +3221,10 @@ const TikTokFeedScreen = ({
         }
         }
 
+        if (!isProfilePostsFeed) {
+          mergedListings = pinActiveBoostsFirst(mergedListings);
+        }
+
         const resultForTransform = {
           ...result,
           listings: mergedListings,
@@ -3273,7 +3299,7 @@ const TikTokFeedScreen = ({
 
               // Category 3 specific fields
               const searchPurposeLabels = {
-                enter: 'מחפש להכנס',
+                enter: 'מחפש להיכנס',
                 bring_in: 'מחפש להכניס',
                 partner: 'מחפש להכניס',
               };

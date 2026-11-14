@@ -30,7 +30,7 @@ import {persistAdLike, useIsLiked} from '../feed/likedListings';
 import {isPostLiked, togglePostLiked, useIsPostLiked} from '../feed/postLikes';
 import {useFeedActions} from '../feed/feedActions';
 import {CommentsSheet, listingChatPeer, OptionsSheet, reportTarget, ShareSheet} from '../feed/FeedSheets';
-import {likePost, unlikePost} from '../api/client';
+import {likePost, recordListingContact, unlikePost} from '../api/client';
 import {useSession} from '../auth/session';
 import CompanyReportScreen from '../profile/CompanyReportScreen';
 import StagePortal from '../feed/StagePortal';
@@ -378,19 +378,21 @@ function PauseLayer({paused, onToggle}) {
   );
 }
 
-function PostTextLayer({payload}) {
+/** Desktop editor canvas. Phone-authored posts keep their saved preview ratio. */
+function editorCanvasFrame(cellWidth, cellHeight, payload) {
+  const previewWidth = Number(payload?.previewWidth) || 0;
+  const previewHeight = Number(payload?.previewHeight) || 0;
+  const aspect = previewWidth > 0 && previewHeight > 0 ? previewWidth / previewHeight : 16 / 9;
+  return postTextFrame(cellWidth, cellHeight, aspect, 1);
+}
+
+function PostTextLayer({payload, frameWidth, frameHeight}) {
   if (!payload?.overlays?.length) return null;
-  const frame = postTextFrame(
-    AD_FRAME.width,
-    AD_FRAME.height,
-    payload.previewWidth,
-    payload.previewHeight,
-  );
   const space = {
     previewWidth: payload.previewWidth,
     previewHeight: payload.previewHeight,
-    feedWidth: frame.width,
-    feedHeight: frame.height,
+    feedWidth: frameWidth,
+    feedHeight: frameHeight,
   };
   return (
     <div className={styles.postTextLayer}>
@@ -404,7 +406,7 @@ function PostTextLayer({payload}) {
           <div
             key={`${index}-${String(block.text || '').slice(0, 12)}`}
             className={styles.postTextBlock}
-            style={{left: frame.left + layout.x, top: frame.top + layout.y, width: layout.width}}>
+            style={{left: layout.x, top: layout.y, width: layout.width}}>
             <p
               className={styles.postText}
               dir="rtl"
@@ -438,6 +440,7 @@ export function PostMedia({item, active}) {
   const count = item.images.length;
   const colorFill = useColorEdgeFill(!showVideo ? still : '');
   const {bind: bindVideo, bindSound, paused, togglePaused} = useVideoPlayback(active && showVideo, !muted);
+  const canvas = editorCanvasFrame(AD_FRAME.width, AD_FRAME.height, item.postText);
 
   return (
     <div
@@ -451,50 +454,46 @@ export function PostMedia({item, active}) {
             }
           : undefined
       }>
-      {colorFill && still ? (
-        <img
-          className={colorFill.solid ? styles.postColorContain : styles.postColorFill}
-          src={still}
-          alt={item.description || ''}
-        />
-      ) : null}
       {showVideo ? (
-        <>
-          {still ? (
-            <img className={styles.postBlur} src={still} alt="" />
-          ) : (
-            <video
-              ref={bindVideo}
-              className={styles.postBlur}
-              src={item.videoUrl}
-              muted
-              loop
-              playsInline
-            />
-          )}
+        still ? (
+          <img className={styles.postBlur} src={still} alt="" />
+        ) : (
+          <video
+            ref={bindVideo}
+            className={styles.postBlur}
+            src={item.videoUrl}
+            muted
+            loop
+            playsInline
+          />
+        )
+      ) : still ? (
+        <img className={styles.postBlur} src={still} alt="" />
+      ) : null}
+      <div
+        className={styles.postCanvas}
+        style={{width: canvas.width, height: canvas.height, left: canvas.left, top: canvas.top}}>
+        {showVideo ? (
           <video
             ref={bindSound}
-            className={styles.postVideo}
+            className={styles.postCanvasMedia}
             src={item.videoUrl}
             poster={still || undefined}
             muted
             loop
             playsInline
           />
-        </>
-      ) : !colorFill && still ? (
-        <img className={styles.postBlur} src={still} alt="" />
-      ) : null}
-      {!colorFill && !showVideo && <div className={styles.postFrame}>
-        {still ? (
-          <img className={styles.postFrameMedia} src={still} alt={item.description || ''} />
+        ) : still ? (
+          <img className={styles.postCanvasMedia} src={still} alt={item.description || ''} />
         ) : (
           <p className={styles.postFrameText} dir="auto">
             {item.description}
           </p>
         )}
-      </div>}
-      {item.postText ? <PostTextLayer payload={item.postText} /> : null}
+        {item.postText ? (
+          <PostTextLayer payload={item.postText} frameWidth={canvas.width} frameHeight={canvas.height} />
+        ) : null}
+      </div>
       {showVideo ? (
         <>
           <PauseLayer paused={paused} onToggle={togglePaused} />
@@ -1013,11 +1012,14 @@ export default function FeedCard({item, active}) {
   };
   const openProfile = () => nav.open(feedListingProfilePayload(item.raw));
   const openMessage = () => {
-    if (!requireUser()) return;
     const peer = listingChatPeer(item);
     if (!peer.email && !peer.subscriptionId) {
       window.alert('לא ניתן לפתוח שיחה עבור המודעה הזו');
       return;
+    }
+    const ownerId = String(item.raw?.subscription_id || item.raw?.owner_id || '').trim();
+    if (item.id && (!userId || !ownerId || ownerId !== String(userId))) {
+      recordListingContact(item.id, userId);
     }
     onOpenChat(peer);
   };

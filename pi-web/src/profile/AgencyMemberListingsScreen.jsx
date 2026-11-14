@@ -217,7 +217,7 @@ export default function AgencyMemberListingsScreen({
 
   const openBoostConfirm = listing => {
     if (!canBoostThisMonth) {
-      window.alert('הגעת למכסת ההקפצות החודשית (הקפצה אחת בחודש).');
+      window.alert('עברת את המכסה של ההקפצות החודש');
       return;
     }
     setBoostConfirmListing(listing);
@@ -244,7 +244,7 @@ export default function AgencyMemberListingsScreen({
         setBoostedOverrides(prev => ({...prev, [String(listingId)]: res.boost_expires_at}));
       }
       setBoostConfirmListing(null);
-      window.alert('ההקפצה הופעלה! הדירוג הוא "גבוהה" למשך 24 שעות.');
+      window.alert('ההקפצה הופעלה! המודעה תופיע בראש הזרימה למשך 24 שעות.');
     } catch (e) {
       if (e?.code === 'QUOTA_EXCEEDED') setBoostQuota(prev => ({...prev, remaining: 0}));
       window.alert(e?.message || 'הקפצה נכשלה');
@@ -361,7 +361,7 @@ export default function AgencyMemberListingsScreen({
                     <button type="button" onClick={() => (post ? onEditPost?.(listing, member) : onEditListing?.(listing, member))}>
                       עריכה
                     </button>
-                    <button type="button" onClick={() => openBoostConfirm(listing)} disabled={!canBoostThisMonth}>
+                    <button type="button" onClick={() => openBoostConfirm(listing)}>
                       הקפצה
                     </button>
                     <button type="button" onClick={() => (frozen ? setUnfreezeConfirmListing(listing) : setFreezeConfirmListing(listing))}>

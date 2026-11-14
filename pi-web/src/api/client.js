@@ -495,6 +495,23 @@ export async function clearPostCommentReaction(listingId, commentId, userId) {
   return data;
 }
 
+/** Count a phone tap or a Pi Chat open on a listing or post. */
+export async function recordListingContact(listingId, userId = null) {
+  if (!listingId) return null;
+  try {
+    const response = await apiFetch(`${apiBase()}/api/listings/${listingId}/contact`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(userId ? {user_id: String(userId)} : {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return null;
+    return data && typeof data.contact_count === 'number' ? data.contact_count : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordListingShare(listingId, count = 1) {
   if (!listingId) return null;
   try {

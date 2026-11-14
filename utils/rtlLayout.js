@@ -11,6 +11,23 @@ import {I18nManager, Platform} from 'react-native';
 export const textAlign = 'right';
 /** Physical right for Hebrew under forceRTL + swapLeftAndRightInRTL on native. */
 export const hebrewTextAlign = Platform.OS === 'web' ? 'right' : 'left';
+
+/**
+ * Physical-right alignment for a TextInput on iPhone and Android, whether the
+ * device language is English or Hebrew.
+ *
+ * Text does not behave like TextInput here: iOS never copies the RTL layout
+ * direction onto the field, and Android maps left/right to absolute gravity.
+ * `direction: 'ltr'` stops the device language from mirroring the field, so
+ * `textAlign: 'right'` stays the physical right. `writingDirection: 'rtl'`
+ * keeps Hebrew character order. Padding on a field with this style is physical
+ * — do not pre-swap paddingLeft and paddingRight.
+ */
+export const physicalRightInputStyle = {
+  direction: 'ltr',
+  textAlign: 'right',
+  writingDirection: 'rtl',
+};
 export const flexEnd = 'flex-end';
 export const flexStart = 'flex-start';
 

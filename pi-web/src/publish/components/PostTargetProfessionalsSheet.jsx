@@ -10,7 +10,12 @@ import styles from './PostTargetProfessionalsSheet.module.css';
  * with professional types so matching professionals and, for תיווך, brokers get a chat
  * notification from the system "עדכונים על פוסטים רלוונטים" account.
  */
-export default function PostTargetProfessionalsSheet({visible, onSkip, onConfirm, submitting = false}) {
+export default function PostTargetProfessionalsSheet({
+  visible,
+  onSkip,
+  onConfirm,
+  submitting = false,
+}) {
   const [selectedTypes, setSelectedTypes] = useState([]);
 
   useEffect(() => {
@@ -91,6 +96,7 @@ export default function PostTargetProfessionalsSheet({visible, onSkip, onConfirm
             </span>
           </button>
         </div>
+        <p className={styles.storyNote}>כל פוסט שמפורסם עולה לסטורי אוטומטית</p>
       </div>
     </div>
   );

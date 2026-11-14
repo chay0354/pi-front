@@ -137,7 +137,13 @@ const getListingEngagementStats = (listing, postRecord) => {
       : listing.comment_count != null
         ? Number(listing.comment_count)
         : 0;
-  return {views, likes, comments};
+  const contacts =
+    listing.contact_count != null
+      ? Number(listing.contact_count)
+      : listing.contacts != null
+        ? Number(listing.contacts)
+        : 0;
+  return {views, likes, comments, contacts};
 };
 
 const getListingTypeBadgeLabel = (listing, ownerUser) => {
@@ -190,13 +196,22 @@ const getExposureAsset = exposure => {
 };
 
 const ListingStatsRow = ({listing, postRecord, textStyle}) => {
-  const {views, likes, comments} = getListingEngagementStats(
+  const {views, likes, comments, contacts} = getListingEngagementStats(
     listing,
     postRecord,
   );
   const statTextStyle = textStyle ? [styles.statText, textStyle] : styles.statText;
   return (
     <View style={styles.statsRow}>
+      <View style={styles.statItem}>
+        <MaterialCommunityIcons
+          name="phone-outline"
+          size={22}
+          color={STAT_ICON_COLOR}
+          style={{opacity: STAT_ICON_OPACITY}}
+        />
+        <Text style={statTextStyle}>{contacts}</Text>
+      </View>
       <View style={styles.statItem}>
         <Image source={LISTING_STAT_ICONS.views} style={STAT_ICON_STYLE} resizeMode="contain" />
         <Text style={statTextStyle}>{views}</Text>
@@ -226,7 +241,6 @@ const EditPublishListingCard = ({
   onPress,
   exposure = 'low',
   isFrozen = false,
-  canBoost = true,
   onBoostPress,
   onFreezePress,
   onRemovePress,
@@ -280,12 +294,11 @@ const EditPublishListingCard = ({
   const renderActionRow = (compactActions = false) => (
     <View style={[styles.actionRow, compactActions && styles.actionRowList]}>
       <TouchableOpacity
-        style={[styles.actionBtn, !canBoost && styles.actionBtnDisabled]}
+        style={styles.actionBtn}
         onPress={e => {
           e?.stopPropagation?.();
           onBoostPress?.(listing);
         }}
-        disabled={!canBoost}
         activeOpacity={0.8}>
         {!compactActions ? (
           <Text style={styles.actionBtnText}>הקפצה</Text>
@@ -577,7 +590,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
   },
-  actionBtnDisabled: {opacity: 0.45},
   actionBtnFrozenIcon: {tintColor: FROZEN_ACTION_BLUE},
   actionBtnFrozenText: {color: FROZEN_ACTION_BLUE},
   actionBtnText: {color: '#fff', fontSize: 16, fontFamily: 'Rubik-Regular'},

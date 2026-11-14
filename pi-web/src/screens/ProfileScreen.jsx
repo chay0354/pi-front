@@ -1,12 +1,13 @@
 import {Fragment, useCallback, useEffect, useRef, useState} from 'react';
 import {mdiClose, mdiHeart, mdiHeartOutline, mdiShareVariant} from '@mdi/js';
 import {persistAdLike, useIsLiked} from '../feed/likedListings';
-import {cancelFollowRequest, getFollowStatus, sendFollowRequest, submitReview, toSubscriptionId, unfollowUser} from '../api/client';
+import {cancelFollowRequest, getFollowStatus, recordListingContact, sendFollowRequest, submitReview, toSubscriptionId, unfollowUser} from '../api/client';
 import {useSession} from '../auth/session';
 import MdiIcon from '../publish/MdiIcon';
 import VolumeIcon from '../components/VolumeIcon';
 import {isReduceMotion} from '../a11y/prefs';
 import {PostMedia} from '../components/FeedCard';
+import {ShareSheet} from '../feed/FeedSheets';
 import {toFeedItem} from '../feed/listingRules';
 import {BnbListingContent, LandListingContent, PartnersListingContent} from '../profile/DedicatedContent';
 import {
@@ -30,6 +31,7 @@ import {
   formatReviewDate,
 } from '../profile/ProfileSubviews';
 import {categoryImages} from '../profile/lib/constant';
+import {listingVirtualTourUrl, normalizeVirtualTourUrl, virtualTourEmbedUrl} from '../publish/lib/virtualTour';
 import {
   HERO_NAV_BACK_XML,
   HERO_NAV_HEART_XML,
@@ -361,6 +363,40 @@ function FeatureChips({features, keyPrefix}) {
   );
 }
 
+/** Company project visualization / 3D tour (general_details.virtual_tour_url). */
+function VirtualTour({url}) {
+  const frameRef = useRef(null);
+  const tourUrl = normalizeVirtualTourUrl(url);
+  const embedUrl = virtualTourEmbedUrl(url);
+  if (!tourUrl || !embedUrl) return null;
+  const openFullScreen = () => {
+    const el = frameRef.current;
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else window.open(tourUrl, '_blank', 'noopener,noreferrer');
+  };
+  return (
+    <div className={styles.tour}>
+      <p className={styles.constructionTitle}>הדמיית הפרויקט</p>
+      <div className={styles.tourFrame} ref={frameRef}>
+        <iframe
+          title="הדמיית הפרויקט"
+          src={embedUrl}
+          loading="lazy"
+          allow="autoplay; fullscreen; xr-spatial-tracking; gyroscope; accelerometer"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+        <button type="button" className={styles.tourExpand} onClick={openFullScreen} aria-label="הדמיה במסך מלא">
+          <img src={asset('full_screen.png')} alt="" width={22} height={22} />
+        </button>
+      </div>
+      <a className={styles.tourLink} href={tourUrl} target="_blank" rel="noopener noreferrer">
+        פתיחה בחלון חדש
+      </a>
+    </div>
+  );
+}
+
 function ProjectOffers({cards}) {
   return (
     <div className={styles.offers}>
@@ -445,6 +481,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
   const [followBusy, setFollowBusy] = useState(false);
   const [unfollowOpen, setUnfollowOpen] = useState(false);
   const [report, setReport] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [followerDelta, setFollowerDelta] = useState(0);
 
   useEffect(() => {
@@ -525,12 +562,16 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
     }
   };
 
+  const recordInquiry = () => {
+    if (!vm.isListingFromFeed || isOwn) return;
+    const listingId = user?.id != null ? String(user.id).trim() : '';
+    if (!listingId) return;
+    const viewerId = currentUser?.id || currentUser?.subscription_id || null;
+    recordListingContact(listingId, viewerId);
+  };
   const handleChatPress = () => {
     if (isOwn) return;
-    if (!currentUser) {
-      onNeedLogin?.();
-      return;
-    }
+    recordInquiry();
     const email = String(vm.displayEmail || user?.creator_email || user?.email || '')
       .trim()
       .toLowerCase();
@@ -642,16 +683,27 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
     }
     window.location.href = `tel:${tel.replace(/[^\d+]/g, '')}`;
   };
-  const handleCallPress = () => onCall(vm.primaryContactPhone);
+  const handleCallPress = () => {
+    if (isOwn) return;
+    recordInquiry();
+    onCall(vm.primaryContactPhone);
+  };
 
   const shareProfile = () => {
-    const title = String(vm.displayName || '').trim() || 'פרופיל';
-    const url = window.location.href;
-    if (navigator.share) {
-      navigator.share({title, text: title, url}).catch(() => {});
+    const listing = vm.lastAd || (user && isAdsListingRecord(user) ? user : null);
+    if (listing?.id != null && String(listing.id).trim()) {
+      setShareOpen(true);
       return;
     }
-    navigator.clipboard?.writeText(url).catch(() => {});
+    const title = String(vm.displayName || '').trim() || 'פרופיל';
+    const url = window.location.href;
+    const text = url ? `${title}\n${url}` : title;
+    const done = () => showAlert('הועתק', 'הקישור הועתק');
+    if (navigator.clipboard?.writeText && url) {
+      navigator.clipboard.writeText(url).then(done).catch(() => showAlert(title, text));
+      return;
+    }
+    showAlert(title, text);
   };
 
   const copyContactDetails = async () => {
@@ -1011,6 +1063,12 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
           <ConstructionStatus status={lastAd?.construction_status} />
         </>
       ) : null}
+      {vm.isCompany && listingVirtualTourUrl(lastAd) ? (
+        <>
+          <span className={styles.adDividerWide} />
+          <VirtualTour url={listingVirtualTourUrl(lastAd)} />
+        </>
+      ) : null}
     </>
   );
 
@@ -1204,7 +1262,11 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
               </p>
             ) : null}
             {vm.contactPhones.map((phone, i) => (
-              <a key={i} className={styles.contactRow} href={`tel:${String(phone).replace(/[^\d+]/g, '')}`}>
+              <a
+                key={i}
+                className={styles.contactRow}
+                href={`tel:${String(phone).replace(/[^\d+]/g, '')}`}
+                onClick={() => recordInquiry()}>
                 <img className={styles.contactIcon} src={asset('callIcon.png')} alt="" />
                 <span className={styles.contactLink}>{String(phone).trim()}</span>
               </a>
@@ -1521,6 +1583,14 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
           title={vm.displayName}
           onClose={() => setSubview(null)}
           active={active}
+        />
+      ) : null}
+      {shareOpen && (vm.lastAd || user) ? (
+        <ShareSheet
+          item={toFeedItem(vm.lastAd || user)}
+          user={currentUser}
+          onClose={() => setShareOpen(false)}
+          onOpenChat={onOpenChat}
         />
       ) : null}
       {report ? (

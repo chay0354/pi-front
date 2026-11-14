@@ -27,6 +27,7 @@ import HomeIntroModal, {
 } from '../components/HomeIntroModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeStoryStrip from '../components/HomeStoryStrip';
+import {ProfileAvatar} from '../components/ProfileAvatar';
 import StoryViewerModal from '../components/StoryViewerModal';
 import PiAiSearchModal from '../components/PiAiSearchModal';
 import {getListings, getStoriesFeed} from '../utils/api';
@@ -38,6 +39,11 @@ import {
 import {firstVideoUrl} from '../utils/listingGridCardFigma';
 import {cappedMuxUri, muxThumbnailUri} from '../utils/videoPlayback';
 import {prefetchFeedVideoUri} from '../utils/feedVideoPreload';
+import {
+  getBnbBusinessLogoUrl,
+  getListingFeedAvatarUrl,
+  shouldForceGoldRingForListing,
+} from '../utils/userProfileImage';
 
 import {
   userCategories,
@@ -394,6 +400,14 @@ const Home = ({
   const featureMedia = featureListing
     ? resolveFeatureProjectVideoMedia(featureListing)
     : null;
+  const featureAvatarUrl = featureListing
+    ? getListingFeedAvatarUrl(featureListing)
+    : null;
+  const featureAvatarFallback = (() => {
+    if (!featureListing) return null;
+    const logo = getBnbBusinessLogoUrl(featureListing);
+    return logo && logo !== featureAvatarUrl ? logo : null;
+  })();
 
   // Warm poster + first video segments as soon as the ad is picked.
   useEffect(() => {
@@ -611,11 +625,13 @@ const Home = ({
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Carusel
-          categoriesList={userCategories}
-          initialCategoryId={carouselCategoryId}
-          onCategorySelect={handleCategorySelect}
-        />
+        <View style={styles.carouselLift}>
+          <Carusel
+            categoriesList={userCategories}
+            initialCategoryId={carouselCategoryId}
+            onCategorySelect={handleCategorySelect}
+          />
+        </View>
         {/* Tight header: pull up toward the carousel so the project video
             card below gains the freed height (grows toward the top). */}
         <View
@@ -663,6 +679,23 @@ const Home = ({
                     </Text>
                     <Text style={styles.projectCardCta}>צפו בפרויקט</Text>
                   </View>
+                  {featureListing ? (
+                    <View
+                      style={styles.featureAvatarLayer}
+                      pointerEvents="none">
+                      <View style={styles.featureAvatarSlot}>
+                        <ProfileAvatar
+                          uri={featureAvatarUrl}
+                          fallbackUri={featureAvatarFallback}
+                          size={46}
+                          subscriptionType={featureListing}
+                          forceGoldRing={shouldForceGoldRingForListing(
+                            featureListing,
+                          )}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
                   {featureMedia?.type === 'video' ? (
                     <View
                       style={styles.videoControlsLayer}
@@ -888,6 +921,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  /** Whole category carousel, shifted up without moving the project card. */
+  carouselLift: {
+    transform: [{translateY: -18}],
+  },
   projectCardSlot: {
     flex: 1,
     marginHorizontal: 20,
@@ -930,6 +967,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Rubik-SemiBold',
     textAlign: 'center',
     marginBottom: 2,
+  },
+  featureAvatarLayer: {
+    ...StyleSheet.absoluteFillObject,
+    ...forceLtrStyle,
+    zIndex: 13,
+    elevation: 13,
+  },
+  featureAvatarSlot: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
   },
   projectCardCta: {
     color: '#FFFFFF',

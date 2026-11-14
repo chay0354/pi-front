@@ -177,6 +177,20 @@ export async function updateGroupTitle({userEmail, conversationId, title}) {
   return data;
 }
 
+export async function deleteChatGroup({userEmail, conversationId}) {
+  const response = await apiFetch(`${apiBase()}/api/chat/groups/delete`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      user_email: String(userEmail || '').trim().toLowerCase(),
+      conversation_id: String(conversationId || '').trim(),
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to delete group');
+  return data;
+}
+
 export async function removeMemberFromChatGroup({userEmail, conversationId, memberEmail}) {
   const response = await apiFetch(`${apiBase()}/api/chat/groups/remove-member`, {
     method: 'POST',

@@ -319,6 +319,55 @@ button:hover > span > .uploadPill {
   resize: none;
 }
 
+.tourHint {
+  margin: 0;
+  color: #d2d0dc;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.tourInputWrap {
+  position: relative;
+}
+
+.tourInput {
+  padding: 0 20px 0 52px;
+  font-size: 20px;
+  text-align: left;
+}
+
+.tourInputError,
+.tourInputError:hover,
+.tourInputError:focus {
+  border-color: #ff6b6b;
+}
+
+.tourClear {
+  position: absolute;
+  top: calc(50% + 6px);
+  left: 16px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.tourClear:hover {
+  color: #fff;
+}
+
+.tourError {
+  margin: 10px 0 0;
+  color: #ff6b6b;
+  font-size: 16px;
+}
+
 .textInput::placeholder,
 .textArea::placeholder,
 .phoneTextInput::placeholder {

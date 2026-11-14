@@ -186,17 +186,32 @@ const getListingEngagementStats = (listing, postRecord) => {
       : listing.comment_count != null
         ? Number(listing.comment_count)
         : 0;
-  return {views, likes, comments};
+  const contacts =
+    listing.contact_count != null
+      ? Number(listing.contact_count)
+      : listing.contacts != null
+        ? Number(listing.contacts)
+        : 0;
+  return {views, likes, comments, contacts};
 };
 
 const ListingStatsRow = ({listing, postRecord, textStyle}) => {
-  const {views, likes, comments} = getListingEngagementStats(
+  const {views, likes, comments, contacts} = getListingEngagementStats(
     listing,
     postRecord,
   );
 
   return (
     <View style={styles.statsRow}>
+      <View style={styles.statItem}>
+        <MaterialCommunityIcons
+          name="phone-outline"
+          size={22}
+          color={STAT_ICON_COLOR}
+          style={{opacity: STAT_ICON_OPACITY}}
+        />
+        <Text style={[styles.statText, textStyle]}>{contacts}</Text>
+      </View>
       <View style={styles.statItem}>
         {renderStatIcon(LISTING_STAT_ICONS.views)}
         <Text style={[styles.statText, textStyle]}>{views}</Text>
@@ -906,7 +921,7 @@ const EditPublishAdScreen = ({
     const email = currentUser?.email;
     if (!listingId || !email) {
       setBoostConfirmListing(null);
-      if (typeof alert !== 'undefined') alert('לא ניתן להקפיץ כרגע');
+      Alert.alert('', 'לא ניתן להקפיץ כרגע');
       return;
     }
     setBoostSubmitting(true);
@@ -926,9 +941,12 @@ const EditPublishAdScreen = ({
         }));
       }
       setBoostConfirmListing(null);
-      if (typeof alert !== 'undefined') {
-        alert('ההקפצה הופעלה! הדירוג הוא "גבוהה" למשך 24 שעות.');
-      }
+      // iOS drops an alert presented in the same turn the modal unmounts.
+      setTimeout(
+        () =>
+          Alert.alert('', 'ההקפצה הופעלה! המודעה תופיע בראש הזרימה למשך 24 שעות.'),
+        Platform.OS === 'ios' ? 450 : 0,
+      );
     } catch (e) {
       if (e?.code === 'QUOTA_EXCEEDED') {
         setBoostQuota({
@@ -937,9 +955,11 @@ const EditPublishAdScreen = ({
           remaining: 0,
         });
       }
-      if (typeof alert !== 'undefined') {
-        alert(e?.message || 'הקפצה נכשלה');
-      }
+      setBoostConfirmListing(null);
+      setTimeout(
+        () => Alert.alert('', e?.message || 'הקפצה נכשלה'),
+        Platform.OS === 'ios' ? 450 : 0,
+      );
     } finally {
       setBoostSubmitting(false);
     }
@@ -949,9 +969,7 @@ const EditPublishAdScreen = ({
 
   const openBoostConfirm = listing => {
     if (!canBoostThisMonth) {
-      if (typeof alert !== 'undefined') {
-        alert('הגעת למכסת ההקפצות החודשית (הקפצה אחת בחודש).');
-      }
+      Alert.alert('', 'עברת את המכסה של ההקפצות החודש');
       return;
     }
     setBoostConfirmListing(listing);
@@ -1004,12 +1022,8 @@ const EditPublishAdScreen = ({
           </View>
           <View style={[styles.actionRow, {marginTop: 16}]}>
             <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                !canBoostThisMonth && styles.actionBtnDisabled,
-              ]}
+              style={styles.actionBtn}
               onPress={() => openBoostConfirm(listing)}
-              disabled={!canBoostThisMonth}
               activeOpacity={0.8}>
               <Image
                 source={require('../assets/arrow_up.png')}
@@ -1146,12 +1160,8 @@ const EditPublishAdScreen = ({
 
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                !canBoostThisMonth && styles.actionBtnDisabled,
-              ]}
+              style={styles.actionBtn}
               onPress={() => openBoostConfirm(listing)}
-              disabled={!canBoostThisMonth}
               activeOpacity={0.8}>
               <Text style={styles.actionBtnText}>הקפצה</Text>
               <Image
@@ -1522,8 +1532,9 @@ const EditPublishAdScreen = ({
         </View>
       )}
 
+      {removeConfirmListing != null ? (
       <Modal
-        visible={removeConfirmListing != null}
+        visible
         transparent
         animationType="fade"
         onRequestClose={() =>
@@ -1574,9 +1585,11 @@ const EditPublishAdScreen = ({
           </View>
         </Pressable>
       </Modal>
+      ) : null}
 
+      {freezeConfirmListing != null ? (
       <Modal
-        visible={freezeConfirmListing != null}
+        visible
         transparent
         animationType="fade"
         onRequestClose={() => setFreezeConfirmListing(null)}>
@@ -1629,9 +1642,11 @@ const EditPublishAdScreen = ({
           </View>
         </Pressable>
       </Modal>
+      ) : null}
 
+      {boostConfirmListing != null ? (
       <Modal
-        visible={boostConfirmListing != null}
+        visible
         transparent
         animationType="fade"
         onRequestClose={() => !boostSubmitting && setBoostConfirmListing(null)}>
@@ -1683,9 +1698,11 @@ const EditPublishAdScreen = ({
           </View>
         </Pressable>
       </Modal>
+      ) : null}
 
+      {unfreezeConfirmListing != null ? (
       <Modal
-        visible={unfreezeConfirmListing != null}
+        visible
         transparent
         animationType="fade"
         onRequestClose={() => setUnfreezeConfirmListing(null)}>
@@ -1736,6 +1753,7 @@ const EditPublishAdScreen = ({
           </View>
         </Pressable>
       </Modal>
+      ) : null}
     </View>
   );
 };

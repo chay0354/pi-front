@@ -2,21 +2,24 @@
   direction: rtl;
   display: flex;
   flex-direction: column;
-  overflow: clip;
-  border-radius: 18px;
+  width: 334px;
+  height: 540px;
+  overflow: hidden;
+  border-radius: 16px;
   background: #2b2a39;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
 }
 
 .media {
   position: relative;
   flex-shrink: 0;
-  height: 220px;
+  height: 252px;
   overflow: hidden;
-  background: #33324a;
+  background: #e0def7;
+  box-shadow: 0 3.832px 67.068px rgba(0, 0, 0, 0.15);
 }
 
-.photo {
+.photo,
+.empty {
   display: block;
   width: 100%;
   height: 100%;
@@ -24,37 +27,40 @@
 }
 
 .empty {
-  display: block;
-  width: 100%;
-  height: 100%;
   background: #5a5670;
+}
+
+.media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(129, 129, 129, 0), rgba(0, 0, 0, 0.5));
+  pointer-events: none;
 }
 
 .mute {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  left: 18px;
+  top: 208px;
   z-index: 2;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
+  background: transparent;
   cursor: pointer;
 }
 
 .body {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 24px;
   min-height: 0;
-  padding: 14px 16px 8px;
+  overflow: hidden;
+  padding: 18px 18px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -62,70 +68,133 @@
   cursor: pointer;
 }
 
-.name {
+.identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 18px;
   width: 100%;
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 20px;
+  width: 100%;
+}
+
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  overflow: hidden;
-  color: #fff;
-  font-size: 22px;
-  font-weight: 500;
-  line-height: 28px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  color: #f7f3e6;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 31px;
 }
 
 .address {
   display: flex;
-  flex-direction: row-reverse;
   align-items: center;
-  gap: 6px;
-  max-width: 100%;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
   margin: 0;
-  color: rgba(255, 255, 255, 0.75);
+  color: #fff;
   font-size: 14px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0.545px;
 }
 
 .address span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.address img {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
+  min-width: 0;
 }
 
 .tags {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 6px;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tag {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: #1e1d27;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-  line-height: 26px;
+  display: flex;
+  align-items: center;
+  height: 27px;
+  padding: 0 9px;
+  border: 0.714px solid #fff;
+  border-radius: 36px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 22px;
   white-space: nowrap;
 }
 
+.bio {
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 32px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .message {
-  width: calc(100% - 32px);
-  margin: 4px 16px 16px;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: 44px;
+  margin: 32px 18px 18px;
+  padding: 10px 20px 8px 8px;
   border: 0;
-  background: transparent;
+  border-radius: 846px;
+  background: linear-gradient(182deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
+  color: #1e1d27;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.2px;
   cursor: pointer;
 }
 
-.message img {
-  display: block;
-  width: 100%;
-  height: 48px;
-  object-fit: contain;
+.piChat {
+  position: relative;
+  flex-shrink: 0;
+  width: 77px;
+  height: 34.414px;
+  filter: drop-shadow(0 3.624px 6.341px rgba(0, 0, 0, 0.5));
+}
+
+.piChatWord {
+  position: absolute;
+  left: 10.1px;
+  top: 6.09px;
+}
+
+.piChatMark {
+  position: absolute;
+  left: 41.7px;
+  top: 3.6px;
+}
+
+.piChatText {
+  position: absolute;
+  top: 15.92px;
+  left: 63.26px;
+  transform: translateX(-100%);
+  color: #1e1d27;
+  font-size: 11.78px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
 }

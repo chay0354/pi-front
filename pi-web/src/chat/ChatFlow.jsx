@@ -35,6 +35,7 @@ export default function ChatFlow({
   onClose,
   onOpenPost,
   onOpenPeerProfile,
+  onNeedLogin,
   initialPeer = null,
 }) {
   const [conversation, setConversation] = useState(() => conversationFromPeer(initialPeer));
@@ -76,8 +77,9 @@ export default function ChatFlow({
   return (
     <div className={styles.shell} dir="rtl">
       <aside className={styles.homeRail}>
-        <button type="button" className={styles.homeBtn} onClick={onClose} aria-label="סגור צ׳אט">
+        <button type="button" className={styles.homeBtn} onClick={onClose} aria-label="חזור">
           <img className={styles.homeIcon} src={homeIcon} alt="" />
+          <span className={styles.homeLabel}>חזור</span>
         </button>
       </aside>
       <div className={styles.listSlot}>
@@ -102,6 +104,7 @@ export default function ChatFlow({
             onPiWelcomeOpened={onWelcomeRead}
             onOpenPost={onOpenPost}
             onOpenPeerProfile={onOpenPeerProfile}
+            onNeedLogin={onNeedLogin}
             onContactListingOwner={openPeer}
           />
         ) : (

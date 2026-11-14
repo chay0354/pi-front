@@ -111,7 +111,7 @@ export default function FeedScreen({
     setOpenPanel(prev => (prev === id ? null : id));
   };
   const filters = sidebarFiltersForCategory(category);
-  const pros = useRecommendedPros();
+  const {pros, brokers} = useRecommendedPros();
   const featuredProjects = useFeaturedProjects();
   const projects = useMemo(() => featuredProjects.slice(0, 5), [featuredProjects]);
 
@@ -121,14 +121,16 @@ export default function FeedScreen({
     items.forEach((item, i) => {
       out.push({key: item.id, item});
       if (searching || videoOnly || (i + 1) % RECOMMENDED_PROS_EVERY !== 0) return;
-      const showProjects = slot % 2 === 1 && projects.length > 0;
+      const rotation = [
+        pros.length ? {key: `pros-${i}`, pros, title: 'בעלי מקצוע מומלצים'} : null,
+        projects.length ? {key: `projects-${i}`, projects} : null,
+        brokers.length ? {key: `brokers-${i}`, pros: brokers, title: 'תיווך מומלץ'} : null,
+      ].filter(Boolean);
+      if (rotation.length) out.push(rotation[slot % rotation.length]);
       slot += 1;
-      if (showProjects) out.push({key: `projects-${i}`, projects});
-      else if (pros.length > 0) out.push({key: `pros-${i}`, pros});
-      else if (projects.length > 0) out.push({key: `projects-${i}`, projects});
     });
     return out;
-  }, [items, pros, projects, searching, videoOnly]);
+  }, [items, pros, brokers, projects, searching, videoOnly]);
 
   const selectCategory = useCallback(id => {
     setCategory(id);
@@ -316,7 +318,12 @@ export default function FeedScreen({
               entry.projects ? (
                 <RecommendedProjects key={entry.key} projects={entry.projects} active={screenActive && i === activeIndex} />
               ) : entry.pros ? (
-                <RecommendedPros key={entry.key} pros={entry.pros} active={screenActive && i === activeIndex} />
+                <RecommendedPros
+                  key={entry.key}
+                  pros={entry.pros}
+                  title={entry.title}
+                  active={screenActive && i === activeIndex}
+                />
               ) : (
                 <FeedCard key={entry.key} item={entry.item} active={screenActive && i === activeIndex} />
               ),

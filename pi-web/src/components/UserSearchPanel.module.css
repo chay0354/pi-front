@@ -216,20 +216,21 @@
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 14px;
+  gap: 0;
   direction: ltr;
 }
 
 .fiveRing {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: 72px;
+  height: 72px;
+  margin-left: -8px;
   object-fit: contain;
 }
 
 .fiveNum {
   color: #ffd275;
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 500;
   line-height: 1;
 }

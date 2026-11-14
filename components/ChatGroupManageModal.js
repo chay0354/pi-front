@@ -56,6 +56,7 @@ const ChatGroupManageModal = ({
   onRemoveMember,
   onSetMemberRole,
   onLeaveGroup,
+  onDeleteGroup,
   onConversationDeleted,
 }) => {
   const [titleDraft, setTitleDraft] = useState('');
@@ -276,12 +277,16 @@ const ChatGroupManageModal = ({
               {editingTitle && showTitleEditor ? (
                 <View style={styles.titleEditBlock}>
                   <TextInput
-                    style={[styles.titleInput, {textAlign: 'left'}]}
+                    style={[
+                      styles.titleInput,
+                      {direction: 'rtl', textAlign: 'left', writingDirection: 'rtl'},
+                    ]}
                     value={titleDraft}
                     onChangeText={setTitleDraft}
                     placeholder="שם הקבוצה"
                     placeholderTextColor="rgba(255,255,255,0.35)"
                     maxLength={120}
+                    writingDirection="rtl"
                   />
                   <View
                     style={[
@@ -443,6 +448,47 @@ const ChatGroupManageModal = ({
               <Text style={styles.leaveOutlineText}>עזוב את הקבוצה</Text>
             </TouchableOpacity>
 
+            {myRole === 'owner' ? (
+              <TouchableOpacity
+                style={styles.deleteOutline}
+                onPress={() => {
+                  Alert.alert(
+                    'למחוק את הקבוצה?',
+                    'הקבוצה תימחק לכולם, וגם אתה תצא ממנה.',
+                    [
+                      {text: 'ביטול', style: 'cancel'},
+                      {
+                        text: 'מחק',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            const res = await onDeleteGroup?.();
+                            if (res?.conversationDeleted || res?.removedSelf) {
+                              onConversationDeleted?.();
+                            }
+                          } catch (e) {
+                            Alert.alert(
+                              '',
+                              e?.message ? String(e.message) : 'מחיקת הקבוצה נכשלה',
+                            );
+                          }
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="מחק קבוצה">
+                <MaterialCommunityIcons
+                  name="delete-outline"
+                  size={20}
+                  color="#ff8a8a"
+                />
+                <Text style={styles.leaveOutlineText}>מחק קבוצה</Text>
+              </TouchableOpacity>
+            ) : null}
+
             {Platform.OS === 'web' ? <View style={{height: 24}} /> : null}
           </ScrollView>
         </View>
@@ -596,6 +642,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,100,100,0.45)',
   },
   leaveOutlineText: {fontSize: 15, color: '#ffb4b4', fontWeight: '600'},
+  deleteOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,100,100,0.45)',
+  },
 });
 
 export default ChatGroupManageModal;

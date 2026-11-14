@@ -496,6 +496,16 @@ const CITY_ALIAS_ENTRIES = ISRAELI_CITIES.flatMap(city =>
 
 const CITY_BY_LABEL = new Map(ISRAELI_CITIES.map(c => [c.label, c]));
 
+/** Short aliases like ת״א must be a whole word, not a slice of משכנתאות. */
+function queryHasCityKey(q, keyNorm) {
+  if (!keyNorm || keyNorm.length < 2) return false;
+  if (keyNorm.includes(' ')) return q.includes(keyNorm);
+  return q.split(' ').some(token => {
+    if (token === keyNorm || token === `ב${keyNorm}`) return true;
+    return keyNorm.length >= 4 && token.includes(keyNorm);
+  });
+}
+
 /**
  * @param {string} query
  * @returns {{ raw: string, city: string|null, purpose: 'rent'|'sale'|null }}
@@ -519,7 +529,7 @@ export function parsePiAiQuery(query) {
 
   let city = null;
   for (const entry of CITY_ALIAS_ENTRIES) {
-    if (entry.keyNorm.length >= 2 && q.includes(entry.keyNorm)) {
+    if (queryHasCityKey(q, entry.keyNorm)) {
       city = entry.label;
       break;
     }
@@ -530,10 +540,10 @@ export function parsePiAiQuery(query) {
       const guess = normalizeHebrewQuery(inline[1]);
       if (guess.length >= 3) {
         for (const entry of CITY_ALIAS_ENTRIES) {
-          if (
-            entry.keyNorm.includes(guess) ||
-            guess.includes(entry.keyNorm)
-          ) {
+          const key = entry.keyNorm;
+          const same = key === guess || guess === `ב${key}`;
+          const longEnough = key.length >= 4 && (key.includes(guess) || guess.includes(key));
+          if (same || longEnough) {
             city = entry.label;
             break;
           }
@@ -901,11 +911,14 @@ export function inferPiAiQueryConstraints(query) {
   const typeQ = q.replace(/קומת\s*קרקע/g, ' ');
   let cats = null;
   if (/שותפ/.test(typeQ)) cats = ['3'];
-  else if (/(?:צימר|\bbnb\b|לינה)/i.test(typeQ)) cats = ['5'];
+  else if (/(?:צימר|\bbnb\b|לינה|חופש)/i.test(typeQ)) cats = ['5'];
   else if (/משרד/.test(typeQ)) cats = ['2'];
   else if (/(?:מגרש|קרקע|גוש|חלקה)/.test(typeQ)) cats = ['7'];
   else if (/מסחר/.test(typeQ)) cats = ['8'];
-  else if (/(?:דיר|בית|יוקר|פנטהאוז)/.test(typeQ)) cats = [...HOME_CATS];
+  else if (/מגזר\s*דתי|חרדי/.test(typeQ)) cats = ['6'];
+  else if (/גלובל/.test(typeQ)) cats = ['4'];
+  else if (/יוקר|פנטהאוז/.test(typeQ)) cats = ['12'];
+  else if (/(?:דיר|בית)/.test(typeQ)) cats = [...HOME_CATS];
 
   let purpose = null;
   const rent = /להשכרה|לשכור|שכירות|השכרה/.test(q);
@@ -924,13 +937,34 @@ export function inferPiAiQueryConstraints(query) {
   };
 }
 
+/**
+ * Broad "show me this type" questions ("כל הדירות להשכרה", "משרדים", "צימר").
+ * The local filter already is the answer — Gemini must not shrink it to one ad.
+ * A city, neighborhood, room count, size, floor, price, or amenity still ranks.
+ */
+export function shouldReturnFullPiAiPool(query, parsed) {
+  const q = normalizeHebrewQuery(query);
+  if (!q) return false;
+  const constraints = inferPiAiQueryConstraints(query);
+  const hasRankingHints =
+    constraints.rooms != null ||
+    constraints.area != null ||
+    constraints.floor != null ||
+    constraints.price != null ||
+    constraints.amenities != null;
+  const asksAll = /(?:^|\s)כל(?:\s|$)/.test(q);
+  if (asksAll && !hasRankingHints) return true;
+  const hasPlace = Boolean(parsed?.city) || /אזור|שכונ/.test(q);
+  return !hasPlace && !hasRankingHints && Boolean(constraints.cats || constraints.purpose);
+}
+
 function listingFitsPiAiConstraints(listing, constraints) {
   if (!listing || !constraints) return true;
   if (constraints.cats && constraints.cats.length) {
     const c = String(listing.category != null ? listing.category : '');
     if (!constraints.cats.includes(c)) return false;
   }
-  if (constraints.purpose) {
+  if (constraints.purpose && Number(listing.category) !== 3) {
     if (listingPurposeKind(listing) !== constraints.purpose) return false;
   }
   if (constraints.rooms != null) {
@@ -967,7 +1001,7 @@ export function filterListingsByParsedQuery(listings, parsed, query) {
     if (parsed?.city && !listingMatchesCity(listing, parsed.city)) {
       return false;
     }
-    if (parsed?.purpose && !listingMatchesPurpose(listing, parsed.purpose)) {
+    if (parsed?.purpose && Number(listing.category) !== 3 && !listingMatchesPurpose(listing, parsed.purpose)) {
       return false;
     }
     if (!listingFitsPiAiConstraints(listing, constraints)) {
