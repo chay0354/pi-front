@@ -21,12 +21,12 @@ function CategoryTile({category, selected, onSelect}) {
       aria-label={category.name}
       onClick={() => onSelect(category.id)}>
       {category.tile === 'apartments' ? (
-        <ApartmentsTile selected={selected} />
+        <ApartmentsTile selected={false} />
       ) : (
         <Rectangle1
           className={category.tile === 'Variant13' ? TILE_CLASS.replace('gap-[20px]', 'gap-[28px]') : TILE_CLASS}
           property1={category.tile}
-          selected={selected}
+          selected={false}
         />
       )}
     </button>

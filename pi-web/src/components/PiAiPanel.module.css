@@ -13,6 +13,12 @@
   background: #2b2a39;
   filter: drop-shadow(0 4px 35px rgba(0, 0, 0, 0.35));
   direction: ltr;
+  transform: translateX(-100%);
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panelOpen {
+  transform: translateX(0);
 }
 
 .stack {
@@ -285,18 +291,29 @@
   justify-content: space-between;
   gap: 10px;
   flex-shrink: 0;
+  box-sizing: border-box;
   width: 100%;
-  height: 52px;
+  min-height: 52px;
   margin: 0;
-  padding: 10px 16px 10px 8px;
+  padding: 5px 16px 5px 8px;
   border: 1px solid #8c85b3;
   border-radius: 1000px;
   background: transparent;
 }
 
+/* Figma 846:17058: long text grows the field, send button stays top-left. */
+.composerMulti {
+  align-items: flex-start;
+  padding: 10px 16px 10px 8px;
+  border-radius: 24px;
+}
+
 .composerInput {
+  display: block;
   flex: 1;
   min-width: 0;
+  height: 26px;
+  margin: 0;
   padding: 0;
   border: 0;
   outline: none;
@@ -307,6 +324,15 @@
   font-weight: 400;
   line-height: 26px;
   text-align: right;
+  word-break: break-word;
+  resize: none;
+  overflow: hidden;
+  scrollbar-width: thin;
+}
+
+/* Figma trims the text box to cap height and baseline, so the first cap lines up with the button top. */
+.composerMulti .composerInput {
+  margin: -6.5px 0 -7px;
 }
 
 .composerInput::placeholder {

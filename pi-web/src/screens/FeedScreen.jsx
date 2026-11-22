@@ -139,6 +139,8 @@ export default function FeedScreen({
     setSearchQuery(null);
     setOpenPanel(null);
     setUserSearchOpen(false);
+    const n = id != null && String(id).trim() !== '' ? parseInt(String(id).trim(), 10) : NaN;
+    if (n === 3 || n === 5) setPurposes({rent: true, sale: true});
   }, []);
 
   const togglePurpose = useCallback(key => {
@@ -198,11 +200,14 @@ export default function FeedScreen({
   }, [category]);
   const isGuest = !currentUser;
   const isBnbCategory = categoryNum === 5;
+  const isPartnersCategory = categoryNum === 3;
+  /** BnB + שותפים: no sale/rent purpose (same as mobile CityFilter hidePurpose). */
+  const showPurposeFilters = !isBnbCategory && !isPartnersCategory;
   const subscriptionType = String(currentUser?.subscription_type || '').toLowerCase();
   const showListingInSheet = isGuest
     ? isBnbCategory
     : canShowListingAdInCreateSheet(currentUser?.subscription_type, categoryNum);
-  const showOpenHouseInSheet = canCreateOpenHousePost(currentUser);
+  const showOpenHouseInSheet = canCreateOpenHousePost(currentUser, categoryNum);
   const listingSheetCopy = useMemo(
     () => getListingSheetCopy(category, currentUser?.subscription_type),
     [category, currentUser?.subscription_type],
@@ -232,7 +237,10 @@ export default function FeedScreen({
       }
       const lockedHost = getUserBnbHostLock(currentUser);
       const next = lockedHost ? {...(opts || {}), bnbHostType: lockedHost} : opts;
-      const isCompanyOrBroker = subscriptionType === subscriptionTypes.company || isBrokerLikeSubscriptionType(subscriptionType);
+      const isCompanyOrBroker =
+        subscriptionType === subscriptionTypes.company ||
+        subscriptionType === subscriptionTypes.business ||
+        isBrokerLikeSubscriptionType(subscriptionType);
       if (isCompanyOrBroker) onOpenEditPublish?.(category, next);
       else onOpenAdsForm?.(category, next);
     },
@@ -348,6 +356,7 @@ export default function FeedScreen({
           unseenLikedCount={liked.unseen}
           purposes={purposes}
           onTogglePurpose={togglePurpose}
+          showPurposeFilters={showPurposeFilters}
           onSearch={() => togglePanel('search')}
           searchActive={Boolean(searchQuery)}
           onOpenFilter={togglePanel}

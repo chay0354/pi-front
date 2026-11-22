@@ -10,6 +10,7 @@ import {
   OPEN_HOUSE_POST_DESCRIPTION,
   OPEN_HOUSE_POST_KIND,
   canAccessListingAnalysis,
+  canCreateOpenHousePost,
   isOpenHouseListing,
 } from './lib/publishRules';
 
@@ -58,7 +59,10 @@ export default function PublishFlow({start, onExit, onHome, onMenu}) {
           returnScreen: 'exit',
           editingListing: start.editingListing ?? null,
           listingCategoryId: toCategoryId(start?.category),
-          postDescriptionLabel: start?.openHouse ? OPEN_HOUSE_POST_DESCRIPTION : DEFAULT_POST_DESCRIPTION,
+          postDescriptionLabel:
+            start?.openHouse && canCreateOpenHousePost(currentUser, toCategoryId(start?.category))
+              ? OPEN_HOUSE_POST_DESCRIPTION
+              : DEFAULT_POST_DESCRIPTION,
         }
       : EMPTY_POST_EDITOR,
   );
@@ -295,7 +299,10 @@ export default function PublishFlow({start, onExit, onHome, onMenu}) {
               publishTarget: 'post',
               returnScreen: 'editPublish',
               listingCategoryId: listingCat,
-              postDescriptionLabel: opts?.openHouse ? OPEN_HOUSE_POST_DESCRIPTION : DEFAULT_POST_DESCRIPTION,
+              postDescriptionLabel:
+                opts?.openHouse && canCreateOpenHousePost(currentUser, listingCat)
+                  ? OPEN_HOUSE_POST_DESCRIPTION
+                  : DEFAULT_POST_DESCRIPTION,
             });
           }}
           onEditPost={listing => {

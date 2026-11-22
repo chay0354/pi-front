@@ -19,6 +19,7 @@ import imgPiChatPi from '../assets/figma/menu/8de32.svg';
 import iconEdit from '../assets/figma/menu/b7a41.svg';
 import iconFavorites from '../assets/figma/menu/0bb8f.svg';
 import iconCompany from '../assets/figma/menu/4f264.svg';
+import iconBusiness from '../assets/figma/menu/business.svg';
 import iconBrokerGroup from '../assets/figma/menu/28d68.svg';
 import iconProfessional from '../assets/figma/menu/0a7b1.svg';
 import iconSecret from '../assets/figma/menu/c9575.svg';
@@ -50,6 +51,7 @@ const MENU_ICONS = {
   updates: iconUpdates,
   favorites: iconFavorites,
   company: iconCompany,
+  business: iconBusiness,
   professional: iconProfessional,
   secret: iconSecret,
   feedback: iconFeedback,
@@ -150,6 +152,7 @@ function PiChatButton({unreadChatCount, onPress}) {
  * Every entry and visibility rule follows the mobile screen; handlers come from App like mobile App.js.
  */
 export default function SideMenu({
+  shown = false,
   onClose,
   onOpenEditPublishAd,
   onOpenChat,
@@ -176,7 +179,9 @@ export default function SideMenu({
   const {currentUser, setCurrentUser} = useSession();
   const isLoggedBroker = currentUser?.subscription_type === subscriptionTypes.broker;
   const isLoggedProfessional = currentUser?.subscription_type === subscriptionTypes.professional;
-  const isLoggedCompany = currentUser?.subscription_type === subscriptionTypes.company;
+  const isLoggedCompany =
+    currentUser?.subscription_type === subscriptionTypes.company ||
+    currentUser?.subscription_type === subscriptionTypes.business;
   const isLoggedProjectMarketer = currentUser?.subscription_type === subscriptionTypes.projectMarketer;
   const isMarketingManagerUser = isMarketingManager(currentUser);
   const [followingPreviewRows, setFollowingPreviewRows] = useState([]);
@@ -281,6 +286,7 @@ export default function SideMenu({
 
   const subscriptionItems = [
     {label: 'מנוי לחברות', icon: 'company', onPress: () => onOpenSubscription?.(subscriptionTypes.company)},
+    {label: 'מנוי לעסקים', icon: 'business', onPress: () => onOpenSubscription?.(subscriptionTypes.business)},
     {label: 'מנוי למתווכים', icon: 'broker', onPress: () => onOpenSubscription?.(subscriptionTypes.broker)},
     {
       label: 'מנוי לבעלי מקצוע',
@@ -331,9 +337,9 @@ export default function SideMenu({
   ];
 
   return (
-    <div className={styles.root}>
-      <button type="button" className={styles.backdrop} aria-label="סגירת התפריט" tabIndex={-1} onClick={onClose} />
-      <aside className={styles.panel} role="dialog" aria-modal="true" aria-label="תפריט">
+    <div className={shown ? `${styles.root} ${styles.rootOpen}` : styles.root}>
+      <button type="button" className={shown ? `${styles.backdrop} ${styles.backdropOpen}` : styles.backdrop} aria-label="סגירת התפריט" tabIndex={-1} onClick={onClose} />
+      <aside className={shown ? `${styles.panel} ${styles.panelOpen}` : styles.panel} role="dialog" aria-modal="true" aria-label="תפריט">
         <header className={styles.header}>
           <button type="button" className={styles.closeButton} aria-label="סגירה" onClick={onClose}>
             <img src={imgClose} alt="" width={24} height={24} />

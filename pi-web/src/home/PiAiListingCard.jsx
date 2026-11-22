@@ -31,6 +31,7 @@ export default function PiAiListingCard({item}) {
     item.rooms != null ? `${item.rooms} חד׳` : company?.apartments != null ? formatCompanyApartments(company.apartments) : '';
   const price = item.price != null ? formatPrice(item.price) : company?.projectName || '';
   const image = item.images[0];
+  const rating = project ? item.piRating ?? 5 : item.piRating;
 
   const open = () => nav.open(feedListingProfilePayload(item.raw));
   const toggleLike = event => {
@@ -54,61 +55,43 @@ export default function PiAiListingCard({item}) {
         <span className={styles.shade} aria-hidden />
         {image ? <img className={styles.pager} src={iconPager} alt="" width={82} height={8} /> : null}
       </div>
-      <div className={project ? `${styles.info} ${styles.infoProject}` : styles.info}>
-        <div className={project ? `${styles.who} ${styles.whoProject}` : styles.who}>
-          <span className={styles.publisher}>
+      <div className={styles.info}>
+        <div className={styles.who}>
+          <span className={project ? `${styles.publisher} ${styles.publisherProject}` : styles.publisher}>
             <span className={project ? `${styles.avatar} ${styles.avatarLogo}` : styles.avatar}>
               <img src={avatar} alt="" onError={() => item.creatorAvatar && setFailedSrc(item.creatorAvatar)} />
             </span>
-            {item.creatorName ? <span className={styles.name} dir="auto">{item.creatorName}</span> : null}
+            <span className={styles.name} dir="auto">{item.creatorName}</span>
           </span>
-          {project ? <PiRatingBadge rating={item.piRating ?? 5} variant="listing" /> : null}
+          {rating != null ? (
+            <span className={styles.rating}>
+              <PiRatingBadge rating={rating} variant="listing" />
+            </span>
+          ) : null}
         </div>
         <img className={styles.line} src={iconLine} alt="" width={306} height={1} />
-        <div className={styles.details}>
-          {project ? (
-            <span className={styles.actionsOnly}>
-              <span className={styles.actions}>
-                <button type="button" className={styles.heart} aria-label="מועדפים" aria-pressed={liked} onClick={toggleLike}>
-                  <img src={liked ? iconHeartLiked : iconHeart} alt="" width={32} height={32} />
-                </button>
-                {PURPOSE_LABEL[item.purpose] ? <span className={styles.tag}>{PURPOSE_LABEL[item.purpose]}</span> : null}
-              </span>
+        <div className={styles.specRow}>
+          <span className={styles.actions}>
+            {item.purposeTag || PURPOSE_LABEL[item.purpose] ? (
+              <span className={styles.tag}>{item.purposeTag || PURPOSE_LABEL[item.purpose]}</span>
+            ) : null}
+            <button type="button" className={styles.heart} aria-label="מועדפים" aria-pressed={liked} onClick={toggleLike}>
+              <img src={liked ? iconHeartLiked : iconHeart} alt="" width={32} height={32} />
+            </button>
+          </span>
+          {rooms ? (
+            <span className={styles.rooms}>
+              <img src={iconDoor} alt="" width={24} height={24} />
+              <span dir="auto">{rooms}</span>
             </span>
-          ) : (
-            <div className={styles.specRow}>
-              {rooms ? (
-                <span className={styles.rooms}>
-                  <img src={iconDoor} alt="" width={24} height={24} />
-                  <span dir="auto">{rooms}</span>
-                </span>
-              ) : <span />}
-              <span className={styles.actions}>
-                <button type="button" className={styles.heart} aria-label="מועדפים" aria-pressed={liked} onClick={toggleLike}>
-                  <img src={liked ? iconHeartLiked : iconHeart} alt="" width={32} height={32} />
-                </button>
-                {PURPOSE_LABEL[item.purpose] ? <span className={styles.tag}>{PURPOSE_LABEL[item.purpose]}</span> : null}
-              </span>
-            </div>
-          )}
-          {price ? <p className={styles.price} dir="auto">{price}</p> : null}
-          {project ? (
-            <div className={styles.facts}>
-              {rooms ? (
-                <p className={styles.rooms}>
-                  <img src={iconDoor} alt="" width={24} height={24} />
-                  <span dir="auto">{rooms}</span>
-                </p>
-              ) : null}
-              {item.address ? (
-                <p className={styles.address}>
-                  <img src={iconPin} alt="" width={24} height={24} />
-                  <span dir="auto">{item.address}</span>
-                </p>
-              ) : null}
-            </div>
-          ) : item.address ? (
-            <p className={styles.address}>
+          ) : null}
+        </div>
+        <p className={styles.price}>
+          <span dir="ltr">{price}</span>
+        </p>
+        <div className={styles.facts}>
+          {item.address ? (
+            <p className={styles.fact}>
               <img src={iconPin} alt="" width={24} height={24} />
               <span dir="auto">{item.address}</span>
             </p>

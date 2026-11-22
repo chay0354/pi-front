@@ -424,7 +424,7 @@ export function BnbListingContent({listing, displayPiRating, mapAddress, adAddre
 const PARTNERS = 'new-profile-pages/partheners/';
 const FEMALE_PAIR_XML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><path d="M10 26L32 11L54 26" stroke="#5ED4EA" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22.5" cy="32" r="5.4" stroke="#F6C53A" stroke-width="3.2"/><path d="M22.5 37.6L13.2 54h18.6L22.5 37.6Z" stroke="#F6C53A" stroke-width="3.2" stroke-linejoin="round"/><circle cx="41.5" cy="32" r="5.4" stroke="#F6C53A" stroke-width="3.2"/><path d="M41.5 37.6L32.2 54h18.6L41.5 37.6Z" stroke="#F6C53A" stroke-width="3.2" stroke-linejoin="round"/></svg>`;
 
-const SEARCH_PURPOSE_LABELS = {enter: 'מחפש להיכנס', bring_in: 'מחפש להכניס', partner: 'מחפש להכניס'};
+const SEARCH_PURPOSE_LABELS = {enter: 'מחפש להיכנס', bring_in: 'מחפש להכניס', partner: 'מחפש שותף'};
 
 const PREFERENCE_META = [
   {key: 'nonSmokers', altKey: 'nonSmoker', label: 'ללא מעשנים', icon: asset(`${PARTNERS}no-smoke.png`)},

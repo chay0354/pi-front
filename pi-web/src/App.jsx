@@ -3,6 +3,7 @@ import FeedScreen from './screens/FeedScreen';
 import HomeScreen from './screens/HomeScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SideMenu from './components/SideMenu';
+import {useSlidePresence} from './components/useSlidePresence';
 import RightDrawer from './components/RightDrawer';
 import DesktopOnlyNotice, {useIsPhone} from './components/DesktopOnlyNotice';
 import {DEFAULT_CATEGORY_ID} from './feed/categories';
@@ -51,6 +52,7 @@ export default function App() {
   const [route, setRoute] = useState({screen: 'home'});
   const [profiles, setProfiles] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuSlide = useSlidePresence(menuOpen);
   /** `{key, screen, props}` — the account-opening flow (login / sign-up / subscriptions). */
   const [account, setAccount] = useState(null);
   /** `{key, screen, ...}` — ערוך/פרסם → AdsForm. */
@@ -285,11 +287,12 @@ export default function App() {
             )}
           </div>
         </ProfileNavContext.Provider>
-        {menuOpen ? (
+        {menuSlide.mounted ? (
           <div
             inert={profiles.length > 0 || account || chat || personal ? true : undefined}
-            style={{position: 'absolute', inset: 0, zIndex: chat ? 0 : publish ? 3 : 1}}>
+            style={{position: 'absolute', inset: 0, zIndex: menuOpen ? (chat ? 0 : publish ? 3 : 1) : 1, pointerEvents: menuSlide.shown ? 'auto' : 'none'}}>
             <SideMenu
+              shown={menuSlide.shown}
               onClose={closeMenu}
               onOpenEditPublishAd={requireUser(() => {
                 setPublish({key: Date.now(), screen: 'editPublish'});

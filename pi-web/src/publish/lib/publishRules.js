@@ -190,7 +190,10 @@ export function getFeedPostCardCaption(listing) {
   return desc;
 }
 
-export function canCreateOpenHousePost(subscriptionTypeOrUser) {
+/** שותפים (3) and BNB (5): a broker may publish a post only, not בית פתוח. */
+const BROKER_POST_ONLY_CATEGORY_IDS = new Set([3, 5]);
+
+export function canCreateOpenHousePost(subscriptionTypeOrUser, listingCategoryId) {
   let sub = '';
   if (subscriptionTypeOrUser == null) {
     sub = '';
@@ -207,7 +210,14 @@ export function canCreateOpenHousePost(subscriptionTypeOrUser) {
       .toLowerCase()
       .trim();
   }
-  return sub === subscriptionTypes.company || sub === subscriptionTypes.broker || sub === subscriptionTypes.projectMarketer;
+  const allowed =
+    sub === subscriptionTypes.company ||
+    sub === subscriptionTypes.business ||
+    sub === subscriptionTypes.broker ||
+    sub === subscriptionTypes.projectMarketer;
+  if (!allowed) return false;
+  if (sub === subscriptionTypes.broker && BROKER_POST_ONLY_CATEGORY_IDS.has(Number(listingCategoryId))) return false;
+  return true;
 }
 
 /** Ad listing categories for brokers and project marketers (excludes BnB + שותפים). */
@@ -239,6 +249,7 @@ export function isRegularSubscriptionType(subscriptionType) {
   return !(
     t === subscriptionTypes.broker ||
     t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
     t === subscriptionTypes.professional ||
     t === subscriptionTypes.projectMarketer
   );
@@ -275,14 +286,14 @@ export function localizeUploadFormFields(fields, subscriptionType) {
   return fields.map(f => localizeUploadFormField(f, subscriptionType));
 }
 
-/** Bottom create-sheet listing title: company → פרויקט; marketers and all others → נכס. */
+/** Bottom create-sheet listing title: company/business → פרויקט; marketers and all others → נכס. */
 export function getCreateSheetListingAssetLabel(subscriptionType) {
-  return resolveSubscriptionType(subscriptionType) === subscriptionTypes.company ? 'פרויקט' : 'נכס';
+  return isCompanySubscriptionType(subscriptionType) ? 'פרויקט' : 'נכס';
 }
 
 /** Bottom create-sheet listing subtitle for standard property categories. */
 export function getCreateSheetListingAssetSubtitle(subscriptionType) {
-  return resolveSubscriptionType(subscriptionType) === subscriptionTypes.company
+  return isCompanySubscriptionType(subscriptionType)
     ? 'פרסמו פרויקט'
     : 'פרסמו נכס למכירה או להשכרה';
 }
@@ -297,7 +308,7 @@ export function getListingSheetCopy(selectedCategory, subscriptionType) {
   if (cat === 8) return {title: 'נכס מסחרי', subtitle: 'פרסם נכס מסחרי למכירה או השכרה'};
   if (cat === 4 || cat === 6 || cat === 12) return {title: 'נכס', subtitle: 'פרסם נכס למכירה או השכרה'};
   if (cat === 2) {
-    const isCompany = resolveSubscriptionType(subscriptionType) === subscriptionTypes.company;
+    const isCompany = isCompanySubscriptionType(subscriptionType);
     return {
       title: isCompany ? 'משרדים' : 'משרד',
       subtitle: isCompany ? 'פרסמו פרויקט' : 'פרסם משרד למכירה או השכרה',
@@ -322,7 +333,7 @@ export function canShowListingAdInCreateSheet(subscriptionType, listingCategoryI
   if (!Number.isFinite(n)) return false;
   if (sub === subscriptionTypes.professional) return false;
   if (isBrokerLikeSubscriptionType(sub)) return brokerSheetAdListingCategoryIds.has(n);
-  if (sub === subscriptionTypes.company) return companySheetAdListingCategoryIds.has(n);
+  if (isCompanySubscriptionType(sub)) return companySheetAdListingCategoryIds.has(n);
   return regularUserAdListingCategoryIds.has(n);
 }
 

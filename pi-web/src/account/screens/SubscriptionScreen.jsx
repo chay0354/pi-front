@@ -4,12 +4,14 @@ import {getHeaderTitle, subscriptionTypes} from '../constants';
 import brokerProfile from '../../assets/account/subscription-broker-profile.png';
 import professionalProfile from '../../assets/account/subscription-professional-profile.png';
 import companyProfile from '../../assets/account/subscription-company-profile.png';
+import businessProfile from '../../assets/account/subscription-business-profile.png';
 import styles from './SubscriptionScreens.module.css';
 
 const PROFILE_IMAGE = {
   [subscriptionTypes.broker]: brokerProfile,
   [subscriptionTypes.professional]: professionalProfile,
   [subscriptionTypes.company]: companyProfile,
+  [subscriptionTypes.business]: businessProfile,
   [subscriptionTypes.projectMarketer]: companyProfile,
 };
 
@@ -22,6 +24,16 @@ const COMPANY_FEATURES = [
   "ניהול קשרי לקוחות דרך צ'אט פאי",
   'פרסום בית פתוח ומבצעי מכירה',
   'פרסום תדמית החברה וגיוס עובדים ',
+];
+
+const BUSINESS_FEATURES = [
+  'ניהול וקבלת לידים חמים בצאט פאי',
+  'פירסום סירטוני תדמית לעסק וגיוס עובדים',
+  'מגוון רחב של ערוצי פירסום',
+  'עמוד פרופיל מקצועי לעסק',
+  'ניהול קשרי לקוחות דרך צאט פאי',
+  'קבלת דירוג בכוכבי פאי',
+  'הגברת אמינות על ידי חוות דעת מלקוחות',
 ];
 
 const BROKER_FEATURES = [
@@ -49,6 +61,15 @@ function subscriptionCopy(type, isAgreed) {
   switch (type) {
     case subscriptionTypes.company:
       return {headline: 'אתם חברת נדל״ן?', subLead: 'בואו לעשות מנוי', subMid: ' ולקבל ', featuresTitle: 'מה כלול במנוי לחברות?'};
+    case subscriptionTypes.business:
+      return {
+        headline: 'מנוי לעסקים',
+        subLead:
+          'מתאים לחברות נדל"ן מניב, חללי עבודה משותפים, מתחמי משרדים וחברות לשיווק קרקעות.',
+        subMid: '',
+        featuresTitle: 'מה כולל במנוי לעסקים',
+        hideAccessLine: true,
+      };
     case subscriptionTypes.projectMarketer:
       return {
         headline: 'אתם משווקי פרויקטים?',
@@ -70,6 +91,7 @@ function subscriptionCopy(type, isAgreed) {
 }
 
 function featuresForType(type) {
+  if (type === subscriptionTypes.business) return BUSINESS_FEATURES;
   if (type === subscriptionTypes.company || type === subscriptionTypes.projectMarketer) return COMPANY_FEATURES;
   if (type === subscriptionTypes.professional) return PROFESSIONAL_FEATURES;
   return BROKER_FEATURES;
@@ -93,11 +115,15 @@ export default function SubscriptionScreen({subscriptionType = subscriptionTypes
 
       <div className={styles.hero}>
         <h2 className={styles.heroHeadline}>{copy.headline}</h2>
-        <p className={styles.heroSubline}>
-          {copy.subLead}
-          {copy.subMid}
-          <span className={styles.goldText}>גישה מלאה</span> לפלטפורמה!
-        </p>
+        {copy.hideAccessLine ? (
+          <p className={styles.heroSubline}>{copy.subLead}</p>
+        ) : (
+          <p className={styles.heroSubline}>
+            {copy.subLead}
+            {copy.subMid}
+            <span className={styles.goldText}>גישה מלאה</span> לפלטפורמה!
+          </p>
+        )}
       </div>
 
       <section className={styles.featuresCard}>

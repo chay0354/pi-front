@@ -260,7 +260,7 @@ export const shouldHideListingCardStats = (listing, selectedCategory = null) =>
 const PARTNERS_SEARCH_PURPOSE_LABELS = {
   enter: 'מחפש להיכנס',
   bring_in: 'מחפש להכניס',
-  partner: 'מחפש להכניס',
+  partner: 'מחפש שותף',
 };
 
 export const purposeLabel = (listing, selectedCategory = null) => {

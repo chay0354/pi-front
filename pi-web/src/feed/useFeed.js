@@ -187,7 +187,9 @@ export function useFeed({category, sidebarFilterId, purposes, feedFilters, video
   }, [category, filter, videoOnly]);
 
   const items = useMemo(() => {
-    const onlyOne = purposes.rent !== purposes.sale;
+    const cat = Number(category);
+    const skipPurpose = cat === 3 || cat === 5; // שותפים / BnB — no sale/rent filter
+    const onlyOne = !skipPurpose && purposes.rent !== purposes.sale;
     const wanted = purposes.rent ? 'rent' : 'sale';
     const byPurpose = state.rows.filter(row => {
       if (videoOnly && !isVideoAdListing(row)) return false;

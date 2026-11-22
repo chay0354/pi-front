@@ -1,6 +1,7 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import imgPiAiLogo from '../assets/figma/home/23cb0.svg';
 import iconClose from '../assets/figma/piai/close.svg';
+import iconCollapse from '../assets/figma/edit-publish/back-chevron.svg';
 import iconLine from '../assets/figma/piai/line.svg';
 import iconSend from '../assets/figma/piai/send.svg';
 import iconApartment from '../assets/figma/piai/apartment.svg';
@@ -101,22 +102,43 @@ function clockNow() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
+const COMPOSER_LINE = 26;
+const COMPOSER_MAX_LINES = 6;
+
 function Composer({draft, setDraft, onSubmit, disabled, inputRef, hint}) {
+  const [multiline, setMultiline] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    const full = el.scrollHeight;
+    el.style.height = `${Math.min(full, COMPOSER_LINE * COMPOSER_MAX_LINES)}px`;
+    el.style.overflowY = full > COMPOSER_LINE * COMPOSER_MAX_LINES ? 'auto' : 'hidden';
+    setMultiline(full > COMPOSER_LINE * 1.5);
+  }, [draft, inputRef]);
+
   return (
     <form
-      className={styles.composer}
+      className={multiline ? `${styles.composer} ${styles.composerMulti}` : styles.composer}
       onSubmit={event => {
         event.preventDefault();
         onSubmit();
       }}>
-      <input
+      <textarea
         ref={inputRef}
+        rows={1}
         className={hint ? `${styles.composerInput} ${styles.composerHint}` : styles.composerInput}
         value={draft}
         placeholder={hint ? 'הינט לפני הקלדה' : 'אני מחפש דירה להשכרה'}
         aria-label={hint ? 'הינט לפני הקלדה' : 'אני מחפש דירה להשכרה'}
         disabled={disabled}
         onChange={event => setDraft(event.target.value)}
+        onKeyDown={event => {
+          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          onSubmit();
+        }}
       />
       <button type="submit" className={styles.composerSend} aria-label="שלח" disabled={disabled || !draft.trim()}>
         <img src={iconSend} alt="" width={28} height={28} />
@@ -129,7 +151,18 @@ function Composer({draft, setDraft, onSubmit, disabled, inputRef, hint}) {
  * Left Pi AI sheet. On home it shows search suggestions over the page;
  * after a query it becomes the conversation next to the results grid.
  */
-export default function PiAiPanel({draft, setDraft, query, search, resultCount = 0, kind = 'listings', onSearch, onClose}) {
+export default function PiAiPanel({
+  shown = false,
+  draft,
+  setDraft,
+  query,
+  search,
+  resultCount = 0,
+  kind = 'listings',
+  onSearch,
+  onClose,
+  onCollapse,
+}) {
   const inputRef = useRef(null);
   const bodyRef = useRef(null);
   const {currentUser} = useSession();
@@ -139,8 +172,8 @@ export default function PiAiPanel({draft, setDraft, query, search, resultCount =
   const loading = search.status === 'loading';
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (shown) inputRef.current?.focus({preventScroll: true});
+  }, [shown]);
 
   useEffect(() => {
     const onKey = event => {
@@ -182,12 +215,23 @@ export default function PiAiPanel({draft, setDraft, query, search, resultCount =
   };
 
   return (
-    <section className={styles.panel} role="dialog" aria-label="Pi AI">
+    <section
+      className={shown ? `${styles.panel} ${styles.panelOpen}` : styles.panel}
+      role="dialog"
+      aria-label="Pi AI"
+      aria-hidden={!shown}
+      inert={!shown}>
       <div className={styles.stack}>
       <header className={styles.header}>
-        <span className={styles.headerSpacer} aria-hidden />
+        {onCollapse ? (
+          <button type="button" className={styles.close} aria-label="הסתר את חלון ה־AI" title="הסתר את החלון" onClick={onCollapse}>
+            <img src={iconCollapse} alt="" width={7.67085} height={12.5133} />
+          </button>
+        ) : (
+          <span className={styles.headerSpacer} aria-hidden />
+        )}
         <img src={imgPiAiLogo} alt="Pi AI" width={87} height={35} />
-        <button type="button" className={styles.close} aria-label="סגור" onClick={onClose}>
+        <button type="button" className={styles.close} aria-label="יציאה מ־Pi AI" title="יציאה מ־Pi AI" onClick={onClose}>
           <img src={iconClose} alt="" width={24} height={24} />
         </button>
       </header>

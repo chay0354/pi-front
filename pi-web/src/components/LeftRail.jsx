@@ -47,6 +47,7 @@ export default function LeftRail({
   unseenLikedCount = 0,
   purposes,
   onTogglePurpose,
+  showPurposeFilters = true,
   onSearch,
   searchActive = false,
   onOpenFilter,
@@ -93,21 +94,22 @@ export default function LeftRail({
             <img src={iconSearchSmall} alt="" width={24} height={24} />
           </button>
 
-          {[
-            ['rent', 'להשכרה'],
-            ['sale', 'למכירה'],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="checkbox"
-              aria-checked={purposes[key]}
-              className={`${styles.pill} ${styles.checkPill}`}
-              onClick={() => onTogglePurpose(key)}>
-              <span className={styles.pillLabel}>{label}</span>
-              <Checkbox checked={purposes[key]} />
-            </button>
-          ))}
+          {showPurposeFilters &&
+            [
+              ['rent', 'להשכרה'],
+              ['sale', 'למכירה'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="checkbox"
+                aria-checked={purposes[key]}
+                className={`${styles.pill} ${styles.checkPill}`}
+                onClick={() => onTogglePurpose(key)}>
+                <span className={styles.pillLabel}>{label}</span>
+                <Checkbox checked={purposes[key]} />
+              </button>
+            ))}
 
           {FILTER_PANELS.map(panel => {
             const selected = Boolean(activePanels[panel.id]);

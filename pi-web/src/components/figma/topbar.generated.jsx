@@ -1644,7 +1644,13 @@ export function Rectangle1({ className, property1 = "Variant20", selected = fals
     <div style={tw(className || `content-stretch flex flex-col h-[145px] items-center px-[13px] py-[8px] relative w-[138px] ${isVariant13 ? "gap-[28px]" : ["Variant19", "Variant18", "Variant17", "Variant16", "Variant15", "Variant14", "Variant12"].includes(property1) ? String.raw`gap-[var(--spacing\/m3,20px)]` : "gap-[20px]"}`)}>
       <div style={tw("-translate-x-1/2 -translate-y-1/2 absolute h-[35px] left-1/2 top-[calc(50%+38px)] w-[170px]")}>
         <div style={tw("absolute inset-[-40%_-8.24%]")}>
-          <img style={tw("block max-w-none size-full")} alt="" src={selected ? tileGlowSrc(property1) : imgEllipse1} />
+          <img style={tw("block max-w-none size-full")} alt="" src={imgEllipse1} />
+          <img
+            data-tile-glow=""
+            style={{...tw("absolute inset-0 block max-w-none size-full"), opacity: 0, transition: "opacity 160ms ease"}}
+            alt=""
+            src={tileGlowSrc(property1)}
+          />
         </div>
       </div>
       <div style={tw(`-translate-x-1/2 absolute left-1/2 w-[110px] ${isVariant12 ? "h-[104px] top-0" : ["Variant19", "Variant17", "Variant16", "Variant15", "Variant13"].includes(property1) ? "-translate-y-1/2 h-[104px] top-[calc(50%-20.5px)]" : "bottom-[28.28%] top-0"}`)}>
@@ -1656,8 +1662,45 @@ export function Rectangle1({ className, property1 = "Variant20", selected = fals
         <div style={tw(`content-stretch flex gap-[2px] h-[16px] items-end pl-[9px] relative shrink-0 w-[88px] ${isVariant13 ? "mb-[-1px]" : ""}`)}>
           <Layer1 className="h-[16px] relative shrink-0 w-[22px]" />
           <div style={tw("h-[8px] relative shrink-0 w-[66px]")}>
-            <p style={tw("[text-box-edge:cap_alphabetic] [text-box-trim:trim-both] [word-break:break-word] absolute capitalize font-['Mirza:SemiBold'] inset-[0_59.09%_0_0] leading-[0px] not-italic text-[11.939px] text-white whitespace-nowrap")}>
-              BNB
+            <p
+              style={tw(
+                `[text-box-edge:cap_alphabetic] [text-box-trim:trim-both] [word-break:break-word] absolute capitalize font-['Mirza:SemiBold'] ${
+                  isVariant12
+                    ? "inset-[0_34.85%_0_0]"
+                    : isVariant13
+                      ? "inset-[0_15.15%_0_0]"
+                      : isVariant14
+                        ? "inset-[0_57.58%_0_0]"
+                        : isVariant15
+                          ? "inset-[0_34.85%_0_0]"
+                          : isVariant16
+                            ? "inset-[0_69.7%_0_0]"
+                            : isVariant17
+                              ? "inset-[0_54.55%_0_0]"
+                              : isVariant18
+                                ? "inset-[0_39.39%_0_0]"
+                                : isVariant19
+                                  ? "inset-[0_57.58%_0_0]"
+                                  : "inset-[0_68.18%_0_0]"
+                } leading-[0px] not-italic text-[11.939px] text-white whitespace-nowrap`,
+              )}>
+              {isVariant12
+                ? "Exclusive"
+                : isVariant13
+                  ? "Commercial"
+                  : isVariant14
+                    ? "Lands"
+                    : isVariant15
+                      ? "Brooklyn"
+                      : isVariant16
+                        ? "BNB"
+                        : isVariant17
+                          ? "Global"
+                          : isVariant18
+                            ? "Partners"
+                            : isVariant19
+                              ? "Office"
+                              : "New"}
             </p>
           </div>
         </div>
@@ -2218,7 +2261,13 @@ export function ApartmentsTile({ selected = true }) {
         <div style={tw("content-stretch flex flex-col gap-[var(--spacing\/m3,20px)] h-[145px] items-center px-[13px] py-[8px] relative shrink-0 w-[138px]")}>
           <div style={tw("-translate-x-1/2 -translate-y-1/2 absolute h-[39px] left-1/2 top-[calc(50%+40px)] w-[170px]")}>
             <div style={tw("absolute inset-[-35.9%_-8.24%]")}>
-              <img style={tw("block max-w-none size-full")} alt="" src={selected ? tileGlowSrc('apartments') : imgEllipse1} />
+              <img style={tw("block max-w-none size-full")} alt="" src={imgEllipse1} />
+              <img
+                data-tile-glow=""
+                style={{...tw("absolute inset-0 block max-w-none size-full"), opacity: 0, transition: "opacity 160ms ease"}}
+                alt=""
+                src={tileGlowSrc('apartments')}
+              />
             </div>
           </div>
           <div style={tw("-translate-x-1/2 -translate-y-1/2 absolute h-[104px] left-1/2 top-[calc(50%-20.5px)] w-[110px]")}>
@@ -2230,8 +2279,8 @@ export function ApartmentsTile({ selected = true }) {
             <div style={tw("content-stretch flex gap-[2px] h-[16px] items-end pl-[9px] relative shrink-0 w-[88px]")}>
               <Layer1 className="h-[16px] relative shrink-0 w-[22px]" />
               <div style={tw("h-[8px] relative shrink-0 w-[66px]")}>
-                <p style={tw("[text-box-edge:cap_alphabetic] [text-box-trim:trim-both] [word-break:break-word] absolute capitalize font-['Mirza:SemiBold'] inset-[0_59.09%_0_0] leading-[0px] not-italic text-[11.939px] text-white whitespace-nowrap")}>
-                  BNB
+                <p style={tw("[text-box-edge:cap_alphabetic] [text-box-trim:trim-both] [word-break:break-word] absolute capitalize font-['Mirza:SemiBold'] inset-[0_15.15%_0_0] leading-[0px] not-italic text-[11.939px] text-white whitespace-nowrap")}>
+                  Apartments
                 </p>
               </div>
             </div>

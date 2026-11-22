@@ -29,14 +29,20 @@ function PlanCard({icon, title, subtitle, onClick, muted}) {
   );
 }
 
-/** CompanyPlanScreen / ProjectMarketerPlanScreen — `variant` is 'company' | 'marketer'. */
+/** CompanyPlanScreen / ProjectMarketerPlanScreen — `variant` is 'company' | 'business' | 'marketer'. */
 export default function PlanScreen({variant, onClose, onSelectPlan, onJoinAgency}) {
   const isMarketer = variant === 'marketer';
   const options = isMarketer ? MARKETER_OPTIONS : COMPANY_OPTIONS;
+  const title =
+    variant === 'marketer'
+      ? 'משווק פרויקטים'
+      : variant === 'business'
+        ? 'מנוי לעסקים'
+        : 'מנוי לחברות';
 
   return (
     <AccountScreen
-      title={isMarketer ? 'משווק פרויקטים' : 'מנוי לחברות'}
+      title={title}
       onBack={onClose}
       backdrop
       width={520}>

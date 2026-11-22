@@ -23,7 +23,7 @@
   height: 100%;
   overflow: hidden;
   background: #1e1d27;
-  animation: slideIn 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: slideIn 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes slideIn {

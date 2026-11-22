@@ -20,6 +20,7 @@ const entry = (screen, props = {}) => ({id: ++entryId, screen, props});
 /** Mobile SideMenu `onOpenSubscription(type)` → first screen of that account type's flow. */
 export function subscriptionEntry(type) {
   if (type === subscriptionTypes.company) return {screen: 'plan', props: {variant: 'company'}};
+  if (type === subscriptionTypes.business) return {screen: 'plan', props: {variant: 'business'}};
   if (type === subscriptionTypes.projectMarketer) return {screen: 'plan', props: {variant: 'marketer'}};
   if (type === subscriptionTypes.professional) return {screen: 'subscription', props: {subscriptionType: type}};
   return {screen: 'subscription', props: {subscriptionType: subscriptionTypes.broker}};
@@ -117,7 +118,9 @@ export default function AccountFlow({start, onExit}) {
                 'subscription',
                 props.variant === 'marketer'
                   ? {subscriptionType: subscriptionTypes.projectMarketer, marketerPlan: plan}
-                  : {subscriptionType: subscriptionTypes.company, companyPlan: plan},
+                  : props.variant === 'business'
+                    ? {subscriptionType: subscriptionTypes.business, companyPlan: plan}
+                    : {subscriptionType: subscriptionTypes.company, companyPlan: plan},
               )
             }
             onJoinAgency={() => push('joinAgency')}

@@ -16,6 +16,8 @@ export const getHeaderTitle = subscriptionType => {
   switch (subscriptionType) {
     case subscriptionTypes.company:
       return 'מנוי לחברות';
+    case subscriptionTypes.business:
+      return 'מנוי לעסקים';
     case subscriptionTypes.professional:
       return 'מנוי לבעלי מקצוע';
     case subscriptionTypes.projectMarketer:

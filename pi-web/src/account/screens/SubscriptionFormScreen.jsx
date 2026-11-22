@@ -74,13 +74,29 @@ export default function SubscriptionFormScreen({
   onNext,
 }) {
   const isProjectMarketerFlow = subscriptionType === subscriptionTypes.projectMarketer;
-  const isCompanyFlow = subscriptionType === subscriptionTypes.company || isProjectMarketerFlow;
+  const isBusinessFlow = subscriptionType === subscriptionTypes.business;
+  const isCompanyFlow =
+    subscriptionType === subscriptionTypes.company ||
+    isBusinessFlow ||
+    isProjectMarketerFlow;
   const isBroker = subscriptionType === subscriptionTypes.broker;
   const isProfessional = subscriptionType === subscriptionTypes.professional;
-  const orgNameLabel = isProjectMarketerFlow ? 'שם המשווק' : 'שם החברה';
-  const orgLogoLabel = isProjectMarketerFlow ? 'משווק' : 'חברה';
+  const orgNameLabel = isProjectMarketerFlow
+    ? 'שם המשווק'
+    : isBusinessFlow
+      ? 'שם העסק'
+      : 'שם החברה';
+  const orgLogoLabel = isProjectMarketerFlow
+    ? 'משווק'
+    : isBusinessFlow
+      ? 'עסק'
+      : 'חברה';
   const companyLogoLabel = `לוגו ${orgLogoLabel}`;
-  const orgWebsiteLabel = isProjectMarketerFlow ? 'כתובת אתר המשווק' : 'כתובת אתר החברה';
+  const orgWebsiteLabel = isProjectMarketerFlow
+    ? 'כתובת אתר המשווק'
+    : isBusinessFlow
+      ? 'כתובת אתר העסק'
+      : 'כתובת אתר החברה';
 
   const [activeTab, setActiveTab] = useState('images');
   const [selectedTypes, setSelectedTypes] = useState([]);

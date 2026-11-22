@@ -1,12 +1,31 @@
 .card {
+  position: relative;
   direction: rtl;
   display: flex;
   flex-direction: column;
   width: 334px;
-  height: 540px;
+  height: 529px;
   overflow: hidden;
   border-radius: 16px;
   background: #2b2a39;
+}
+
+/* Same hover stroke as the listing cards (Figma 879:62087). */
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 2px solid #fee787;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.card:hover::after,
+.card:has(:focus-visible)::after {
+  opacity: 1;
 }
 
 .media {
@@ -52,14 +71,14 @@
   cursor: pointer;
 }
 
+/* Figma 858:26937 card content. Row heights are the Figma text boxes, so every card keeps 252 / 277. */
 .body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 24px;
   min-height: 0;
-  overflow: hidden;
   padding: 18px 18px 0;
   border: 0;
   background: transparent;
@@ -71,22 +90,22 @@
 .identity {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 18px;
-  width: 100%;
 }
 
 .titleRow {
   display: flex;
   align-items: flex-start;
-  justify-content: flex-end;
   gap: 20px;
-  width: 100%;
+  height: 35px;
 }
 
 .name {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
+  height: 20px;
   margin: 0;
   color: #f7f3e6;
   font-size: 28px;
@@ -94,12 +113,30 @@
   line-height: 31px;
 }
 
+.name span,
+.address span,
+.bio span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The badge glow is bigger than its 62×35 slot, so it overflows instead of growing the row. */
+.rating {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 62px;
+  height: 35px;
+}
+
 .address {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 4px;
-  width: 100%;
+  height: 24px;
   margin: 0;
   color: #fff;
   font-size: 14px;
@@ -108,27 +145,26 @@
   letter-spacing: 0.545px;
 }
 
-.address span {
-  min-width: 0;
+.address img {
+  flex-shrink: 0;
 }
 
 .tags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
   gap: 6px;
-  width: 100%;
-  min-height: 0;
+  height: 27.143px;
   overflow: hidden;
 }
 
 .tag {
   display: flex;
   align-items: center;
-  height: 27px;
-  padding: 0 9px;
+  box-sizing: border-box;
+  height: 27.143px;
+  padding: 0 9.286px;
   border: 0.714px solid #fff;
-  border-radius: 36px;
+  border-radius: 35.714px;
   color: #fff;
   font-size: 16px;
   font-weight: 400;
@@ -137,15 +173,14 @@
 }
 
 .bio {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  height: 13px;
   margin: 0;
-  overflow: hidden;
   color: #fff;
   font-size: 18px;
   font-weight: 400;
   line-height: 32px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .message {
@@ -158,7 +193,7 @@
   padding: 10px 20px 8px 8px;
   border: 0;
   border-radius: 846px;
-  background: linear-gradient(182deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
+  background: linear-gradient(180.56deg, #fee787 4.56%, #bd9947 50.76%, #9c6522 88.31%);
   color: #1e1d27;
   font-size: 20px;
   font-weight: 500;

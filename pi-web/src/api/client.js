@@ -204,6 +204,7 @@ function followTypeLabel(type) {
   const t = String(type || '').trim().toLowerCase();
   if (t === 'broker') return 'תיווך';
   if (t === 'company') return 'חברה';
+  if (t === 'business') return 'עסק';
   if (t === 'project_marketer') return 'משווק פרויקטים';
   if (t === 'professional') return 'מקצועי';
   return 'משתמש';
@@ -1013,6 +1014,14 @@ export async function loginOrRegisterWithApple(
   } catch (error) {
     return {success: false, error: error.message, subscription: null};
   }
+}
+
+/** Verified business accounts for the website story circles. Regular users are excluded. */
+export async function getBusinessProfiles() {
+  const rows = await supabaseRestGet(
+    'subscriptions?subscription_type=in.(broker,company,business,professional,project_marketer)&status=in.(verified,active)&select=id,subscription_type,name,contact_person_name,business_name,broker_office_name,profile_picture_url,company_logo_url&order=updated_at.desc&limit=500',
+  );
+  return Array.isArray(rows) ? rows : [];
 }
 
 /** Home story rings (profile intro + slides from the last 24 hours). */

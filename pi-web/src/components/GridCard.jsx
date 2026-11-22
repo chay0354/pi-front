@@ -78,7 +78,7 @@ export default function GridCard({item, onRequestUnlike, onOpen, className = ''}
   const title = company ? company.projectName || (item.price != null ? formatPrice(item.price) : '') : item.price != null ? formatPrice(item.price) : '';
   const image = item.images[0];
 
-  let tag = <span className={styles.tag}>{PURPOSE_LABEL[item.purpose]}</span>;
+  let tag = <span className={styles.tag}>{item.purposeTag || PURPOSE_LABEL[item.purpose]}</span>;
   if (company?.openHouse) tag = <OpenHouseTag />;
   else if (company?.preSale) tag = <PreSaleTag />;
 

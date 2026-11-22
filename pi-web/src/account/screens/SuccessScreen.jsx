@@ -18,8 +18,10 @@ export default function SuccessScreen({
   const resolvedType = String(subscription?.subscription_type || subscriptionType || '').toLowerCase();
   const isCompany =
     subscriptionType === subscriptionTypes.company ||
+    subscriptionType === subscriptionTypes.business ||
     subscriptionType === subscriptionTypes.projectMarketer ||
     resolvedType === 'company' ||
+    resolvedType === 'business' ||
     resolvedType === subscriptionTypes.projectMarketer;
   const isBroker = subscriptionType === subscriptionTypes.broker || resolvedType === 'broker';
   const companyLogoUrl = subscription?.company_logo_url || subscription?.companyLogoUrl || null;

@@ -25,6 +25,7 @@ import {
   resolveSubscriptionType,
   subscriptionTypes,
   isB2BSubscriptionType,
+  isCompanySubscriptionType,
   SALES_IMAGE_POST_KIND,
   uploadProjectWording,
 } from './lib/publishRules';
@@ -371,7 +372,7 @@ export default function AdsForm({
     if (t === subscriptionTypes.broker || t === subscriptionTypes.projectMarketer) {
       return brokerCategoryForm;
     }
-    if (t === subscriptionTypes.company || t === subscriptionTypes.professional) {
+    if (isCompanySubscriptionType(t) || t === subscriptionTypes.professional) {
       // companyCategoryForm has no key `1` — merge broker’s חדש מקבלן project form
       return {
         ...companyCategoryForm,
@@ -391,7 +392,7 @@ export default function AdsForm({
   /** גלובל + סוג נכס "קרקע": same sections/order as קרקעות (cat. 7) */
   const adsFormFields = useMemo(() => {
     const raw = buildGlobalGroundFieldList(formList, category, propertyType) ?? formList[category]?.fields ?? [];
-    const isCompany = resolveSubscriptionType(currentUser) === subscriptionTypes.company;
+    const isCompany = isCompanySubscriptionType(currentUser);
     const withTour = canAddVirtualTour(isCompany, category) ? withVirtualTourField(raw) : raw;
     return localizeUploadFormFields(withTour, currentUser?.subscription_type);
   }, [formList, category, propertyType, currentUser]);
@@ -865,7 +866,8 @@ export default function AdsForm({
       setProjectOffers(prev => ({...prev, ...initialListing.project_offers}));
     }
     const subType = String(currentUser?.subscription_type || '').toLowerCase();
-    const isCompanyLike = subType === subscriptionTypes.company || subType === subscriptionTypes.professional;
+    const isCompanyLike =
+      isCompanySubscriptionType(subType) || subType === subscriptionTypes.professional;
     if (cat === 2 && isCompanyLike) {
       const po = initialListing.project_offers;
       if (po && typeof po === 'object') {
@@ -1030,7 +1032,7 @@ export default function AdsForm({
       return false;
     }
     const t = String(currentUser?.subscription_type || '').toLowerCase();
-    return t === subscriptionTypes.company || t === subscriptionTypes.professional;
+    return isCompanySubscriptionType(t) || t === subscriptionTypes.professional;
   }, [category, currentUser?.subscription_type]);
 
   const isCompanyCommercialUpload = useMemo(() => {
@@ -1038,7 +1040,7 @@ export default function AdsForm({
       return false;
     }
     const t = String(currentUser?.subscription_type || '').toLowerCase();
-    return t === subscriptionTypes.company || t === subscriptionTypes.professional;
+    return isCompanySubscriptionType(t) || t === subscriptionTypes.professional;
   }, [category, currentUser?.subscription_type]);
 
   const amenitiesWithQuantity = ['חנייה', 'מרפסת', 'מרפסת לסוכה'];
@@ -2213,7 +2215,7 @@ export default function AdsForm({
             onEditMainImage={() => openAdImageEditor('main')}
             onEditAdditionalImage={openAdImageEditor}
             coverTitle={
-              resolveSubscriptionType(currentUser) === subscriptionTypes.company
+              isCompanySubscriptionType(currentUser)
                 ? 'תמונת נושא או הדמייה'
                 : 'תמונת נושא'
             }

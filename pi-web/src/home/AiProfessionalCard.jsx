@@ -109,26 +109,32 @@ export default function AiProfessionalCard({item, onOpen, onMessage}) {
       <button type="button" className={styles.body} onClick={onOpen}>
         <div className={styles.identity}>
           <div className={styles.titleRow}>
-            <p className={styles.name}>{heading}</p>
-            <PiRatingBadge rating={rating} variant="listing" />
-          </div>
-          {address ? (
-            <p className={styles.address}>
-              <img src={iconPin} alt="" width={24} height={24} />
-              <span>{address}</span>
+            <p className={styles.name}>
+              <span>{heading}</span>
             </p>
-          ) : null}
-        </div>
-        {tags.length ? (
-          <div className={styles.tags}>
-            {tags.map(tag => (
-              <span key={tag} className={styles.tag}>
-                {tag}
-              </span>
-            ))}
+            <span className={styles.rating}>
+              <PiRatingBadge rating={rating} variant="listing" />
+            </span>
           </div>
-        ) : null}
-        {bio ? <p className={styles.bio}>{bio}</p> : null}
+          <p className={styles.address}>
+            {address ? (
+              <>
+                <img src={iconPin} alt="" width={24} height={24} />
+                <span>{address}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        <div className={styles.tags}>
+          {tags.map(tag => (
+            <span key={tag} className={styles.tag}>
+              {tag}
+            </span>
+          ))}
+        </div>
+        <p className={styles.bio}>
+          <span>{bio}</span>
+        </p>
       </button>
       <button
         type="button"

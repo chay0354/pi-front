@@ -4,9 +4,10 @@ import splashBack from '../assets/figma/splash/back.png';
 import homeLogo from '../assets/homeLogo.png';
 import styles from './SplashScreen.module.css';
 
-const TAGLINE = "it's just simple";
-const HOLD_MS = 2100;
-const FLY_MS = 950;
+const TAGLINE = 'It’s Just Simple!';
+const HOLD_MS = 2300;
+/** Match the app’s soft handoff: logo flies, then the cover fades off. */
+const FLY_MS = 1050;
 
 /** Boot splash: logo settles, the tagline writes itself, then the logo lands on the header. */
 export default function SplashScreen() {
@@ -40,6 +41,7 @@ export default function SplashScreen() {
 
   return (
     <div className={`${styles.splash} ${phase === 'out' ? styles.out : ''}`} role="presentation">
+      <div className={styles.veil} aria-hidden />
       <div className={styles.back} aria-hidden>
         <img src={splashBack} alt="" />
         <div className={styles.backFade} />

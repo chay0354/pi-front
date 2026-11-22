@@ -7,12 +7,26 @@
   justify-content: center;
   overflow: hidden;
   background: #1e1d27;
-  transition: background-color 0.7s ease;
+  transition: background-color 0.9s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .out {
   background: transparent;
   pointer-events: none;
+}
+
+/* Soft cover like the app overlay — fades so the home screen comes through. */
+.veil {
+  position: absolute;
+  inset: 0;
+  background: #1e1d27;
+  opacity: 1;
+  transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.out .veil {
+  opacity: 0;
 }
 
 .back {
@@ -42,7 +56,7 @@
 .out .back {
   animation: none;
   opacity: 0;
-  transition: opacity 0.65s ease;
+  transition: opacity 0.7s ease;
 }
 
 .center {
@@ -55,6 +69,7 @@
 }
 
 .logo {
+  /* Keep the Pi mark dominant; 2701 in the asset stays the size reference for the slogan. */
   width: min(440px, 34vw);
   height: auto;
   transform-origin: center center;
@@ -63,36 +78,38 @@
 
 .fly {
   animation: none;
-  transition: transform 0.95s cubic-bezier(0.45, 0, 0.15, 1);
+  transition: transform 1.05s cubic-bezier(0.45, 0, 0.15, 1);
   transform: translate(var(--dx), var(--dy)) scale(var(--scale));
 }
 
 .out .logo:not(.fly) {
   animation: none;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.55s ease;
 }
 
 .tagline {
-  margin: 18px 0 0;
+  /* Sized against the “2701” wordmark in the logo — roughly that digit height, much larger than before. */
+  margin: clamp(22px, 2.4vw, 36px) 0 0;
   color: #f4e7c8;
-  font-family: 'Rubik', system-ui, sans-serif;
-  font-size: clamp(22px, 2.4vw, 34px);
+  font-family: 'Tinos', 'Times New Roman', Times, serif;
+  font-size: clamp(52px, 7vw, 88px);
   font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+  line-height: 1.05;
+  letter-spacing: 0.035em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
 }
 
 .letter {
   display: inline-block;
   opacity: 0;
-  transform: translateY(14px);
-  animation: splashLetter 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(18px);
+  animation: splashLetter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .out .tagline {
-  animation: splashTagOut 0.4s ease forwards;
+  animation: splashTagOut 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .srOnly {
@@ -136,7 +153,7 @@
 @keyframes splashTagOut {
   to {
     opacity: 0;
-    transform: translateY(-12px);
+    transform: translateY(-10px) scale(0.96);
   }
 }
 

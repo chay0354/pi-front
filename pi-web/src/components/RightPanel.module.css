@@ -67,12 +67,17 @@
   text-box-trim: trim-both;
 }
 
-.filtersWrap {
+.filtersArea {
   position: absolute;
   top: 126px;
   right: 0;
   width: 208px;
   height: 499px;
+}
+
+.filtersWrap {
+  width: 100%;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -137,4 +142,94 @@
 
 .selected .filterLabel {
   color: var(--yellow-icons);
+}
+
+/* Only shows when the list overflows (BNB has more filters than fit). */
+.scrollHint {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.scrollHintShown {
+  opacity: 1;
+}
+
+.scrollHintShown .scrollButton {
+  pointer-events: auto;
+}
+
+.scrollHintTop {
+  top: 0;
+  align-items: flex-start;
+  height: 72px;
+  padding-top: 4px;
+  background: linear-gradient(to bottom, var(--blue-100) 30%, rgba(30, 29, 39, 0));
+}
+
+.scrollHintBottom {
+  bottom: 0;
+  align-items: flex-end;
+  height: 120px;
+  padding-bottom: 8px;
+  background: linear-gradient(to top, var(--blue-100) 40%, rgba(30, 29, 39, 0));
+}
+
+.scrollButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 4px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--yellow-icons);
+  font: inherit;
+  cursor: pointer;
+}
+
+.scrollButton:hover {
+  opacity: 0.8;
+}
+
+.scrollLabel {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.scrollArrowDown,
+.scrollArrowUp {
+  display: block;
+}
+
+.scrollArrowDown {
+  transform: rotate(90deg);
+  animation: filtersNudge 1.6s ease-in-out infinite;
+}
+
+.scrollArrowUp {
+  transform: rotate(-90deg);
+}
+
+@keyframes filtersNudge {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollArrowDown {
+    animation: none;
+  }
 }

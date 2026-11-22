@@ -37,10 +37,13 @@ export default function FeedPostPreviewMedia({
   cropOverflow = false,
   showTextOverlays = true,
   stillMaxWidth = 0,
+  /** When true, ignore the live desktop feed page and use authored / phone 9:16 aspect. */
+  ignoreFeedPageSize = false,
   children,
 }) {
   const frameRef = useRef(null);
   const feedPageSize = useFeedPostPageSize();
+  const pageSize = ignoreFeedPageSize ? null : feedPageSize;
   const [layout, setLayout] = useState({width: 0, height: 0});
   const [thumbFailed, setThumbFailed] = useState(false);
 
@@ -89,8 +92,8 @@ export default function FeedPostPreviewMedia({
       return {width: layout.width, height: layout.height, left: 0, top: 0};
     }
     const resolve = cropOverflow ? resolvePostFrameCoverCell : resolvePostFrameInCell;
-    return resolve(layout.width, layout.height, overlayPayload, feedPageSize);
-  }, [cropOverflow, feedPageSize, layout, overlayPayload]);
+    return resolve(layout.width, layout.height, overlayPayload, pageSize);
+  }, [cropOverflow, pageSize, layout, overlayPayload]);
   const openHouseOverlayText = useMemo(() => {
     if (!showOpenHouseChrome || !isOpenHouseListing(listing)) return '';
     const details = getOpenHouseDetailsFromListing(listing);

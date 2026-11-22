@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {getListings, getProfessionalsDirectory, getReviews, getStoriesFeed} from '../api/client';
+import {getBusinessProfiles, getListings, getProfessionalsDirectory, getReviews, getStoriesFeed} from '../api/client';
 import {subscriptionType, toFeedItem} from './listingRules';
 import {
   cappedMuxUri,
@@ -40,7 +40,10 @@ function featuredMedia(listing) {
 function toFeaturedProjects(listings) {
   return (Array.isArray(listings) ? listings : [])
     .map(toFeedItem)
-    .filter(item => !item.isPost && subscriptionType(item.raw) === 'company' && item.videoUrl)
+    .filter(item => {
+      const type = subscriptionType(item.raw);
+      return !item.isPost && (type === 'company' || type === 'business') && item.videoUrl;
+    })
     .map(item => {
       const media = featuredMedia(item.raw);
       return {
@@ -100,7 +103,11 @@ export function useFeaturedProjects() {
   const [projects, setProjects] = useState([]);
   useEffect(() => {
     const controller = new AbortController();
-    getListings({category: FEATURED_CATEGORY_ID, subscription_type: 'company', signal: controller.signal})
+    getListings({
+      category: FEATURED_CATEGORY_ID,
+      subscription_type: 'company,business',
+      signal: controller.signal,
+    })
       .then(data => setProjects(toFeaturedProjects(data?.listings)))
       .catch(() => {
         if (!controller.signal.aborted) setProjects([]);
@@ -110,22 +117,108 @@ export function useFeaturedProjects() {
   return projects;
 }
 
-/** Home story rings: only subscriptions that still have an active story. */
+const REGULAR_TYPES = new Set(['user', 'private', 'regular', 'customer']);
+
+function isRegularType(type) {
+  const value = String(type || '').trim().toLowerCase();
+  return !value || REGULAR_TYPES.has(value);
+}
+
+function businessDisplayName(row) {
+  const type = String(row?.subscription_type || '').trim().toLowerCase();
+  const name = text(row?.name);
+  const contact = text(row?.contact_person_name);
+  const business = text(row?.business_name);
+  const office = text(row?.broker_office_name);
+  if (type === 'company' || type === 'business' || type === 'project_marketer') return business || name || contact;
+  if (type === 'broker') return office || business || name || contact;
+  return name || business || contact;
+}
+
+function businessAvatar(row) {
+  const type = String(row?.subscription_type || '').trim().toLowerCase();
+  const photo = text(row?.profile_picture_url);
+  const logo = text(row?.company_logo_url);
+  if (photo) return photo;
+  if (type === 'company' || type === 'business' || type === 'project_marketer') return logo || null;
+  return null;
+}
+
+/** Story rings first, then every other business account with an empty story. */
+function mergeHomeRings(storyRings, accounts) {
+  const byId = new Map();
+  const add = ring => {
+    const id = ring?.subscription_id != null ? String(ring.subscription_id) : '';
+    if (!id || byId.has(id) || isRegularType(ring.subscription_type)) return;
+    const name = String(ring.display_name || '').trim();
+    if (!name) return;
+    byId.set(id, {
+      subscription_id: ring.subscription_id,
+      display_name: name,
+      profile_image_url: ring.profile_image_url || null,
+      subscription_type: String(ring.subscription_type || '').trim().toLowerCase() || null,
+      slides: Array.isArray(ring.slides) ? ring.slides : [],
+    });
+  };
+  for (const ring of storyRings) add(ring);
+  for (const row of accounts) {
+    add({
+      subscription_id: row?.id,
+      display_name: businessDisplayName(row),
+      profile_image_url: businessAvatar(row),
+      subscription_type: row?.subscription_type,
+      slides: [],
+    });
+  }
+  const withSlides = [];
+  const without = [];
+  for (const ring of byId.values()) {
+    if (ring.slides.length > 0) withSlides.push(ring);
+    else without.push(ring);
+  }
+  return [...withSlides, ...without];
+}
+
+const STORY_ACTIVE_MS = 24 * 60 * 60 * 1000;
+
+/** Keep only slides from the last 24 hours (same window as GET /api/stories/feed). */
+export function filterSlidesLast24h(slides) {
+  const cutoff = Date.now() - STORY_ACTIVE_MS;
+  return (Array.isArray(slides) ? slides : []).filter(slide => {
+    if (!slide || slide.kind === 'portrait') return false;
+    const t = new Date(slide.created_at || 0).getTime();
+    // Feed already scoped to 24h; missing created_at still counts as live.
+    return !Number.isFinite(t) || t <= 0 || t >= cutoff;
+  });
+}
+
+/** Rings that have at least one live story slide — used by StoryScreen, not the home strip. */
+export function ringsWithLiveStories(rings) {
+  return (Array.isArray(rings) ? rings : [])
+    .map(ring => {
+      const slides = filterSlidesLast24h(ring?.slides);
+      return slides.length > 0 ? {...ring, slides} : null;
+    })
+    .filter(Boolean);
+}
+
+/** Home circles: every broker, company, professional and project marketer, with or without a story. */
 export function useHomeStories() {
   const [rings, setRings] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    getStoriesFeed()
-      .then(data => {
-        if (cancelled) return;
-        const next = (Array.isArray(data?.rings) ? data.rings : []).filter(
-          ring => ring?.subscription_id && Array.isArray(ring.slides) && ring.slides.length > 0,
-        );
-        setRings(next);
-      })
-      .catch(() => {
-        if (!cancelled) setRings([]);
-      });
+    Promise.all([
+      getStoriesFeed().catch(() => ({rings: []})),
+      getBusinessProfiles().catch(() => []),
+    ]).then(([stories, accounts]) => {
+      if (cancelled) return;
+      setRings(
+        mergeHomeRings(
+          Array.isArray(stories?.rings) ? stories.rings : [],
+          Array.isArray(accounts) ? accounts : [],
+        ),
+      );
+    });
     return () => {
       cancelled = true;
     };

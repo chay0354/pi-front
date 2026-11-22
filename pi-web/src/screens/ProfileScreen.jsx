@@ -6,9 +6,9 @@ import {useSession} from '../auth/session';
 import MdiIcon from '../publish/MdiIcon';
 import VolumeIcon from '../components/VolumeIcon';
 import {isReduceMotion} from '../a11y/prefs';
-import {PostMedia} from '../components/FeedCard';
 import {ShareSheet} from '../feed/FeedSheets';
 import {toFeedItem} from '../feed/listingRules';
+import FeedPostPreviewMedia from '../publish/components/FeedPostPreviewMedia';
 import {BnbListingContent, LandListingContent, PartnersListingContent} from '../profile/DedicatedContent';
 import {
   FollowPlusBadge,
@@ -91,11 +91,11 @@ const showAlert = (title, message) => window.alert(title ? `${title}\n\n${messag
 const LOGIN_REQUIRED = 'כדי להמשיך יש לפתוח חשבון או להתחבר באפליקציה.';
 const requireLogin = () => showAlert('נדרשת התחברות', LOGIN_REQUIRED);
 
-/** Portrait post tile: the feed's 930×502 post frame, scaled down (videos show their poster). */
-const POST_FRAME_W = 930;
-const POST_FRAME_H = 502;
-const POST_TILE_W = (1016 - 4) / 3;
-const POST_TILE_SCALE = POST_TILE_W / POST_FRAME_W;
+const POST_GRID_GAP = 2;
+const POST_GRID_COLS = 9;
+const POST_CARD_W = 1315;
+const POST_TILE_W = (POST_CARD_W - POST_GRID_GAP * (POST_GRID_COLS - 1)) / POST_GRID_COLS;
+const POST_GRID_THUMB_WIDTH = Math.min(480, Math.ceil(POST_TILE_W * 3));
 
 function PostGridTile({tile, onOpen}) {
   if (!tile) {
@@ -105,28 +105,25 @@ function PostGridTile({tile, onOpen}) {
       </span>
     );
   }
-  const base = toFeedItem(tile.listing);
-  const still = tile.isVideo ? tile.posterUri : tile.uri;
-  const item = {...base, videoUrl: null, preferVideo: false, images: still ? [still] : base.images.slice(0, 1)};
-  const videoFrame = tile.isVideo && !item.images.length && tile.uri;
   return (
     <button type="button" className={styles.gridTile} onClick={() => onOpen(tile)} aria-label="פתח פוסט">
-      {videoFrame ? (
-        <video className={styles.gridTileVideo} src={`${tile.uri}#t=0.1`} muted preload="metadata" playsInline />
-      ) : (
-        <span
-          className={styles.gridTileFrame}
-          style={{width: POST_FRAME_W, height: POST_FRAME_H, transform: `scale(${POST_TILE_SCALE})`}}>
-          <PostMedia item={item} active={false} />
-        </span>
-      )}
+      <FeedPostPreviewMedia
+        listing={tile.listing}
+        posterUri={tile.posterUri}
+        className={styles.gridTileMedia}
+        cropOverflow
+        ignoreFeedPageSize
+        showOpenHouseChrome={false}
+        showVideoPlayIcon={false}
+        stillMaxWidth={POST_GRID_THUMB_WIDTH}
+      />
       {tile.isVideo ? (
-        <span className={`${styles.gridPlay} ${tile.posterUri || videoFrame ? styles.gridPlayDim : ''}`}>
-          <Icon name="play-circle" size={44} color="rgba(255,255,255,0.85)" />
+        <span className={`${styles.gridPlay} ${tile.posterUri ? styles.gridPlayDim : ''}`}>
+          <Icon name="play-circle" size={22} color="rgba(255,255,255,0.85)" />
         </span>
       ) : null}
       <span className={styles.gridViews} dir="ltr">
-        <img src={POST_GRID_VIEW_ICON} alt="" width={16} height={16} />
+        <img src={POST_GRID_VIEW_ICON} alt="" width={11} height={11} />
         <span>{formatPostViewCount(getListingViewCount(tile.listing))}</span>
       </span>
     </button>
@@ -584,7 +581,8 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
       listingId: listingId || null,
     });
   };
-  const scrollRef = useRef(null);
+  const asideRef = useRef(null);
+  const mainRef = useRef(null);
   const [subview, setSubview] = useState(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroMuted, setHeroMuted] = useState(false);
@@ -596,7 +594,8 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
   const screenActive = active && !subview && viewerIndex == null;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({top: 0});
+    asideRef.current?.scrollTo({top: 0});
+    mainRef.current?.scrollTo({top: 0});
     setHeroIndex(0);
   }, [user?.id]);
 
@@ -828,7 +827,18 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
     <div className={styles.hero}>
       {vm.lastAdImages.length > 0 ? (
         <>
-          <div className={styles.heroViewport} dir="ltr">
+          <div
+            className={styles.heroViewport}
+            dir="ltr"
+            role="button"
+            tabIndex={0}
+            aria-label="מסך מלא"
+            onClick={() => setViewerIndex(heroIndex)}
+            onKeyDown={event => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              setViewerIndex(heroIndex);
+            }}>
             <div className={styles.heroTrack} style={{transform: `translateX(${-heroIndex * 100}%)`}}>
               {vm.lastAdImages.map((slide, i) => (
                 <div key={slide.isVideo ? `video-${i}` : `img-${i}-${slide.uri}`} className={styles.heroSlide}>
@@ -949,6 +959,24 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
   );
 
   /** Aside block under the identity card: tag + heart/share, price, address, features, map. */
+  const renderLocationMap = () =>
+    vm.showLocationMap ? (
+      <>
+        <span className={styles.asideDivider} />
+        <h3 className={styles.mapTitle}>מיקום הנכס</h3>
+        <LocationMap
+          address={firstNonEmpty(
+            lastAd?.address,
+            lastAd?.location,
+            lastAd?.search_address,
+            lastAd?.land_address,
+            vm.brokerAddress,
+          )}
+          height={230}
+        />
+      </>
+    ) : null;
+
   const renderAdSummary = () => (
     <section className={styles.adSummary}>
       <div className={styles.piPurposeRow}>
@@ -1000,22 +1028,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
       {(vm.isBroker || vm.isRegularUserAdView) && vm.listingCategoryNum !== 7 ? (
         <FeatureChips features={vm.adFeatures} keyPrefix="feat" />
       ) : null}
-      {vm.showLocationMap ? (
-        <>
-          <span className={styles.asideDivider} />
-          <h3 className={styles.mapTitle}>מיקום הנכס</h3>
-          <LocationMap
-            address={firstNonEmpty(
-              lastAd?.address,
-              lastAd?.location,
-              lastAd?.search_address,
-              lastAd?.land_address,
-              vm.brokerAddress,
-            )}
-            height={230}
-          />
-        </>
-      ) : null}
+      {vm.isCompany ? null : renderLocationMap()}
       {isOwn ? null : (
         <button type="button" className={styles.reportLink} onClick={openReport}>
           דווח על מודעה
@@ -1396,7 +1409,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
 
   return (
     <div className={styles.screen} aria-label={vm.displayName}>
-      <div className={styles.scroll} ref={scrollRef}>
+      <div className={styles.scroll}>
         <header className={styles.topNav}>
           {showFixedCompanyHero ? (
             <>
@@ -1424,7 +1437,7 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
         </header>
 
         <div className={styles.layout}>
-          <aside className={styles.aside}>
+          <aside className={styles.aside} ref={asideRef}>
             {asideHasIdentity ? (
               <div className={styles.identity}>
                 <span className={styles.avatarWrap}>
@@ -1494,10 +1507,12 @@ export default function ProfileScreen({user, onClose, active = true, onOpenFollo
               </>
             ) : null}
 
+            {vm.isCompany ? renderLocationMap() : null}
+
             {showAdSummary || isOwn ? null : reportButton}
           </aside>
 
-          <main className={styles.main}>
+          <main className={styles.main} ref={mainRef}>
             {showLastAdCard ? (
               <section className={styles.lastAdCard}>
                 {vm.showProfilePostGridAtTop ? (

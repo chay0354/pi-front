@@ -173,7 +173,7 @@ export function subscriptionType(listing) {
   return '';
 }
 
-const BUSINESS_TYPES = new Set(['company', 'broker', 'professional', 'project_marketer']);
+const BUSINESS_TYPES = new Set(['company', 'business', 'broker', 'professional', 'project_marketer']);
 
 /** Pi badge: company, broker, professional, project marketer. */
 function shouldShowPiRating(listing) {
@@ -277,6 +277,16 @@ function companyDetails(listing) {
   };
 }
 
+const PARTNERS_PURPOSE_LABELS = {enter: 'מחפש להיכנס', bring_in: 'מחפש להכניס', partner: 'מחפש שותף'};
+
+/** Pill on a שותפים card. `partner` is מחפש שותף, not מחפש להכניס. */
+export function partnersPurposeLabel(listing) {
+  const key = String(listing?.search_purpose || listing?.searchPurposeKey || '')
+    .trim()
+    .toLowerCase();
+  return PARTNERS_PURPOSE_LABELS[key] || '';
+}
+
 export const formatCompanyFloors = n => (n === 1 ? 'קומה 1' : `${n} קומות`);
 export const formatCompanyApartments = n => (n === 1 ? 'דירה 1' : `${n} דירות`);
 
@@ -311,6 +321,7 @@ export function toFeedItem(listing) {
         ? 'collage'
         : 'slideshow',
     purpose: listing.purpose === 'rent' ? 'rent' : 'sale',
+    purposeTag: Number(listing.category) === 3 ? partnersPurposeLabel(listing) || 'מחפש להכניס' : '',
     price,
     area: positive(listing.area),
     floor: listing.floor != null && listing.floor !== '' ? Number(listing.floor) : null,

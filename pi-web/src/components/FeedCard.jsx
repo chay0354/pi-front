@@ -1209,7 +1209,7 @@ export default function FeedCard({item, active}) {
             <div className={styles.priceActions}>
               <FavoriteButton id={item.id} />
               <span className={styles.tag} dir="auto">
-                {PURPOSE_LABEL[item.purpose]}
+                {item.purposeTag || PURPOSE_LABEL[item.purpose]}
               </span>
             </div>
           </div>

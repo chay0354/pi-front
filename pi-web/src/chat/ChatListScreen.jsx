@@ -365,7 +365,9 @@ const ChatListScreen = ({
 
   const currentUserType = getUserSubscriptionTypeLower(currentUser);
   const isBrokerUser = isBrokerLikeSubscriptionType(currentUserType);
-  const isCompanyUser = currentUserType === subscriptionTypes.company;
+  const isCompanyUser =
+    currentUserType === subscriptionTypes.company ||
+    currentUserType === subscriptionTypes.business;
   const isProfessionalUser = currentUserType === subscriptionTypes.professional;
   const isProjectMarketerUser = isProjectMarketerType(currentUserType);
   const isRegularUser = isRegularSubscriptionType(currentUserType);

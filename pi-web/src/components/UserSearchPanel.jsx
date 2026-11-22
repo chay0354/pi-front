@@ -37,6 +37,7 @@ const subtitleFor = listing => {
   if (specialties[0]) return specialties[0];
   if (creatorTypes[0]) return creatorTypes[0];
   if (subType === subscriptionTypes.company) return 'חברה';
+  if (subType === subscriptionTypes.business) return 'עסק';
   if (subType === subscriptionTypes.professional) return 'נותן שירות';
   return 'משתמש';
 };

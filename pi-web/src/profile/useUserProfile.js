@@ -35,7 +35,10 @@ import {
 import {muxThumbnailUri} from './lib/videoPlayback';
 
 export const MAX_VISIBLE_REVIEWS = 5;
-export const POST_GRID_PAGE_SIZE = 6;
+/** Profile post strip: 9 columns × 2 rows per swipe page (was 3×2). */
+export const POST_GRID_COLUMNS = 9;
+export const POST_GRID_ROWS = 2;
+export const POST_GRID_PAGE_SIZE = POST_GRID_COLUMNS * POST_GRID_ROWS;
 
 const DUMMY_PROFILE = {
   name: 'דוד לוי תיווך בע"מ',

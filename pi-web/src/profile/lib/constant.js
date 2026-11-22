@@ -18,17 +18,20 @@ export const categoryImages = {
 export const subscriptionTypes = {
   user: 'user',
   company: 'company',
+  /** מנוי לעסקים — same product behavior as company, own icons and plan copy. */
+  business: 'business',
   professional: 'professional',
   broker: 'broker',
   projectMarketer: 'project_marketer',
 };
 
-/** Broker, company, professional and project marketer — not regular (`user`) accounts. */
+/** Broker, company, business, professional and project marketer — not regular (`user`) accounts. */
 export function isB2BSubscriptionType(type) {
   const t = String(type || '').trim().toLowerCase();
   return (
     t === subscriptionTypes.broker ||
     t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
     t === subscriptionTypes.professional ||
     t === subscriptionTypes.projectMarketer
   );
@@ -40,10 +43,14 @@ export function isProjectMarketerType(type) {
   );
 }
 
-/** Company + משווק: the org logo is the avatar (no separate profile photo). */
+/** Company / business / משווק: the org logo is the avatar (no separate profile photo). */
 export function usesOrgLogoAsAvatar(subscriptionType) {
   const t = resolveSubscriptionType(subscriptionType);
-  return t === subscriptionTypes.company || t === subscriptionTypes.projectMarketer;
+  return (
+    t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
+    t === subscriptionTypes.projectMarketer
+  );
 }
 
 /** Broker + משווק פרויקטים — same upload forms, profiles, feed overlays, and filters. */
@@ -82,12 +89,13 @@ export function isRegularSubscriptionType(subscriptionType) {
   return !(
     t === subscriptionTypes.broker ||
     t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
     t === subscriptionTypes.professional ||
     t === subscriptionTypes.projectMarketer
   );
 }
 
-/** Open (non-broker) group-create flow: regular, professional, company, project marketer. */
+/** Open (non-broker) group-create flow: regular, professional, company, business, project marketer. */
 export function usesOpenChatGroupFlow(subscriptionType) {
   const t = resolveSubscriptionType(subscriptionType);
   if (t === subscriptionTypes.broker) return false;
@@ -95,19 +103,21 @@ export function usesOpenChatGroupFlow(subscriptionType) {
     isRegularSubscriptionType(t) ||
     t === subscriptionTypes.professional ||
     t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
     t === subscriptionTypes.projectMarketer
   );
 }
 
 export function isCompanySubscriptionType(subscriptionType) {
   const t = resolveSubscriptionType(subscriptionType);
-  return t === subscriptionTypes.company;
+  return t === subscriptionTypes.company || t === subscriptionTypes.business;
 }
 
 export const shouldShowProfileGoldRing = subscriptionType => {
   const t = resolveSubscriptionType(subscriptionType);
   return (
     t === subscriptionTypes.company ||
+    t === subscriptionTypes.business ||
     t === subscriptionTypes.professional ||
     t === subscriptionTypes.broker ||
     t === subscriptionTypes.projectMarketer

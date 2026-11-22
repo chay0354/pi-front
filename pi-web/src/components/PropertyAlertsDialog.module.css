@@ -27,7 +27,7 @@
   overflow: auto;
   padding: 24px 20px 32px;
   background: #27262f;
-  animation: alertsIn 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: alertsIn 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes alertsIn {

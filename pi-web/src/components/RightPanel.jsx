@@ -1,4 +1,6 @@
+import {useEffect, useRef, useState} from 'react';
 import iconSearch from '../assets/figma/feed/icon-search.svg';
+import iconChevron from '../assets/figma/feed/arrow-down.svg';
 import styles from './RightPanel.module.css';
 
 const SELECTED_COLOR = '#FFC40A';
@@ -22,9 +24,40 @@ function FilterIcon({filter, selected}) {
   return <img className={styles.filterIcon} src={filter.icon} alt="" />;
 }
 
+const SCROLL_STEP = 84 * 3;
+
+/** Tracks whether a scroller has hidden content above or below. */
+function useScrollEdges(ref, contentKey) {
+  const [edges, setEdges] = useState({up: false, down: false});
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const update = () => {
+      const up = el.scrollTop > 4;
+      const down = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+      setEdges(prev => (prev.up === up && prev.down === down ? prev : {up, down}));
+    };
+    update();
+    el.addEventListener('scroll', update, {passive: true});
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, [ref, contentKey]);
+  return edges;
+}
+
 function FilterList({filters, selectedFilterId, onSelectFilter}) {
+  const scrollRef = useRef(null);
+  const edges = useScrollEdges(scrollRef, filters.length);
+  const scrollBy = direction => scrollRef.current?.scrollBy({top: direction * SCROLL_STEP, behavior: 'smooth'});
+
   return (
-    <div className={styles.filtersWrap}>
+    <div className={styles.filtersArea}>
+    <div className={styles.filtersWrap} ref={scrollRef}>
       <div className={styles.filters}>
         {filters.map(filter => {
           const selected = filter.id === selectedFilterId;
@@ -40,6 +73,18 @@ function FilterList({filters, selectedFilterId, onSelectFilter}) {
             </button>
           );
         })}
+      </div>
+    </div>
+      <div className={`${styles.scrollHint} ${styles.scrollHintTop} ${edges.up ? styles.scrollHintShown : ''}`} aria-hidden={!edges.up}>
+        <button type="button" className={styles.scrollButton} aria-label="לפילטרים הקודמים" tabIndex={edges.up ? 0 : -1} onClick={() => scrollBy(-1)}>
+          <img className={styles.scrollArrowUp} src={iconChevron} alt="" width={36} height={36} />
+        </button>
+      </div>
+      <div className={`${styles.scrollHint} ${styles.scrollHintBottom} ${edges.down ? styles.scrollHintShown : ''}`} aria-hidden={!edges.down}>
+        <button type="button" className={styles.scrollButton} aria-label="לפילטרים נוספים" tabIndex={edges.down ? 0 : -1} onClick={() => scrollBy(1)}>
+          <span className={styles.scrollLabel}>עוד פילטרים</span>
+          <img className={styles.scrollArrowDown} src={iconChevron} alt="" width={36} height={36} />
+        </button>
       </div>
     </div>
   );

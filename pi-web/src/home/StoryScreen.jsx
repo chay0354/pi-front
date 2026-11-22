@@ -90,7 +90,14 @@ export default function StoryScreen({rings, subscriptionId, onClose, onOpenProfi
   const railRef = useRef(null);
 
   const ring = rings[userIndex] || null;
-  const slides = ring?.slides || [];
+  const slides = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    return (Array.isArray(ring?.slides) ? ring.slides : []).filter(slide => {
+      if (!slide || slide.kind === 'portrait') return false;
+      const t = new Date(slide.created_at || 0).getTime();
+      return !Number.isFinite(t) || t <= 0 || t >= cutoff;
+    });
+  }, [ring]);
   const slide = slides[slideIndex] || null;
   const video = isVideoSlide(slide);
   const uri = slide ? resolveStorySlideUri(slide) : '';
@@ -134,6 +141,22 @@ export default function StoryScreen({rings, subscriptionId, onClose, onOpenProfi
   useEffect(() => {
     elapsedRef.current = 0;
   }, [userIndex, slideIndex]);
+
+  // No live (≤24h) slides for this ring — skip ahead or close (never show a portrait filler).
+  useEffect(() => {
+    if (!ring) {
+      onClose?.();
+      return;
+    }
+    if (slides.length > 0) return;
+    if (userIndex < rings.length - 1) {
+      setUserIndex(userIndex + 1);
+      setSlideIndex(0);
+      setProgress(0);
+      return;
+    }
+    onClose?.();
+  }, [ring, slides.length, userIndex, rings.length, onClose]);
 
   useLayoutEffect(() => {
     const card = cardRef.current;

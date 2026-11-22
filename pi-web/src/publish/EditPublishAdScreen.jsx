@@ -345,7 +345,7 @@ export default function EditPublishAdScreen({
   onHome,
   onMenu,
 }) {
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewMode] = useState('list');
   const [selectedCategoryId, setSelectedCategoryId] = useState(() => toEditProfileUiCategoryId(initialCategoryId));
   const selectedCategoryIdRef = useRef(selectedCategoryId);
   selectedCategoryIdRef.current = selectedCategoryId;
@@ -477,8 +477,8 @@ export default function EditPublishAdScreen({
     () => canShowListingAdInCreateSheet(currentUser?.subscription_type, selectedListingCategoryId),
     [currentUser?.subscription_type, selectedListingCategoryId],
   );
-  // בית פתוח: broker, company, project marketer.
-  const showOpenHouseCreateInSheet = canCreateOpenHousePost(currentUser);
+  // בית פתוח: broker, company, project marketer. Brokers: post only in שותפים and BNB.
+  const showOpenHouseCreateInSheet = canCreateOpenHousePost(currentUser, selectedListingCategoryId);
 
   const filteredListings = useMemo(() => {
     if (publishCategoriesStrip.length === 0 || !selectedCategoryId) return mergedListings;

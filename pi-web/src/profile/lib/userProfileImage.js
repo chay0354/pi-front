@@ -167,6 +167,7 @@ export function resolveBnbListingHostType(listing) {
     .trim();
   if (
     sub === 'company' ||
+    sub === 'business' ||
     sub === 'broker' ||
     sub === 'professional' ||
     sub === 'project_marketer'

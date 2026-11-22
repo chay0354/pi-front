@@ -13,23 +13,23 @@
 .scroll {
   position: relative;
   z-index: 0;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #4d4966 transparent;
+  overflow: hidden;
 }
 
 /* Top navigation (mobile back / fixed listing hero nav) */
 .topNav {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 10;
+  flex-shrink: 0;
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
   justify-content: space-between;
   height: 96px;
-  padding: 0 160px;
+  padding: 0 40px;
   background: linear-gradient(180deg, var(--blue-100) 70%, rgba(30, 29, 39, 0));
 }
 
@@ -71,12 +71,30 @@
 /* Two panels like the web Figma: details aside on the right, media + content on the left. */
 .layout {
   display: grid;
-  grid-template-columns: 423px 1056px;
+  grid-template-columns: 460px 1355px;
+  grid-template-rows: minmax(0, 1fr);
   column-gap: 25px;
   align-items: start;
-  width: 1504px;
+  flex: 1;
+  min-height: 0;
+  width: 1840px;
   margin: 0 auto;
-  padding: 8px 0 96px;
+  padding: 8px 0 24px;
+}
+
+/* Each panel scrolls on its own. */
+.aside,
+.main {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #4d4966 transparent;
+}
+
+.aside > *,
+.main > * {
+  flex-shrink: 0;
 }
 
 .aside {
@@ -563,7 +581,7 @@
 .hero {
   position: relative;
   width: 100%;
-  height: 472px;
+  height: 680px;
   overflow: hidden;
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.08);
@@ -573,6 +591,7 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .heroTrack {
@@ -619,9 +638,9 @@
 
 .thumb {
   position: relative;
-  flex: 0 0 188px;
-  width: 188px;
-  height: 137px;
+  flex: 0 0 248px;
+  width: 248px;
+  height: 181px;
   padding: 0;
   overflow: hidden;
   border: 5px solid transparent;
@@ -806,14 +825,15 @@
 .postGridPage {
   display: grid;
   flex: 0 0 100%;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(9, 1fr);
   gap: 2px;
 }
 
 .gridTile {
   position: relative;
   display: block;
-  aspect-ratio: 930 / 502;
+  /* Phone post frame (portrait) — same idea as mobile POST_GRID_CELL_WIDTH / 0.78. */
+  aspect-ratio: 9 / 16;
   overflow: hidden;
   background: #1e1d27;
 }
@@ -825,26 +845,15 @@
   background: #2b2a39;
 }
 
-.gridTileFrame {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: block;
-  transform-origin: 0 0;
-  pointer-events: none;
-}
-
-.gridTileVideo {
+.gridTileMedia {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   pointer-events: none;
 }
 
-.gridTile:hover .gridTileFrame,
-.gridTile:hover .gridTileVideo {
+.gridTile:hover .gridTileMedia {
   filter: brightness(1.08);
 }
 
@@ -863,14 +872,14 @@
 
 .gridViews {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  bottom: 4px;
+  left: 4px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 14px;
+  gap: 3px;
+  font-size: 10px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 12px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }

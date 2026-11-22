@@ -13,7 +13,9 @@ const NUMBERED_STARS = [star1, star2, star3, star4, star5];
 
 /** "איזה יופי שהצטרפתם אלינו!" — shown after email verification, before the success step. */
 export default function RatingIntroScreen({subscriptionType = subscriptionTypes.broker, onClose, onContinue}) {
-  const isCompany = subscriptionType === subscriptionTypes.company;
+  const isCompany =
+    subscriptionType === subscriptionTypes.company ||
+    subscriptionType === subscriptionTypes.business;
 
   return (
     <AccountScreen title={getHeaderTitle(subscriptionType)} onBack={onClose} width={460} className={styles.ratingScreen}>

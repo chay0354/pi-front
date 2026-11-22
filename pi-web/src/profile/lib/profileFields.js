@@ -128,7 +128,7 @@ export function getProfileBusinessNameFieldKey(subscriptionType, user = null) {
   if (isProjectMarketerType(t)) {
     return isTeamMarketerUnderManager(user) ? 'name' : 'business_name';
   }
-  if (t === subscriptionTypes.company) return 'business_name';
+  if (t === subscriptionTypes.company || t === subscriptionTypes.business) return 'business_name';
   return null;
 }
 
@@ -202,16 +202,17 @@ export function getProfileEditFields(subscriptionType, user = null) {
     ];
   }
 
-  if (t === subscriptionTypes.company) {
+  if (t === subscriptionTypes.company || t === subscriptionTypes.business) {
+    const org = t === subscriptionTypes.business ? 'עסק' : 'חברה';
     return [
-      {key: 'business_name', label: 'שם החברה', placeholder: 'שם החברה'},
+      {key: 'business_name', label: `שם ה${org}`, placeholder: `שם ה${org}`},
       {key: 'contact_person_name', label: 'איש קשר', placeholder: 'שם איש הקשר'},
       officePhone,
       {key: 'mobile_phone', label: 'מספר פרטי ישיר', placeholder: 'מספר טלפון נייד (אופציונאלי)', ...phonePad},
       hidePrivatePhone,
       virtualPhone,
       {key: 'company_website', label: 'אתר אינטרנט', placeholder: 'https://', ...urlPad},
-      {key: 'business_address', label: 'כתובת חברה', placeholder: 'כתובת החברה'},
+      {key: 'business_address', label: `כתובת ${org}`, placeholder: `כתובת ה${org}`},
       about,
     ];
   }

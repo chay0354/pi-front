@@ -5,13 +5,14 @@ import {PiRating} from '../components/FeedCard';
 import VolumeIcon from '../components/VolumeIcon';
 import PiAiListingCard from '../home/PiAiListingCard';
 import PiAiPanel from '../components/PiAiPanel';
+import {useSlidePresence} from '../components/useSlidePresence';
 import {PiAiMascot, PiChatMark} from '../components/figma/home.generated';
 import {isFeedPost, toFeedItem} from '../feed/listingRules';
 import {usePiAiSearch} from '../feed/usePiAiSearch';
 import {inferPiAiKind, usePiAiProfessionals} from '../feed/usePiAiProfessionals';
 import AiProfessionalCard from '../home/AiProfessionalCard';
 import ProPromo from '../home/ProPromo';
-import {useFeaturedProjects, useHomeProfessionals, useHomeStories} from '../feed/useHome';
+import {ringsWithLiveStories, useFeaturedProjects, useHomeProfessionals, useHomeStories} from '../feed/useHome';
 import {useSession} from '../auth/session';
 import ProfessionalsDirectoryScreen from '../home/ProfessionalsDirectoryScreen';
 import SelectedProjectsScreen from '../home/SelectedProjectsScreen';
@@ -28,6 +29,8 @@ import imgBackdrop from '../assets/figma/home/8b3ea.png';
 import imgMuted from '../assets/figma/home/3d2da.svg';
 import imgPopularFold from '../assets/figma/home/8c929.svg';
 import imgPiAiLogo from '../assets/figma/home/23cb0.svg';
+import iconAiChevron from '../assets/figma/edit-publish/back-chevron.svg';
+import iconAiClose from '../assets/figma/piai/close.svg';
 import imgStarBadge from '../assets/figma/home/80461.svg';
 import imgDivider from '../assets/figma/home/e253b.svg';
 import imgRingSmall from '../assets/figma/home/50d02.svg';
@@ -40,6 +43,7 @@ const STORY_TYPE_LABEL = {
   broker: 'תיווך',
   professional: 'בעל מקצוע',
   company: 'חברה',
+  business: 'עסק',
   project_marketer: 'שיווק',
 };
 
@@ -489,8 +493,11 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
   const projects = useFeaturedProjects();
   const {topBroker, topProfessional} = useHomeProfessionals();
   const storyRings = useHomeStories();
+  /** Viewer only: rings that still have slides from the last 24h (strip still shows everyone). */
+  const liveStoryRings = useMemo(() => ringsWithLiveStories(storyRings), [storyRings]);
   const {currentUser} = useSession();
   const [piAiOpen, setPiAiOpen] = useState(false);
+  const aiSlide = useSlidePresence(piAiOpen);
   const [piAiDraft, setPiAiDraft] = useState('');
   const [piAiQuery, setPiAiQuery] = useState('');
   const piAiKind = inferPiAiKind(piAiQuery);
@@ -516,12 +523,24 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
   };
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [storyId, setStoryId] = useState(null);
-  const onOpenPiAi = () => setPiAiOpen(true);
-  const closePiAi = useCallback(() => {
-    setPiAiOpen(false);
-    setPiAiDraft('');
-    setPiAiQuery('');
-  }, []);
+  const [piAiCollapsed, setPiAiCollapsed] = useState(false);
+  const onOpenPiAi = () => {
+    setPiAiCollapsed(false);
+    setPiAiOpen(true);
+  };
+  const closePiAi = useCallback(() => setPiAiOpen(false), []);
+  const collapsePiAi = useCallback(() => setPiAiCollapsed(true), []);
+  const aiPanelShown = aiSlide.shown && !piAiCollapsed;
+  const aiTabShown = aiSlide.shown && piAiCollapsed;
+  const aiWasMounted = useRef(false);
+  useEffect(() => {
+    if (aiWasMounted.current && !aiSlide.mounted) {
+      setPiAiDraft('');
+      setPiAiQuery('');
+      setPiAiCollapsed(false);
+    }
+    aiWasMounted.current = aiSlide.mounted;
+  }, [aiSlide.mounted]);
   const openCategoryFromAi = id => {
     closePiAi();
     onOpenCategory?.(id);
@@ -559,7 +578,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
         />
 
         {piAiResults ? (
-          <div className={styles.aiResults}>
+          <div className={piAiCollapsed ? `${styles.aiResults} ${styles.aiResultsFull}` : styles.aiResults}>
             {piAiActiveSearch.status === 'loading' ? (
               <p className={styles.aiStatus} dir="auto">
                 {piAiActiveSearch.message || 'מחפש עבורך…'}
@@ -643,26 +662,46 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
             image: ring.profile_image_url || null,
             video: storyRingVideoUri(ring),
           }))}
-          onOpenPro={pro => setStoryId(pro.id)}
+          onOpenPro={pro => {
+            const id = String(pro?.id || '');
+            if (!id) return;
+            if (!liveStoryRings.some(ring => String(ring.subscription_id) === id)) return;
+            setStoryId(id);
+          }}
           onOpenDirectory={() => openDirectory()}
         />
         </>
         )}
-        {piAiOpen ? (
-          <div className={styles.aiLayer}>
-            <PiAiPanel
-              draft={piAiDraft}
-              setDraft={setPiAiDraft}
+      </div>
+      {aiSlide.mounted ? (
+        <div className={styles.aiLayer}>
+          <div
+            className={aiTabShown ? `${styles.aiTab} ${styles.aiTabShown}` : styles.aiTab}
+            aria-hidden={!aiTabShown}
+            inert={!aiTabShown}>
+            <button type="button" className={styles.aiTabOpen} aria-label="פתח את חלון Pi AI" title="פתח את חלון ה־AI" onClick={() => setPiAiCollapsed(false)}>
+              <img src={imgPiAiLogo} alt="" width={87} height={35} />
+              <img className={styles.aiTabChevron} src={iconAiChevron} alt="" width={7.67085} height={12.5133} />
+            </button>
+            <span className={styles.aiTabLine} aria-hidden />
+            <button type="button" className={styles.aiTabExit} aria-label="יציאה מ־Pi AI" title="יציאה מ־Pi AI" onClick={closePiAi}>
+              <img src={iconAiClose} alt="" width={24} height={24} />
+            </button>
+          </div>
+          <PiAiPanel
+            shown={aiPanelShown}
+            onCollapse={collapsePiAi}
+            draft={piAiDraft}
+            setDraft={setPiAiDraft}
             query={piAiQuery}
             search={piAiActiveSearch}
             resultCount={piAiKind === 'professionals' ? piAiPros.length : piAiItems.length}
             kind={piAiKind}
             onSearch={setPiAiQuery}
-              onClose={closePiAi}
-            />
-          </div>
-        ) : null}
-      </div>
+            onClose={closePiAi}
+          />
+        </div>
+      ) : null}
       {directoryOpen ? (
         <ProfessionalsDirectoryScreen
           currentUser={currentUser}
@@ -673,9 +712,9 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
         />
       ) : null}
       {projectsOpen ? <SelectedProjectsScreen onClose={() => setProjectsOpen(false)} /> : null}
-      {storyId ? (
+      {storyId && liveStoryRings.length > 0 ? (
         <StoryScreen
-          rings={storyRings}
+          rings={liveStoryRings}
           subscriptionId={storyId}
           onClose={() => setStoryId(null)}
           onOpenProfile={ring => {
