@@ -7,7 +7,7 @@
   justify-content: center;
   overflow: hidden;
   background: #1e1d27;
-  transition: background-color 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.58s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .out {
@@ -21,7 +21,8 @@
   inset: 0;
   background: #1e1d27;
   opacity: 1;
-  transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Backdrop is gone by about a third of the flight, like the app intro. */
+  transition: opacity 0.58s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
@@ -56,7 +57,7 @@
 .out .back {
   animation: none;
   opacity: 0;
-  transition: opacity 0.7s ease;
+  transition: opacity 0.58s ease;
 }
 
 .center {
@@ -78,8 +79,6 @@
 
 .fly {
   animation: none;
-  transition: transform 1.05s cubic-bezier(0.45, 0, 0.15, 1);
-  transform: translate(var(--dx), var(--dy)) scale(var(--scale));
 }
 
 .out .logo:not(.fly) {
@@ -108,8 +107,13 @@
   animation: splashLetter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.tagOut .tagline {
+  animation: splashTagOut 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 .out .tagline {
-  animation: splashTagOut 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: none;
+  opacity: 0;
 }
 
 .srOnly {
