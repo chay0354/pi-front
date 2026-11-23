@@ -122,13 +122,7 @@
   flex: 1 1 auto;
   width: 1920px;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.stage::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 
 /* The skyline is the first layer. Everything after it stays above that photo. */
@@ -156,11 +150,11 @@
   display: grid;
   grid-template-columns: 422px minmax(0, 1fr) 423px;
   column-gap: 73px;
-  grid-template-rows: minmax(min-content, 1fr);
-  flex: 1 0 auto;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 0;
   align-items: stretch;
-  min-height: min-content;
-  padding: 12px 0 8px;
+  min-height: 0;
+  padding: 8px 0 4px;
 }
 
 /* Figma "3": the faded skyline sits behind the top bar and fades out by y 406. */
@@ -525,15 +519,27 @@
   grid-row: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
   align-self: stretch;
-  min-height: min-content;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   padding-top: 52px;
 }
 
-.leftColumn > *,
-.rightColumn > * {
+.colFit {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: inherit;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.colFit > * {
   flex-shrink: 0;
 }
 
@@ -635,6 +641,7 @@
   border: 0;
   border-radius: 16px 0 0 16px;
   background: var(--blue-600);
+  --promo-fill: var(--blue-600);
   filter: drop-shadow(0 4px 35px rgba(0, 0, 0, 0.35));
   color: inherit;
   font: inherit;
@@ -643,14 +650,15 @@
 }
 
 .mortgage:hover {
-  background: #33324a;
+  background: var(--blue-500);
+  --promo-fill: var(--blue-500);
 }
 
 .mortgageInner {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 20px;
+  gap: 16px;
   width: 100%;
   transition: opacity 0.28s ease;
 }
@@ -665,8 +673,20 @@
   line-height: normal;
   color: var(--yellow-icons);
   text-align: right;
+  white-space: nowrap;
   text-box-edge: cap alphabetic;
   text-box-trim: trim-both;
+}
+
+.promoSale {
+  font-size: 7.5px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  background-image: linear-gradient(150.86deg, #34f3e0 1.02%, #04cfe1 91.5%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .promoIcon {
@@ -674,68 +694,6 @@
   flex-shrink: 0;
   width: 100px;
   height: 100px;
-}
-
-.promoGlass {
-  position: absolute;
-  z-index: 1;
-  left: calc(50% + 6.18px);
-  top: calc(50% - 7.57px);
-  width: 82.5px;
-  height: 82.5px;
-  translate: -50% -50%;
-  pointer-events: none;
-}
-
-.promoGlyph {
-  position: absolute;
-  z-index: 2;
-  left: calc(50% - 3.91px);
-  top: calc(50% - 18.62px);
-  display: flex;
-  translate: -50% -50%;
-  pointer-events: none;
-}
-
-.promoExtra {
-  position: absolute;
-  z-index: 2;
-  left: 6px;
-  top: 62px;
-  display: flex;
-  align-items: flex-end;
-  pointer-events: none;
-}
-
-.promoSpark {
-  position: absolute;
-  z-index: 2;
-  left: 84px;
-  top: 46px;
-  width: 11px;
-  height: 11px;
-  pointer-events: none;
-}
-
-.promoDotA,
-.promoDotB {
-  position: absolute;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.promoDotA {
-  left: 83.75px;
-  top: 37.5px;
-  width: 3.75px;
-  height: 3.75px;
-}
-
-.promoDotB {
-  left: 93.13px;
-  top: 59.38px;
-  width: 5px;
-  height: 5px;
 }
 
 /* ---- "כוכבי פאי" cards ---- */
@@ -943,8 +901,8 @@
   flex: 0 0 auto;
   width: 1920px;
   height: auto;
-  margin-top: 36px;
-  padding-bottom: 18px;
+  margin-top: 12px;
+  padding-bottom: 8px;
 }
 
 .prosInner {

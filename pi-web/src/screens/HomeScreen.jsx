@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {mdiClose} from '@mdi/js';
 import TopBar from '../components/TopBar';
 import {PiRating} from '../components/FeedCard';
@@ -510,6 +510,35 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
   );
   const piAiPros = piAiProSearch.rows;
   const piAiResults = Boolean(piAiQuery.trim());
+  const stageRef = useRef(null);
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || piAiResults) return undefined;
+    let frame = 0;
+    const fit = () => {
+      stage.querySelectorAll('[data-home-fit]').forEach(node => {
+        node.style.height = '';
+        node.style.transform = '';
+        const have = node.clientHeight;
+        const need = node.scrollHeight;
+        if (!(have > 0) || need <= have + 1) return;
+        const z = have / need;
+        node.style.height = `${(need / have) * 100}%`;
+        node.style.transformOrigin = node.dataset.homeEdge === 'left' ? 'top left' : 'top right';
+        node.style.transform = `scale(${z})`;
+      });
+    };
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    });
+    ro.observe(stage);
+    fit();
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+    };
+  }, [piAiResults]);
   const [qrOpen, setQrOpen] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [directoryTypes, setDirectoryTypes] = useState([]);
@@ -560,7 +589,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
 
   return (
     <div className={styles.screen}>
-      <div className={styles.stage}>
+      <div className={styles.stage} ref={stageRef}>
         {!piAiResults ? (
           <div className={styles.backdrop} aria-hidden>
             <div className={styles.backdropImage}>
@@ -623,6 +652,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
         />
 
         <div className={styles.leftColumn}>
+          <div className={styles.colFit} data-home-fit="" data-home-edge="left">
           <button type="button" className={styles.piAiPill} aria-label="Pi AI" onClick={onOpenPiAi}>
             <img src={imgPiAiLogo} alt="" width={87} height={35} />
           </button>
@@ -639,9 +669,11 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
             <PiAiMascot />
           </div>
           <TopRatedCard entry={topProfessional} side="left" onOpenPro={openPro} />
+          </div>
         </div>
 
         <div className={styles.rightColumn}>
+          <div className={styles.colFit} data-home-fit="" data-home-edge="right">
           <button
             type="button"
             className={styles.chatPill}
@@ -651,6 +683,7 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
           </button>
           <ProPromo onOpen={type => openDirectory([type])} />
           <TopRatedCard entry={topBroker} side="right" onOpenPro={openPro} />
+          </div>
         </div>
         </div>
 
@@ -664,9 +697,10 @@ export default function HomeScreen({onOpenCategory, onMenu, onOpenChat, unreadCh
           }))}
           onOpenPro={pro => {
             const id = String(pro?.id || '');
-            if (!id) return;
-            if (!liveStoryRings.some(ring => String(ring.subscription_id) === id)) return;
-            setStoryId(id);
+            if (!id || liveStoryRings.length === 0) return;
+            const own = liveStoryRings.find(ring => String(ring.subscription_id) === id);
+            // No live story: always the first story in the viewer, not the next circle along the strip.
+            setStoryId(String((own || liveStoryRings[0]).subscription_id));
           }}
           onOpenDirectory={() => openDirectory()}
         />

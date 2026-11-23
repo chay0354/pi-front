@@ -295,6 +295,7 @@ export default function App() {
               shown={menuSlide.shown}
               onClose={closeMenu}
               onOpenEditPublishAd={requireUser(() => {
+                setMenuOpen(false);
                 setPublish({key: Date.now(), screen: 'editPublish'});
               })}
               unreadChatCount={currentUser ? unreadChatCount + (piWelcomeRead ? 0 : 1) : 0}

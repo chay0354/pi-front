@@ -379,7 +379,8 @@ import imgEllipse66 from '../../assets/figma/topbar/a41e1.svg';
 import imgEllipse64 from '../../assets/figma/topbar/5ec32.svg';
 import imgEllipse67 from '../../assets/figma/topbar/5fe40.svg';
 import imgGroup1000003455 from '../../assets/figma/topbar/0f2c4.svg';
-import imgRectangle10 from '../../assets/figma/topbar/296f2.svg';
+import imgApartmentsEllipse from '../../assets/figma/topbar/c7093.svg';
+import imgRectangle10 from '../../assets/figma/topbar/247a6.svg';
 import imgGroup1000003633 from '../../assets/figma/topbar/f8d19.svg';
 import imgEllipse624 from '../../assets/figma/topbar/0f7d5.svg';
 import imgVector291 from '../../assets/figma/topbar/15a8e.svg';
@@ -2261,7 +2262,7 @@ export function ApartmentsTile({ selected = true }) {
         <div style={tw("content-stretch flex flex-col gap-[var(--spacing\/m3,20px)] h-[145px] items-center px-[13px] py-[8px] relative shrink-0 w-[138px]")}>
           <div style={tw("-translate-x-1/2 -translate-y-1/2 absolute h-[39px] left-1/2 top-[calc(50%+40px)] w-[170px]")}>
             <div style={tw("absolute inset-[-35.9%_-8.24%]")}>
-              <img style={tw("block max-w-none size-full")} alt="" src={imgEllipse1} />
+              <img style={tw("block max-w-none size-full")} alt="" src={imgApartmentsEllipse} />
               <img
                 data-tile-glow=""
                 style={{...tw("absolute inset-0 block max-w-none size-full"), opacity: 0, transition: "opacity 160ms ease"}}
@@ -2271,7 +2272,7 @@ export function ApartmentsTile({ selected = true }) {
             </div>
           </div>
           <div style={tw("-translate-x-1/2 -translate-y-1/2 absolute h-[104px] left-1/2 top-[calc(50%-20.5px)] w-[110px]")}>
-            <div style={tw("absolute inset-[-3.85%_-2.44%]")}>
+            <div style={tw("absolute inset-[0_1.19%]")}>
               <img style={tw("block max-w-none size-full")} alt="" src={imgRectangle10} />
             </div>
           </div>
